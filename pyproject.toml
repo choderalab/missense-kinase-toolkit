@@ -26,7 +26,7 @@ requires-python = ">=3.8"
 
 # Update the urls once the hosting is set up.
 #[project.urls]
-#"Source" = "https://github.com/<username>/missense_kinase_toolkit/"
+#"Source" = "https://github.com/choderalab/missense_kinase_toolkit/"
 #"Documentation" = "https://missense_kinase_toolkit.readthedocs.io/"
 
 [project.optional-dependencies]
