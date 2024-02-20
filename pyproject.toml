@@ -11,6 +11,9 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
 ]
+packages = [
+    {include = "missense_kinase_toolkit", from="src"},
+]
 
 [tool.poetry.dependencies]
 python = "^3.9"
