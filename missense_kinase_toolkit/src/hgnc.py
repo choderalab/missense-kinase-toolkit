@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import requests
 
-# from pan_preclinical_etl import requests_wrapper
+import requests_wrapper
 
 
 def maybe_get_symbol_from_hgnc_search(
