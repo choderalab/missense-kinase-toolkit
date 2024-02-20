@@ -54,7 +54,7 @@ jobs:
         # conda setup requires this special shell
         shell: bash -l {0}
         run: |
-          pytest -v --cov=missense_kinase_toolkit --cov-report=xml --color=yes missense_kinase_toolkit/tests/
+          pytest -v --cov=missense_kinase_toolkit --cov-report=xml --color=yes tests/
 
       - name: CodeCov
         uses: codecov/codecov-action@v1
