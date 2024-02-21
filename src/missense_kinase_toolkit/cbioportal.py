@@ -110,7 +110,7 @@ def parse_series2dict(
         Dictionary of values from the series
     """
     if strwrap is None:
-        strwrap = "Gene\((.*)\)"
+        strwrap = r"Gene\((.*)\)"
     if delim1 is None:
         delim1 = ", "
     if delim2 is None:
