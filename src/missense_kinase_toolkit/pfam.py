@@ -120,7 +120,21 @@ def concat_pfam(
     return df, dict_error, dict_missing
 
 
-def extract_numeric(input_string):
+def extract_numeric(
+    input_string: str,
+) -> str:
+    """Extract numeric characters from a string
+
+    Parameters
+    ----------
+    input_string : str
+        Input string
+
+    Returns
+    -------
+    str
+        Numeric characters extracted from the input string
+    """
     num = ""
     for i in input_string:
         if i.isdigit():
