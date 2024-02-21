@@ -7,6 +7,7 @@ from requests.adapters import HTTPAdapter, Retry
 
 ETL_REQUEST_CACHE_VAR = "ETL_REQUEST_CACHE"
 
+
 def add_retry_to_session(
     session,
     retries=5,

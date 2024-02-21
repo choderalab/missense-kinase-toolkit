@@ -1,7 +1,7 @@
 # How to contribute
 
 We welcome contributions from external contributors, and this document
-describes how to merge code changes into this missense_kinase_toolkit. 
+describes how to merge code changes into this missense_kinase_toolkit.
 
 ## Getting Started
 
