@@ -129,7 +129,7 @@ def extract_numeric(
     ----------
     input_string : str
         Input string
-    
+
     Returns
     -------
     str
