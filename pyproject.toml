@@ -12,7 +12,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 packages = [
-    {include = "src"},
+    {include = "missense_kinase_toolkit", from = "src"},
 ]
 
 [tool.poetry.dependencies]
@@ -46,12 +46,16 @@ format-jinja = """
     {%- if distance == 0 -%}
         {{- base -}}
     {%- else -%}
+        {{- base }}.dev{{ distance }}+g{{commit}}
+    {%- endif -%}
+"""
+format-jinja = """
+    {%- if distance == 0 -%}
+        {{- base -}}
+    {%- else -%}
         {{- base }}.dev{{ distance }}+g{{commit}}.d{{ datetime.now().strftime('%Y%m%d%H%M%S') -}}
     {%- endif -%}
 """
-format-jinja-imports = [
-    { module = "datetime", item = "datetime" }
-]
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
 build-backend = "poetry_dynamic_versioning.backend"

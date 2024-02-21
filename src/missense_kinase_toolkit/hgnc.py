@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import requests
 
-import requests_wrapper
+from missense_kinase_toolkit import requests_wrapper
 
 
 def maybe_get_symbol_from_hgnc_search(
