@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import requests
 
-from missense_kinase_toolkit import requests_wrapper
+from missense_kinase_toolkit import requests_wrapper, utils_requests
 
 
 def maybe_get_symbol_from_hgnc_search(
@@ -36,7 +36,7 @@ def maybe_get_symbol_from_hgnc_search(
         list_hgnc_gene_name = extract_list_from_hgnc_response_docs(res, "symbol")
     else:
         list_hgnc_gene_name = None
-        print_status_code_if_res_not_ok(res)
+        utils_requests.print_status_code_if_res_not_ok(res)
 
     return list_hgnc_gene_name
 
@@ -78,7 +78,7 @@ def maybe_get_info_from_hgnc_fetch(
                 list_out.append(list_entry)
     else:
         list_out = [None for _ in list_to_extract]
-        print_status_code_if_res_not_ok(res)
+        utils_requests.print_status_code_if_res_not_ok(res)
 
     dict_out = dict(zip(list_to_extract, list_out))
 
@@ -130,37 +130,3 @@ def generate_key_set_hgnc_response_docs(
     list_keys = [set(doc.keys()) for doc in res_input.json()["response"]["docs"]]
     set_keys = set.union(*list_keys)
     return set_keys
-
-
-def print_status_code_if_res_not_ok(
-    res_input: requests.models.Response,
-    dict_status_code: dict[int, str] | None = None,
-) -> None:
-    """Print the status code and status message if the response is not OK
-
-    Parameters
-    ----------
-    res_input : requests.models.Response
-        Response object from an HGNC REST API request
-    dict_status_code : dict[int, str] | None
-        Dictionary of status codes and status messages; if None, defaults to a standard set of status codes
-
-    Returns
-    -------
-    None
-    """
-    if dict_status_code is None:
-        dict_status_code = {
-            400: "Bad request",
-            404: "Not found",
-            415: "Unsupported media type",
-            500: "Server error",
-            503: "Service unavailable",
-        }
-
-    try:
-        print(
-            f"Error code: {res_input.status_code} ({dict_status_code[res_input.status_code]})"
-        )
-    except KeyError:
-        print(f"Error code: {res_input.status_code}")
