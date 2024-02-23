@@ -58,10 +58,10 @@ jobs:
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4.0.1
-        with:
-          file: ./coverage.xml
-          flags: unittests
-          name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
+        # with:
+        #   file: ./coverage.xml
+        #   flags: unittests
+        #   name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
         env:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: choderalab/missense-kinase-toolkit
