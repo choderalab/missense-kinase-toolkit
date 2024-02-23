@@ -1,7 +1,7 @@
 missense-kinase-toolkit
 ==============================
 [//]: # (Badges)
-[![GitHub Actions Build Status](https://github.com/choderalab/missense_kinase_toolkit/workflows/CI/badge.svg)](https://github.com/choderalab/missense_kinase_toolkit/actions?query=workflow%3ACI)
+[![CI](https://github.com/choderalab/missense-kinase-toolkit/actions/workflows/CI.yaml/badge.svg)](https://github.com/choderalab/missense-kinase-toolkit/actions/workflows/CI.yaml)
 [![codecov](https://codecov.io/gh/choderalab/missense-kinase-toolkit/branch/main/graph/badge.svg)](https://codecov.io/gh/choderalab/missense-kinase-toolkit/branch/main)
 [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/choderalab/missense-kinase-toolkit/main.svg?badge_token=dufHMzu_RH2VGGToCgvtcQ)](https://results.pre-commit.ci/latest/github/choderalab/missense-kinase-toolkit/main?badge_token=dufHMzu_RH2VGGToCgvtcQ)
 
