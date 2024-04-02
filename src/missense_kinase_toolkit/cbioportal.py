@@ -1,95 +1,145 @@
 from __future__ import annotations
 
-import re
-
-import requests
-from requests.auth import HTTPBasicAuth
-import pandas as pd
 import os
+import re
+import pandas as pd
 
-from missense_kinase_toolkit import requests_wrapper
+from bravado.client import SwaggerClient
+from bravado.requests_client import RequestsClient
 
 
 CBIOPORTAL_TOKEN_VAR = "CBIOPORTAL_TOKEN"
+CBIOPORTAL_INSTANCE_VAR = "CBIOPORTAL_INSTANCE"
 
 
-def create_setlist(
-    input_object: requests.models.Response,
-    attr: str,
-) -> tuple[list, set]:
-    """Create a list and set of unique values from a response object
-
-    Parameters
-    ----------
-    input_object : requests.models.Response
-        Response object from a request
-    attr : str
-        Attribute to extract from the response object
+def maybe_get_cbioportal_token_from_env() -> str | None:
+    """Get the cBioPortal token from the environment
 
     Returns
     -------
-    tuple[list, set]
-        List and set of unique values from the response object
+    str | None
+        cBioPortal token as string if exists, otherwise None
     """
-    list_output = []
-    set_output = set()
+    try:
+        token = os.environ[CBIOPORTAL_TOKEN_VAR]
+    except KeyError:
+        token = None
 
-    for entry in input_object:
-        list_output.append(entry[attr])
-        set_output.add(entry[attr])
-
-    return list_output, set_output
+    return token
 
 
-def print_counts(
+def maybe_get_cbioportal_instance_from_env(
+) -> str | None:
+    """Get the cBioPortal instance from the environment
+
+    Returns
+    -------
+    str | None
+        cBioPortal instance as string if exists, otherwise None
+    """
+    try:
+        instance = os.environ[CBIOPORTAL_INSTANCE_VAR]
+    except KeyError:
+        instance = None
+
+    return instance
+
+def get_all_mutations_by_study(
+    str_study_id: str
+) -> list | None:
+    """Get mutations  cBioPortal data
+
+    Parameters
+    ----------
+    str_studyid : str
+        Study ID within cBioPortal instance; 
+            e.g. MSKCC clinical sequencing cohort is "msk_impact_2017" and MSKCC clinical sequencing cohort is "mskimpact"
+
+    Returns
+    -------
+    requests.models.Response
+        cBioPortal data
+    """
+    token = maybe_get_cbioportal_token_from_env()
+    
+    instance = maybe_get_cbioportal_instance_from_env()
+    if instance is not None:
+        url = f"https://{instance}/api/v2/api-docs"
+    else:
+        url = "https://cbioportal.org/api/v2/api-docs"
+        
+    if all(v is not None for v in (token, instance)):
+        http_client = RequestsClient()
+        http_client.set_api_key(
+            instance, 
+            f"Bearer {token}",
+            param_name='Authorization', 
+            param_in='header'
+        )
+        cbioportal = SwaggerClient.from_url(
+            url,
+            http_client=http_client,
+            config={
+                "validate_requests":False,
+                "validate_responses":False,
+                "validate_swagger_spec": False
+            }
+        )
+    else:
+        cbioportal = SwaggerClient.from_url(
+            url,
+            config={
+                "validate_requests":False,
+                "validate_responses":False,
+                "validate_swagger_spec": False
+            }
+        )
+        
+    studies = cbioportal.Studies.getAllStudiesUsingGET().result()
+    study_ids = [study.studyId for study in studies]
+    
+    if str_study_id in study_ids:
+        #TODO - add error handling
+        #TODO - extract multiple studies
+        muts = cbioportal.Mutations.getMutationsInMolecularProfileBySampleListIdUsingGET(
+            molecularProfileId=f"{str_study_id}_mutations",
+            sampleListId=f"{str_study_id}_all",
+            projection="DETAILED"
+            ).result()
+    else:
+        raise ValueError(f"Study {str_study_id} not found in cBioPortal instance {instance}")
+    
+    return muts
+
+
+def parse_muts2dataframe(
     list_input: list,
-) -> None:
-    """Print the counts of unique values in a list
+) -> pd.DataFrame:
+    """Parse a list of abc.Mutation into a dictionary
 
     Parameters
     ----------
-    list_input : list
-        List of values to count
+    input_object : list
+        List of abc.Mutation objects
 
     Returns
     -------
-    None
-    """
-    for Unique in set(list_input):
-        n = list_input.count(Unique)
-        print(f"{Unique:<15} \t {n:>10}")
-
-
-def parse_obj2dict(
-    input_object: requests.models.Response,
-) -> dict:
-    """Parse a response object into a dictionary
-
-    Parameters
-    ----------
-    input_object : requests.models.Response
-        Response object from a request
-
-    Returns
-    -------
-    dict
-        Dictionary of values from the response object
+    pd.DataFrame
+        Dataframe for the input list of abc.Mutation objects
     """
     dict_output = {}
-
-    list_dir = dir(input_object[0])
-
+    list_dir = dir(list_input[0])
     for attr in list_dir:
         list_attr = []
-        for entry in input_object:
+        for entry in list_input:
             try:
                 add = int(entry[attr])
             except ValueError:
                 add = str(entry[attr])
             list_attr.append(add)
         dict_output[attr] = list_attr
-
-    return dict_output
+    df = pd.DataFrame.from_dict(dict_output)
+    return df
 
 
 def parse_series2dict(
@@ -152,57 +202,8 @@ def calc_vaf(
     return vaf
 
 
-def get_cbioportal_token(
-
-) -> str:
-    """Get the cBioPortal token from the environment
-
-    Returns
-    -------
-    str
-        cBioPortal token
-    """
-    token = os.environ[CBIOPORTAL_TOKEN_VAR]
-
-    return token
-
-
-def get_cbioprotal_data() -> requests.models.Response:
-    """Get the cBioPortal data
-
-    Returns
-    -------
-    requests.models.Response
-        cBioPortal data
-    """
-    token = get_cbioportal_token()
-    url = "https://cbioportal.mskcc.org/api/v2/api-docs"
-
-    headers =  {"Content-Type":"application/json", "Authorization": f"Bearer {token}"}
-
-    res = requests_wrapper.get_cached_session().get(
-        url, headers=headers
-    )
-
-    res.json().keys()
-    res.json()["paths"].keys()
-    res.json()["paths"]['/cancer-types']
-    res.json()["paths"]["/molecular-profiles/{molecularProfileId}/molecular-data/fetch"]
-    dir(res)
-    res.Studies
-
-    headers = {"X-Auth-Token": token}
-    response = requests.get(url, headers=headers)
-
-
-    url = 'https://api_url'
-    headers = {'Accept': 'application/json'}
-    auth = HTTPBasicAuth('apikey', '1234abcd')
-    files = {'file': open('filename', 'rb')}
-
-    req = requests.get(url, headers=headers, auth=auth, files=files)
-
-    return response
+muts = get_all_mutations_by_study("mskimpact")
+df_muts = parse_muts2dataframe(muts)
 
 
 # from bravado.client import SwaggerClient

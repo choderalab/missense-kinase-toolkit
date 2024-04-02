@@ -7,7 +7,9 @@ import pandas as pd
 from missense_kinase_toolkit import requests_wrapper
 
 
-def retrieve_pfam(uniprot_id: str) -> pd.DataFrame | str | None:
+def retrieve_pfam(
+    uniprot_id: str,
+) -> pd.DataFrame | str | None:
     """Retrieve Pfam domain information for a given UniProt ID using InterPro REST API
 
     Parameters
