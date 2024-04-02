@@ -52,7 +52,7 @@ def get_all_mutations_by_study(
     Parameters
     ----------
     str_studyid : str
-        Study ID within cBioPortal instance; 
+        Study ID within cBioPortal instance;
             e.g. MSKCC clinical sequencing cohort is "msk_impact_2017" and MSKCC clinical sequencing cohort is "mskimpact"
 
     Returns
@@ -61,19 +61,19 @@ def get_all_mutations_by_study(
         cBioPortal data
     """
     token = maybe_get_cbioportal_token_from_env()
-    
+
     instance = maybe_get_cbioportal_instance_from_env()
     if instance is not None:
         url = f"https://{instance}/api/v2/api-docs"
     else:
         url = "https://cbioportal.org/api/v2/api-docs"
-        
+
     if all(v is not None for v in (token, instance)):
         http_client = RequestsClient()
         http_client.set_api_key(
-            instance, 
+            instance,
             f"Bearer {token}",
-            param_name='Authorization', 
+            param_name='Authorization',
             param_in='header'
         )
         cbioportal = SwaggerClient.from_url(
@@ -94,10 +94,10 @@ def get_all_mutations_by_study(
                 "validate_swagger_spec": False
             }
         )
-        
+
     studies = cbioportal.Studies.getAllStudiesUsingGET().result()
     study_ids = [study.studyId for study in studies]
-    
+
     if str_study_id in study_ids:
         #TODO - add error handling
         #TODO - extract multiple studies
@@ -108,7 +108,7 @@ def get_all_mutations_by_study(
             ).result()
     else:
         raise ValueError(f"Study {str_study_id} not found in cBioPortal instance {instance}")
-    
+
     return muts
 
 
