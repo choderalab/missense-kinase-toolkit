@@ -3,7 +3,14 @@ from __future__ import annotations
 import re
 
 import requests
+from requests.auth import HTTPBasicAuth
 import pandas as pd
+import os
+
+from missense_kinase_toolkit import requests_wrapper
+
+
+CBIOPORTAL_TOKEN_VAR = "CBIOPORTAL_TOKEN"
 
 
 def create_setlist(
@@ -143,3 +150,73 @@ def calc_vaf(
     vaf = dataframe[alt] / (dataframe[alt] + dataframe[ref])
 
     return vaf
+
+
+def get_cbioportal_token(
+        
+) -> str:
+    """Get the cBioPortal token from the environment
+
+    Returns
+    -------
+    str
+        cBioPortal token
+    """
+    token = os.environ[CBIOPORTAL_TOKEN_VAR]
+
+    return token
+
+
+def get_cbioprotal_data() -> requests.models.Response:
+    """Get the cBioPortal data
+
+    Returns
+    -------
+    requests.models.Response
+        cBioPortal data
+    """
+    token = get_cbioportal_token()
+    url = "https://cbioportal.mskcc.org/api/v2/api-docs"
+
+    headers =  {"Content-Type":"application/json", "Authorization": f"Bearer {token}"}
+
+    res = requests_wrapper.get_cached_session().get(
+        url, headers=headers
+    )
+
+    res.json().keys()
+    res.json()["paths"].keys()
+    res.json()["paths"]['/cancer-types']
+    res.json()["paths"]["/molecular-profiles/{molecularProfileId}/molecular-data/fetch"]
+    dir(res)
+    res.Studies
+
+    headers = {"X-Auth-Token": token}
+    response = requests.get(url, headers=headers)
+
+
+    url = 'https://api_url'
+    headers = {'Accept': 'application/json'}
+    auth = HTTPBasicAuth('apikey', '1234abcd')
+    files = {'file': open('filename', 'rb')}
+
+    req = requests.get(url, headers=headers, auth=auth, files=files)
+
+    return response
+
+
+# from bravado.client import SwaggerClient
+# from bravado.requests_client import RequestsClient
+
+# http_client = RequestsClient()
+# http_client.set_api_key(
+#     'genie.cbioportal.org', 'Bearer <TOKEN>',
+#     param_name='Authorization', param_in='header'
+# )
+
+# cbioportal = SwaggerClient.from_url('https://genie.cbioportal.org/api/v2/api-docs',
+#                                     http_client=http_client,
+#                                     config={"validate_requests":False,
+#                                             "validate_responses":False,
+#                                             "validate_swagger_spec": False}
+# )

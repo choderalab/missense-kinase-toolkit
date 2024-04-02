@@ -1,6 +1,7 @@
 [tool.poetry]
 name = "missense-kinase-toolkit"
 # https://github.com/mtkennerly/poetry-dynamic-versioning/issues/14
+# https://browniebroke.com/blog/convert-existing-poetry-to-src-layout/
 version = "0.0.0"
 description = "An ETL pipeline package to facilitate structure-based ML for human kinase property prediction"
 authors = ["Jess White <jessica.white@choderalab.org>"]

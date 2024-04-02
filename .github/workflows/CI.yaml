@@ -35,10 +35,12 @@ jobs:
           ulimit -a
 
       # More info on options: https://github.com/marketplace/actions/provision-with-micromamba
-      - uses: mamba-org/provision-with-micromamba@main
+      # https://github.com/mamba-org/provision-with-micromamba#migration-to-setup-micromamba%60
+      - uses: mamba-org/setup-micromamba@v1
         with:
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test
+          # conda-forge is the default channel now and does not need to be specified
           channels: conda-forge,defaults
           extra-specs: |
             python=${{ matrix.python-version }}

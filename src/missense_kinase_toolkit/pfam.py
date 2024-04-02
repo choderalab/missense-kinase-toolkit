@@ -22,10 +22,12 @@ def retrieve_pfam(uniprot_id: str) -> pd.DataFrame | str | None:
           None if response is empty
     """
 
-    url = "https://www.ebi.ac.uk/interpro/api/entry/pfam/protein/UniProt/" + uniprot_id
+    url = f"https://www.ebi.ac.uk/interpro/api/entry/pfam/protein/UniProt/{uniprot_id}"
 
+    header = {"Accept": "application/json"}
     res = requests_wrapper.get_cached_session().get(
-        url, headers={"Accept": "application/json"}
+        url, 
+        headers=header
     )
 
     if res.ok:
