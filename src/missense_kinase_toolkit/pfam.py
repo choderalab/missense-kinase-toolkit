@@ -26,7 +26,7 @@ def retrieve_pfam(uniprot_id: str) -> pd.DataFrame | str | None:
 
     header = {"Accept": "application/json"}
     res = requests_wrapper.get_cached_session().get(
-        url, 
+        url,
         headers=header
     )
 

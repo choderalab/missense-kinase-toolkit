@@ -153,7 +153,7 @@ def calc_vaf(
 
 
 def get_cbioportal_token(
-        
+
 ) -> str:
     """Get the cBioPortal token from the environment
 
