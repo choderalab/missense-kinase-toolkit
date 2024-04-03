@@ -186,3 +186,4 @@ $RECYCLE.BIN/
 
 # Requests cache directory
 requests_cache/
+data_cache/
