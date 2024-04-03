@@ -1,7 +1,7 @@
 import pandas as pd
 
 def scrape_kinhub(
-    url: str ='http://www.kinhub.org/kinases.html'
+    url: str = "http://www.kinhub.org/kinases.html",
 ) -> pd.DataFrame:
     """Scrape the KinHub database for kinase information
 

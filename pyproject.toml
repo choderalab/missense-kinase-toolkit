@@ -42,6 +42,9 @@ pytest-runner = "^6.0.1"
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 
+[tool.poetry.scripts]
+process_cbioportal = "missense_kinase_toolkit.cli.process_cbioportal:main"
+
 [tool.poetry-dynamic-versioning]
 enable = true
 vcs = "git"
