@@ -10,7 +10,7 @@ def print_status_code_if_res_not_ok(
     Parameters
     ----------
     res_input : requests.models.Response
-        Response object from an HGNC REST API request
+        Response object from an API request
     dict_status_code : dict[int, str] | None
         Dictionary of status codes and status messages; if None, defaults to a standard set of status codes
 

@@ -1,145 +1,201 @@
+#!/usr/bin/env python3
+
 from __future__ import annotations
 
-import re
-
-import requests
+import os
 import pandas as pd
+import sys
+
+from bravado.client import SwaggerClient
+from bravado.requests_client import RequestsClient
 
 
-def create_setlist(
-    input_object: requests.models.Response,
-    attr: str,
-) -> tuple[list, set]:
-    """Create a list and set of unique values from a response object
+CBIOPORTAL_TOKEN_VAR = "CBIOPORTAL_TOKEN"
+CBIOPORTAL_INSTANCE_VAR = "CBIOPORTAL_INSTANCE"
+DATA_CACHE_DIR = "DATA_CACHE"
+CBIOPORTAL_COHORT_VAR = "CBIOPORTAL_COHORT"
 
-    Parameters
-    ----------
-    input_object : requests.models.Response
-        Response object from a request
-    attr : str
-        Attribute to extract from the response object
+
+def maybe_get_cbioportal_token_from_env(
+) -> str | None:
+    """Get the cBioPortal token from the environment
 
     Returns
     -------
-    tuple[list, set]
-        List and set of unique values from the response object
+    str | None
+        cBioPortal token as string if exists, otherwise None
     """
-    list_output = []
-    set_output = set()
+    try:
+        token = os.environ[CBIOPORTAL_TOKEN_VAR]
+    except KeyError:
+        token = None
 
-    for entry in input_object:
-        list_output.append(entry[attr])
-        set_output.add(entry[attr])
-
-    return list_output, set_output
+    return token
 
 
-def print_counts(
-    list_input: list,
-) -> None:
-    """Print the counts of unique values in a list
+def maybe_get_cbioportal_instance_from_env(
+) -> str | None:
+    """Get the cBioPortal instance from the environment
+
+    Returns
+    -------
+    str | None
+        cBioPortal instance as string if exists, otherwise None
+    """
+    try:
+        instance = os.environ[CBIOPORTAL_INSTANCE_VAR]
+    except KeyError:
+        instance = None
+
+    return instance
+
+
+def maybe_get_cbioportal_cohort_from_env(
+) -> str | None:
+    """Get the cBioPortal instance from the environment
+
+    Returns
+    -------
+    str | None
+        cBioPortal instance as string if exists, otherwise None
+    """
+    try:
+        instance = os.environ[CBIOPORTAL_COHORT_VAR]
+    except KeyError:
+        print("Cohort not found in environment variables. This is necessary to run analysis. Exiting...")
+        sys.exit(1)
+
+    return instance
+
+
+def get_all_mutations_by_study(
+) -> list | None:
+    """Get mutations  cBioPortal data
+
+    Returns
+    -------
+    list | None
+        cBioPortal data of Abstract Base Classes objects if successful, otherwise None
+    """
+    token = maybe_get_cbioportal_token_from_env()
+
+    instance = maybe_get_cbioportal_instance_from_env()
+    if instance is not None:
+        url = f"https://{instance}/api/v2/api-docs"
+    else:
+        url = "https://cbioportal.org/api/v2/api-docs"
+
+    # Zehir, 2017 MSKCC sequencing cohort is "msk_impact_2017"
+    # MSKCC clinical sequencing cohort is "mskimpact"
+    study_id = maybe_get_cbioportal_cohort_from_env()
+
+    if all(v is not None for v in (token, instance)):
+        http_client = RequestsClient()
+        http_client.set_api_key(
+            instance,
+            f"Bearer {token}",
+            param_name='Authorization',
+            param_in='header'
+        )
+        cbioportal = SwaggerClient.from_url(
+            url,
+            http_client=http_client,
+            config={
+                "validate_requests":False,
+                "validate_responses":False,
+                "validate_swagger_spec": False
+            }
+        )
+    else:
+        cbioportal = SwaggerClient.from_url(
+            url,
+            config={
+                "validate_requests":False,
+                "validate_responses":False,
+                "validate_swagger_spec": False
+            }
+        )
+
+    studies = cbioportal.Studies.getAllStudiesUsingGET().result()
+    study_ids = [study.studyId for study in studies]
+
+    if study_id in study_ids:
+        #TODO: add error handling
+        #TODO: extract multiple studies
+        muts = cbioportal.Mutations.getMutationsInMolecularProfileBySampleListIdUsingGET(
+            molecularProfileId=f"{study_id}_mutations",
+            sampleListId=f"{study_id}_all",
+            projection="DETAILED"
+            ).result()
+    else:
+        raise ValueError(f"Study {study_id} not found in cBioPortal instance {instance}")
+
+    return muts
+
+
+def parse_iterabc2dataframe(
+    list_input: iter,
+) -> pd.DataFrame:
+    """Parse an iterable containing Abstract Base Classes into a dataframe
 
     Parameters
     ----------
-    list_input : list
-        List of values to count
+    input_object : iter
+        Iterable of Abstract Base Classes objects
+
+    Returns
+    -------
+    pd.DataFrame
+        Dataframe for the input list of Abstract Base Classes objects
+    """
+    list_dir = [dir(entry) for entry in list_input]
+    set_dir = {item for sublist in list_dir for item in sublist}
+
+    dict_dir = {attr: [] for attr in set_dir}
+    for entry in list_input:
+        for attr in dict_dir.keys():
+            try:
+                dict_dir[attr].append(getattr(entry, attr))
+            except AttributeError:
+                dict_dir[attr].append(None)
+
+    df = pd.DataFrame.from_dict(dict_dir)
+
+    return df
+
+
+def save_cbioportal_data_to_csv(
+    df: pd.DataFrame,
+) -> None:
+    """Save cBioPortal data to a CSV file
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe of cBioPortal data
 
     Returns
     -------
     None
     """
-    for Unique in set(list_input):
-        n = list_input.count(Unique)
-        print(f"{Unique:<15} \t {n:>10}")
+    try:
+        path_data = os.environ[DATA_CACHE_DIR]
+        if not os.path.exists(path_data):
+            os.makedirs(path_data)
+        study_id = maybe_get_cbioportal_cohort_from_env()
+        df.to_csv(os.path.join(path_data, f"{study_id}_mutations.csv"), index=False)
+    except KeyError:
+        print("DATA_CACHE not found in environment variables...")
 
 
-def parse_obj2dict(
-    input_object: requests.models.Response,
-) -> dict:
-    """Parse a response object into a dictionary
-
-    Parameters
-    ----------
-    input_object : requests.models.Response
-        Response object from a request
-
-    Returns
-    -------
-    dict
-        Dictionary of values from the response object
-    """
-    dict_output = {}
-
-    list_dir = dir(input_object[0])
-
-    for attr in list_dir:
-        list_attr = []
-        for entry in input_object:
-            try:
-                add = int(entry[attr])
-            except ValueError:
-                add = str(entry[attr])
-            list_attr.append(add)
-        dict_output[attr] = list_attr
-
-    return dict_output
+def main():
+    muts = get_all_mutations_by_study()
+    df_muts = parse_iterabc2dataframe(muts)
+    df_genes = parse_iterabc2dataframe(df_muts["gene"])
+    df_combo = pd.concat([df_muts, df_genes], axis=1)
+    df_combo = df_combo.drop(['gene'], axis=1)
+    save_cbioportal_data_to_csv(df_combo)
 
 
-def parse_series2dict(
-    series: pd.Series,
-    strwrap: None | str = None,
-    delim1: None | str = None,
-    delim2: None | str = None,
-) -> dict:
-    """Parse a series into a dictionary
-
-    Parameters
-    ----------
-    series : pd.Series
-        Series to parse
-    strwrap : None | str
-        Regular expression to wrap the values in the series
-    delim1 : None | str
-        Delimiter to split the values in the series
-    delim2 : None | str
-        Delimiter to split the values in the series
-
-    Returns
-    -------
-    dict
-        Dictionary of values from the series
-    """
-    if strwrap is None:
-        strwrap = r"Gene\((.*)\)"
-    if delim1 is None:
-        delim1 = ", "
-    if delim2 is None:
-        delim2 = "="
-
-    list_temp = series.apply(
-        lambda x: re.search(strwrap, str(x)).group(1).split(delim1)
-    )
-    list_keys = [gene.split(delim2)[0] for gene in list_temp[0]]
-    dict_out = {key: [] for key in list_keys}
-
-    for row in list_temp:
-        list_row = [col.split(delim2)[1] for col in row]
-        for idx, col in enumerate(list_row):
-            dict_out[list_keys[idx]].append(col)
-
-    return dict_out
-
-
-def calc_vaf(
-    dataframe,
-    alt: None | str = None,
-    ref: None | str = None,
-):
-    if alt is None:
-        alt = "tumorAltCount"
-    if ref is None:
-        ref = "tumorRefCount"
-
-    vaf = dataframe[alt] / (dataframe[alt] + dataframe[ref])
-
-    return vaf
+if __name__ == "__main__":
+    main()

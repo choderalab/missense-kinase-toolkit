@@ -3,9 +3,9 @@ import os
 from functools import cache
 from requests.adapters import HTTPAdapter, Retry
 
-# this script was written by Jeff Quinn (MSKCC, Tansey lab)
 
-ETL_REQUEST_CACHE_VAR = "ETL_REQUEST_CACHE"
+# this script was written by Jeff Quinn (MSKCC, Tansey lab)
+REQUEST_CACHE_VAR = "REQUEST_CACHE"
 
 
 def add_retry_to_session(
@@ -28,8 +28,8 @@ def add_retry_to_session(
 
 @cache
 def get_cached_session():
-    if "ETL_REQUEST_CACHE" in os.environ:
-        cache_location = os.environ["ETL_REQUEST_CACHE"]
+    if REQUEST_CACHE_VAR in os.environ:
+        cache_location = os.environ[REQUEST_CACHE_VAR]
 
         session = CachedSession(
             cache_location, allowable_codes=(200, 404, 400), backend="sqlite"
