@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import argparse
 
 from missense_kinase_toolkit import config, cbioportal
