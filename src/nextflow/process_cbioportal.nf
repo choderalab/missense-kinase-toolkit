@@ -14,7 +14,7 @@ process PROCESS_CBIOPORTAL {
     """
     export PYTHONHASHSEED=0
     mkdir -p "${prefix}/per_study_results/${study_name}"
-    ${cache_flag}process_dataset \
+    process_cbioportal \
         --data-dir ${raw_data} \
         --output-dir ${prefix}/per_study_results/${study_name} \
         --studies ${studies} \
