@@ -12,7 +12,7 @@ def set_output_dir(
     val: str
 ) -> None:
     """Set the output directory in environment variables
-    
+
     Parameters
     ----------
     val : str
@@ -24,7 +24,7 @@ def set_output_dir(
     """
     os.environ[OUTPUT_DIR_VAR] = val
 
-    
+
 def get_output_dir(
 ) -> str | None:
     """Get the output directory from the environment
@@ -49,7 +49,7 @@ def set_cbioportal_instance(
     Parameters
     ----------
     val : str
-        cBioPortal instance; e.g., "cbioportal.mskcc.org" for MSKCC or 
+        cBioPortal instance; e.g., "cbioportal.mskcc.org" for MSKCC or
 
     Returns
     -------
@@ -104,13 +104,13 @@ def maybe_get_cbioportal_token(
         return os.environ[CBIOPORTAL_TOKEN_VAR]
     except KeyError:
         return None
-    
+
 
 def set_request_cache(
     val: str
 ) -> None:
     """Set the request cache path in environment variables
-    
+
     Parameters
     ----------
     val : str
