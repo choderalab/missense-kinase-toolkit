@@ -16,7 +16,7 @@ DATA_CACHE_DIR = "DATA_CACHE"
 CBIOPORTAL_COHORT_VAR = "CBIOPORTAL_COHORT"
 
 
-def maybe_get_cbioportal_token_from_env(       
+def maybe_get_cbioportal_token_from_env(
 ) -> str | None:
     """Get the cBioPortal token from the environment
 
@@ -68,7 +68,7 @@ def maybe_get_cbioportal_cohort_from_env(
     return instance
 
 
-def get_all_mutations_by_study(       
+def get_all_mutations_by_study(
 ) -> list | None:
     """Get mutations  cBioPortal data
 
@@ -149,8 +149,8 @@ def parse_iterabc2dataframe(
         Dataframe for the input list of Abstract Base Classes objects
     """
     list_dir = [dir(entry) for entry in list_input]
-    set_dir = set([item for sublist in list_dir for item in sublist])
-    
+    set_dir = {item for sublist in list_dir for item in sublist}
+
     dict_dir = {attr: [] for attr in set_dir}
     for entry in list_input:
         for attr in dict_dir.keys():
@@ -158,14 +158,14 @@ def parse_iterabc2dataframe(
                 dict_dir[attr].append(getattr(entry, attr))
             except AttributeError:
                 dict_dir[attr].append(None)
-    
+
     df = pd.DataFrame.from_dict(dict_dir)
-    
+
     return df
 
 
 def save_cbioportal_data_to_csv(
-    df: pd.DataFrame, 
+    df: pd.DataFrame,
 ) -> None:
     """Save cBioPortal data to a CSV file
 

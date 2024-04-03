@@ -44,7 +44,7 @@ def scrape_kinhub(
         if i % mult == 0:
             i = 1
         else:
-            i +=1    
+            i +=1
 
     df_kinhub = pd.DataFrame.from_dict(dict_kinhub)
     # df_kinhub = clean_names(df_kinhub)

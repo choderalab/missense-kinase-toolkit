@@ -6,7 +6,7 @@ DATA_CACHE_DIR = "DATA_CACHE"
 
 
 def save_dataframe_to_csv(
-    df: pd.DataFrame, 
+    df: pd.DataFrame,
     filename: str,
 ) -> None:
     """Save a dataframe to a CSV file
