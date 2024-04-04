@@ -12,7 +12,7 @@ def parsearg_utils():
     parser.add_argument(
         "--cohort",
         type=str,
-        help="Optional: cBioPortal cohort IDs separated by commas (e.g., `msk_impact_2017` for Zehir, 2017 and `mskimpact` for MSKCC clinical sequencing cohort)",
+        help="Optional: cBioPortal cohort IDs separated by commas (e.g., `msk_impact_2017` for Zehir, 2017 and `mskimpact` for MSKCC clinical sequencing cohort) (str)",
         default="msk_impact_2017",
     )
 

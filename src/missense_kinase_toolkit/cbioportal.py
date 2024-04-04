@@ -9,13 +9,6 @@ from bravado.requests_client import RequestsClient
 from missense_kinase_toolkit import config, io_utils
 
 
-# OUTPUT_DIR_VAR = "OUTPUT_DIR"
-# CBIOPORTAL_INSTANCE_VAR = "CBIOPORTAL_INSTANCE"
-# CBIOPORTAL_TOKEN_VAR = "CBIOPORTAL_TOKEN"
-# REQUEST_CACHE_VAR = "REQUESTS_CACHE"
-# CBIOPORTAL_COHORT_VAR = "CBIOPORTAL_COHORT"
-
-
 def get_all_mutations_by_study(
     study_id: str,
 ) -> list | None:
@@ -26,16 +19,9 @@ def get_all_mutations_by_study(
     list | None
         cBioPortal data of Abstract Base Classes objects if successful, otherwise None
     """
-    # instance = os.environ[CBIOPORTAL_INSTANCE_VAR]
     instance = config.get_cbioportal_instance()
     url = f"https://{instance}/api/v2/api-docs"
-    # token = os.environ[CBIOPORTAL_TOKEN_VAR]
     token = config.maybe_get_cbioportal_token()
-    # study_id = os.environ[CBIOPORTAL_COHORT_VAR]
-
-    # print(token)
-    # print(url)
-    # print(study_id)
 
     if token is not None:
         http_client = RequestsClient()
@@ -108,44 +94,14 @@ def parse_iterabc2dataframe(
                 dict_dir[attr].append(None)
 
     df = pd.DataFrame.from_dict(dict_dir)
+    df = df[sorted(df.columns.to_list())]
 
     return df
 
 
-# def save_cbioportal_data_to_csv(
-#     df: pd.DataFrame,
-#     study_id: str,
-# ) -> None:
-#     """Save cBioPortal data to a CSV file
-
-#     Parameters
-#     ----------
-#     df : pd.DataFrame
-#         Dataframe of cBioPortal data
-#     study_id : str
-#         cBioPortal study ID
-
-#     Returns
-#     -------
-#     None
-#     """
-#     try:
-#         # path_data = os.environ[OUTPUT_DIR_VAR]
-#         path_data = config.get_output_dir()
-#         if not os.path.exists(path_data):
-#             os.makedirs(path_data)
-#         # study_id = os.environ[CBIOPORTAL_COHORT_VAR]
-#         # study_id = config.get_cbioportal_cohort()
-#         df.to_csv(os.path.join(path_data, f"{study_id}_mutations.csv"), index=False)
-#     except KeyError:
-#         print("OUTPUT_DIR not found in environment variables...")
-
-
 def get_and_save_cbioportal_cohort(
-# def main(
     study_id: str,
 ) -> None:
-    # muts = get_all_mutations_by_study()
     muts = get_all_mutations_by_study(study_id)
 
     df_muts = parse_iterabc2dataframe(muts)
@@ -154,9 +110,5 @@ def get_and_save_cbioportal_cohort(
     df_combo = df_combo.drop(['gene'], axis=1)
 
     filename = f"{study_id}_mutations.csv"
+
     io_utils.save_dataframe_to_csv(df_combo, filename)
-    # save_cbioportal_data_to_csv(df_combo, study_id)
-
-
-# if __name__ == "__main__":
-#     main()

@@ -1,5 +1,8 @@
 import pandas as pd
 
+from missense_kinase_toolkit import requests_wrapper
+
+
 def scrape_kinhub(
     url: str = "http://www.kinhub.org/kinases.html",
 ) -> pd.DataFrame:
@@ -24,7 +27,7 @@ def scrape_kinhub(
     # perhaps just write own function to clean column names
     # from janitor import clean_names
 
-    page = requests.get(url)
+    page = requests_wrapper.get_cached_session().get(url)
     soup = BeautifulSoup(page.content, "html.parser")
 
     list_header = [t for tr in soup.select('tr') for t in tr if t.name == 'th']
