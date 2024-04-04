@@ -43,7 +43,7 @@ pytest-runner = "^6.0.1"
 pythonpath = ["src"]
 
 [tool.poetry.scripts]
-process_cbioportal = "missense_kinase_toolkit.cli.process_cbioportal:main"
+extract_cbioportal = "missense_kinase_toolkit.cli.extract_cbioportal:main"
 
 [tool.poetry-dynamic-versioning]
 enable = true

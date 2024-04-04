@@ -2,7 +2,7 @@ import os
 import pandas as pd
 
 
-DATA_CACHE_DIR = "DATA_CACHE"
+OUTPUT_DIR_VAR = "OUTPUT_DIR"
 
 
 def save_dataframe_to_csv(
@@ -15,8 +15,9 @@ def save_dataframe_to_csv(
     ----------
     df : pd.DataFrame
         Dataframe to save
-    output_path : str
-        Path to save the CSV file
+    filename : str
+        Filename to save (either with or without "csv" suffix)
+
 
     Returns
     -------
@@ -25,9 +26,9 @@ def save_dataframe_to_csv(
     filename = filename.replace(".csv", "") + ".csv"
 
     try:
-        path_data = os.environ[DATA_CACHE_DIR]
+        path_data = os.environ[OUTPUT_DIR_VAR]
         if not os.path.exists(path_data):
             os.makedirs(path_data)
-        df.to_csv(os.path.join(path_data, f"{filename}_mutations.csv"), index=False)
+        df.to_csv(os.path.join(path_data, filename), index=False)
     except KeyError:
-        print("DATA_CACHE not found in environment variables...")
+        print("OUTPUT_DIR not found in environment variables...")

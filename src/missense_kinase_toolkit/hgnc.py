@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import requests
 
 from missense_kinase_toolkit import requests_wrapper, utils_requests

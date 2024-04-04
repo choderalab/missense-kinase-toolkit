@@ -25,8 +25,8 @@ def parsearg_utils():
     parser.add_argument(
         "--instance",
         type=str,
-        help="Optional: cBioPortal instance (e.g., `cbioportal.mskcc.org`). Default: `cbioportal.org` (str)",
-        default="cbioportal.org",
+        help="Optional: cBioPortal instance (e.g., `cbioportal.mskcc.org`). Default: `www.cbioportal.org` (str)",
+        default="www.cbioportal.org",
     )
 
     parser.add_argument(
@@ -36,12 +36,12 @@ def parsearg_utils():
         help="Optional: cBioPortal API token (str)",
     )
 
-    parser.add_argument(
-        "--requestsCache",
-        type=str,
-        default="",
-        help="Optional: Requests cache (str)",
-    )
+    # parser.add_argument(
+    #     "--requestsCache",
+    #     type=str,
+    #     default="",
+    #     help="Optional: Requests cache (str)",
+    # )
 
     # TODO: add logging functionality
     return parser
@@ -54,22 +54,23 @@ def main():
     list_studies = str_studies.split(",")
     list_studies = [study.strip() for study in list_studies]
 
-    # required arguments
+    # required argument
     config.set_output_dir(args.outDir)
-    config.set_cbioportal_instance(args.instance)
 
     # optional arguments
+    config.set_cbioportal_instance(args.instance)
+    
     try:
         if args.token != "":
-            config.set_cbioportal_instance(args.token)
+            config.set_cbioportal_token(args.token)
     except AttributeError:
         pass
 
-    try:
-        if args.requestsCache != "":
-            config.set_cbioportal_instance(args.requestsCache)
-    except AttributeError:
-        pass
+    # try:
+    #     if args.requestsCache != "":
+    #         config.set_request_cache(args.requestsCache)
+    # except AttributeError:
+    #     pass
 
     for study in list_studies:
         cbioportal.get_and_save_cbioportal_cohort(study)
