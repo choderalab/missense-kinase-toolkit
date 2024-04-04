@@ -59,7 +59,7 @@ def main():
 
     # optional arguments
     config.set_cbioportal_instance(args.instance)
-    
+
     try:
         if args.token != "":
             config.set_cbioportal_token(args.token)
