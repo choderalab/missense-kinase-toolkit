@@ -5,6 +5,24 @@ import pandas as pd
 OUTPUT_DIR_VAR = "OUTPUT_DIR"
 
 
+def check_outdir_exists(
+) -> str:
+    """Check if OUTPUT_DIR in environmental variables and create directory if doesn't exist
+
+    Returns
+    -------
+    str
+    """
+    try:
+        path_data = os.environ[OUTPUT_DIR_VAR]
+        if not os.path.exists(path_data):
+            os.makedirs(path_data)
+    except KeyError:
+        print("OUTPUT_DIR not found in environment variables...")
+
+    return path_data
+
+
 def save_dataframe_to_csv(
     df: pd.DataFrame,
     filename: str,
@@ -23,15 +41,9 @@ def save_dataframe_to_csv(
     -------
     None
     """
-    filename = f"{filename.replace(".csv", "")}.csv"
-
-    try:
-        path_data = os.environ[OUTPUT_DIR_VAR]
-        if not os.path.exists(path_data):
-            os.makedirs(path_data)
-        df.to_csv(os.path.join(path_data, filename), index=False)
-    except KeyError:
-        print("OUTPUT_DIR not found in environment variables...")
+    filename = filename.replace(".csv", "") + ".csv"
+    path_data = check_outdir_exists()
+    df.to_csv(os.path.join(path_data, filename), index=False)
 
 
 def concatenate_csv_files_with_glob(
@@ -51,25 +63,18 @@ def concatenate_csv_files_with_glob(
     """
     import glob
 
-    str_find = f"{str_find.replace(".csv", "")}.csv"
-
-    csv_files = glob.glob(str_find)
+    str_find = str_find.replace(".csv", "") + ".csv"
+    path_data = check_outdir_exists()
+    csv_files = glob.glob(os.path.join(path_data, str_find))
 
     df_combo = pd.DataFrame()
-
-    try:
-        path_data = os.environ[OUTPUT_DIR_VAR]
-        if not os.path.exists(path_data):
-            os.makedirs(path_data)
-    except KeyError:
-        print("OUTPUT_DIR not found in environment variables...")
-
-    try:
+    if len(csv_files) > 0:
         for csv_file in csv_files:
             df = pd.read_csv(csv_file)
             df_combo = pd.concat([df_combo, df])
-    except:
+    else:
         print(f"No files matching {str_find} found in {path_data}...")
 
+    #TODO: implement remove duplicates
 
     return df_combo

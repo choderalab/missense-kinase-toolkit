@@ -107,7 +107,7 @@ def get_and_save_cbioportal_cohort(
     df_muts = parse_iterabc2dataframe(muts)
     df_genes = parse_iterabc2dataframe(df_muts["gene"])
     df_combo = pd.concat([df_muts, df_genes], axis=1)
-    df_combo = df_combo.drop(['gene'], axis=1)
+    df_combo = df_combo.drop(["gene"], axis=1)
 
     filename = f"{study_id}_mutations.csv"
 

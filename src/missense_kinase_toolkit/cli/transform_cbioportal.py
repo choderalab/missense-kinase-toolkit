@@ -37,7 +37,7 @@ def parsearg_utils():
 def main():
     args = parsearg_utils().parse_args()
 
-    str_mutations = args.mutation
+    str_mutations = args.mutations
     list_mutations = str_mutations.split(",")
     list_mutations = [mutation.strip() for mutation in list_mutations]
 
@@ -50,4 +50,21 @@ def main():
     except AttributeError:
         pass
 
-    df = concatenate_csv_files_with_glob()
+    df_cbioportal = io_utils.concatenate_csv_files_with_glob("*_mutations.csv")
+    
+    df_kinhub = scrapers.kinhub()
+    io_utils.save_dataframe_to_csv(df_kinhub, "kinhub.csv")
+    
+    list_kinase_hgnc = df_kinhub["HGNC Name"].to_list()
+
+    df_subset = df_cbioportal.loc[df_cbioportal["mutationType"].isin(list_mutations), ].reset_index(drop=True)
+    df_subset = df_subset.loc[df_subset["hugoGeneSymbol"].isin(list_kinase_hgnc), ].reset_index(drop=True)
+
+    list_cols = ["HGNC Name", "UniprotID"]
+    df_subset_merge = df_subset.merge(df_kinhub[list_cols],
+                                      how = "left",
+                                      left_on = "hugoGeneSymbol",
+                                      right_on = "HGNC Name")
+    df_subset_merge = df_subset_merge.drop(["HGNC Name"], axis=1)
+
+    io_utils.save_dataframe_to_csv(df_subset_merge, "transformed_mutations.csv")

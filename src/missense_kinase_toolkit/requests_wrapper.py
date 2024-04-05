@@ -31,9 +31,6 @@ def get_cached_session():
     if REQUEST_CACHE_VAR in os.environ:
         cache_location = os.environ[REQUEST_CACHE_VAR]
 
-        if not os.path.exists(cache_location):
-            os.makedirs(cache_location)
-
         session = CachedSession(
             cache_location, allowable_codes=(200, 404, 400), backend="sqlite"
         )
