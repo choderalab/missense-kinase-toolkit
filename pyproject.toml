@@ -44,6 +44,7 @@ pythonpath = ["src"]
 
 [tool.poetry.scripts]
 extract_cbioportal = "missense_kinase_toolkit.cli.extract_cbioportal:main"
+transform_cbioportal = "missense_kinase_toolkit.cli.transform_cbioportal:main"
 
 [tool.poetry-dynamic-versioning]
 enable = true
