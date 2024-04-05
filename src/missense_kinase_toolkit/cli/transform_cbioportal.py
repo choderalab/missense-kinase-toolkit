@@ -51,10 +51,10 @@ def main():
         pass
 
     df_cbioportal = io_utils.concatenate_csv_files_with_glob("*_mutations.csv")
-    
+
     df_kinhub = scrapers.kinhub()
     io_utils.save_dataframe_to_csv(df_kinhub, "kinhub.csv")
-    
+
     list_kinase_hgnc = df_kinhub["HGNC Name"].to_list()
 
     df_subset = df_cbioportal.loc[df_cbioportal["mutationType"].isin(list_mutations), ].reset_index(drop=True)
