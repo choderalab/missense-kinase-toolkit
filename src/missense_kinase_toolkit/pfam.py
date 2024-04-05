@@ -2,7 +2,7 @@ import json
 
 import pandas as pd
 
-from missense_kinase_toolkit import requests_wrapper
+from missense_kinase_toolkit import requests_wrapper, utils_requests
 
 
 def retrieve_pfam(
@@ -21,7 +21,6 @@ def retrieve_pfam(
         DataFrame with Pfam domain information if request is successful, UniProt ID if request fails;
           None if response is empty
     """
-
     url = f"https://www.ebi.ac.uk/interpro/api/entry/pfam/protein/UniProt/{uniprot_id}"
 
     header = {"Accept": "application/json"}
@@ -31,146 +30,72 @@ def retrieve_pfam(
     )
 
     if res.ok:
-        dict_json = json.loads(res.text)["results"]
-        try:
-            df1_out = pd.DataFrame()
-            df2_out = pd.DataFrame()
+        if len(res.text) == 0:
+            print(f"No PFAM domains found: {uniprot_id}")
+            return None
+        else:
+            list_json = json.loads(res.text)["results"]
 
-            for entry in dict_json:
-                df1_temp = pd.DataFrame.from_dict(
-                    entry["metadata"], orient="index"
-                ).transpose()
-                df1_out = pd.concat([df1_out, df1_temp]).reset_index(drop=True)
+            # metadata for UniProt ID
+            list_metadata = [entry["metadata"] for entry in list_json]
+            list_metadata = [{"pfam_accession" if k == "accession" else k:v for k,v in entry.items()} for entry in list_metadata]
+            
+            # Pfam domains locations
+            list_locations = [entry["proteins"][0]["entry_protein_locations"][0]["fragments"][0] for entry in list_json]
+            
+            # model information
+            list_model = [entry["proteins"][0]["entry_protein_locations"][0] for entry in list_json]
+            [entry.pop("fragments", None) for entry in list_model]
 
-                df2_temp = pd.DataFrame.from_dict(
-                    entry["proteins"][0], orient="index"
-                ).transpose()
-                df2_out = pd.concat([df2_out, df2_temp]).reset_index(drop=True)
+            # protein information
+            # do last because pop is an in-place operation
+            list_protein = [entry["proteins"][0] for entry in list_json]
+            [entry.pop("entry_protein_locations", None) for entry in list_protein]
+            list_protein = [{"uniprot" if k == "accession" else k:v for k,v in entry.items()} for entry in list_protein]
 
-            df1_out = df1_out.rename(columns={"accession": "pfam_accession"})
-            df2_out = df2_out.rename(
-                columns={
-                    "accession": "uniprot_accession",
-                    "source_database": "review_status",
-                }
+            df_concat = pd.concat(
+                [
+                    pd.DataFrame(list_protein),
+                    pd.DataFrame(list_metadata), 
+                    pd.DataFrame(list_locations), 
+                    pd.DataFrame(list_model)
+                ], 
+                 axis=1
             )
 
-            df_out = pd.concat([df1_out, df2_out], axis=1)
-            df_out = df_out.explode("entry_protein_locations").reset_index(drop=True)
-
-            list_entry = ["model", "score"]
-            for entry in list_entry:
-                df_out[entry] = df_out["entry_protein_locations"].apply(
-                    lambda x: x[entry]
-                )
-
-            list_fragments = ["start", "end", "dc-status"]
-            for entry in list_fragments:
-                df_out[entry] = df_out["entry_protein_locations"].apply(
-                    lambda x: x["fragments"][0][entry]
-                )
-
-            del df_out["entry_protein_locations"]
-
-            return df_out
-        except KeyError:
-            print("Error:")
-            print(dict_json)
-            print()
-            return None
+            return df_concat
     else:
-        return uniprot_id
-
-
-def concat_pfam(
-    iter_uniprot: iter[str],
-    iter_hgnc: iter[str],
-) -> tuple[pd.DataFrame, dict[str, str], dict[str, str]]:
-    """Concatenate Pfam domain information for a list of UniProt IDs
-
-    Parameters
-    ----------
-    iter_uniprot : iter[str]
-        Iterable of UniProt IDs
-    iter_hgnc : iter[str]
-        Iterable of HGNC symbols
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame with Pfam domain information
-    dict[str, str]
-        Dictionary of HGNC symbols and UniProt IDs with errors
-    dict[str, str]
-        Dictionary of HGNC symbols and UniProt IDs with missing information
-    """
-    dict_error = {}
-    dict_missing = {}
-    df = pd.DataFrame()
-
-    for uniprot, hgnc in zip(iter_uniprot, iter_hgnc):
-        temp = retrieve_pfam(uniprot)
-
-        if temp is None:
-            dict_error[hgnc] = uniprot
-        if type(temp) is str:
-            dict_missing[hgnc] = uniprot
-        else:
-            temp.insert(0, "hgnc", hgnc)
-            df = pd.concat([df, temp]).reset_index(drop=True)
-
-    return df, dict_error, dict_missing
-
-
-def extract_numeric(
-    input_string: str,
-) -> str:
-    """Extract numeric characters from a string
-
-    Parameters
-    ----------
-    input_string : str
-        Input string
-
-    Returns
-    -------
-    str
-        Numeric characters extracted from the input string
-    """
-    num = ""
-    for i in input_string:
-        if i.isdigit():
-            num = num + i
-    return num
-
-
-def find_pfam(
-    input_hgnc: str,
-    input_position: int,
-    df_ref: pd.DataFrame,
-) -> str | None:
-    """Find Pfam domain for a given HGNC symbol and position
-
-    Parameters
-    ----------
-    input_hgnc : str
-        HGNC symbol
-    input_position : int
-        Codon position
-    df_ref : pd.DataFrame
-        DataFrame with Pfam domain information
-
-    Returns
-    -------
-    str | None
-        Pfam domain if found, None if not found
-    """
-    df_temp = df_ref.loc[df_ref["hgnc"] == input_hgnc].reset_index()
-    try:
-        domain = df_temp.loc[
-            ((input_position >= df_temp["start"]) & (input_position <= df_temp["end"])),
-            "name",
-        ].values[0]
-        return domain
-    except IndexError:
+        utils_requests.print_status_code_if_res_not_ok(res)
         return None
+
+
+# def find_pfam(
+#     input_hgnc: str,
+#     input_position: int,
+#     df_ref: pd.DataFrame,
+# ) -> str | None:
+#     """Find Pfam domain for a given HGNC symbol and position
+
+#     Parameters
+#     ----------
+#     input_hgnc : str
+#         HGNC symbol
+#     input_position : int
+#         Codon position
+#     df_ref : pd.DataFrame
+#         DataFrame with Pfam domain information
+
+#     Returns
+#     -------
+#     str | None
+#         Pfam domain if found, None if not found
+#     """
+#     df_temp = df_ref.loc[df_ref["hgnc"] == input_hgnc].reset_index()
+#     try:
+#         domain = df_temp.loc[
+#             ((input_position >= df_temp["start"]) & (input_position <= df_temp["end"])),
+#             "name",
+#         ].values[0]
+#         return domain
+#     except IndexError:
+#         return None

@@ -48,6 +48,7 @@ def save_dataframe_to_csv(
 
 def concatenate_csv_files_with_glob(
     str_find: str,
+    str_remove: str = "transformed_mutations.csv",
 ) -> pd.DataFrame:
     """Use glob to find csv files to concatenate
 
@@ -66,11 +67,12 @@ def concatenate_csv_files_with_glob(
     str_find = str_find.replace(".csv", "") + ".csv"
     path_data = check_outdir_exists()
     csv_files = glob.glob(os.path.join(path_data, str_find))
+    csv_files = [csv_file for csv_file in csv_files if str_remove not in csv_file]
 
     df_combo = pd.DataFrame()
     if len(csv_files) > 0:
         for csv_file in csv_files:
-            df = pd.read_csv(csv_file)
+            df = pd.read_csv(csv_file, low_memory=False)
             df_combo = pd.concat([df_combo, df])
     else:
         print(f"No files matching {str_find} found in {path_data}...")
