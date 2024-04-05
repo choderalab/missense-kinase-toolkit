@@ -185,5 +185,7 @@ $RECYCLE.BIN/
 # End of https://www.toptal.com/developers/gitignore/api/osx,windows,linux
 
 # Requests cache directory
-requests_cache/
-data_cache/
+# requests_cache/
+# data_cache/
+*params.json
+True.sqlite

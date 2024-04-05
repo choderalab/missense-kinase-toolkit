@@ -1,7 +1,10 @@
 import pandas as pd
 
-def scrape_kinhub(
-    url: str ='http://www.kinhub.org/kinases.html'
+from missense_kinase_toolkit import requests_wrapper
+
+
+def kinhub(
+    url: str = "http://www.kinhub.org/kinases.html",
 ) -> pd.DataFrame:
     """Scrape the KinHub database for kinase information
 
@@ -24,7 +27,7 @@ def scrape_kinhub(
     # perhaps just write own function to clean column names
     # from janitor import clean_names
 
-    page = requests.get(url)
+    page = requests_wrapper.get_cached_session().get(url)
     soup = BeautifulSoup(page.content, "html.parser")
 
     list_header = [t for tr in soup.select('tr') for t in tr if t.name == 'th']
@@ -49,4 +52,10 @@ def scrape_kinhub(
     df_kinhub = pd.DataFrame.from_dict(dict_kinhub)
     # df_kinhub = clean_names(df_kinhub)
 
-    return df_kinhub
+    # for kinases with 2 kinase domains, entries are duplicated despite same UniProt ID
+    # drop these
+    df_kinhub_drop = df_kinhub.loc[~df_kinhub["Manning Name"].apply(lambda x: "Domain2_" in str(x)), ]
+    # list_uniprot = df_kinhub["UniprotID"][df_kinhub["Manning Name"].apply(lambda x: "Domain2_" in str(x))].to_list()
+    # assert df_kinhub.shape[0] - df_kinhub_drop.shape[0] == df_kinhub_drop["UniprotID"].isin(list_uniprot).sum()
+
+    return df_kinhub_drop
