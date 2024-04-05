@@ -39,10 +39,10 @@ def retrieve_pfam(
             # metadata for UniProt ID
             list_metadata = [entry["metadata"] for entry in list_json]
             list_metadata = [{"pfam_accession" if k == "accession" else k:v for k,v in entry.items()} for entry in list_metadata]
-            
+
             # Pfam domains locations
             list_locations = [entry["proteins"][0]["entry_protein_locations"][0]["fragments"][0] for entry in list_json]
-            
+
             # model information
             list_model = [entry["proteins"][0]["entry_protein_locations"][0] for entry in list_json]
             [entry.pop("fragments", None) for entry in list_model]
@@ -56,10 +56,10 @@ def retrieve_pfam(
             df_concat = pd.concat(
                 [
                     pd.DataFrame(list_protein),
-                    pd.DataFrame(list_metadata), 
-                    pd.DataFrame(list_locations), 
+                    pd.DataFrame(list_metadata),
+                    pd.DataFrame(list_locations),
                     pd.DataFrame(list_model)
-                ], 
+                ],
                  axis=1
             )
 
