@@ -15,10 +15,10 @@ Generate own `params.json` file using the following parameters:
 
 Below is a description of what each variable should contain. If variable is optional and not in use, do not create any entry in the `json` file.
 
-| Variable             | Optional | Description |
-| :--------------------| :------: | :---------- |
-| 'CBIOPORTAL_COHORT'  |    No    | cBioPortal cohort to analyze |
-| 'OUTPUT_DIR'         |    No    | Path to outdir to save data |
-| 'CBIOPORTAL_INSTANCE'|    Yes   | `cbioportal.org` if none provided |
-| 'CBIOPORTAL_TOKEN'   |    Yes   | Data Access Token if using private instance|
-| 'REQUESTS_CACHE'     |    Yes   | Path to dir to cache requests data |
+| Variable             | Optional | Description                                |
+| :--------------------| :------: | :----------------------------------------- |
+| CBIOPORTAL_COHORT    |    No    | cBioPortal cohort to analyze               |
+| OUTPUT_DIR           |    No    | Path to outdir to save data                |
+| CBIOPORTAL_INSTANCE  |    Yes   | `cbioportal.org` if none provided          |
+| CBIOPORTAL_TOKEN     |    Yes   | Data Access Token if using private instance|
+| REQUESTS_CACHE       |    Yes   | Boolean of whether to cache requests data  |

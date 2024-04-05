@@ -36,14 +36,8 @@ def parsearg_utils():
         help="Optional: cBioPortal API token (str)",
     )
 
-    # parser.add_argument(
-    #     "--requestsCache",
-    #     type=str,
-    #     default="",
-    #     help="Optional: Requests cache (str)",
-    # )
-
     # TODO: add logging functionality
+    # TODO: cache requests for cBioPortal API
     return parser
 
 
@@ -65,12 +59,6 @@ def main():
             config.set_cbioportal_token(args.token)
     except AttributeError:
         pass
-
-    # try:
-    #     if args.requestsCache != "":
-    #         config.set_request_cache(args.requestsCache)
-    # except AttributeError:
-    #     pass
 
     for study in list_studies:
         cbioportal.get_and_save_cbioportal_cohort(study)

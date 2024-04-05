@@ -14,7 +14,7 @@ def parsearg_utils():
         "--mutations",
         type=str,
         help="Optional: Mutation type(s) to extract, separated by commas (e.g., `Missense_Mutation`) (str)",
-        default="",
+        default="Missense_Mutation",
     )
 
     parser.add_argument(
@@ -25,9 +25,9 @@ def parsearg_utils():
 
     parser.add_argument(
         "--requestsCache",
-        type=str,
-        default="",
-        help="Optional: Requests cache (str)",
+        type=bool,
+        default=False,
+        help="Optional: Requests cache; default False (bool)",
     )
 
     # TODO: add logging functionality
@@ -44,11 +44,8 @@ def main():
     # required argument
     config.set_output_dir(args.outDir)
 
-    try:
-        if args.requestsCache != "":
-            config.set_request_cache(args.requestsCache)
-    except AttributeError:
-        pass
+    # optional argument
+    config.set_request_cache(args.requestsCache)
 
     df_cbioportal = io_utils.concatenate_csv_files_with_glob("*_mutations.csv")
 

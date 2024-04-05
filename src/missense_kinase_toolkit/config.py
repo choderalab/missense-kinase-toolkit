@@ -107,7 +107,7 @@ def maybe_get_cbioportal_token(
 
 
 def set_request_cache(
-    val: str
+    val: bool
 ) -> None:
     """Set the request cache path in environment variables
 
@@ -120,7 +120,8 @@ def set_request_cache(
     -------
     None
     """
-    os.environ[REQUEST_CACHE_VAR] = val
+    #TODO: val should be bool but doesn't work with env, fix
+    os.environ[REQUEST_CACHE_VAR] = str(val)
 
 
 def maybe_get_request_cache(
