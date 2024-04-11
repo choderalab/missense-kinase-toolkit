@@ -50,7 +50,7 @@ class cBioPortal():
     # instance: ClassVar[str] = f"{config.get_cbioportal_instance()}"
     # url: ClassVar[str] = f"https://{instance}/api/v2/api-docs"
     # cbioportal: ClassVar[SwaggerClient | None] = None
- 
+
     def __init__(self):
         self.instance = config.get_cbioportal_instance()
         self.url = f"https://{self.instance}/api/v2/api-docs"
@@ -69,7 +69,7 @@ class cBioPortal():
         else:
             print("No API token provided")
         return http_client
-    
+
     def get_cbioportal_api(self):
         http_client = self._set_api_key()
 
@@ -90,10 +90,10 @@ class cBioPortal():
 
     def get_instance(self):
         return self.instance
-    
+
     def get_url(self):
         return self.url
-    
+
     def get_cbioportal(self):
         return self._cbioportal
 
@@ -146,6 +146,6 @@ class Mutations(cBioPortal):
 
     def get_study_id(self):
         return self.study_id
-    
+
     def get_mutations(self):
         return self._mutations
