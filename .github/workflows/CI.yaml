@@ -54,7 +54,7 @@ jobs:
           # python -m pip install . --no-deps
           python -m pip install poetry
           python -m venv .venv --copies
-          poetry config virtualenvs.create false
+          # poetry config virtualenvs.create false
           poetry install
           # micromamba list
 
