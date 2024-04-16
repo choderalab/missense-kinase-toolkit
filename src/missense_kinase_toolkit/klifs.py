@@ -41,7 +41,7 @@ class HumanKinaseInfo(KLIFS):
         try:
             kinase_info = (
                 self._klifs.Information.get_kinase_ID(
-                kinase_name=[self.kinase_name], 
+                kinase_name=[self.kinase_name],
                 species=self.species)
             .response()
             .result[0]
@@ -55,16 +55,16 @@ class HumanKinaseInfo(KLIFS):
         except Exception as e:
             print(e)
             list_key = [
-                'family', 
-                'full_name', 
-                'gene_name', 
-                'group', 
-                'iuphar', 
-                'kinase_ID', 
-                'name', 
-                'pocket', 
-                'species', 
-                'subfamily', 
+                'family',
+                'full_name',
+                'gene_name',
+                'group',
+                'iuphar',
+                'kinase_ID',
+                'name',
+                'pocket',
+                'species',
+                'subfamily',
                 'uniprot'
                 ]
             dict_kinase_info = dict(zip(list_key, [None]*len(list_key)))
@@ -111,4 +111,3 @@ class HumanKinaseInfo(KLIFS):
 #     data.entity2_idx.unique()
 #     data.
 #     split = data.get_split()
-

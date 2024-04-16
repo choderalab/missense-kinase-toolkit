@@ -8,7 +8,7 @@ def parsearg_utils():
     parser = argparse.ArgumentParser(
         description="Get mutations from cBioPortal instance for all specified studies."
     )
-    
+
     parser.add_argument(
         "--outDir",
         type=str,

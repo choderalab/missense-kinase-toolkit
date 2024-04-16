@@ -65,7 +65,7 @@ def load_csv_to_dataframe(
     except FileNotFoundError:
         print(f"File {filename} not found in {path_data}...")
     return df
-    
+
 
 def save_dataframe_to_csv(
     df: pd.DataFrame,

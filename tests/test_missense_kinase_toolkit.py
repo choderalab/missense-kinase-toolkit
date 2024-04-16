@@ -19,7 +19,7 @@ def test_kinhub_scraper():
     from missense_kinase_toolkit import scrapers
 
     df_kinhub = scrapers.kinhub()
-    
+
     assert df_kinhub.shape[0] == 517
     assert df_kinhub.shape[1] == 8
     assert "HGNC Name" in df_kinhub.columns
@@ -30,7 +30,7 @@ def test_klifs_HumanKinaseInfo():
     from missense_kinase_toolkit import klifs
 
     dict_egfr = klifs.HumanKinaseInfo("EGFR")._kinase_info
-    
+
     assert dict_egfr["family"] == "EGFR"
     assert dict_egfr["full_name"] == "epidermal growth factor receptor"
     assert dict_egfr["gene_name"] == "EGFR"

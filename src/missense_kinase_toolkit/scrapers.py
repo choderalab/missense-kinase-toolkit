@@ -55,5 +55,5 @@ def kinhub(
     list_cols.remove("HGNC Name")
     df_kinhub_agg = df_kinhub.groupby(["HGNC Name"], as_index=False, sort=False).agg(set)
     df_kinhub_agg[list_cols] = df_kinhub_agg[list_cols].map(lambda x : ', '.join(str(s) for s in x))
-    
+
     return df_kinhub_agg
