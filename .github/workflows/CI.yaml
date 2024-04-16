@@ -64,7 +64,7 @@ jobs:
         # conda setup requires this special shell
         shell: bash -l {0}
         run: |
-          poetry pytest -v --cov=missense_kinase_toolkit --cov-report=xml --color=yes tests/
+          pytest -v --cov=missense_kinase_toolkit --cov-report=xml --color=yes tests/
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4.0.1
