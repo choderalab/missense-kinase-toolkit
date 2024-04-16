@@ -2,11 +2,24 @@
 
 import argparse
 
-from missense_kinase_toolkit import config, cbioportal
+from missense_kinase_toolkit import config, io_utils, cbioportal
 
 def parsearg_utils():
     parser = argparse.ArgumentParser(
-        description="Get mutations from cBioPortal cohort and instance"
+        description="Get mutations from cBioPortal instance for all specified studies."
+    )
+    
+    parser.add_argument(
+        "--outDir",
+        type=str,
+        help="Required: Output directory path (str)",
+    )
+
+    parser.add_argument(
+        "--requestsCache",
+        type=str,
+        default="requests_cache",
+        help="Optional: Requests cache; default: `requests_cache` (str)",
     )
 
     parser.add_argument(
@@ -14,12 +27,6 @@ def parsearg_utils():
         type=str,
         help="Optional: cBioPortal cohort IDs separated by commas (e.g., `msk_impact_2017` for Zehir, 2017 and `mskimpact` for MSKCC clinical sequencing cohort) (str)",
         default="msk_impact_2017",
-    )
-
-    parser.add_argument(
-        "--outDir",
-        type=str,
-        help="Required: Output directory path (str)",
     )
 
     parser.add_argument(
@@ -37,21 +44,15 @@ def parsearg_utils():
     )
 
     # TODO: add logging functionality
-    # TODO: cache requests for cBioPortal API
     return parser
 
 
 def main():
     args = parsearg_utils().parse_args()
 
-    str_studies = args.cohort
-    list_studies = str_studies.split(",")
-    list_studies = [study.strip() for study in list_studies]
+    list_studies = io_utils.convert_str2list(args.cohort)
 
-    # required argument
     config.set_output_dir(args.outDir)
-
-    # optional arguments
     config.set_cbioportal_instance(args.instance)
 
     try:
@@ -61,4 +62,4 @@ def main():
         pass
 
     for study in list_studies:
-        cbioportal.Mutations(study).get_and_save_cbioportal_cohort_mutations()
+        cbioportal.get_and_save_cbioportal_cohort(study)

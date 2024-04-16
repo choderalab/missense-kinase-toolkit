@@ -18,7 +18,6 @@ def kinhub(
     pd.DataFrame
         DataFrame of kinase information
     """
-    import requests
     from bs4 import BeautifulSoup
     import numpy as np
     # TODO: to fix ImportError
@@ -52,10 +51,9 @@ def kinhub(
     df_kinhub = pd.DataFrame.from_dict(dict_kinhub)
     # df_kinhub = clean_names(df_kinhub)
 
-    # for kinases with 2 kinase domains, entries are duplicated despite same UniProt ID
-    # drop these
-    df_kinhub_drop = df_kinhub.loc[~df_kinhub["Manning Name"].apply(lambda x: "Domain2_" in str(x)), ]
-    # list_uniprot = df_kinhub["UniprotID"][df_kinhub["Manning Name"].apply(lambda x: "Domain2_" in str(x))].to_list()
-    # assert df_kinhub.shape[0] - df_kinhub_drop.shape[0] == df_kinhub_drop["UniprotID"].isin(list_uniprot).sum()
-
-    return df_kinhub_drop
+    list_cols = df_kinhub.columns.to_list()
+    list_cols.remove("HGNC Name")
+    df_kinhub_agg = df_kinhub.groupby(["HGNC Name"], as_index=False, sort=False).agg(set)
+    df_kinhub_agg[list_cols] = df_kinhub_agg[list_cols].map(lambda x : ', '.join(str(s) for s in x))
+    
+    return df_kinhub_agg
