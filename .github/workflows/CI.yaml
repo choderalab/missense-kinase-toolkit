@@ -37,8 +37,8 @@ jobs:
       # More info on options: https://github.com/marketplace/actions/provision-with-micromamba
       # https://github.com/mamba-org/provision-with-micromamba#migration-to-setup-micromamba%60
       - uses: mamba-org/setup-micromamba@v1
-        env:
-          SETUPTOOLS_USE_DISTUTILS=stdlib
+        # env:
+        #   SETUPTOOLS_USE_DISTUTILS=stdlib
         with:
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test
