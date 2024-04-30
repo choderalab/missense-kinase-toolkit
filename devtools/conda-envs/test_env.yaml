@@ -17,3 +17,10 @@ dependencies:
     # Pip-only installs
   #- pip:
   #  - codecov
+
+    # Other
+  - pandas
+  - bravado
+  - requests-cache
+  - beautifulsoup4
+  - numpy

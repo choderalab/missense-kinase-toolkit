@@ -23,6 +23,50 @@ def check_outdir_exists(
     return path_data
 
 
+def convert_str2list(
+    input_str: str
+) -> list[str]:
+    """Convert a string to a list
+
+    Parameters
+    ----------
+    str : str
+        String to convert to list
+
+    Returns
+    -------
+    list[str]
+        List of strings
+    """
+    list_str = input_str.split(",")
+    list_str = [str_in.strip() for str_in in list_str]
+    return list_str
+
+
+def load_csv_to_dataframe(
+    filename: str,
+) -> None:
+    """Load a CSV file as a dataframe
+
+    Parameters
+    ----------
+    filename : str
+        Filename to load (either with or without "csv" suffix)
+
+    Returns
+    -------
+    pd.DataFrame
+        Dataframe loaded from CSV file
+    """
+    filename = filename.replace(".csv", "") + ".csv"
+    path_data = check_outdir_exists()
+    try:
+        df = pd.read_csv(os.path.join(path_data, filename))
+    except FileNotFoundError:
+        print(f"File {filename} not found in {path_data}...")
+    return df
+
+
 def save_dataframe_to_csv(
     df: pd.DataFrame,
     filename: str,
@@ -35,7 +79,6 @@ def save_dataframe_to_csv(
         Dataframe to save
     filename : str
         Filename to save (either with or without "csv" suffix)
-
 
     Returns
     -------
