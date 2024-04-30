@@ -27,8 +27,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Install poetry
-        run: pipx install poetry
+      # - name: Install poetry
+      #   run: pipx install poetry
 
       - name: Additional info about the build
         shell: bash
