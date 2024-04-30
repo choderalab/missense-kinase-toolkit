@@ -21,3 +21,4 @@ dependencies:
     # Other
   - pandas
   - bravado
+  - requests-cache
