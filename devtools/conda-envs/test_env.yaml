@@ -22,3 +22,5 @@ dependencies:
   - pandas
   - bravado
   - requests-cache
+  - beautifulsoup4
+  - numpy
