@@ -3,11 +3,29 @@ from bravado.client import SwaggerClient
 
 
 class KLIFS():
+    """Class to interact with the KLIFS API.
+
+    Parameters
+    ----------
+    None
+
+    Returns
+    -------
+    None
+    """
     def __init__(self):
+        """Initialize KLIFS Class object."""
         self.url = "https://dev.klifs.net/swagger_v2/swagger.json"
         self._klifs = self.get_klifs_api()
 
     def get_klifs_api(self):
+        """Get KLIFS API.
+
+        Returns
+        -------
+        SwaggerClient
+            KLIFS API object
+        """
         klifs_api = SwaggerClient.from_url(
             self.url,
             config={
@@ -19,13 +37,17 @@ class KLIFS():
         return klifs_api
 
     def get_url(self):
+        """Get KLIFS API URL."""
         return self.url
 
     def get_klifs(self):
+        """Get KLIFS API object."""
         return self._klifs
 
 
 class HumanKinaseInfo(KLIFS):
+    """Class to get information about a human kinase from KLIFS.
+    """
     species: str = "Human"
     def __init__(
         self,

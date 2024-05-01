@@ -33,6 +33,8 @@ beautifulsoup4 = "^4.12.3"
 [tool.poetry.group.dev.dependencies]
 black = "^24.3.0"
 flake8 = "^7.0.0"
+sphinx = "^7.3.7"
+sphinx-rtd-theme = "^2.0.0"
 
 
 [tool.poetry.group.test.dependencies]
