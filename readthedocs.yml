@@ -1,7 +1,6 @@
 # .readthedocs.yaml
 # Read the Docs configuration file
 # See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
-# taken from https://education.molssi.org/python-package-best-practices/10-documentation.html#read-the-docs
 
 # Required
 version: 2
@@ -30,4 +29,4 @@ sphinx:
 # See https://docs.readthedocs.io/en/stable/guides/reproducible-builds.html
 python:
     install:
-    - requirements: docs/requirements.yaml
+    - requirements: docs/requirements.txt
