@@ -1,5 +1,5 @@
-# numpy
-# matplotlib
 sphinx
 sphinx_rtd_theme
+# necessary due to dynamic versioning; o/w metadata error in RTD
+# https://stackoverflow.com/questions/75922593/sphinx-readthedocs-and-package-version
 -e .
