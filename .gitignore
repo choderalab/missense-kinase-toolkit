@@ -188,4 +188,4 @@ $RECYCLE.BIN/
 # requests_cache/
 # data_cache/
 *params.json
-True.sqlite
+*.sqlite
