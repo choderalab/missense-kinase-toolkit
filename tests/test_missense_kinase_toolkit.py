@@ -26,10 +26,10 @@ def test_kinhub_scraper():
     assert "UniprotID" in df_kinhub.columns
 
 
-def test_klifs_HumanKinaseInfo():
+def test_klifs_KinaseInfo():
     from missense_kinase_toolkit import klifs
 
-    dict_egfr = klifs.HumanKinaseInfo("EGFR")._kinase_info
+    dict_egfr = klifs.KinaseInfo("EGFR")._kinase_info
 
     assert dict_egfr["family"] == "EGFR"
     assert dict_egfr["full_name"] == "epidermal growth factor receptor"
