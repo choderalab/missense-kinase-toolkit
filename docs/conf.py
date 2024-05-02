@@ -56,6 +56,9 @@ extensions = [
 
 autosummary_generate = True
 napoleon_google_docstring = False
+napoleon_numpy_docstring = True
+napoleon_include_init_with_doc = True
+napolean_include_private_with_doc = True
 napoleon_use_param = False
 napoleon_use_ivar = True
 
@@ -187,3 +190,32 @@ texinfo_documents = [
 
 
 # -- Extension configuration -------------------------------------------------
+
+here = os.path.dirname(__file__)
+repo = os.path.join(here,  '../src')
+
+# Ensure env.metadata[env.docname]['nbsphinx-link-target']
+# points relative to repo root:
+nbsphinx_link_target_root = repo
+
+
+nbsphinx_prolog = (
+r"""
+{% if env.metadata[env.docname]['nbsphinx-link-target'] %}
+{% set docpath = env.metadata[env.docname]['nbsphinx-link-target'] %}
+{% else %}
+{% set docpath = env.doc2path(env.docname, base='docs/source/') %}
+{% endif %}
+
+.. only:: html
+
+    .. role:: raw-html(raw)
+        :format: html
+
+    .. nbinfo::
+        This page was generated from `{{ docpath }}`__.
+
+    __ https://github.com/choderalab/missense-kinase-toolkit/tree/main/
+        """ +
+    r"{{ docpath }}"
+)

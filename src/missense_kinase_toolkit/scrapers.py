@@ -6,7 +6,7 @@ from missense_kinase_toolkit import requests_wrapper
 def kinhub(
     url: str = "http://www.kinhub.org/kinases.html",
 ) -> pd.DataFrame:
-    """Scrape the KinHub database for kinase information
+    """Scrape the KinHub database to obtain list of human kinases with additional information.
 
     Parameters
     ----------
@@ -17,6 +17,7 @@ def kinhub(
     -------
     pd.DataFrame
         DataFrame of kinase information
+        
     """
     from bs4 import BeautifulSoup
     import numpy as np

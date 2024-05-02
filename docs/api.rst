@@ -3,8 +3,7 @@ API Documentation
 
 .. autosummary::
    :toctree: autosummary
+   :template: custom-module-template.rst
+   :recursive:
 
-   missense_kinase_toolkit.cbioportal
-   missense_kinase_toolkit.klifs
-   missense_kinase_toolkit.pfam
-   missense_kinase_toolkit.scrapers
+   missense_kinase_toolkit

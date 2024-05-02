@@ -3,15 +3,19 @@ import sys
 
 
 OUTPUT_DIR_VAR = "OUTPUT_DIR"
+"""str: Environment variable for output directory"""
 CBIOPORTAL_INSTANCE_VAR = "CBIOPORTAL_INSTANCE"
+"""str: Environment variable for cBioPortal instance; if none provided, default is `www.cbioportal.org`"""
 CBIOPORTAL_TOKEN_VAR = "CBIOPORTAL_TOKEN"
+"""str: Environment variable for cBioPortal token; if none provided, default is `None`"""
 REQUEST_CACHE_VAR = "REQUESTS_CACHE"
+"""str: Environment variable for request cache file prefix; if none provided, default is requests_cache"""
 
 
 def set_output_dir(
     val: str
 ) -> None:
-    """Set the output directory in environment variables
+    """Set the output directory in environment variables.
 
     Parameters
     ----------
@@ -21,13 +25,14 @@ def set_output_dir(
     Returns
     -------
     None
+
     """
     os.environ[OUTPUT_DIR_VAR] = val
 
 
 def get_output_dir(
 ) -> str | None:
-    """Get the output directory from the environment
+    """Get the output directory from the environment.
 
     Returns
     -------
@@ -44,7 +49,7 @@ def get_output_dir(
 def set_cbioportal_instance(
     val: str
 ) -> None:
-    """Set the cBioPortal instance in the environment variables
+    """Set the cBioPortal instance in the environment variables.
 
     Parameters
     ----------
@@ -54,13 +59,14 @@ def set_cbioportal_instance(
     Returns
     -------
     None
+
     """
     os.environ[CBIOPORTAL_INSTANCE_VAR] = val
 
 
 def get_cbioportal_instance(
 ) -> str | None:
-    """Get the cBioPortal instance from the environment
+    """Get the cBioPortal instance from the environment.
 
     Returns
     -------
@@ -77,7 +83,7 @@ def get_cbioportal_instance(
 def set_cbioportal_token(
     val: str
 ) -> None:
-    """Set the cBioPortal token in the environment variables
+    """Set the cBioPortal token in the environment variables.
 
     Parameters
     ----------
@@ -87,13 +93,14 @@ def set_cbioportal_token(
     Returns
     -------
     None
+
     """
     os.environ[CBIOPORTAL_TOKEN_VAR] = val
 
 
 def maybe_get_cbioportal_token(
 ) -> str | None:
-    """Get the cBioPortal token from the environment
+    """Get the cBioPortal token from the environment.
 
     Returns
     -------
@@ -109,7 +116,7 @@ def maybe_get_cbioportal_token(
 def set_request_cache(
     val: bool
 ) -> None:
-    """Set the request cache path in environment variables
+    """Set the request cache path in environment variables.
 
     Parameters
     ----------
@@ -119,6 +126,7 @@ def set_request_cache(
     Returns
     -------
     None
+
     """
     #TODO: val should be bool but doesn't work with env, fix
     os.environ[REQUEST_CACHE_VAR] = str(val)
@@ -126,12 +134,13 @@ def set_request_cache(
 
 def maybe_get_request_cache(
 ) -> str | None:
-    """Get the request cache path from the environment
+    """Get the request cache path from the environment.
 
     Returns
     -------
     str | None
         Request cache path as string if exists, otherwise None
+
     """
     try:
         return os.environ[REQUEST_CACHE_VAR]

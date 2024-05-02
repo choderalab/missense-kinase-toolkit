@@ -3,58 +3,41 @@ import pandas as pd
 
 from bravado.client import SwaggerClient
 from bravado.requests_client import RequestsClient
-# from pydantic import BaseModel
-# from typing import ClassVar
 
-from missense_kinase_toolkit import config, io_utils, utils_requests
+from missense_kinase_toolkit import config, io_utils
 
 
 logger = logging.getLogger(__name__)
 
 
-def parse_iterabc2dataframe(
-    input_object: iter,
-) -> pd.DataFrame:
-    """Parse an iterable containing Abstract Base Classes into a dataframe
-
-    Parameters
-    ----------
-    input_object : iter
-        Iterable of Abstract Base Classes objects
-
-    Returns
-    -------
-    pd.DataFrame
-        Dataframe for the input list of Abstract Base Classes objects
-    """
-    list_dir = [dir(entry) for entry in input_object]
-    set_dir = {item for sublist in list_dir for item in sublist}
-
-    dict_dir = {attr: [] for attr in set_dir}
-    for entry in input_object:
-        for attr in dict_dir.keys():
-            try:
-                dict_dir[attr].append(getattr(entry, attr))
-            except AttributeError:
-                dict_dir[attr].append(None)
-
-    df = pd.DataFrame.from_dict(dict_dir)
-    df = df[sorted(df.columns.to_list())]
-
-    return df
-
-
 class cBioPortal():
-    # instance: ClassVar[str] = f"{config.get_cbioportal_instance()}"
-    # url: ClassVar[str] = f"https://{instance}/api/v2/api-docs"
-    # cbioportal: ClassVar[SwaggerClient | None] = None
-
+    """Class to interact with the cBioPortal API."""
     def __init__(self):
+        """Initialize cBioPortal Class object.
+
+        Attributes
+        ----------
+        instance : str
+            cBioPortal instance
+        url : str
+            cBioPortal API URL
+        _cbioportal : bravado.client.SwaggerClient
+            cBioPortal API object
+
+        """
         self.instance = config.get_cbioportal_instance()
         self.url = f"https://{self.instance}/api/v2/api-docs"
         self._cbioportal = self.get_cbioportal_api()
 
     def _set_api_key(self):
+        """Set API key for cBioPortal API.
+        
+        Returns
+        -------
+        RequestsClient
+            RequestsClient object with API key set
+        
+        """
         token = config.maybe_get_cbioportal_token()
         http_client = RequestsClient()
         if token is not None:
@@ -69,6 +52,14 @@ class cBioPortal():
         return http_client
 
     def get_cbioportal_api(self):
+        """Get cBioPortal API as bravado.client.SwaggerClient object.
+
+        Returns
+        -------
+        bravado.client.SwaggerClient
+            cBioPortal API object
+
+        """
         http_client = self._set_api_key()
 
         cbioportal_api = SwaggerClient.from_url(
@@ -81,26 +72,42 @@ class cBioPortal():
             }
         )
 
-        # response = cbioportal_api.Studies.getAllStudiesUsingGET().response().incoming_response
-        # logger.error(utils_requests.print_status_code(response.status_code))
-
         return cbioportal_api
 
     def get_instance(self):
+        """Get cBioPortal instance."""
         return self.instance
 
     def get_url(self):
+        """Get cBioPortal API URL."""
         return self.url
 
     def get_cbioportal(self):
+        """Get cBioPortal API object."""
         return self._cbioportal
 
 
 class Mutations(cBioPortal):
+    """Class to get mutations from a cBioPortal study."""
     def __init__(
         self,
         study_id: str,
     ) -> None:
+        """Initialize Mutations Class object.
+
+        Parameters
+        ----------
+        study_id : str
+            cBioPortal study ID
+    
+        Attributes
+        ----------
+        study_id : str
+            cBioPortal study ID
+        _mutations : list | None
+            List of cBioPortal mutations
+
+        """
         super().__init__()
         self.study_id = study_id
         self._mutations = self.get_all_mutations_by_study()
@@ -114,6 +121,7 @@ class Mutations(cBioPortal):
         -------
         list | None
             cBioPortal data of Abstract Base Classes objects if successful, otherwise None
+
         """
         studies = self._cbioportal.Studies.getAllStudiesUsingGET().result()
         study_ids = [study.studyId for study in studies]
@@ -133,8 +141,16 @@ class Mutations(cBioPortal):
     def get_and_save_cbioportal_cohort_mutations(
         self,
     ) -> None:
-        df_muts = parse_iterabc2dataframe(self._mutations)
-        df_genes = parse_iterabc2dataframe(df_muts["gene"])
+        """Get and save cBioPortal cohort mutations to a CSV file.
+        
+        Notes
+        ----
+            The CSV file will be saved in the output directory specified in the configuration file.
+            As the "gene" ABC object is nested within the "mutation" ABC object, the two dataframes are parsed and concatenated.
+
+        """
+        df_muts = io_utils.parse_iterabc2dataframe(self._mutations)
+        df_genes = io_utils.parse_iterabc2dataframe(df_muts["gene"])
         df_combo = pd.concat([df_muts, df_genes], axis=1)
         df_combo = df_combo.drop(["gene"], axis=1)
 
@@ -143,7 +159,9 @@ class Mutations(cBioPortal):
         io_utils.save_dataframe_to_csv(df_combo, filename)
 
     def get_study_id(self):
+        """Get cBioPortal study ID."""
         return self.study_id
 
     def get_mutations(self):
+        """Get cBioPortal mutations."""
         return self._mutations

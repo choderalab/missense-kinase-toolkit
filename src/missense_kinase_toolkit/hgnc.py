@@ -7,7 +7,7 @@ def maybe_get_symbol_from_hgnc_search(
     input_symbol_or_id: str,
     input_is_hgnc_symbol: bool = True,
 ) -> list[str] | None:
-    """Get gene name from HGNC REST API using either a gene symbol or an Ensembl gene ID
+    """Get gene name from HGNC REST API using either a gene symbol or an Ensembl gene ID.
 
     Parameters
     ----------
@@ -43,7 +43,7 @@ def maybe_get_info_from_hgnc_fetch(
     hgnc_gene_symbol: str,
     list_to_extract: list[str] | None = None,
 ) -> dict | None:
-    """Get gene information for a given HGNC gene name from gene symbol report using HGNC REST API
+    """Get gene information for a given HGNC gene name from gene symbol report using HGNC REST API.
 
     Parameters
     ----------
@@ -87,7 +87,7 @@ def extract_list_from_hgnc_response_docs(
     res_input: requests.models.Response,
     str_to_extract: str,
 ) -> list[str]:
-    """Extract a list of values from the response documents of an HGNC REST API request
+    """Extract a list of values from the response documents of an HGNC REST API request.
 
     Parameters
     ----------
@@ -113,7 +113,7 @@ def extract_list_from_hgnc_response_docs(
 def generate_key_set_hgnc_response_docs(
     res_input: requests.models.Response,
 ) -> set[str]:
-    """Generate a set of keys present in the response documents of an HGNC REST API request
+    """Generate a set of keys present in the response documents of an HGNC REST API request.
 
     Parameters
     ----------

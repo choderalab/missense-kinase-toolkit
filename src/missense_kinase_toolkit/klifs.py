@@ -1,30 +1,35 @@
-# from bravado.requests_client import RequestsClient
+import logging
+
 from bravado.client import SwaggerClient
 
 
+logger = logging.getLogger(__name__)
+
+
 class KLIFS():
-    """Class to interact with the KLIFS API.
-
-    Parameters
-    ----------
-    None
-
-    Returns
-    -------
-    None
-    """
+    """Class to interact with the KLIFS API."""
     def __init__(self):
-        """Initialize KLIFS Class object."""
+        """Initialize KLIFS Class object.
+        
+        Attributes
+        ----------
+        url : str
+            KLIFS API URL
+        _klifs : bravado.client.SwaggerClient
+            KLIFS API object
+
+        """
         self.url = "https://dev.klifs.net/swagger_v2/swagger.json"
         self._klifs = self.get_klifs_api()
 
     def get_klifs_api(self):
-        """Get KLIFS API.
+        """Get KLIFS API as bravado.client.SwaggerClient object.
 
         Returns
         -------
-        SwaggerClient
+        bravado.client.SwaggerClient
             KLIFS API object
+
         """
         klifs_api = SwaggerClient.from_url(
             self.url,
@@ -45,21 +50,49 @@ class KLIFS():
         return self._klifs
 
 
-class HumanKinaseInfo(KLIFS):
-    """Class to get information about a human kinase from KLIFS.
+class KinaseInfo(KLIFS):
+    """Class to get information about a kinase from KLIFS.
     """
-    species: str = "Human"
     def __init__(
         self,
         kinase_name: str,
+        species: str = "Human",
     ) -> None:
+        """Initialize KinaseInfo Class object.
+
+        Parameters
+        ----------
+        kinase_name : str
+            Name of the kinase
+        species : str
+            Species of the kinase; default "Human" but can also be "Mouse"
+        
+        Attributes
+        ----------
+        kinase_name : str
+            Name of the kinase searched
+        species : str
+            Species of the kinase
+        _kinase_info : dict[str, str | int | None]
+            KLIFS API object
+
+        """
         super().__init__()
         self.kinase_name = kinase_name
+        self.species = species
         self._kinase_info = self.get_kinase_info()
 
     def get_kinase_info(
         self
     ) -> dict[str, str | int | None]:
+        """Get information about a kinase from KLIFS.
+        
+        Returns
+        -------
+        dict[str, str | int | None]
+            Dictionary with information about the kinase
+
+        """
         try:
             kinase_info = (
                 self._klifs.Information.get_kinase_ID(
@@ -94,42 +127,9 @@ class HumanKinaseInfo(KLIFS):
         return dict_kinase_info
 
     def get_kinase_name(self):
+        """Get name of the kinase."""
         return self.kinase_name
 
     def get_species(self):
+        """Get species of the kinase."""
         return self.species
-
-
-# def load_af2active(url, path_save):
-#     import os
-#     import wget
-#     import tarfile
-
-#     if not os.path.exists(path_save):
-#         os.makedirs(path_save)
-#     else:
-#         if os.path.exists(os.path.join(path_save, "Kincore_AF2_HumanCatalyticKinases")):
-#             print("File already exists...")
-#             return
-
-#     wget.download(url, path_save)
-
-# def get_tdc_dti(source_name="DAVIS"):
-#     from tdc.multi_pred import DTI
-
-#     data = DTI(name = source_name)
-#     data_davis = DTI(name = 'DAVIS')
-#     data_davis.get_data()
-#     data_davis.entity1_idx.unique().tolist()
-
-#     data_kiba = DTI(name = 'KIBA')
-
-#     data_kiba.get_data()
-
-#     print(data.label_distribution())
-#     data.print_stats()
-#     data.entity2_name
-#     len(data.entity1_idx.unique())
-#     data.entity2_idx.unique()
-#     data.
-#     split = data.get_split()
