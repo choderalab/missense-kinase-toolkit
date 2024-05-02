@@ -4,6 +4,7 @@ missense-kinase-toolkit
 [![CI](https://github.com/choderalab/missense-kinase-toolkit/actions/workflows/CI.yaml/badge.svg)](https://github.com/choderalab/missense-kinase-toolkit/actions/workflows/CI.yaml)
 [![codecov](https://codecov.io/gh/choderalab/missense-kinase-toolkit/branch/main/graph/badge.svg)](https://codecov.io/gh/choderalab/missense-kinase-toolkit/branch/main)
 [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/choderalab/missense-kinase-toolkit/main.svg?badge_token=dufHMzu_RH2VGGToCgvtcQ)](https://results.pre-commit.ci/latest/github/choderalab/missense-kinase-toolkit/main?badge_token=dufHMzu_RH2VGGToCgvtcQ)
+[![Documentation Status](https://readthedocs.org/projects/missense-kinase-toolkit/badge/?version=latest)](https://missense-kinase-toolkit.readthedocs.io/en/latest/?badge=latest)
 
 
 An ETL pipeline package to facilitate structure-based ML for human kinase property prediction
