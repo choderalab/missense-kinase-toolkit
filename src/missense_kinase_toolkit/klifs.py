@@ -10,7 +10,7 @@ class KLIFS():
     """Class to interact with the KLIFS API."""
     def __init__(self):
         """Initialize KLIFS Class object.
-        
+
         Attributes
         ----------
         url : str
@@ -66,7 +66,7 @@ class KinaseInfo(KLIFS):
             Name of the kinase
         species : str
             Species of the kinase; default "Human" but can also be "Mouse"
-        
+
         Attributes
         ----------
         kinase_name : str
@@ -86,7 +86,7 @@ class KinaseInfo(KLIFS):
         self
     ) -> dict[str, str | int | None]:
         """Get information about a kinase from KLIFS.
-        
+
         Returns
         -------
         dict[str, str | int | None]

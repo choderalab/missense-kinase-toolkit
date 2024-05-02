@@ -31,12 +31,12 @@ class cBioPortal():
 
     def _set_api_key(self):
         """Set API key for cBioPortal API.
-        
+
         Returns
         -------
         RequestsClient
             RequestsClient object with API key set
-        
+
         """
         token = config.maybe_get_cbioportal_token()
         http_client = RequestsClient()
@@ -99,7 +99,7 @@ class Mutations(cBioPortal):
         ----------
         study_id : str
             cBioPortal study ID
-    
+
         Attributes
         ----------
         study_id : str
@@ -142,7 +142,7 @@ class Mutations(cBioPortal):
         self,
     ) -> None:
         """Get and save cBioPortal cohort mutations to a CSV file.
-        
+
         Notes
         ----
             The CSV file will be saved in the output directory specified in the configuration file.

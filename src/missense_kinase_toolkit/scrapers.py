@@ -17,7 +17,7 @@ def kinhub(
     -------
     pd.DataFrame
         DataFrame of kinase information
-        
+
     """
     from bs4 import BeautifulSoup
     import numpy as np
