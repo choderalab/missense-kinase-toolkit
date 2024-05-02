@@ -56,7 +56,7 @@ def main():
     list_kinase_hgnc = df_kinhub["HGNC Name"].to_list()
     dict_kinase_info = {}
     for kinase in list_kinase_hgnc:
-        dict_kinase_info[kinase] = klifs.HumanKinaseInfo(kinase)._kinase_info
+        dict_kinase_info[kinase] = klifs.KinaseInfo(kinase)._kinase_info
     df_klifs = pd.DataFrame(dict_kinase_info).T
     df_klifs = df_klifs.rename_axis("HGNC Name").reset_index()
     io_utils.save_dataframe_to_csv(df_klifs, args.csvKLIFS)

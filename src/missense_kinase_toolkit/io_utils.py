@@ -3,15 +3,17 @@ import pandas as pd
 
 
 OUTPUT_DIR_VAR = "OUTPUT_DIR"
+"""str: Environment variable for output directory"""
 
 
 def check_outdir_exists(
 ) -> str:
-    """Check if OUTPUT_DIR in environmental variables and create directory if doesn't exist
+    """Check if OUTPUT_DIR in environmental variables and create directory if doesn't exist.
 
     Returns
     -------
-    str
+    str | None
+        Path to OUTPUT_DIR
     """
     try:
         path_data = os.environ[OUTPUT_DIR_VAR]
@@ -26,7 +28,7 @@ def check_outdir_exists(
 def convert_str2list(
     input_str: str
 ) -> list[str]:
-    """Convert a string to a list
+    """Convert a string to a list.
 
     Parameters
     ----------
@@ -37,6 +39,7 @@ def convert_str2list(
     -------
     list[str]
         List of strings
+
     """
     list_str = input_str.split(",")
     list_str = [str_in.strip() for str_in in list_str]
@@ -55,8 +58,9 @@ def load_csv_to_dataframe(
 
     Returns
     -------
-    pd.DataFrame
+    df : pd.DataFrame
         Dataframe loaded from CSV file
+
     """
     filename = filename.replace(".csv", "") + ".csv"
     path_data = check_outdir_exists()
@@ -71,7 +75,7 @@ def save_dataframe_to_csv(
     df: pd.DataFrame,
     filename: str,
 ) -> None:
-    """Save a dataframe to a CSV file
+    """Save a dataframe to a CSV file.
 
     Parameters
     ----------
@@ -83,6 +87,7 @@ def save_dataframe_to_csv(
     Returns
     -------
     None
+
     """
     filename = filename.replace(".csv", "") + ".csv"
     path_data = check_outdir_exists()
@@ -93,7 +98,7 @@ def concatenate_csv_files_with_glob(
     str_find: str,
     str_remove: str = "transformed_mutations.csv",
 ) -> pd.DataFrame:
-    """Use glob to find csv files to concatenate
+    """Use glob to find csv files to concatenate.
 
     Parameters
     ----------
@@ -104,6 +109,7 @@ def concatenate_csv_files_with_glob(
     ------
     pd.DataFrame
         Concatenated dataframe
+
     """
     import glob
 
@@ -123,3 +129,36 @@ def concatenate_csv_files_with_glob(
     #TODO: implement remove duplicates
 
     return df_combo
+
+
+def parse_iterabc2dataframe(
+    input_object: iter,
+) -> pd.DataFrame:
+    """Parse an iterable containing Abstract Base Classes into a dataframe.
+
+    Parameters
+    ----------
+    input_object : iter
+        Iterable of Abstract Base Classes objects
+
+    Returns
+    -------
+    pd.DataFrame
+        Dataframe for the input list of Abstract Base Classes objects
+
+    """
+    list_dir = [dir(entry) for entry in input_object]
+    set_dir = {item for sublist in list_dir for item in sublist}
+
+    dict_dir = {attr: [] for attr in set_dir}
+    for entry in input_object:
+        for attr in dict_dir.keys():
+            try:
+                dict_dir[attr].append(getattr(entry, attr))
+            except AttributeError:
+                dict_dir[attr].append(None)
+
+    df = pd.DataFrame.from_dict(dict_dir)
+    df = df[sorted(df.columns.to_list())]
+
+    return df
