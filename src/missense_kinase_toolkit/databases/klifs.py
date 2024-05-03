@@ -10,7 +10,7 @@ class KLIFS():
     """Class to interact with the KLIFS API."""
     def __init__(self):
         """Initialize KLIFS Class object.
-        
+
         Upon initialization, KLIFS API is queried.
 
         Attributes

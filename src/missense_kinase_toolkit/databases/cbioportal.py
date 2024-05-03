@@ -95,8 +95,8 @@ class Mutations(cBioPortal):
         self,
         study_id: str,
     ) -> None:
-        """Initialize Mutations Class object. 
-        
+        """Initialize Mutations Class object.
+
         Upon initialization, cBioPortal API is queried and mutations for specificied study are retrieved.
 
         Parameters
