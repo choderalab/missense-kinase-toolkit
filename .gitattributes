@@ -1,1 +1,3 @@
 missense_kinase_toolkit/_version.py export-subst
+
+*.ipynb -linguist-detectable
