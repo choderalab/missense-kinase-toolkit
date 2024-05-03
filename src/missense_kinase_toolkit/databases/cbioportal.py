@@ -4,7 +4,7 @@ import pandas as pd
 from bravado.client import SwaggerClient
 from bravado.requests_client import RequestsClient
 
-from missense_kinase_toolkit import config, io_utils
+from missense_kinase_toolkit.databases import config, io_utils
 
 
 logger = logging.getLogger(__name__)
@@ -14,6 +14,8 @@ class cBioPortal():
     """Class to interact with the cBioPortal API."""
     def __init__(self):
         """Initialize cBioPortal Class object.
+
+        Upon initialization, cBioPortal API is queried.
 
         Attributes
         ----------
@@ -27,7 +29,7 @@ class cBioPortal():
         """
         self.instance = config.get_cbioportal_instance()
         self.url = f"https://{self.instance}/api/v2/api-docs"
-        self._cbioportal = self.get_cbioportal_api()
+        self._cbioportal = self.query_cbioportal_api()
 
     def _set_api_key(self):
         """Set API key for cBioPortal API.
@@ -51,8 +53,8 @@ class cBioPortal():
             print("No API token provided")
         return http_client
 
-    def get_cbioportal_api(self):
-        """Get cBioPortal API as bravado.client.SwaggerClient object.
+    def query_cbioportal_api(self):
+        """Queries cBioPortal API for instance as bravado.client.SwaggerClient object.
 
         Returns
         -------
@@ -94,6 +96,8 @@ class Mutations(cBioPortal):
         study_id: str,
     ) -> None:
         """Initialize Mutations Class object.
+
+        Upon initialization, cBioPortal API is queried and mutations for specificied study are retrieved.
 
         Parameters
         ----------

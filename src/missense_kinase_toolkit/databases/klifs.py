@@ -11,6 +11,8 @@ class KLIFS():
     def __init__(self):
         """Initialize KLIFS Class object.
 
+        Upon initialization, KLIFS API is queried.
+
         Attributes
         ----------
         url : str
@@ -20,9 +22,9 @@ class KLIFS():
 
         """
         self.url = "https://dev.klifs.net/swagger_v2/swagger.json"
-        self._klifs = self.get_klifs_api()
+        self._klifs = self.query_klifs_api()
 
-    def get_klifs_api(self):
+    def query_klifs_api(self):
         """Get KLIFS API as bravado.client.SwaggerClient object.
 
         Returns
@@ -60,6 +62,8 @@ class KinaseInfo(KLIFS):
     ) -> None:
         """Initialize KinaseInfo Class object.
 
+        Upon initialization, KLIFS API is queried and kinase information for specificied kinase is retrieved.
+
         Parameters
         ----------
         kinase_name : str
@@ -80,9 +84,9 @@ class KinaseInfo(KLIFS):
         super().__init__()
         self.kinase_name = kinase_name
         self.species = species
-        self._kinase_info = self.get_kinase_info()
+        self._kinase_info = self.query_kinase_info()
 
-    def get_kinase_info(
+    def query_kinase_info(
         self
     ) -> dict[str, str | int | None]:
         """Get information about a kinase from KLIFS.
@@ -133,3 +137,7 @@ class KinaseInfo(KLIFS):
     def get_species(self):
         """Get species of the kinase."""
         return self.species
+
+    def get_kinase_info(self):
+        """Get information about the kinase."""
+        return self._kinase_info

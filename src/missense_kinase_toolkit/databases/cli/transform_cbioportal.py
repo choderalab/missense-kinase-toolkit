@@ -2,7 +2,7 @@
 
 import argparse
 
-from missense_kinase_toolkit import config, io_utils
+from missense_kinase_toolkit.databases import config, io_utils
 
 
 def parsearg_utils():

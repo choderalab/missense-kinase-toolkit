@@ -8,7 +8,7 @@ CBIOPORTAL_INSTANCE_VAR = "CBIOPORTAL_INSTANCE"
 """str: Environment variable for cBioPortal instance; if none provided, default is `www.cbioportal.org`"""
 CBIOPORTAL_TOKEN_VAR = "CBIOPORTAL_TOKEN"
 """str: Environment variable for cBioPortal token; if none provided, default is `None`"""
-REQUEST_CACHE_VAR = "REQUESTS_CACHE"
+REQUESTS_CACHE_VAR = "REQUESTS_CACHE"
 """str: Environment variable for request cache file prefix; if none provided, default is requests_cache"""
 
 
@@ -114,7 +114,7 @@ def maybe_get_cbioportal_token(
 
 
 def set_request_cache(
-    val: bool
+    val: str
 ) -> None:
     """Set the request cache path in environment variables.
 
@@ -128,8 +128,7 @@ def set_request_cache(
     None
 
     """
-    #TODO: val should be bool but doesn't work with env, fix
-    os.environ[REQUEST_CACHE_VAR] = str(val)
+    os.environ[REQUESTS_CACHE_VAR] = val
 
 
 def maybe_get_request_cache(
@@ -143,6 +142,6 @@ def maybe_get_request_cache(
 
     """
     try:
-        return os.environ[REQUEST_CACHE_VAR]
+        return os.environ[REQUESTS_CACHE_VAR]
     except KeyError:
         return None
