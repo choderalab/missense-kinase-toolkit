@@ -35,13 +35,23 @@ def test_config():
 
 
 def test_cbioportal():
-    from missense_kinase_toolkit.databases import cbioportal
+    from missense_kinase_toolkit.databases import config, cbioportal
+
+    config.set_cbioportal_instance("www.cbioportal.org")
 
     # test that the function to set the API key for cBioPortal works
-    cbioportal.cBioPortal()._set_api_key()
+    # cbioportal.cBioPortal()._set_api_key()
 
     # test that the function to query the cBioPortal API works
-    cbioportal.cBioPortal().query_cbioportal_api()
+    cbioportal_instance = cbioportal.cBioPortal()
+    
+    # test that server status is up
+    assert cbioportal_instance._cbioportal.Server_running_status.getServerStatusUsingGET().response().result["status"] == "UP"
+
+    # test that Zehir cohort is available
+    list_studies = cbioportal_instance._cbioportal.Studies.getAllStudiesUsingGET().result()
+    list_study_ids = [study.studyId for study in list_studies]
+    assert "msk_impact_2017" in list_study_ids
 
 
 def test_io_utils():
