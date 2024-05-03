@@ -5,68 +5,79 @@ import pandas as pd
 from missense_kinase_toolkit.databases import requests_wrapper, utils_requests
 
 
-def retrieve_pfam(
-    uniprot_id: str,
-) -> pd.DataFrame | str | None:
-    """Retrieve Pfam domain information for a given UniProt ID using InterPro REST API
+class Pfam:
+    """Class to interact with the Pfam API."""
+    def __init__(
+        self,
+        uniprot_id: str,
+    ) -> None:
+        """Initialize Pfam Class object.
 
-    Parameters
-    ----------
-    uniprot_id : str
-        UniProt ID
+        Attributes
+        ----------
+        url : str
+            Pfam API URL
 
-    Returns
-    -------
-    pd.DataFrame | str | None
-        DataFrame with Pfam domain information if request is successful, UniProt ID if request fails;
-          None if response is empty
-    """
-    url = f"https://www.ebi.ac.uk/interpro/api/entry/pfam/protein/UniProt/{uniprot_id}"
+        """
+        self.url = "https://www.ebi.ac.uk/interpro/api/entry/pfam/protein/UniProt/"
+        self.uniprot_id = uniprot_id
+        self._pfam = self.query_pfam_api()
 
-    header = {"Accept": "application/json"}
-    res = requests_wrapper.get_cached_session().get(
-        url,
-        headers=header
-    )
+    def query_pfam_api(self):
+        """Queries Pfam API for UniProt ID as DataFrame object.
 
-    if res.ok:
-        if len(res.text) == 0:
-            print(f"No PFAM domains found: {uniprot_id}")
-            return None
+        Returns
+        -------
+        pd.DataFrame | str | None
+            DataFrame with Pfam domain information if request is successful, None if response is empty or request fails
+
+        """
+        url = f"{self.url}{self.uniprot_id}"
+
+        header = {"Accept": "application/json"}
+        res = requests_wrapper.get_cached_session().get(
+            url,
+            headers=header
+        )
+
+        if res.ok:
+            if len(res.text) == 0:
+                print(f"No PFAM domains found: {self.uniprot_id}")
+                return None
+            else:
+                list_json = json.loads(res.text)["results"]
+
+                # metadata for UniProt ID
+                list_metadata = [entry["metadata"] for entry in list_json]
+                list_metadata = [{"pfam_accession" if k == "accession" else k:v for k,v in entry.items()} for entry in list_metadata]
+
+                # Pfam domains locations
+                list_locations = [entry["proteins"][0]["entry_protein_locations"][0]["fragments"][0] for entry in list_json]
+
+                # model information
+                list_model = [entry["proteins"][0]["entry_protein_locations"][0] for entry in list_json]
+                [entry.pop("fragments", None) for entry in list_model]
+
+                # protein information
+                # do last because pop is an in-place operation
+                list_protein = [entry["proteins"][0] for entry in list_json]
+                [entry.pop("entry_protein_locations", None) for entry in list_protein]
+                list_protein = [{"uniprot" if k == "accession" else k:v for k,v in entry.items()} for entry in list_protein]
+
+                df_concat = pd.concat(
+                    [
+                        pd.DataFrame(list_protein),
+                        pd.DataFrame(list_metadata),
+                        pd.DataFrame(list_locations),
+                        pd.DataFrame(list_model)
+                    ],
+                     axis=1
+                )
+
+                return df_concat
         else:
-            list_json = json.loads(res.text)["results"]
-
-            # metadata for UniProt ID
-            list_metadata = [entry["metadata"] for entry in list_json]
-            list_metadata = [{"pfam_accession" if k == "accession" else k:v for k,v in entry.items()} for entry in list_metadata]
-
-            # Pfam domains locations
-            list_locations = [entry["proteins"][0]["entry_protein_locations"][0]["fragments"][0] for entry in list_json]
-
-            # model information
-            list_model = [entry["proteins"][0]["entry_protein_locations"][0] for entry in list_json]
-            [entry.pop("fragments", None) for entry in list_model]
-
-            # protein information
-            # do last because pop is an in-place operation
-            list_protein = [entry["proteins"][0] for entry in list_json]
-            [entry.pop("entry_protein_locations", None) for entry in list_protein]
-            list_protein = [{"uniprot" if k == "accession" else k:v for k,v in entry.items()} for entry in list_protein]
-
-            df_concat = pd.concat(
-                [
-                    pd.DataFrame(list_protein),
-                    pd.DataFrame(list_metadata),
-                    pd.DataFrame(list_locations),
-                    pd.DataFrame(list_model)
-                ],
-                 axis=1
-            )
-
-            return df_concat
-    else:
-        utils_requests.print_status_code_if_res_not_ok(res)
-        return None
+            utils_requests.print_status_code_if_res_not_ok(res)
+            return None
 
 
 # def find_pfam(

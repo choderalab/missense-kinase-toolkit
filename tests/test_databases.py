@@ -34,32 +34,13 @@ def test_config():
     assert config.maybe_get_cbioportal_token() == "test"
 
 
-def test_cbioportal():
-    from missense_kinase_toolkit.databases import config, cbioportal
-
-    config.set_cbioportal_instance("www.cbioportal.org")
-
-    # test that the function to set the API key for cBioPortal works
-    # cbioportal.cBioPortal()._set_api_key()
-
-    # test that the function to query the cBioPortal API works
-    cbioportal_instance = cbioportal.cBioPortal()
-
-    # test that server status is up
-    assert cbioportal_instance._cbioportal.Server_running_status.getServerStatusUsingGET().response().result["status"] == "UP"
-
-    # test that Zehir cohort is available
-    list_studies = cbioportal_instance._cbioportal.Studies.getAllStudiesUsingGET().result()
-    list_study_ids = [study.studyId for study in list_studies]
-    assert "msk_impact_2017" in list_study_ids
-
-
 def test_io_utils():
-    from missense_kinase_toolkit.databases import io_utils
     import pandas as pd
     import os
+    from missense_kinase_toolkit.databases import io_utils, config
 
-    os.environ["OUTPUT_DIR"] = "."
+    # os.environ["OUTPUT_DIR"] = "."
+    config.set_output_dir(".")
 
     # test that the functions to save and load dataframes work
     df = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
@@ -81,18 +62,45 @@ def test_io_utils():
     assert io_utils.convert_str2list("a, b, c") == ["a", "b", "c"]
 
 
-def test_kinhub_scraper():
-    from missense_kinase_toolkit.databases import scrapers
+def test_cbioportal():
+    import os
+    from missense_kinase_toolkit.databases import config, io_utils, cbioportal
 
-    df_kinhub = scrapers.kinhub()
+    config.set_cbioportal_instance("www.cbioportal.org")
+    config.set_output_dir(".")
 
-    assert df_kinhub.shape[0] == 517
-    assert df_kinhub.shape[1] == 8
-    assert "HGNC Name" in df_kinhub.columns
-    assert "UniprotID" in df_kinhub.columns
+    # test that the function to set the API key for cBioPortal works
+    # cbioportal.cBioPortal()._set_api_key()
+
+    # test that the function to query the cBioPortal API works
+    cbioportal_instance = cbioportal.cBioPortal()
+
+    # test that server status is up
+    assert cbioportal_instance._cbioportal.Server_running_status.getServerStatusUsingGET().response().result["status"] == "UP"
+
+    # test that Zehir cohort is available
+    study = "msk_impact_2017"
+    list_studies = cbioportal_instance._cbioportal.Studies.getAllStudiesUsingGET().result()
+    list_study_ids = [study.studyId for study in list_studies]
+    assert study in list_study_ids
+
+    # test that the function to get all mutations by study works
+    cbioportal.Mutations(study).get_and_save_cbioportal_cohort_mutations()
+    df = io_utils.load_csv_to_dataframe(f"{study}_mutations.csv")
+    assert df.shape[0] == 78142
+    os.remove(f"{study}_mutations.csv")
 
 
-def test_klifs_KinaseInfo():
+def test_hgnc():
+    from missense_kinase_toolkit.databases import hgnc
+
+    abl1 = hgnc.HGNC("Abl1", True)
+    abl1.maybe_get_symbol_from_hgnc_search()
+    assert abl1.hgnc == "ABL1"
+    assert abl1.maybe_get_info_from_hgnc_fetch()["locus_type"][0] == "gene with protein product"
+
+
+def test_klifs():
     from missense_kinase_toolkit.databases import klifs
 
     dict_egfr = klifs.KinaseInfo("EGFR")._kinase_info
@@ -107,3 +115,14 @@ def test_klifs_KinaseInfo():
     assert dict_egfr["pocket"]      ==      "KVLGSGAFGTVYKVAIKELEILDEAYVMASVDPHVCRLLGIQLITQLMPFGCLLDYVREYLEDRRLVHRDLAARNVLVITDFGLA"
     assert dict_egfr["species"]     ==      "Human"
     assert dict_egfr["uniprot"]     ==      "P00533"
+
+
+def test_scrapers():
+    from missense_kinase_toolkit.databases import scrapers
+
+    # test that the function to scrape the KinHub database works
+    df_kinhub = scrapers.kinhub()
+    assert df_kinhub.shape[0] == 517
+    assert df_kinhub.shape[1] == 8
+    assert "HGNC Name" in df_kinhub.columns
+    assert "UniprotID" in df_kinhub.columns
