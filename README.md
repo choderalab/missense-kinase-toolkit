@@ -9,7 +9,7 @@ missense-kinase-toolkit
 
 An ETL pipeline package to facilitate structure-based ML for human kinase property prediction
 
-Additional documentation can be found [here](https://stackoverflow.com/questions/75922593/sphinx-readthedocs-and-package-version).
+Additional documentation can be found [here](https://readthedocs.org/projects/missense-kinase-toolkit/badge/?version=latest).
 
 ### Copyright
 
