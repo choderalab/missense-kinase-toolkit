@@ -98,7 +98,7 @@ def test_hgnc():
     abl1.maybe_get_symbol_from_hgnc_search()
     assert abl1.hgnc == "ABL1"
     assert abl1.maybe_get_info_from_hgnc_fetch()["locus_type"][0] == "gene with protein product"
-    
+
 
 def test_klifs():
     from missense_kinase_toolkit.databases import klifs

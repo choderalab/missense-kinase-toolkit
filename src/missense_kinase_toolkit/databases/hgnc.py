@@ -18,7 +18,7 @@ class HGNC:
             Gene symbol or Ensembl gene ID
         input_is_hgnc_symbol : bool
             If True, input_symbol_or_id is a gene symbol, otherwise it is an Ensembl gene ID
-        
+
         Attributes
         ----------
         url : str
@@ -54,7 +54,7 @@ class HGNC:
             url = f"{self.url}/search/ensembl_gene_id:{self.ensembl}"
 
         res = requests_wrapper.get_cached_session().get(
-            url, 
+            url,
             headers={"Accept": "application/json"}
         )
 
@@ -69,13 +69,13 @@ class HGNC:
             elif len(list_hgnc_gene_name) == 0:
                 print(f"No gene names found for {self.hgnc}")
             else:
-                print(f"Multiple gene names found: {list_hgnc_gene_name}.") 
+                print(f"Multiple gene names found: {list_hgnc_gene_name}.")
         else:
             list_hgnc_gene_name = None
             utils_requests.print_status_code_if_res_not_ok(res)
 
         return list_hgnc_gene_name
-    
+
     def maybe_get_info_from_hgnc_fetch(
         self,
         list_to_extract: list[str] | None = None,
@@ -128,7 +128,7 @@ class HGNC:
             dict_out = None
 
         return dict_out
-    
+
     @staticmethod
     def _extract_list_from_hgnc_response_docs(
         res_input: requests.models.Response,
@@ -172,7 +172,7 @@ class HGNC:
         -------
         set[str]
             Set of keys present in the response documents
-            
+
         """
         list_keys = [set(doc.keys()) for doc in res_input.json()["response"]["docs"]]
         set_keys = set.union(*list_keys)
