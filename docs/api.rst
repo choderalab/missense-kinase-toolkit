@@ -6,4 +6,4 @@ API Documentation
    :template: custom-module-template.rst
    :recursive:
 
-   missense_kinase_toolkit
+   missense_kinase_toolkit.databases

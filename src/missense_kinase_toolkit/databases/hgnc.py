@@ -1,6 +1,6 @@
 import requests
 
-from missense_kinase_toolkit import requests_wrapper, utils_requests
+from missense_kinase_toolkit.databases import requests_wrapper, utils_requests
 
 
 def maybe_get_symbol_from_hgnc_search(

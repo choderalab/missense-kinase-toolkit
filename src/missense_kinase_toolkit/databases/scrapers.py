@@ -1,6 +1,6 @@
 import pandas as pd
 
-from missense_kinase_toolkit import requests_wrapper
+from missense_kinase_toolkit.databases import requests_wrapper
 
 
 def kinhub(
@@ -52,6 +52,7 @@ def kinhub(
     df_kinhub = pd.DataFrame.from_dict(dict_kinhub)
     # df_kinhub = clean_names(df_kinhub)
 
+    # aggregate rows with the same HGNC Name (e.g., multiple kinase domains like JAK)
     list_cols = df_kinhub.columns.to_list()
     list_cols.remove("HGNC Name")
     df_kinhub_agg = df_kinhub.groupby(["HGNC Name"], as_index=False, sort=False).agg(set)

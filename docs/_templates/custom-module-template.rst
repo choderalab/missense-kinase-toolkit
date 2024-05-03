@@ -1,5 +1,3 @@
-# courtesy of ASAP Discovery team
-
 {{ fullname | escape | underline}}
 
 .. automodule:: {{ fullname }}

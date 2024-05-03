@@ -4,7 +4,7 @@ import argparse
 
 import pandas as pd
 
-from missense_kinase_toolkit import config, io_utils, scrapers, klifs
+from missense_kinase_toolkit.databases import config, io_utils, scrapers, klifs
 
 def parsearg_utils():
     parser = argparse.ArgumentParser(
