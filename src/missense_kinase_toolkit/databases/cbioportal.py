@@ -53,7 +53,9 @@ class cBioPortal():
             print("No API token provided")
         return http_client
 
-    def query_cbioportal_api(self):
+    def query_cbioportal_api(
+        self
+    ) -> SwaggerClient:
         """Queries cBioPortal API for instance as bravado.client.SwaggerClient object.
 
         Returns
@@ -148,7 +150,7 @@ class Mutations(cBioPortal):
         """Get and save cBioPortal cohort mutations to a CSV file.
 
         Notes
-        ----
+        -----
             The CSV file will be saved in the output directory specified in the configuration file.
             As the "gene" ABC object is nested within the "mutation" ABC object, the two dataframes are parsed and concatenated.
 
