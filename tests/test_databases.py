@@ -44,7 +44,7 @@ def test_cbioportal():
 
     # test that the function to query the cBioPortal API works
     cbioportal_instance = cbioportal.cBioPortal()
-    
+
     # test that server status is up
     assert cbioportal_instance._cbioportal.Server_running_status.getServerStatusUsingGET().response().result["status"] == "UP"
 
