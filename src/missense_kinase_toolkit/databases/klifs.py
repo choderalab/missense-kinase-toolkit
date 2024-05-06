@@ -112,6 +112,7 @@ class KinaseInfo(KLIFS):
             dict_kinase_info = dict(zip(list_key, list_val))
 
         except Exception as e:
+            print(f"Error in query_kinase_info for {self.kinase_name}:")
             print(e)
             list_key = [
                 'family',
@@ -127,6 +128,7 @@ class KinaseInfo(KLIFS):
                 'uniprot'
                 ]
             dict_kinase_info = dict(zip(list_key, [None]*len(list_key)))
+            dict_kinase_info["name"] = self.kinase_name
 
         return dict_kinase_info
 
