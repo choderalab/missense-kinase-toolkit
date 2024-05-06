@@ -39,8 +39,18 @@ class HGNC:
 
     def maybe_get_symbol_from_hgnc_search(
         self,
+        custom_field: str | None = None,
+        custom_term: str | None = None,
     ) -> list[str] | None:
         """Get gene name from HGNC REST API using either a gene symbol or an Ensembl gene ID.
+
+        Parameters
+        ----------
+        custom_field : str | None
+            Optional: custom field to search for in the HGNC REST API; otherwise defaults to "symbol" or "ensembl_gene_id"
+            See https://www.genenames.org/help/rest/ under "searchableFields" for options
+        custom_term : str | None
+            Optional: custom term to search for in the HGNC REST API
 
         Returns
         -------
@@ -48,10 +58,13 @@ class HGNC:
             List of gene names that match input_symbol_or_id; empty list if no match and None if request fails
 
         """
-        if self.hgnc is not None:
-            url = f"{self.url}/search/symbol:{self.hgnc}"
+        if custom_field is not None:
+            url = f"{self.url}/search/{custom_field}:{custom_term}"
         else:
-            url = f"{self.url}/search/ensembl_gene_id:{self.ensembl}"
+            if self.hgnc is not None:
+                url = f"{self.url}/search/symbol:{self.hgnc}"
+            else:
+                url = f"{self.url}/search/ensembl_gene_id:{self.ensembl}"
 
         res = requests_wrapper.get_cached_session().get(
             url,
