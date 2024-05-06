@@ -15,18 +15,18 @@ def add_retry_to_session(
     status_forcelist=(429, 500, 501, 502, 503, 504),
 ):
     """Add retry logic to a session.
-    
+
     Parameters
     ----------
     session : requests.Session
-        Session object    
+        Session object
     retries : int
         Number of retries
     backoff_factor : float
         Backoff factor
     status_forcelist : tuple[int]
         Tuple of status codes to force a retry
-    
+
     Returns
     -------
     requests.Session

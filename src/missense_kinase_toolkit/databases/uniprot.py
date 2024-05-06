@@ -46,7 +46,7 @@ class UniProt():
 
         """
         url_fasta = f"{self.url}/{self.uniprot_id}.fasta"
-        
+
         res = requests_wrapper.get_cached_session().get(url_fasta)
         if res.ok:
             str_fasta = res.text
