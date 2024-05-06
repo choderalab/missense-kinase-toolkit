@@ -14,6 +14,25 @@ def add_retry_to_session(
     backoff_factor=0.3,
     status_forcelist=(429, 500, 501, 502, 503, 504),
 ):
+    """Add retry logic to a session.
+
+    Parameters
+    ----------
+    session : requests.Session
+        Session object
+    retries : int
+        Number of retries
+    backoff_factor : float
+        Backoff factor
+    status_forcelist : tuple[int]
+        Tuple of status codes to force a retry
+
+    Returns
+    -------
+    requests.Session
+        Session object with retry logic
+
+    """
     retry = Retry(
         total=retries,
         backoff_factor=backoff_factor,
@@ -28,6 +47,14 @@ def add_retry_to_session(
 
 @cache
 def get_cached_session():
+    """Get a cached session.
+
+    Returns
+    -------
+    requests.Session
+        Cached session object
+
+    """
     if REQUEST_CACHE_VAR in os.environ:
         cache_location = os.environ[REQUEST_CACHE_VAR]
 
