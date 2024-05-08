@@ -2,7 +2,7 @@ def map_aa_to_single_letter_code(
     aa: str,
 ) -> str | None:
     """Map any amino acid input from name or 3-letter or single-letter code to validated single-letter code.
-    
+
     Parameters
     ----------
     aa : str
@@ -47,7 +47,7 @@ def map_aa_to_single_letter_code(
 
 def map_single_letter_aa_to_color(aa, dict_color):
     """Map amino acid to color using specified dictionary.
-    
+
     Parameters
     ----------
     aa : str
@@ -64,7 +64,7 @@ def map_single_letter_aa_to_color(aa, dict_color):
     aa_clean = map_aa_to_single_letter_code(aa)
     if aa_clean is None:
         print(f"{aa} is an invalid amino acid; using '-' as default symbol.")
-        aa_clean = "-" 
+        aa_clean = "-"
     if aa_clean  in dict_color.keys():
         return dict_color[aa_clean]
     else:
