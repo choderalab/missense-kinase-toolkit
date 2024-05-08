@@ -93,7 +93,7 @@ POCKET_KLIFS_REGIONS = [
     (84, "a.l"),
     (85, "a.l"),
 ]
-"""tuple[int, str]: Mapping KLIFS pocket ID to region"""
+"""list[tuple[int, str]]: Mapping KLIFS pocket ID to region"""
 
 POCKET_KLIFS_REGION_COLORS = {
     "I" : "khaki",
