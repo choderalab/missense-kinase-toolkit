@@ -31,6 +31,9 @@ janitor = "^0.1.1"
 beautifulsoup4 = "^4.12.3"
 ipykernel = "^6.29.4"
 jupyter = "^1.0.0"
+biopython = "^1.83"
+bokeh = "^3.4.1"
+seaborn = "^0.13.2"
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.3.0"
