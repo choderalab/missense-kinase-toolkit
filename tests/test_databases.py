@@ -85,8 +85,7 @@ def test_cbioportal():
     assert study in list_study_ids
 
     # test that the function to get all mutations by study works
-    cbioportal.Mutations(study).get_and_save_cbioportal_cohort_mutations()
-    df = io_utils.load_csv_to_dataframe(f"{study}_mutations.csv")
+    df = cbioportal.Mutations(study).get_cbioportal_cohort_mutations()
     assert df.shape[0] == 78142
     os.remove(f"{study}_mutations.csv")
 
