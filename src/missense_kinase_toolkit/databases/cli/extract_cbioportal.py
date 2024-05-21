@@ -62,4 +62,4 @@ def main():
         pass
 
     for study in list_studies:
-        cbioportal.Mutations(study).get_and_save_cbioportal_cohort_mutations()
+        cbioportal.Mutations(study).get_cbioportal_cohort_mutations(bool_save=True)
