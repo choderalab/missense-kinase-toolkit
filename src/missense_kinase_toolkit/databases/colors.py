@@ -299,7 +299,7 @@ DICT_COLORS = {
             "-": "#000000",
         },
         "DICT_ANNOTATION" : {
-            "aliphatic hydrophobic"     :       "#ffafaf", # A,I,L,M,V  
+            "aliphatic hydrophobic"     :       "#ffafaf", # A,I,L,M,V
             "aromatic"                  :       "#ffc803", # F,W,Y
             "positive"                  :       "#6464ff", # R,H,K
             "negative"                  :       "#ff0000", # D,E
@@ -310,7 +310,7 @@ DICT_COLORS = {
     }
 }
 """dict[dict[str, str], dict[str, str]]: Mapping amino acid to color
-    using specified dictionary. Dictionaries include color schemes from: 
+    using specified dictionary. Dictionaries include color schemes from:
     - 2010 Colour Alphabet Project (ALPHABET_PROJECT)
     - ASAP Discovery palette (ASAP)
     - RasMol amino color scheme (RASMOL)
