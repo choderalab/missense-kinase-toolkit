@@ -144,8 +144,9 @@ class Mutations(cBioPortal):
 
         return muts
 
-    def get_and_save_cbioportal_cohort_mutations(
+    def get_cbioportal_cohort_mutations(
         self,
+        bool_save = False,
     ) -> None:
         """Get and save cBioPortal cohort mutations to a CSV file.
 
@@ -162,7 +163,10 @@ class Mutations(cBioPortal):
 
         filename = f"{self.study_id}_mutations.csv"
 
-        io_utils.save_dataframe_to_csv(df_combo, filename)
+        if bool_save:
+            io_utils.save_dataframe_to_csv(df_combo, filename)
+        else:
+            return df_combo
 
     def get_study_id(self):
         """Get cBioPortal study ID."""
