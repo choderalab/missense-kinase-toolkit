@@ -94,7 +94,7 @@ def find_pfam_domain(
     Parameters
     ----------
     input_id : str
-        Input ID that matches 
+        Input ID that matches
     input_position : int
         Codon position
     df_ref : pd.DataFrame
@@ -106,7 +106,7 @@ def find_pfam_domain(
     col_ref_end : None | str
         Column containing the domain end position; if None defaults to "end" (Pfam API default)
     col_ref_domain : None | str
-        Column containing the domain name; if None defaults to "name" (Pfam API default)    
+        Column containing the domain name; if None defaults to "name" (Pfam API default)
 
     Returns
     -------
@@ -123,7 +123,7 @@ def find_pfam_domain(
 
     df_temp = df_ref.loc[df_ref[col_ref_id] == input_id].reset_index()
     try:
-        domain = df_temp.loc[((input_position >= df_temp[col_ref_start]) & 
+        domain = df_temp.loc[((input_position >= df_temp[col_ref_start]) &
                               (input_position <= df_temp[col_ref_end])), col_ref_domain].values[0]
         return domain
     except:
