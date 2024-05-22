@@ -5,11 +5,11 @@ import sys
 OUTPUT_DIR_VAR = "OUTPUT_DIR"
 """str: Environment variable for output directory"""
 CBIOPORTAL_INSTANCE_VAR = "CBIOPORTAL_INSTANCE"
-"""str: Environment variable for cBioPortal instance; if none provided, default is `www.cbioportal.org`"""
+"""str: Environment variable for cBioPortal instance; if none provided, default is `www.cbioportal.org` in CLI scripts"""
 CBIOPORTAL_TOKEN_VAR = "CBIOPORTAL_TOKEN"
-"""str: Environment variable for cBioPortal token; if none provided, default is `None`"""
+"""str: Environment variable for cBioPortal token; if none provided, default is `None` in CLI scripts"""
 REQUESTS_CACHE_VAR = "REQUESTS_CACHE"
-"""str: Environment variable for request cache file prefix; if none provided, default is requests_cache"""
+"""str: Environment variable for request cache file prefix; if none provided, default is requests_cache in CLI scripts"""
 
 
 def set_output_dir(
