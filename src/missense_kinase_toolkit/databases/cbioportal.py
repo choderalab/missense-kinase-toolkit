@@ -148,7 +148,12 @@ class Mutations(cBioPortal):
         self,
         bool_save = False,
     ) -> None:
-        """Get and save cBioPortal cohort mutations to a CSV file.
+        """Get cBioPortal cohort mutations and optionally save as a CSV file.
+
+        Parameters
+        ----------
+        bool_save : bool
+            Save cBioPortal cohort mutations as a CSV file if True
 
         Notes
         -----

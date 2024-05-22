@@ -63,8 +63,7 @@ def test_io_utils():
 
 
 def test_cbioportal():
-    import os
-    from missense_kinase_toolkit.databases import config, io_utils, cbioportal
+    from missense_kinase_toolkit.databases import config, cbioportal
 
     config.set_cbioportal_instance("www.cbioportal.org")
     config.set_output_dir(".")
@@ -87,7 +86,6 @@ def test_cbioportal():
     # test that the function to get all mutations by study works
     df = cbioportal.Mutations(study).get_cbioportal_cohort_mutations()
     assert df.shape[0] == 78142
-    os.remove(f"{study}_mutations.csv")
 
 
 def test_hgnc():

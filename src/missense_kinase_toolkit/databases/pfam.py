@@ -80,33 +80,51 @@ class Pfam:
             return None
 
 
-# def find_pfam(
-#     input_hgnc: str,
-#     input_position: int,
-#     df_ref: pd.DataFrame,
-# ) -> str | None:
-#     """Find Pfam domain for a given HGNC symbol and position
+def find_pfam_domain(
+    input_id: str,
+    input_position: int,
+    df_ref: pd.DataFrame,
+    col_ref_id: str,
+    col_ref_start: None | str = None,
+    col_ref_end: None | str = None,
+    col_ref_domain : None | str = None,
+) -> str | None:
+    """Find Pfam domain for a given HGNC symbol and position
 
-#     Parameters
-#     ----------
-#     input_hgnc : str
-#         HGNC symbol
-#     input_position : int
-#         Codon position
-#     df_ref : pd.DataFrame
-#         DataFrame with Pfam domain information
+    Parameters
+    ----------
+    input_id : str
+        Input ID that matches
+    input_position : int
+        Codon position
+    df_ref : pd.DataFrame
+        DataFrame with Pfam domain information
+    col_ref_id : str
+        Column that contains the IDs to match to in the df_ref dataframe
+    col_ref_start : None | str
+        Column containing the domain start position; if None defaults to "start" (Pfam API default)
+    col_ref_end : None | str
+        Column containing the domain end position; if None defaults to "end" (Pfam API default)
+    col_ref_domain : None | str
+        Column containing the domain name; if None defaults to "name" (Pfam API default)
 
-#     Returns
-#     -------
-#     str | None
-#         Pfam domain if found, None if not found
-#     """
-#     df_temp = df_ref.loc[df_ref["hgnc"] == input_hgnc].reset_index()
-#     try:
-#         domain = df_temp.loc[
-#             ((input_position >= df_temp["start"]) & (input_position <= df_temp["end"])),
-#             "name",
-#         ].values[0]
-#         return domain
-#     except IndexError:
-#         return None
+    Returns
+    -------
+    str | None
+        Pfam domain if found, None if not found
+    """
+
+    if col_ref_start is None:
+        col_ref_start = "start"
+    if col_ref_end is None:
+        col_ref_end = "end"
+    if col_ref_domain is None:
+        col_ref_domain = "name"
+
+    df_temp = df_ref.loc[df_ref[col_ref_id] == input_id].reset_index()
+    try:
+        domain = df_temp.loc[((input_position >= df_temp[col_ref_start]) &
+                              (input_position <= df_temp[col_ref_end])), col_ref_domain].values[0]
+        return domain
+    except:
+        return None
