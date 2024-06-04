@@ -158,12 +158,12 @@ DICT_COLORS = {
             "V": "violet",      # Valine (VAL)
             "-": "white",
         },
-        "DIC_ANNOTATION" : None
+        "DICT_ANNOTATION" : None
     },
     # http://openrasmol.org/doc/rasmol.html#aminocolours
     "RASMOL" : {
         "DICT_COLORS" : {
-            "A": "#C8C8C8",  # Alanine (ALA)
+            "A": "#0F820F",  # Alanine (ALA)
             "R": "#145AFF",  # Arginine (ARG)
             "N": "#00DCDC",  # Asparagine (ASN)
             "D": "#E60A0A",  # Aspartic acid (ASP)
@@ -239,7 +239,7 @@ DICT_COLORS = {
     },
     # https://www.jalview.org/help/html/colourSchemes/clustal.html
     "CLUSTALX" : {
-        "DIC_COLOR" : {
+        "DICT_COLORS" : {
             "A": "blue",    # Alanine (ALA)
             "R": "red",     # Arginine (ARG)
             "N": "green",   # Asparagine (ASN)
@@ -274,7 +274,7 @@ DICT_COLORS = {
         }
     },
     # https://www.jalview.org/help/html/colourSchemes/zappo.html
-    "COLORS_ZAPPO" : {
+    "ZAPPO" : {
         "DICT_COLORS" : {
             "A": "#ffafaf",  # Alanine (ALA)
             "R": "#6464ff",  # Arginine (ARG)
