@@ -197,6 +197,7 @@ DICT_COLORS = {
         }
     },
     # http://openrasmol.org/doc/rasmol.html#shapelycolours
+    # https://www.dnastar.com/manuals/MegAlignPro/17.3.1/en/topic/change-the-analysis-view-color-scheme
     "SHAPELY" : {
         "DICT_COLORS" : {
             "A": "#8CFF8C",  # Alanine (ALA)
@@ -204,21 +205,21 @@ DICT_COLORS = {
             "N": "#FF7C70",  # Asparagine (ASN)
             "D": "#A00042",  # Aspartic acid (ASP)
             "C": "#FFFF70",  # Cysteine (CYS)
-            "Q": "#FF4C4C",  # Glutamine (GLN)
-            "E": "#660000",  # Glutamic acid (GLU)
+            "Q": "#FF7C70",  # Glutamine (GLN)
+            "E": "#A00042",  # Glutamic acid (GLU)
             "G": "#FFFFFF",  # Glycine (GLY)
             "H": "#7070FF",  # Histidine (HIS)
             "I": "#004C00",  # Isoleucine (ILE)
-            "L": "#455E45",  # Leucine (LEU)
-            "K": "#4747B8",  # Lysine (LYS)
-            "M": "#B8A042",  # Methionine (MET)
+            "L": "#004C00",  # Leucine (LEU)
+            "K": "#00007C",  # Lysine (LYS)
+            "M": "#FFFF70",  # Methionine (MET)
             "F": "#534C42",  # Phenylalanine (PHE)
             "P": "#525252",  # Proline (PRO)
             "S": "#FF7042",  # Serine (SER)
-            "T": "#B84C00",  # Threonine (THR)
+            "T": "#FF7042",  # Threonine (THR)
             "W": "#4F4600",  # Tryptophan (TRP)
-            "Y": "#8C704C",  # Tyrosine (TYR)
-            "V": "#FF8CFF",  # Valine (VAL)
+            "Y": "#534C42",  # Tyrosine (TYR)
+            "V": "#004C00",  # Valine (VAL)
             "-": "#000000",
         },
         "DICT_ANNOTATION" : {
