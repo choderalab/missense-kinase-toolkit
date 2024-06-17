@@ -109,7 +109,7 @@ def convert_pocket_region_list_to_dict(
         Dictionary with pocket regions as keys and start and end indices as values
 
     """
-    list_klifs_region = list(set([i[1] for i in LIST_POCKET_KLIFS_REGIONS]))
+    list_klifs_region = list({i[1] for i in LIST_POCKET_KLIFS_REGIONS})
 
     list_klifs_start = []
     list_klifs_end = []
@@ -123,9 +123,9 @@ def convert_pocket_region_list_to_dict(
     list_klifs_start = list(np.array(list_klifs_start)[idx_sort])
     list_klifs_end = list(np.array(list_klifs_end)[idx_sort])
 
-    dict_klifs_regions = {region : {"start" : list_klifs_start[idx], 
+    dict_klifs_regions = {region : {"start" : list_klifs_start[idx],
                                     "end" : list_klifs_end[idx]} for idx, region in enumerate(list_klifs_region)}
-    
+
     return dict_klifs_regions
 
 
@@ -252,7 +252,7 @@ class KLIFSPocket:
     list_klifs_region_start : list[str]
         Start region of KLIFS pocket
     list_klifs_region_end : list[str]
-        End region of KLIFS pocket; end region will be the same as start region 
+        End region of KLIFS pocket; end region will be the same as start region
             if no concatenation necessary to find a single exact match
     klifs_substring : str
         Substring of KLIFS pocket that maps to indices for the region(s) provided
@@ -262,10 +262,10 @@ class KLIFSPocket:
         Length of list of indices in UniProt sequence where KLIFS region starts (i.e., len(list_substring_idx))
     substring_idx : int | None
         Index in UniProt sequence where KLIFS region starts
-    
+
     Attributes
     ----------
-        
+
     """
     uniprotID                   :   str
     hgncName                    :   str
@@ -286,17 +286,17 @@ def remove_gaps_from_klifs(
     klifs_string: str
 ) -> str:
     """Remove gaps from KLIFS pocket sequence.
-    
+
     Parameters
     ----------
     klifs_pocket : str
         KLIFS pocket sequence; can be entire sequence or substring
-        
+
     Returns
     -------
     klifs_pocket_narm : str
         KLIFS pocket sequence without gaps (i.e., "-" removed)
-        
+
     """
     klifs_pocket_narm = "".join([i for i in klifs_string if i != "-"])
     return klifs_pocket_narm
@@ -343,7 +343,7 @@ def align_klifs_pocket_to_uniprot_seq(
         UniProt canonical sequence
     str_klifs : str
         KLIFS pocket sequence
-    
+
     Returns
     -------
     substring_klifs : str
@@ -380,7 +380,7 @@ def iterate_klifs_alignment(
         UniProt canonical sequence
     string_klifs : str
         KLIFS pocket sequence
-    
+
     Returns
     -------
     dict_out : dict[str, str | int | None]
@@ -388,7 +388,7 @@ def iterate_klifs_alignment(
         klifs_region_start : str
             Start region of KLIFS pocket
         klifs_region_end : str
-            End region of KLIFS pocket; end region will be the same as start region 
+            End region of KLIFS pocket; end region will be the same as start region
                 if no concatenation necessary to find a single exact match
         klifs_substring : str
             Substring of KLIFS pocket that maps to indices for the region(s) provided
@@ -398,7 +398,7 @@ def iterate_klifs_alignment(
             Length of list of indices in UniProt sequence where KLIFS region starts (i.e., len(list_substring_idx))
         substring_idx : int | None
             Index in UniProt sequence where KLIFS region starts
-        
+
     """
     # dict_klifs = convert_pocket_region_list_to_dict(LIST_POCKET_KLIFS_REGIONS)
     dict_klifs = DICT_POCKET_KLIFS_REGIONS
@@ -435,7 +435,7 @@ def iterate_klifs_alignment(
         )
         if len(list_substring_idx) != 1:
             substring_idx = np.nan
-        
+
         else:
             substring_idx = list_substring_idx[0]
     else:

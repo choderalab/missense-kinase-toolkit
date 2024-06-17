@@ -5,11 +5,11 @@ from bravado.client import SwaggerClient
 # from dataclasses import dataclass
 
 from missense_kinase_toolkit.databases.config import (
-    get_cbioportal_instance, 
+    get_cbioportal_instance,
     maybe_get_cbioportal_token
 )
 from missense_kinase_toolkit.databases.io_utils import (
-    parse_iterabc2dataframe, 
+    parse_iterabc2dataframe,
     save_dataframe_to_csv,
 )
 from missense_kinase_toolkit.databases.api_schema import APIKeySwaggerClient
@@ -38,7 +38,7 @@ class cBioPortal(APIKeySwaggerClient):
         self.instance = get_cbioportal_instance()
         self.url: str = f"https://{self.instance}/api/v2/api-docs"
         self._cbioportal = self.query_api()
-    
+
     def maybe_get_token(self):
         return maybe_get_cbioportal_token()
 
@@ -73,7 +73,7 @@ class cBioPortal(APIKeySwaggerClient):
 class Mutations(cBioPortal):
     """Class to get mutations from a cBioPortal study."""
     def __init__(
-        self, 
+        self,
         study_id: str,
     ) -> None:
         """Initialize Mutations Class object.

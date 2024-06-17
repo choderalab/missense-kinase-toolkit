@@ -19,12 +19,12 @@ class SwaggerAPIClient(ABC):
         self
     ) -> SwaggerClient:
         """Query a Swagger API and return result.
-        
+
         Parameters
         ----------
         url : str
             API URL
-            
+
         Returns
         -------
         SwaggerClient
@@ -32,7 +32,7 @@ class SwaggerAPIClient(ABC):
         """
         ...
 
-        
+
 class APIKeySwaggerClient(SwaggerAPIClient, ABC):
     @abstractmethod
     def maybe_get_token(
@@ -44,7 +44,7 @@ class APIKeySwaggerClient(SwaggerAPIClient, ABC):
         -------
         str | None
             API token if available; None otherwise
-        
+
         """
         ...
 
