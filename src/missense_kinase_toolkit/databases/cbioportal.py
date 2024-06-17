@@ -1,16 +1,24 @@
 import logging
 import pandas as pd
-
 from bravado.client import SwaggerClient
-from bravado.requests_client import RequestsClient
+# from pydantic import BaseModel as PydanticBaseModel
+# from dataclasses import dataclass
 
-from missense_kinase_toolkit.databases import config, io_utils
+from missense_kinase_toolkit.databases.config import (
+    get_cbioportal_instance,
+    maybe_get_cbioportal_token
+)
+from missense_kinase_toolkit.databases.io_utils import (
+    parse_iterabc2dataframe,
+    save_dataframe_to_csv,
+)
+from missense_kinase_toolkit.databases.api_schema import APIKeySwaggerClient
 
 
 logger = logging.getLogger(__name__)
 
 
-class cBioPortal():
+class cBioPortal(APIKeySwaggerClient):
     """Class to interact with the cBioPortal API."""
     def __init__(self):
         """Initialize cBioPortal Class object.
@@ -23,48 +31,19 @@ class cBioPortal():
             cBioPortal instance
         url : str
             cBioPortal API URL
-        _cbioportal : bravado.client.SwaggerClient
-            cBioPortal API object
+        _cbioportal : bravado.client.SwaggerClient | None
+            cBioPortal API object (post-init)
 
         """
-        self.instance = config.get_cbioportal_instance()
-        self.url = f"https://{self.instance}/api/v2/api-docs"
-        self._cbioportal = self.query_cbioportal_api()
+        self.instance = get_cbioportal_instance()
+        self.url: str = f"https://{self.instance}/api/v2/api-docs"
+        self._cbioportal = self.query_api()
 
-    def _set_api_key(self):
-        """Set API key for cBioPortal API.
+    def maybe_get_token(self):
+        return maybe_get_cbioportal_token()
 
-        Returns
-        -------
-        RequestsClient
-            RequestsClient object with API key set
-
-        """
-        token = config.maybe_get_cbioportal_token()
-        http_client = RequestsClient()
-        if token is not None:
-            http_client.set_api_key(
-                self.instance,
-                f"Bearer {token}",
-                param_name="Authorization",
-                param_in="header"
-            )
-        else:
-            print("No API token provided")
-        return http_client
-
-    def query_cbioportal_api(
-        self
-    ) -> SwaggerClient:
-        """Queries cBioPortal API for instance as bravado.client.SwaggerClient object.
-
-        Returns
-        -------
-        bravado.client.SwaggerClient
-            cBioPortal API object
-
-        """
-        http_client = self._set_api_key()
+    def query_api(self):
+        http_client = self.set_api_key()
 
         cbioportal_api = SwaggerClient.from_url(
             self.url,
@@ -99,8 +78,6 @@ class Mutations(cBioPortal):
     ) -> None:
         """Initialize Mutations Class object.
 
-        Upon initialization, cBioPortal API is queried and mutations for specificied study are retrieved.
-
         Parameters
         ----------
         study_id : str
@@ -109,9 +86,9 @@ class Mutations(cBioPortal):
         Attributes
         ----------
         study_id : str
-            cBioPortal study ID
+            cBioPortal study ID; default: `msk_impact_2017` (Zehir, 2017)
         _mutations : list | None
-            List of cBioPortal mutations
+            List of cBioPortal mutations; None if study not found (post-init)
 
         """
         super().__init__()
@@ -161,15 +138,14 @@ class Mutations(cBioPortal):
             As the "gene" ABC object is nested within the "mutation" ABC object, the two dataframes are parsed and concatenated.
 
         """
-        df_muts = io_utils.parse_iterabc2dataframe(self._mutations)
-        df_genes = io_utils.parse_iterabc2dataframe(df_muts["gene"])
+        df_muts = parse_iterabc2dataframe(self._mutations)
+        df_genes = parse_iterabc2dataframe(df_muts["gene"])
         df_combo = pd.concat([df_muts, df_genes], axis=1)
         df_combo = df_combo.drop(["gene"], axis=1)
 
-        filename = f"{self.study_id}_mutations.csv"
-
         if bool_save:
-            io_utils.save_dataframe_to_csv(df_combo, filename)
+            filename = f"{self.study_id}_mutations.csv"
+            save_dataframe_to_csv(df_combo, filename)
         else:
             return df_combo
 
@@ -180,3 +156,5 @@ class Mutations(cBioPortal):
     def get_mutations(self):
         """Get cBioPortal mutations."""
         return self._mutations
+
+#TODO: implement clinical annotations class

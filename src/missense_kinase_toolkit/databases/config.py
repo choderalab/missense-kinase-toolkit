@@ -54,7 +54,7 @@ def set_cbioportal_instance(
     Parameters
     ----------
     val : str
-        cBioPortal instance; e.g., "cbioportal.mskcc.org" for MSKCC or
+        cBioPortal instance; e.g., "cbioportal.mskcc.org" for MSKCC or "www.cbioportal.org"
 
     Returns
     -------
