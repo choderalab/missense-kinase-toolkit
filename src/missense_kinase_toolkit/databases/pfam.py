@@ -96,7 +96,7 @@ def find_pfam_domain(
     input_id : str
         Input ID that matches
     input_position : int
-        Codon position
+        Codon position in UniProt canonical sequence
     df_ref : pd.DataFrame
         DataFrame with Pfam domain information
     col_ref_id : str
