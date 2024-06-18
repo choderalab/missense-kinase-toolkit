@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 from bravado.client import SwaggerClient
 
+from missense_kinase_toolkit.databases.api_schema import SwaggerAPIClient
+
 
 logger = logging.getLogger(__name__)
 
@@ -235,53 +237,6 @@ POCKET_KLIFS_REGION_COLORS = {
 """dict[str, str]: Mapping KLIFS pocket region to color"""
 
 
-@dataclass
-class KLIFSPocket:
-    """Dataclass to hold KLIFS pocket alignment information per kinase.
-
-    Parameters
-    ----------
-    uniprotID : str
-        UniProt ID
-    hgncName : str
-        HGNC name
-    uniprotSeq : str
-        UniProt canonical sequence
-    klifsSeq : str
-        KLIFS pocket sequence
-    list_klifs_region_start : list[str]
-        Start region of KLIFS pocket
-    list_klifs_region_end : list[str]
-        End region of KLIFS pocket; end region will be the same as start region
-            if no concatenation necessary to find a single exact match
-    klifs_substring : str
-        Substring of KLIFS pocket that maps to indices for the region(s) provided
-    klifs_substring_narm : str
-        Substring of KLIFS pocket without gaps (i.e., "-" removed)
-    len_substring_idx : int
-        Length of list of indices in UniProt sequence where KLIFS region starts (i.e., len(list_substring_idx))
-    substring_idx : int | None
-        Index in UniProt sequence where KLIFS region starts
-
-    Attributes
-    ----------
-
-    """
-    uniprotID                   :   str
-    hgncName                    :   str
-    uniprotSeq                  :   str
-    klifsSeq                    :   str
-    list_klifs_region_start     :   list[str]
-    list_klifs_region_end       :   list[str]
-    list_klifs_substring        :   list[str]
-    list_substring_idxs         :   list[list[int]]
-
-    def remove_klifs_gaps(self):
-        list_substring_klifs_narm = [remove_gaps_from_klifs(substring_klifs) \
-                                     for substring_klifs in self.list_klifs_substring]
-        return list_substring_klifs_narm
-
-
 def remove_gaps_from_klifs(
     klifs_string: str
 ) -> str:
@@ -348,8 +303,6 @@ def align_klifs_pocket_to_uniprot_seq(
     -------
     substring_klifs : str
         Substring of KLIFS pocket that maps to indices for the region(s) provided
-    substring_klifs_narm : str
-        Substring of KLIFS pocket without gaps (i.e., "-" removed)
     list_substring_idx : list[int] | None
         List of indices in UniProt sequence where KLIFS region starts
 
@@ -360,16 +313,15 @@ def align_klifs_pocket_to_uniprot_seq(
         list_idx = None
     else:
         list_idx = return_idx_of_substring_in_superstring(str_uniprot, substring_klifs_narm)
+    return substring_klifs, list_idx
 
-    return substring_klifs, substring_klifs_narm, list_idx
 
-
-#TODO: convert output to named tuple or dataclass instead
+#TODO "b.l" algorithm since non-contiguous region
+#TODO keep match string separate from KLIFS substring at start region
 def iterate_klifs_alignment(
-    klifs_index: int,
     string_uniprot: str,
     string_klifs: str,
-) -> list[int] | None:
+) -> dict[str, list[str | list[int] | None]]:
     """ Align KLIFS region to UniProt canonical Uniprot sequence.
 
     Parameters
@@ -383,84 +335,96 @@ def iterate_klifs_alignment(
 
     Returns
     -------
-    dict_out : dict[str, str | int | None]
-        Dictionary with keys:
-        klifs_region_start : str
-            Start region of KLIFS pocket
-        klifs_region_end : str
-            End region of KLIFS pocket; end region will be the same as start region
-                if no concatenation necessary to find a single exact match
-        klifs_substring : str
-            Substring of KLIFS pocket that maps to indices for the region(s) provided
-        klifs_substring_narm : str
-            Substring of KLIFS pocket without gaps (i.e., "-" removed)
-        len_substring_idx : int
-            Length of list of indices in UniProt sequence where KLIFS region starts (i.e., len(list_substring_idx))
-        substring_idx : int | None
-            Index in UniProt sequence where KLIFS region starts
+    dict_out : dict[str, list[str | list[int] | None]]
+        Dictionary with keys (match part of KLIFSPocket object):
+            list_klifs_region : list[str]
+                List of start and end regions of KLIFS pocket separated by ":"; end region will be the
+                    same as start region if no concatenation necessary to find a single exact match
+            list_klifs_substr_actual : list[str]
+                List of substring of KLIFS pocket that maps to the *start region* of the KLIFS pocket
+            list_klifs_substr_match : list[str]
+                List of the actual substring used to match to the KLIFS pocket for the region(s) provided;
+                    will be the same as list_klifs_substr_actual if no concatenation necessary to find a single exact match
+            list_substring_idxs : list[list[int | None]]
+                List of indices in UniProt sequence where KLIFS region starts
 
     """
-    # dict_klifs = convert_pocket_region_list_to_dict(LIST_POCKET_KLIFS_REGIONS)
+    list_klifs_region = []
+    list_klifs_substr_actual = []
+    list_klifs_substr_match = []
+    list_substring_idxs = []
+
     dict_klifs = DICT_POCKET_KLIFS_REGIONS
     list_klifs = list(dict_klifs.keys())
 
-    klifs_region_start, klifs_region_end = list_klifs[klifs_index], list_klifs[klifs_index]
-    klifs_idx_start, klifs_idx_end = dict_klifs[klifs_region_start]["start"]-1, dict_klifs[klifs_region_end]["end"]
+    for klifs_index, klifs_region in enumerate(list_klifs):
+        klifs_region_start, klifs_region_end = klifs_region, klifs_region
+        klifs_idx_start, klifs_idx_end = dict_klifs[klifs_region_start]["start"]-1, \
+            dict_klifs[klifs_region_end]["end"]
 
-    str_klifs, str_klifs_narm, list_substring_idx = align_klifs_pocket_to_uniprot_seq(
-        idx_start   =   klifs_idx_start,
-        idx_end     =   klifs_idx_end,
-        str_uniprot =   string_uniprot,
-        str_klifs   =   string_klifs,
-    )
-    if list_substring_idx is None:
-        substring_idx = None
-
-    #TODO: analyze KLIFS PDB structures to determine contiguous regions
-    if len(list_substring_idx) > 1:
-        # if not last KLIFs region concatenate with susbequent regions
-        if klifs_index + 1 < len(list_klifs):
-            klifs_region_end = list_klifs[klifs_index + 1]
-            klifs_idx_end = dict_klifs[klifs_region_end]["end"]
-        # if last KLIFs region concatenate with previous region
-        else:
-            klifs_region_start = list_klifs[klifs_index - 1]
-            klifs_idx_start = dict_klifs[klifs_region_start]["start"]
-        klifs_idx_start, klifs_idx_end = dict_klifs[klifs_region_start]["start"]-1, dict_klifs[klifs_region_end]["end"]
-        str_klifs, str_klifs_narm, list_substring_idx = align_klifs_pocket_to_uniprot_seq(
+        str_klifs, list_substring_idx = align_klifs_pocket_to_uniprot_seq(
             idx_start   =   klifs_idx_start,
             idx_end     =   klifs_idx_end,
             str_uniprot =   string_uniprot,
             str_klifs   =   string_klifs,
         )
-        if len(list_substring_idx) != 1:
-            substring_idx = np.nan
+        list_klifs_substr_actual.append(str_klifs)
 
-        else:
-            substring_idx = list_substring_idx[0]
-    else:
-        try:
-            substring_idx = list_substring_idx[0]
-        except:
-            substring_idx = np.nan
+        # will no longer extract a single index here so can process elsewhere
+        # if list_substring_idx is None:
+        #     substring_idx = None
 
-    #TODO "b.l" algorithm since non-contiguous
+        if list_substring_idx is not None:
+            #TODO: analyze KLIFS PDB structures to determine contiguous regions
+            if (len(list_substring_idx) > 1):
+                # if not last KLIFs region concatenate with susbequent regions
+                if klifs_index + 1 < len(list_klifs):
+                    klifs_region_end = list_klifs[klifs_index + 1]
+                    klifs_idx_end = dict_klifs[klifs_region_end]["end"]
+                # if last KLIFs region concatenate with previous region
+                else:
+                    len_klifs = len(remove_gaps_from_klifs(str_klifs))
+                    klifs_region_start = list_klifs[klifs_index - 1]
+                    klifs_idx_start = dict_klifs[klifs_region_start]["start"]
+                klifs_idx_start, klifs_idx_end = dict_klifs[klifs_region_start]["start"]-1, \
+                    dict_klifs[klifs_region_end]["end"]
+                str_klifs, list_substring_idx = align_klifs_pocket_to_uniprot_seq(
+                    idx_start   =   klifs_idx_start,
+                    idx_end     =   klifs_idx_end,
+                    str_uniprot =   string_uniprot,
+                    str_klifs   =   string_klifs,
+                )
+                # if last KLIFS region offset by length of preceding KLIFS region with gaps removed
+                if (klifs_index + 1 == len(list_klifs) and len(list_substring_idx) != 0):
+                    len_offset = len(remove_gaps_from_klifs(str_klifs)) - len_klifs
+                    list_substring_idx = [i + len_offset for i in list_substring_idx]
+
+        list_klifs_region.append(klifs_region_start + ":" + klifs_region_end)
+        list_klifs_substr_match.append(str_klifs)
+        list_substring_idxs.append(list_substring_idx)
+
+        # will no longer extract a single index here so can process multiple ways elsewhere
+        #     if len(list_substring_idx) != 1:
+        #         substring_idx = np.nan
+        #     else:
+        #         substring_idx = list_substring_idx[0]
+        # else:
+        #     try:
+        #         substring_idx = list_substring_idx[0]
+        #     except:
+        #         substring_idx = np.nan
+
     dict_out = {
-        "klifs_region_start"        :       klifs_region_start,
-        "klifs_region_end"          :       klifs_region_end,
-        "klifs_substring"           :       str_klifs,
-        "klifs_substring_narm"      :       str_klifs_narm,
-        "len_substring_idx"         :       len(list_substring_idx),
-        "substring_idx"             :       substring_idx,
+        "list_klifs_region"             :       list_klifs_region,
+        "list_klifs_substr_actual"      :       list_klifs_substr_actual,
+        "list_klifs_substr_match"       :       list_klifs_substr_match,
+        "list_substring_idxs"           :       list_substring_idxs
     }
-
-    # is this strictly necessary?
-    # KLIFSPocketInfo = KLIFSPocket(dict_out)
 
     return dict_out
 
 
-class KLIFS():
+class KLIFS(SwaggerAPIClient):
     """Class to interact with the KLIFS API."""
     def __init__(self):
         """Initialize KLIFS Class object.
@@ -476,9 +440,9 @@ class KLIFS():
 
         """
         self.url = "https://dev.klifs.net/swagger_v2/swagger.json"
-        self._klifs = self.query_klifs_api()
+        self._klifs = self.query_api()
 
-    def query_klifs_api(self):
+    def query_api(self):
         """Get KLIFS API as bravado.client.SwaggerClient object.
 
         Returns
@@ -507,8 +471,7 @@ class KLIFS():
 
 
 class KinaseInfo(KLIFS):
-    """Class to get information about a kinase from KLIFS.
-    """
+    """Class to get information about a kinase from KLIFS."""
     def __init__(
         self,
         kinase_name: str,

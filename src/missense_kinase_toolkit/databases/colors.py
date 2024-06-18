@@ -163,7 +163,7 @@ DICT_COLORS = {
     # http://openrasmol.org/doc/rasmol.html#aminocolours
     "RASMOL" : {
         "DICT_COLORS" : {
-            "A": "#0F820F",  # Alanine (ALA)
+            "A": "#C8C8C8",  # Alanine (ALA)
             "R": "#145AFF",  # Arginine (ARG)
             "N": "#00DCDC",  # Asparagine (ASN)
             "D": "#E60A0A",  # Aspartic acid (ASP)
@@ -186,14 +186,20 @@ DICT_COLORS = {
             "-": "#BEA06E",
         },
         "DICT_ANNOTATION" : {
-            "hydrophobic"   :   "#0F820F",      # A,I,L,M,F,W,V
-            "positive"      :   "#145AFF",      # K,R
-            "negative"      :   "#E60A0A",      # D,E
-            "polar"         :   "#00DCDC",      # N,Q,S,T
-            "aromatic"      :   "#3232AA",      # H,Y
-            "cysteine"      :   "#E6E600",      # C
-            "glycine"       :   "#EBEBEB",      # G
-            "proline"       :   "#DC9682",      # P
+
+            "A"         :       "#C8C8C8",
+            "R, K"      :       "#145AFF",
+            "N, Q"      :       "#00DCDC",
+            "D, E"      :       "#E60A0A",
+            "C, M"      :       "#E6E600",
+            "G"         :       "#EBEBEB",
+            "H"         :       "#8282D2",
+            "I, L, V"   :       "#0F820F",
+            "F, Y"      :       "#3232AA",
+            "P"         :       "#DC9682",
+            "S, T"      :       "#FA9600",
+            "W"         :       "#B45AB4",
+            "-"         :       "#BEA06E",
         }
     },
     # http://openrasmol.org/doc/rasmol.html#shapelycolours
