@@ -440,7 +440,7 @@ class KLIFS(SwaggerAPIClient):
 
         """
         self.url = "https://dev.klifs.net/swagger_v2/swagger.json"
-        self._klifs = self.query_klifs_api()
+        self._klifs = self.query_api()
 
     def query_api(self):
         """Get KLIFS API as bravado.client.SwaggerClient object.
