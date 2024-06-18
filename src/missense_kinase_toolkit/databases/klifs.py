@@ -1,5 +1,6 @@
 import numpy as np
 import logging
+from dataclasses import dataclass
 
 from bravado.client import SwaggerClient
 
@@ -312,7 +313,6 @@ def align_klifs_pocket_to_uniprot_seq(
         list_idx = None
     else:
         list_idx = return_idx_of_substring_in_superstring(str_uniprot, substring_klifs_narm)
-
     return substring_klifs, list_idx
 
 
@@ -326,6 +326,8 @@ def iterate_klifs_alignment(
 
     Parameters
     ----------
+    klifs_index : int
+        Index of KLIFS region (e.g. "I") in keys of dict_klifs
     string_uniprot : str
         UniProt canonical sequence
     string_klifs : str
