@@ -17,4 +17,4 @@ Alternatively, since we have used `poetry` as our default package manager for th
 
 .. code-block:: bash
 
-    poetry run missense-kinase-toolkit --build
+    poetry install
