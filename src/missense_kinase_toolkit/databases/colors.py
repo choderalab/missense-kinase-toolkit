@@ -186,7 +186,7 @@ DICT_COLORS = {
             "-": "#BEA06E",
         },
         "DICT_ANNOTATION" : {
-            
+
             "A"         :       "#C8C8C8",
             "R, K"      :       "#145AFF",
             "N, Q"      :       "#00DCDC",
