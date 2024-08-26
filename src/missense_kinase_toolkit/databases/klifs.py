@@ -1,6 +1,5 @@
 import numpy as np
 import logging
-from dataclasses import dataclass
 
 from bravado.client import SwaggerClient
 
@@ -326,8 +325,6 @@ def iterate_klifs_alignment(
 
     Parameters
     ----------
-    klifs_index : int
-        Index of KLIFS region (e.g. "I") in keys of dict_klifs
     string_uniprot : str
         UniProt canonical sequence
     string_klifs : str
@@ -347,7 +344,7 @@ def iterate_klifs_alignment(
                     will be the same as list_klifs_substr_actual if no concatenation necessary to find a single exact match
             list_substring_idxs : list[list[int | None]]
                 List of indices in UniProt sequence where KLIFS region starts
-
+        
     """
     list_klifs_region = []
     list_klifs_substr_actual = []
