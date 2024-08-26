@@ -1,6 +1,5 @@
 import numpy as np
 import logging
-from dataclasses import dataclass
 
 from bravado.client import SwaggerClient
 
@@ -326,8 +325,6 @@ def iterate_klifs_alignment(
 
     Parameters
     ----------
-    klifs_index : int
-        Index of KLIFS region (e.g. "I") in keys of dict_klifs
     string_uniprot : str
         UniProt canonical sequence
     string_klifs : str
