@@ -96,6 +96,21 @@ def test_hgnc():
     assert abl1.hgnc == "ABL1"
     assert abl1.maybe_get_info_from_hgnc_fetch()["locus_type"][0] == "gene with protein product"
 
+    abl1 = hgnc.HGNC("ENSG00000097007", False)
+    abl1.maybe_get_symbol_from_hgnc_search()
+    assert abl1.hgnc == "ABL1"
+    assert abl1.maybe_get_info_from_hgnc_fetch()["locus_type"][0] == "gene with protein product"
+
+    test = hgnc.HGNC("test", True)
+    test.maybe_get_symbol_from_hgnc_search()
+    assert test.ensembl is None
+    assert test.maybe_get_info_from_hgnc_fetch()["locus_type"] is None
+
+    test = hgnc.HGNC("test", False)
+    test.maybe_get_symbol_from_hgnc_search()
+    assert test.hgnc is None
+    assert test.maybe_get_info_from_hgnc_fetch() is None
+
 
 def test_klifs():
     from missense_kinase_toolkit.databases import klifs
@@ -123,3 +138,38 @@ def test_scrapers():
     assert df_kinhub.shape[1] == 8
     assert "HGNC Name" in df_kinhub.columns
     assert "UniprotID" in df_kinhub.columns
+
+
+def test_colors():
+    from missense_kinase_toolkit.databases import colors
+
+    assert colors.map_aa_to_single_letter_code("Ala") == "A"
+    assert colors.map_aa_to_single_letter_code("ALA") == "A"
+    assert colors.map_aa_to_single_letter_code("alanine") == "A"
+    assert colors.map_aa_to_single_letter_code("ALANINE") == "A"
+    assert colors.map_aa_to_single_letter_code("A") == "A"
+    assert colors.map_aa_to_single_letter_code("a") == "A"
+    assert colors.map_aa_to_single_letter_code("AL") is None
+    assert colors.map_aa_to_single_letter_code("ALALALALALA") is None
+
+
+def test_uniprot():
+    from missense_kinase_toolkit.databases import uniprot
+
+    abl1 = uniprot.UniProt("P00519")
+    assert abl1._sequence == "MLEICLKLVGCKSKKGLSSSSSCYLEEALQRPVASDFEPQGLSEAARWNSKENLLAGPSENDPNLFVALYDFVASGDNTLSITKGEKLRVLGYNHNGEWCEAQTKNGQGWVPSNYITPVNSLEKHSWYHGPVSRNAAEYLLSSGINGSFLVRESESSPGQRSISLRYEGRVYHYRINTASDGKLYVSSESRFNTLAELVHHHSTVADGLITTLHYPAPKRNKPTVYGVSPNYDKWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVNAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQESSISDEVEKELGKQGVRGAVSTLLQAPELPTKTRTSRRAAEHRDTTDVPEMPHSKGQGESDPLDHEPAVSPLLPRKERGPPEGGLNEDERLLPKDKKTNLFSALIKKKKKTAPTPPKRSSSFREMDGQPERRGAGEEEGRDISNGALAFTPLDTADPAKSPKPSNGAGVPNGALRESGGSGFRSPHLWKKSSTLTSSRLATGEEEGGGSSSKRFLRSCSASCVPHGAKDTEWRSVTLPRDLQSTGRQFDSSTFGGHKSEKPALPRKRAGENRSDQVTRGTVTPPPRLVKKNEEAADEVFKDIMESSPGSSPPNLTPKPLRRQVTVAPASGLPHKEEAGKGSALGTPAAAEPVTPTSKAGSGAPGGTSKGPAEESRVRRHKHSSESPGRDKGKLSRLKPAPPPPPAASAGKAGGKPSQSPSQEAAGEAVLGAKTKATSLVDAVNSDAAKPSQPGEGLKKPVLPATPKPQSAKPSGTPISPAPVPSTLPSASSALAGDQPSSTAFIPLISTRVSLRKTRQPPERIASGAITKGVVLDSTEALCLAISRNSEQMASHSAVLEAGKNLYTFCVSYVDSIQQMRNKFAFREAINKLENNLRELQICPATAGSGPAATQDFSKLLSSVKEISDIVQR"
+
+
+def test_pfam():
+    from missense_kinase_toolkit.databases import pfam
+
+    # test that the function to find Pfam domain for a given HGNC symbol and position works
+    df_pfam = pfam.Pfam("P00519")._pfam
+    assert df_pfam.shape[0] == 4
+    assert df_pfam.shape[1] == 18
+    assert "uniprot" in df_pfam.columns
+    assert "start" in df_pfam.columns
+    assert "end" in df_pfam.columns
+    assert "name" in df_pfam.columns
+    assert df_pfam.loc[df_pfam["name"] == "Protein tyrosine and serine/threonine kinase", "start"].values[0] == 242
+    assert df_pfam.loc[df_pfam["name"] == "Protein tyrosine and serine/threonine kinase", "end"].values[0] == 492

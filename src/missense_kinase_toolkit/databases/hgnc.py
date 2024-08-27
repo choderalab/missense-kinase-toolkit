@@ -1,7 +1,9 @@
 import requests
+import logging
 
 from missense_kinase_toolkit.databases import requests_wrapper, utils_requests
 
+logger = logging.getLogger(__name__)
 
 class HGNC:
     """Class to interact with the HGNC API."""
@@ -187,6 +189,9 @@ class HGNC:
             Set of keys present in the response documents
 
         """
-        list_keys = [set(doc.keys()) for doc in res_input.json()["response"]["docs"]]
-        set_keys = set.union(*list_keys)
+        try:
+            list_keys = [set(doc.keys()) for doc in res_input.json()["response"]["docs"]]
+            set_keys = set.union(*list_keys)
+        except TypeError:
+            set_keys = set()
         return set_keys
