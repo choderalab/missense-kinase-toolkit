@@ -173,3 +173,9 @@ def test_pfam():
     assert "name" in df_pfam.columns
     assert df_pfam.loc[df_pfam["name"] == "Protein tyrosine and serine/threonine kinase", "start"].values[0] == 242
     assert df_pfam.loc[df_pfam["name"] == "Protein tyrosine and serine/threonine kinase", "end"].values[0] == 492
+    assert pfam.find_pfam_domain(
+        input_id="p00519", 
+        input_position=350, 
+        df_ref=df_pfam, 
+        col_ref_id="uniprot"
+    ) == "Protein tyrosine and serine/threonine kinase"
