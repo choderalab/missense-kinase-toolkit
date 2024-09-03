@@ -18,18 +18,28 @@ def test_config():
     from missense_kinase_toolkit.databases import config
 
     # test that the function to set the output directory works
+    with pytest.raises(SystemExit) as sample:
+        config.get_output_dir()
+    assert sample.type == SystemExit    
+    assert sample.value.code == 1
     config.set_output_dir("test")
     assert config.get_output_dir() == "test"
 
     # test that the function to set the request cache works
+    assert config.maybe_get_request_cache() is None
     config.set_request_cache("test")
     assert config.maybe_get_request_cache() == "test"
 
     # test that the function to set the cBioPortal instance works
+    with pytest.raises(SystemExit) as sample:
+        config.get_cbioportal_instance()
+    assert sample.type == SystemExit    
+    assert sample.value.code == 1
     config.set_cbioportal_instance("test")
     assert config.get_cbioportal_instance() == "test"
 
     # test that the function to set the cBioPortal token works
+    assert config.maybe_get_cbioportal_token() is None
     config.set_cbioportal_token("test")
     assert config.maybe_get_cbioportal_token() == "test"
 
@@ -62,17 +72,42 @@ def test_io_utils():
     assert io_utils.convert_str2list("a, b, c") == ["a", "b", "c"]
 
 
+def test_requests_wrapper(capsys):
+    import requests
+    from missense_kinase_toolkit.databases import uniprot, utils_requests
+
+    uniprot.UniProt("TEST")
+    out, _ = capsys.readouterr()
+    assert out == "Error code: 400 (Bad request)\n"
+
+    utils_requests.print_status_code_if_res_not_ok(
+        requests.get("https://rest.uniprot.org/uniprotkb/TEST"),
+        dict_status_code = {400: "TEST"}
+    )
+    out, _ = capsys.readouterr()
+    assert out == "Error code: 400 (TEST)\n"
+
+    utils_requests.print_status_code_if_res_not_ok(
+        requests.get("https://rest.uniprot.org/uniprotkb/TEST"),
+        dict_status_code = {200: "TEST"}
+    )
+    out, _ = capsys.readouterr()
+    assert out == "Error code: 400\n"
+
+
 def test_cbioportal():
+    import os
     from missense_kinase_toolkit.databases import config, cbioportal
 
     config.set_cbioportal_instance("www.cbioportal.org")
     config.set_output_dir(".")
 
-    # test that the function to set the API key for cBioPortal works
-    # cbioportal.cBioPortal()._set_api_key()
-
     # test that the function to query the cBioPortal API works
     cbioportal_instance = cbioportal.cBioPortal()
+    assert cbioportal_instance.maybe_get_token() is None
+    assert cbioportal_instance.get_instance() == "www.cbioportal.org"
+    assert cbioportal_instance.get_url() == "https://www.cbioportal.org/api/v2/api-docs"
+    assert cbioportal_instance._cbioportal is not None
 
     # test that server status is up
     assert cbioportal_instance._cbioportal.Server_running_status.getServerStatusUsingGET().response().result["status"] == "UP"
@@ -86,6 +121,15 @@ def test_cbioportal():
     # test that the function to get all mutations by study works
     df = cbioportal.Mutations(study).get_cbioportal_cohort_mutations()
     assert df.shape[0] == 78142
+
+    # make sure save works
+    mutations_instance = cbioportal.Mutations(study)
+    mutations_instance.get_cbioportal_cohort_mutations(bool_save=True)
+    assert os.path.isfile(f"{mutations_instance.study_id}_mutations.csv") == True
+    os.remove(f"{mutations_instance.study_id}_mutations.csv")
+
+    assert mutations_instance.get_study_id() == study
+    assert mutations_instance._mutations is not None
 
 
 def test_hgnc():
@@ -110,6 +154,13 @@ def test_hgnc():
     test.maybe_get_symbol_from_hgnc_search()
     assert test.hgnc is None
     assert test.maybe_get_info_from_hgnc_fetch() is None
+
+    test = hgnc.HGNC("temp")
+    test.maybe_get_symbol_from_hgnc_search(
+        custom_field="mane_select", 
+        custom_term="ENST00000318560.6"
+    )
+    assert test.hgnc == "ABL1"
 
 
 def test_klifs():
