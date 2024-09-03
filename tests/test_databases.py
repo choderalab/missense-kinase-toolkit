@@ -20,7 +20,7 @@ def test_config():
     # test that the function to set the output directory works
     with pytest.raises(SystemExit) as sample:
         config.get_output_dir()
-    assert sample.type == SystemExit    
+    assert sample.type == SystemExit
     assert sample.value.code == 1
     config.set_output_dir("test")
     assert config.get_output_dir() == "test"
@@ -33,7 +33,7 @@ def test_config():
     # test that the function to set the cBioPortal instance works
     with pytest.raises(SystemExit) as sample:
         config.get_cbioportal_instance()
-    assert sample.type == SystemExit    
+    assert sample.type == SystemExit
     assert sample.value.code == 1
     config.set_cbioportal_instance("test")
     assert config.get_cbioportal_instance() == "test"
@@ -157,7 +157,7 @@ def test_hgnc():
 
     test = hgnc.HGNC("temp")
     test.maybe_get_symbol_from_hgnc_search(
-        custom_field="mane_select", 
+        custom_field="mane_select",
         custom_term="ENST00000318560.6"
     )
     assert test.hgnc == "ABL1"
