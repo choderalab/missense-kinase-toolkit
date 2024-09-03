@@ -190,17 +190,43 @@ def test_scrapers():
     assert "UniprotID" in df_kinhub.columns
 
 
-def test_colors():
+def test_colors(capsys):
     from missense_kinase_toolkit.databases import colors
 
+    # correct mappings
     assert colors.map_aa_to_single_letter_code("Ala") == "A"
     assert colors.map_aa_to_single_letter_code("ALA") == "A"
     assert colors.map_aa_to_single_letter_code("alanine") == "A"
     assert colors.map_aa_to_single_letter_code("ALANINE") == "A"
     assert colors.map_aa_to_single_letter_code("A") == "A"
     assert colors.map_aa_to_single_letter_code("a") == "A"
-    assert colors.map_aa_to_single_letter_code("AL") is None
-    assert colors.map_aa_to_single_letter_code("ALALALALALA") is None
+
+    # incorrect mappings
+    TEST1 = "X"
+    assert colors.map_aa_to_single_letter_code(TEST1) is None
+    out, _ = capsys.readouterr()
+    assert out == f"Invalid single-letter amino acid: {TEST1.upper()}"
+    TEST2 = "AL"
+    assert colors.map_aa_to_single_letter_code(TEST2) is None
+    out, _ = capsys.readouterr()
+    assert out == f"Length error and invalid amino acid: {TEST2}\n"
+    TEST3 = "XYZ"
+    assert colors.map_aa_to_single_letter_code(TEST3) is None
+    out, _ = capsys.readouterr()
+    assert out == f"Invalid 3-letter amino acid: {TEST3.upper()}\n"
+    TEST4 = "TEST"
+    assert colors.map_aa_to_single_letter_code(TEST4) is None
+    out, _ = capsys.readouterr()
+    assert out == f"Invalid amino acid name: {TEST4.lower()}\n"
+
+    # color mapping
+    DICT_COLORS = colors.DICT_COLORS
+    assert colors.get_color("A", DICT_COLORS["ALPHABET_PROJECT"]["DICT_COLORS"]) == "#F0A3FF"
+    assert colors.get_color("A", DICT_COLORS["ASAP"]["DICT_COLORS"])             == "red"
+    assert colors.get_color("A", DICT_COLORS["RASMOL"]["DICT_COLORS"])           == "#C8C8C8"
+    assert colors.get_color("A", DICT_COLORS["SHAPELY"]["DICT_COLORS"])          == "#8CFF8C"
+    assert colors.get_color("A", DICT_COLORS["CLUSTALX"]["DICT_COLORS"])         == "blue"
+    assert colors.get_color("A", DICT_COLORS["ZAPPO"]["DICT_COLORS"])            == "#ffafaf"
 
 
 def test_uniprot():
