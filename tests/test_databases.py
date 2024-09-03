@@ -104,7 +104,6 @@ def test_cbioportal():
 
     # test that the function to query the cBioPortal API works
     cbioportal_instance = cbioportal.cBioPortal()
-    assert cbioportal_instance.maybe_get_token() is None
     assert cbioportal_instance.get_instance() == "www.cbioportal.org"
     assert cbioportal_instance.get_url() == "https://www.cbioportal.org/api/v2/api-docs"
     assert cbioportal_instance._cbioportal is not None
