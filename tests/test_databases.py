@@ -194,18 +194,18 @@ def test_colors(capsys):
     from missense_kinase_toolkit.databases import colors
 
     # correct mappings
-    assert colors.map_aa_to_single_letter_code("Ala") == "A"
-    assert colors.map_aa_to_single_letter_code("ALA") == "A"
-    assert colors.map_aa_to_single_letter_code("alanine") == "A"
-    assert colors.map_aa_to_single_letter_code("ALANINE") == "A"
-    assert colors.map_aa_to_single_letter_code("A") == "A"
-    assert colors.map_aa_to_single_letter_code("a") == "A"
+    assert colors.map_aa_to_single_letter_code("Ala")       == "A"
+    assert colors.map_aa_to_single_letter_code("ALA")       == "A"
+    assert colors.map_aa_to_single_letter_code("alanine")   == "A"
+    assert colors.map_aa_to_single_letter_code("ALANINE")   == "A"
+    assert colors.map_aa_to_single_letter_code("A")         == "A"
+    assert colors.map_aa_to_single_letter_code("a")         == "A"
 
     # incorrect mappings
     TEST1 = "X"
     assert colors.map_aa_to_single_letter_code(TEST1) is None
     out, _ = capsys.readouterr()
-    assert out == f"Invalid single-letter amino acid: {TEST1.upper()}"
+    assert out == f"Invalid single-letter amino acid: {TEST1.upper()}\n"
     TEST2 = "AL"
     assert colors.map_aa_to_single_letter_code(TEST2) is None
     out, _ = capsys.readouterr()
