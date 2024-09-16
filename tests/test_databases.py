@@ -221,12 +221,12 @@ def test_colors(capsys):
 
     # color mapping
     DICT_COLORS = colors.DICT_COLORS
-    assert colors.get_color("A", DICT_COLORS["ALPHABET_PROJECT"]["DICT_COLORS"]) == "#F0A3FF"
-    assert colors.get_color("A", DICT_COLORS["ASAP"]["DICT_COLORS"])             == "red"
-    assert colors.get_color("A", DICT_COLORS["RASMOL"]["DICT_COLORS"])           == "#C8C8C8"
-    assert colors.get_color("A", DICT_COLORS["SHAPELY"]["DICT_COLORS"])          == "#8CFF8C"
-    assert colors.get_color("A", DICT_COLORS["CLUSTALX"]["DICT_COLORS"])         == "blue"
-    assert colors.get_color("A", DICT_COLORS["ZAPPO"]["DICT_COLORS"])            == "#ffafaf"
+    assert colors.map_single_letter_aa_to_color("A", DICT_COLORS["ALPHABET_PROJECT"]["DICT_COLORS"]) == "#F0A3FF"
+    assert colors.map_single_letter_aa_to_color("A", DICT_COLORS["ASAP"]["DICT_COLORS"])             == "red"
+    assert colors.map_single_letter_aa_to_color("A", DICT_COLORS["RASMOL"]["DICT_COLORS"])           == "#C8C8C8"
+    assert colors.map_single_letter_aa_to_color("A", DICT_COLORS["SHAPELY"]["DICT_COLORS"])          == "#8CFF8C"
+    assert colors.map_single_letter_aa_to_color("A", DICT_COLORS["CLUSTALX"]["DICT_COLORS"])         == "blue"
+    assert colors.map_single_letter_aa_to_color("A", DICT_COLORS["ZAPPO"]["DICT_COLORS"])            == "#ffafaf"
 
 
 def test_uniprot():
