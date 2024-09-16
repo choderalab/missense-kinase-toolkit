@@ -76,7 +76,7 @@ def get_cbioportal_instance(
     try:
         return os.environ[CBIOPORTAL_INSTANCE_VAR]
     except KeyError:
-        print("cBioPortal isntance not found in environment variables. This is necessary to run analysis. Exiting...")
+        print("cBioPortal instance not found in environment variables. This is necessary to run analysis. Exiting...")
         sys.exit(1)
 
 

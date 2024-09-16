@@ -26,6 +26,7 @@ def map_aa_to_single_letter_code(
             return dict_aa[aa_clean]
         else:
             print(f"Invalid 3-letter amino acid: {aa.upper()}")
+            return None
     # Check if amino acid name provided
     elif len(aa) > 3:
         aa_clean = aa.lower()
