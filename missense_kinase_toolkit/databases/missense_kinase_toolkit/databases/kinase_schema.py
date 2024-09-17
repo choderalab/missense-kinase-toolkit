@@ -51,7 +51,8 @@ class KLIFSPocket:
             List of KLIFS pocket substrings with gaps removed
 
         """
-        from missense_kinase_toolkit.databases.klifs import remove_gaps_from_klifs
+        from missense_kinase_toolkit.databases.klifs import \
+            remove_gaps_from_klifs
 
         list_substring_klifs_narm = [
             remove_gaps_from_klifs(substring_klifs)

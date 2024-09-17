@@ -5,13 +5,9 @@ from bravado.client import SwaggerClient
 
 from missense_kinase_toolkit.databases.api_schema import APIKeySwaggerClient
 from missense_kinase_toolkit.databases.config import (
-    get_cbioportal_instance,
-    maybe_get_cbioportal_token,
-)
+    get_cbioportal_instance, maybe_get_cbioportal_token)
 from missense_kinase_toolkit.databases.io_utils import (
-    parse_iterabc2dataframe,
-    save_dataframe_to_csv,
-)
+    parse_iterabc2dataframe, save_dataframe_to_csv)
 
 # from pydantic import BaseModel as PydanticBaseModel
 # from dataclasses import dataclass
@@ -141,7 +137,7 @@ class Mutations(cBioPortal):
         Notes
         -----
             The CSV file will be saved in the output directory specified in the configuration file.
-            As the "gene" ABC object is nested within the "mutation" ABC object, 
+            As the "gene" ABC object is nested within the "mutation" ABC object,
                 the two dataframes are parsed and concatenated.
 
         """

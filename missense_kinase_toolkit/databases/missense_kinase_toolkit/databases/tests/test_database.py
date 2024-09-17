@@ -10,7 +10,7 @@ def test_missense_kinase_toolkit_database_imported():
     """Test if module is imported."""
     import sys
 
-    import missense_kinase_toolkit.databases # noqa: F401
+    import missense_kinase_toolkit.databases  # noqa: F401
 
     assert "missense_kinase_toolkit.databases" in sys.modules
 
