@@ -285,7 +285,7 @@ def iterate_klifs_alignment(
                 List of substring of KLIFS pocket that maps to the *start region* of the KLIFS pocket
             list_klifs_substr_match : list[str]
                 List of the actual substring used to match to the KLIFS pocket for the region(s) provided;
-                    will be the same as list_klifs_substr_actual if no concatenation necessary to find a single exact match
+                    same as list_klifs_substr_actual if no concatenation necessary to find a single exact match
             list_substring_idxs : list[list[int | None]]
                 List of indices in UniProt sequence where KLIFS region starts
 

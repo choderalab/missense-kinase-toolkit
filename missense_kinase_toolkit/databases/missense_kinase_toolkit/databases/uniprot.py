@@ -1,5 +1,3 @@
-import requests
-
 from missense_kinase_toolkit.databases import requests_wrapper, utils_requests
 
 

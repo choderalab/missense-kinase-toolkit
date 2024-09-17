@@ -1,7 +1,5 @@
 import pandas as pd
 
-from missense_kinase_toolkit.databases import utils
-
 # drop values that cannot be matched to protein kinase sequence
 LIST_DROP = [
     "PI3-KINASE-ALPHA",  # lipid kinase

@@ -1,7 +1,6 @@
 from typing import Any
 
 import numpy as np
-import pandas as pd
 
 
 def try_except_split_concat_str(
@@ -35,7 +34,7 @@ def try_except_split_concat_str(
             [str_in.split(delim)[i].upper() for i in range(idx1, idx2 + 1)]
         )
         return str_out
-    except (IndexError, AttributeError) as e:
+    except (IndexError, AttributeError):
         try:
             str_out = str_in.split(delim)[0]
             return str_out
@@ -154,7 +153,7 @@ def replace_string_using_dict(
         for key, val in dict_in.items():
             str_out = str_out.upper().replace(key, val)
         return str_out
-    except:
+    except AttributeError:
         return str_out
 
 

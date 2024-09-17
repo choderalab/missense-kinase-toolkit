@@ -144,5 +144,5 @@ def find_pfam_domain(
             col_ref_domain,
         ].values[0]
         return domain
-    except:
+    except IndexError:
         return None

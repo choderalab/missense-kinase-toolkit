@@ -141,7 +141,8 @@ class Mutations(cBioPortal):
         Notes
         -----
             The CSV file will be saved in the output directory specified in the configuration file.
-            As the "gene" ABC object is nested within the "mutation" ABC object, the two dataframes are parsed and concatenated.
+            As the "gene" ABC object is nested within the "mutation" ABC object, 
+                the two dataframes are parsed and concatenated.
 
         """
         df_muts = parse_iterabc2dataframe(self._mutations)

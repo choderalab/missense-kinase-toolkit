@@ -52,7 +52,8 @@ class HGNC:
         Parameters
         ----------
         custom_field : str | None
-            Optional: custom field to search for in the HGNC REST API; otherwise defaults to "symbol" or "ensembl_gene_id"
+            Optional: custom field to search for in the HGNC REST API; \
+                otherwise defaults to "symbol" or "ensembl_gene_id"
             See https://www.genenames.org/help/rest/ under "searchableFields" for options
         custom_term : str | None
             Optional: custom term to search for in the HGNC REST API
@@ -119,7 +120,8 @@ class HGNC:
 
         Notes
         -----
-            The list of extractable fields can be found at https://www.genenames.org/help/rest/ under "storedFields" in the JSON or XML outputs.
+            The list of extractable fields can be found at https://www.genenames.org/help/rest/ \
+                under "storedFields" in the JSON or XML outputs.
 
         """
         if self.hgnc is not None:
@@ -150,7 +152,8 @@ class HGNC:
 
         else:
             print(
-                "No HGNC gene symbol provided; cannot fetch gene information from HGNC API with Ensembl gene ID {self.ensembl}"
+                "No HGNC gene symbol provided; cannot fetch gene information \
+                    from HGNC API with Ensembl gene ID {self.ensembl}"
             )
             dict_out = None
 
