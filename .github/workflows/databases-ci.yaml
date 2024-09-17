@@ -1,4 +1,4 @@
-name: database-ci
+name: databases-ci
 
 on:
   # GitHub has started calling new repo's first branch "main" https://github.com/github/renaming
@@ -60,14 +60,15 @@ jobs:
         # conda setup requires this special shell
         shell: bash -l {0}
         run: |
-          pytest -v --cov=database --cov-report=xml --color=yes tests
+          pytest -v --cov=databases --cov-report=xml --color=yes \
+          tests/test_databases.py
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4.0.1
         with:
           fail_ci_if_error: false # optional (default = false)
           file: ./coverage.xml
-          flags: database # optional
+          flags: databases # optional
           name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
           # https://github.com/codecov/codecov-action
           token: ${{ secrets.CODECOV_TOKEN }} # required
