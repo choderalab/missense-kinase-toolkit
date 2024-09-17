@@ -1,8 +1,3 @@
-"""
-Unit and regression test for the missense_kinase_toolkit package.
-"""
-
-# Import package, test suite, and other packages as needed
 import pytest
 
 
