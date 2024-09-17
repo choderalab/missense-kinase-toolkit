@@ -73,7 +73,7 @@ jobs:
         with:
           fail_ci_if_error: false # optional (default = false)
           file: ./coverage.xml
-          flags: unittests # optional
+          flags: databases # optional
           name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
           # https://github.com/codecov/codecov-action
           token: ${{ secrets.CODECOV_TOKEN }} # required
