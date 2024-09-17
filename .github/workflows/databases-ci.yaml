@@ -72,7 +72,7 @@ jobs:
         uses: codecov/codecov-action@v4.0.1
         with:
           fail_ci_if_error: false # optional (default = false)
-          file: ./coverage.xml
+          file: missense_kinase_toolkit/databases/coverage.xml
           flags: databases # optional
           name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
           # https://github.com/codecov/codecov-action
