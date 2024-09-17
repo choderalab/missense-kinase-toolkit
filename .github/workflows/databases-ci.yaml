@@ -51,12 +51,14 @@ jobs:
 
       - name: Install package
         # conda setup requires this special shell
+        shell: bash -l {0}
         run: |
           python -m pip install ./missense_kinase_toolkit/databases --no-deps
           micromamba list
 
       - name: Run tests
         # conda setup requires this special shell
+        shell: bash -l {0}
         run: |
           # run each package test suite; append to coverage file
           # exit immediately if a command exits with a non-zero status
