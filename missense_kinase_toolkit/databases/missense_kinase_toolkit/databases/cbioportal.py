@@ -13,7 +13,6 @@ from missense_kinase_toolkit.databases.io_utils import (
 # from dataclasses import dataclass
 
 
-
 logger = logging.getLogger(__name__)
 
 
