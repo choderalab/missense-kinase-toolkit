@@ -7,6 +7,7 @@ from missense_kinase_toolkit.databases import requests_wrapper, utils_requests
 
 class Pfam:
     """Class to interact with the Pfam API."""
+
     def __init__(
         self,
         uniprot_id: str,
@@ -35,10 +36,7 @@ class Pfam:
         url = f"{self.url}{self.uniprot_id}"
 
         header = {"Accept": "application/json"}
-        res = requests_wrapper.get_cached_session().get(
-            url,
-            headers=header
-        )
+        res = requests_wrapper.get_cached_session().get(url, headers=header)
 
         if res.ok:
             if len(res.text) == 0:
@@ -49,29 +47,44 @@ class Pfam:
 
                 # metadata for UniProt ID
                 list_metadata = [entry["metadata"] for entry in list_json]
-                list_metadata = [{"pfam_accession" if k == "accession" else k:v for k,v in entry.items()} for entry in list_metadata]
+                list_metadata = [
+                    {
+                        "pfam_accession" if k == "accession" else k: v
+                        for k, v in entry.items()
+                    }
+                    for entry in list_metadata
+                ]
 
                 # Pfam domains locations
-                list_locations = [entry["proteins"][0]["entry_protein_locations"][0]["fragments"][0] for entry in list_json]
+                list_locations = [
+                    entry["proteins"][0]["entry_protein_locations"][0]["fragments"][0]
+                    for entry in list_json
+                ]
 
                 # model information
-                list_model = [entry["proteins"][0]["entry_protein_locations"][0] for entry in list_json]
+                list_model = [
+                    entry["proteins"][0]["entry_protein_locations"][0]
+                    for entry in list_json
+                ]
                 [entry.pop("fragments", None) for entry in list_model]
 
                 # protein information
                 # do last because pop is an in-place operation
                 list_protein = [entry["proteins"][0] for entry in list_json]
                 [entry.pop("entry_protein_locations", None) for entry in list_protein]
-                list_protein = [{"uniprot" if k == "accession" else k:v for k,v in entry.items()} for entry in list_protein]
+                list_protein = [
+                    {"uniprot" if k == "accession" else k: v for k, v in entry.items()}
+                    for entry in list_protein
+                ]
 
                 df_concat = pd.concat(
                     [
                         pd.DataFrame(list_protein),
                         pd.DataFrame(list_metadata),
                         pd.DataFrame(list_locations),
-                        pd.DataFrame(list_model)
+                        pd.DataFrame(list_model),
                     ],
-                     axis=1
+                    axis=1,
                 )
 
                 return df_concat
@@ -87,7 +100,7 @@ def find_pfam_domain(
     col_ref_id: str,
     col_ref_start: None | str = None,
     col_ref_end: None | str = None,
-    col_ref_domain : None | str = None,
+    col_ref_domain: None | str = None,
 ) -> str | None:
     """Find Pfam domain for a given HGNC symbol and position
 
@@ -123,8 +136,13 @@ def find_pfam_domain(
 
     df_temp = df_ref.loc[df_ref[col_ref_id] == input_id].reset_index()
     try:
-        domain = df_temp.loc[((input_position >= df_temp[col_ref_start]) &
-                              (input_position <= df_temp[col_ref_end])), col_ref_domain].values[0]
+        domain = df_temp.loc[
+            (
+                (input_position >= df_temp[col_ref_start])
+                & (input_position <= df_temp[col_ref_end])
+            ),
+            col_ref_domain,
+        ].values[0]
         return domain
     except:
         return None

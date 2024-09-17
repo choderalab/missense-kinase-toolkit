@@ -1,18 +1,17 @@
 import logging
+
 import pandas as pd
 from bravado.client import SwaggerClient
+
+from missense_kinase_toolkit.databases.api_schema import APIKeySwaggerClient
+from missense_kinase_toolkit.databases.config import (
+    get_cbioportal_instance, maybe_get_cbioportal_token)
+from missense_kinase_toolkit.databases.io_utils import (
+    parse_iterabc2dataframe, save_dataframe_to_csv)
+
 # from pydantic import BaseModel as PydanticBaseModel
 # from dataclasses import dataclass
 
-from missense_kinase_toolkit.databases.config import (
-    get_cbioportal_instance,
-    maybe_get_cbioportal_token
-)
-from missense_kinase_toolkit.databases.io_utils import (
-    parse_iterabc2dataframe,
-    save_dataframe_to_csv,
-)
-from missense_kinase_toolkit.databases.api_schema import APIKeySwaggerClient
 
 
 logger = logging.getLogger(__name__)
@@ -20,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 class cBioPortal(APIKeySwaggerClient):
     """Class to interact with the cBioPortal API."""
+
     def __init__(self):
         """Initialize cBioPortal Class object.
 
@@ -51,8 +51,8 @@ class cBioPortal(APIKeySwaggerClient):
             config={
                 "validate_requests": False,
                 "validate_responses": False,
-                "validate_swagger_spec": False
-            }
+                "validate_swagger_spec": False,
+            },
         )
 
         return cbioportal_api
@@ -72,6 +72,7 @@ class cBioPortal(APIKeySwaggerClient):
 
 class Mutations(cBioPortal):
     """Class to get mutations from a cBioPortal study."""
+
     def __init__(
         self,
         study_id: str,
@@ -110,20 +111,22 @@ class Mutations(cBioPortal):
         study_ids = [study.studyId for study in studies]
 
         if self.study_id in study_ids:
-            #TODO: add incremental error handling beyond missing study
+            # TODO: add incremental error handling beyond missing study
             muts = self._cbioportal.Mutations.getMutationsInMolecularProfileBySampleListIdUsingGET(
                 molecularProfileId=f"{self.study_id}_mutations",
                 sampleListId=f"{self.study_id}_all",
-                projection="DETAILED"
-                ).result()
+                projection="DETAILED",
+            ).result()
         else:
-            logging.error(f"Study {self.study_id} not found in cBioPortal instance {self.instance}")
+            logging.error(
+                f"Study {self.study_id} not found in cBioPortal instance {self.instance}"
+            )
 
         return muts
 
     def get_cbioportal_cohort_mutations(
         self,
-        bool_save = False,
+        bool_save=False,
     ) -> None:
         """Get cBioPortal cohort mutations and optionally save as a CSV file.
 
@@ -157,4 +160,5 @@ class Mutations(cBioPortal):
         """Get cBioPortal mutations."""
         return self._mutations
 
-#TODO: implement clinical annotations class
+
+# TODO: implement clinical annotations class

@@ -1,13 +1,14 @@
+from typing import Any
+
 import numpy as np
 import pandas as pd
-from typing import Any
 
 
 def try_except_split_concat_str(
-    str_in : str, 
-    idx1   : int, 
-    idx2   : int,
-    delim  : str = "-",
+    str_in: str,
+    idx1: int,
+    idx2: int,
+    delim: str = "-",
 ) -> str:
     """
     Split str_in on delim with exception handling.
@@ -30,7 +31,9 @@ def try_except_split_concat_str(
 
     """
     try:
-        str_out = ("").join([str_in.split(delim)[i].upper() for i in range(idx1, idx2 + 1)])
+        str_out = ("").join(
+            [str_in.split(delim)[i].upper() for i in range(idx1, idx2 + 1)]
+        )
         return str_out
     except (IndexError, AttributeError) as e:
         try:
@@ -48,16 +51,21 @@ def create_strsplit_list(
 ) -> list[str]:
     """
     Split list or Series of strings on delim with exception handling.
-    
+
     """
-    return [[try_except_split_concat_str(x, idx_start, i) for i in \
-             range(idx_start, idx_end + 1)] for x in list_in]
-    
+    return [
+        [
+            try_except_split_concat_str(x, idx_start, i)
+            for i in range(idx_start, idx_end + 1)
+        ]
+        for x in list_in
+    ]
+
 
 def try_except_match_str2dict(
-    str_in      : str,
-    dict_in     : dict[str, Any],
-    bool_keyout : bool = True,
+    str_in: str,
+    dict_in: dict[str, Any],
+    bool_keyout: bool = True,
 ) -> Any:
     """
     Dictionary match with exception handling.
@@ -70,7 +78,7 @@ def try_except_match_str2dict(
         Dictionary where keys are strings to match with str_in
     bool_keyout : bool
         If true and no match, return string
-    
+
     Returns
     -------
     Any
@@ -87,8 +95,8 @@ def try_except_match_str2dict(
 
 
 def return_list_match_indices(
-    str_in  : str,
-    list_in : list[str | list[str]],
+    str_in: str,
+    list_in: list[str | list[str]],
 ) -> list[int] | list | None:
     """
     Return list of indices where str_in matches entry or entries in list_in.
@@ -104,20 +112,25 @@ def return_list_match_indices(
     -------
     list[int] | None
         Returns index of matching entries in list
-    
+
     """
     if type(list_in[0]) is str:
         list_out = [idx for idx, hgnc in enumerate(list_in) if hgnc.upper() in str_in]
         return list_out
     elif type(list_in[0]) is list:
-        list_out = [idx for idx, list_nest in enumerate(list_in) for hgnc in list_nest if hgnc.upper() in str_in]
+        list_out = [
+            idx
+            for idx, list_nest in enumerate(list_in)
+            for hgnc in list_nest
+            if hgnc.upper() in str_in
+        ]
         return list_out
     else:
         print(f"Input type of {type(list_in[0])} cannot be handled.")
 
 
 def replace_string_using_dict(
-    str_in: str, 
+    str_in: str,
     dict_in: dict[str, str],
 ) -> str:
     """
@@ -146,10 +159,12 @@ def replace_string_using_dict(
 
 
 def return_list_out(
-    list_kinhub_uniprot: list[str | float], 
+    list_kinhub_uniprot: list[str | float],
     list_assay_name: list[str],
 ):
-    list_out = [return_list_match_indices(x, list_kinhub_uniprot) for x in list_assay_name]
+    list_out = [
+        return_list_match_indices(x, list_kinhub_uniprot) for x in list_assay_name
+    ]
     set_out = [set(i) if i is not np.nan else np.nan for i in list_out]
     list_out = [i[0] if len(j) != 0 else np.nan for i, j in zip(list_out, set_out)]
     return list_out, set_out

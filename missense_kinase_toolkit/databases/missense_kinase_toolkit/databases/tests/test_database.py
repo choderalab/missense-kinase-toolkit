@@ -9,6 +9,7 @@ import pytest
 def test_missense_kinase_toolkit_database_imported():
     """Test if module is imported."""
     import sys
+
     import missense_kinase_toolkit.databases
 
     assert "missense_kinase_toolkit.databases" in sys.modules
@@ -45,9 +46,11 @@ def test_config():
 
 
 def test_io_utils():
-    import pandas as pd
     import os
-    from missense_kinase_toolkit.databases import io_utils, config
+
+    import pandas as pd
+
+    from missense_kinase_toolkit.databases import config, io_utils
 
     # os.environ["OUTPUT_DIR"] = "."
     config.set_output_dir(".")
@@ -74,6 +77,7 @@ def test_io_utils():
 
 def test_requests_wrapper(capsys):
     import requests
+
     from missense_kinase_toolkit.databases import uniprot, utils_requests
 
     uniprot.UniProt("TEST")
@@ -82,14 +86,14 @@ def test_requests_wrapper(capsys):
 
     utils_requests.print_status_code_if_res_not_ok(
         requests.get("https://rest.uniprot.org/uniprotkb/TEST"),
-        dict_status_code = {400: "TEST"}
+        dict_status_code={400: "TEST"},
     )
     out, _ = capsys.readouterr()
     assert out == "Error code: 400 (TEST)\n"
 
     utils_requests.print_status_code_if_res_not_ok(
         requests.get("https://rest.uniprot.org/uniprotkb/TEST"),
-        dict_status_code = {200: "TEST"}
+        dict_status_code={200: "TEST"},
     )
     out, _ = capsys.readouterr()
     assert out == "Error code: 400\n"
@@ -97,7 +101,8 @@ def test_requests_wrapper(capsys):
 
 def test_cbioportal():
     import os
-    from missense_kinase_toolkit.databases import config, cbioportal
+
+    from missense_kinase_toolkit.databases import cbioportal, config
 
     config.set_cbioportal_instance("www.cbioportal.org")
     config.set_output_dir(".")
@@ -109,11 +114,18 @@ def test_cbioportal():
     assert cbioportal_instance._cbioportal is not None
 
     # test that server status is up
-    assert cbioportal_instance._cbioportal.Server_running_status.getServerStatusUsingGET().response().result["status"] == "UP"
+    assert (
+        cbioportal_instance._cbioportal.Server_running_status.getServerStatusUsingGET()
+        .response()
+        .result["status"]
+        == "UP"
+    )
 
     # test that Zehir cohort is available
     study = "msk_impact_2017"
-    list_studies = cbioportal_instance._cbioportal.Studies.getAllStudiesUsingGET().result()
+    list_studies = (
+        cbioportal_instance._cbioportal.Studies.getAllStudiesUsingGET().result()
+    )
     list_study_ids = [study.studyId for study in list_studies]
     assert study in list_study_ids
 
@@ -137,12 +149,18 @@ def test_hgnc():
     abl1 = hgnc.HGNC("Abl1", True)
     abl1.maybe_get_symbol_from_hgnc_search()
     assert abl1.hgnc == "ABL1"
-    assert abl1.maybe_get_info_from_hgnc_fetch()["locus_type"][0] == "gene with protein product"
+    assert (
+        abl1.maybe_get_info_from_hgnc_fetch()["locus_type"][0]
+        == "gene with protein product"
+    )
 
     abl1 = hgnc.HGNC("ENSG00000097007", False)
     abl1.maybe_get_symbol_from_hgnc_search()
     assert abl1.hgnc == "ABL1"
-    assert abl1.maybe_get_info_from_hgnc_fetch()["locus_type"][0] == "gene with protein product"
+    assert (
+        abl1.maybe_get_info_from_hgnc_fetch()["locus_type"][0]
+        == "gene with protein product"
+    )
 
     test = hgnc.HGNC("test", True)
     test.maybe_get_symbol_from_hgnc_search()
@@ -156,8 +174,7 @@ def test_hgnc():
 
     test = hgnc.HGNC("temp")
     test.maybe_get_symbol_from_hgnc_search(
-        custom_field="mane_select",
-        custom_term="ENST00000318560.6"
+        custom_field="mane_select", custom_term="ENST00000318560.6"
     )
     assert test.hgnc == "ABL1"
 
@@ -167,16 +184,19 @@ def test_klifs():
 
     dict_egfr = klifs.KinaseInfo("EGFR")._kinase_info
 
-    assert dict_egfr["family"]      ==      "EGFR"
-    assert dict_egfr["full_name"]   ==      "epidermal growth factor receptor"
-    assert dict_egfr["gene_name"]   ==      "EGFR"
-    assert dict_egfr["group"]       ==      "TK"
-    assert dict_egfr["iuphar"]      ==      1797
-    assert dict_egfr["kinase_ID"]   ==      406
-    assert dict_egfr["name"]        ==      "EGFR"
-    assert dict_egfr["pocket"]      ==      "KVLGSGAFGTVYKVAIKELEILDEAYVMASVDPHVCRLLGIQLITQLMPFGCLLDYVREYLEDRRLVHRDLAARNVLVITDFGLA"
-    assert dict_egfr["species"]     ==      "Human"
-    assert dict_egfr["uniprot"]     ==      "P00533"
+    assert dict_egfr["family"] == "EGFR"
+    assert dict_egfr["full_name"] == "epidermal growth factor receptor"
+    assert dict_egfr["gene_name"] == "EGFR"
+    assert dict_egfr["group"] == "TK"
+    assert dict_egfr["iuphar"] == 1797
+    assert dict_egfr["kinase_ID"] == 406
+    assert dict_egfr["name"] == "EGFR"
+    assert (
+        dict_egfr["pocket"]
+        == "KVLGSGAFGTVYKVAIKELEILDEAYVMASVDPHVCRLLGIQLITQLMPFGCLLDYVREYLEDRRLVHRDLAARNVLVITDFGLA"
+    )
+    assert dict_egfr["species"] == "Human"
+    assert dict_egfr["uniprot"] == "P00533"
 
 
 def test_scrapers():
@@ -194,12 +214,12 @@ def test_colors(capsys):
     from missense_kinase_toolkit.databases import colors
 
     # correct mappings
-    assert colors.map_aa_to_single_letter_code("Ala")       == "A"
-    assert colors.map_aa_to_single_letter_code("ALA")       == "A"
-    assert colors.map_aa_to_single_letter_code("alanine")   == "A"
-    assert colors.map_aa_to_single_letter_code("ALANINE")   == "A"
-    assert colors.map_aa_to_single_letter_code("A")         == "A"
-    assert colors.map_aa_to_single_letter_code("a")         == "A"
+    assert colors.map_aa_to_single_letter_code("Ala") == "A"
+    assert colors.map_aa_to_single_letter_code("ALA") == "A"
+    assert colors.map_aa_to_single_letter_code("alanine") == "A"
+    assert colors.map_aa_to_single_letter_code("ALANINE") == "A"
+    assert colors.map_aa_to_single_letter_code("A") == "A"
+    assert colors.map_aa_to_single_letter_code("a") == "A"
 
     # incorrect mappings
     TEST1 = "X"
@@ -221,19 +241,44 @@ def test_colors(capsys):
 
     # color mapping
     DICT_COLORS = colors.DICT_COLORS
-    assert colors.map_single_letter_aa_to_color("A", DICT_COLORS["ALPHABET_PROJECT"]["DICT_COLORS"]) == "#F0A3FF"
-    assert colors.map_single_letter_aa_to_color("A", DICT_COLORS["ASAP"]["DICT_COLORS"])             == "red"
-    assert colors.map_single_letter_aa_to_color("A", DICT_COLORS["RASMOL"]["DICT_COLORS"])           == "#C8C8C8"
-    assert colors.map_single_letter_aa_to_color("A", DICT_COLORS["SHAPELY"]["DICT_COLORS"])          == "#8CFF8C"
-    assert colors.map_single_letter_aa_to_color("A", DICT_COLORS["CLUSTALX"]["DICT_COLORS"])         == "blue"
-    assert colors.map_single_letter_aa_to_color("A", DICT_COLORS["ZAPPO"]["DICT_COLORS"])            == "#ffafaf"
+    assert (
+        colors.map_single_letter_aa_to_color(
+            "A", DICT_COLORS["ALPHABET_PROJECT"]["DICT_COLORS"]
+        )
+        == "#F0A3FF"
+    )
+    assert (
+        colors.map_single_letter_aa_to_color("A", DICT_COLORS["ASAP"]["DICT_COLORS"])
+        == "red"
+    )
+    assert (
+        colors.map_single_letter_aa_to_color("A", DICT_COLORS["RASMOL"]["DICT_COLORS"])
+        == "#C8C8C8"
+    )
+    assert (
+        colors.map_single_letter_aa_to_color("A", DICT_COLORS["SHAPELY"]["DICT_COLORS"])
+        == "#8CFF8C"
+    )
+    assert (
+        colors.map_single_letter_aa_to_color(
+            "A", DICT_COLORS["CLUSTALX"]["DICT_COLORS"]
+        )
+        == "blue"
+    )
+    assert (
+        colors.map_single_letter_aa_to_color("A", DICT_COLORS["ZAPPO"]["DICT_COLORS"])
+        == "#ffafaf"
+    )
 
 
 def test_uniprot():
     from missense_kinase_toolkit.databases import uniprot
 
     abl1 = uniprot.UniProt("P00519")
-    assert abl1._sequence == "MLEICLKLVGCKSKKGLSSSSSCYLEEALQRPVASDFEPQGLSEAARWNSKENLLAGPSENDPNLFVALYDFVASGDNTLSITKGEKLRVLGYNHNGEWCEAQTKNGQGWVPSNYITPVNSLEKHSWYHGPVSRNAAEYLLSSGINGSFLVRESESSPGQRSISLRYEGRVYHYRINTASDGKLYVSSESRFNTLAELVHHHSTVADGLITTLHYPAPKRNKPTVYGVSPNYDKWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVNAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQESSISDEVEKELGKQGVRGAVSTLLQAPELPTKTRTSRRAAEHRDTTDVPEMPHSKGQGESDPLDHEPAVSPLLPRKERGPPEGGLNEDERLLPKDKKTNLFSALIKKKKKTAPTPPKRSSSFREMDGQPERRGAGEEEGRDISNGALAFTPLDTADPAKSPKPSNGAGVPNGALRESGGSGFRSPHLWKKSSTLTSSRLATGEEEGGGSSSKRFLRSCSASCVPHGAKDTEWRSVTLPRDLQSTGRQFDSSTFGGHKSEKPALPRKRAGENRSDQVTRGTVTPPPRLVKKNEEAADEVFKDIMESSPGSSPPNLTPKPLRRQVTVAPASGLPHKEEAGKGSALGTPAAAEPVTPTSKAGSGAPGGTSKGPAEESRVRRHKHSSESPGRDKGKLSRLKPAPPPPPAASAGKAGGKPSQSPSQEAAGEAVLGAKTKATSLVDAVNSDAAKPSQPGEGLKKPVLPATPKPQSAKPSGTPISPAPVPSTLPSASSALAGDQPSSTAFIPLISTRVSLRKTRQPPERIASGAITKGVVLDSTEALCLAISRNSEQMASHSAVLEAGKNLYTFCVSYVDSIQQMRNKFAFREAINKLENNLRELQICPATAGSGPAATQDFSKLLSSVKEISDIVQR"
+    assert (
+        abl1._sequence
+        == "MLEICLKLVGCKSKKGLSSSSSCYLEEALQRPVASDFEPQGLSEAARWNSKENLLAGPSENDPNLFVALYDFVASGDNTLSITKGEKLRVLGYNHNGEWCEAQTKNGQGWVPSNYITPVNSLEKHSWYHGPVSRNAAEYLLSSGINGSFLVRESESSPGQRSISLRYEGRVYHYRINTASDGKLYVSSESRFNTLAELVHHHSTVADGLITTLHYPAPKRNKPTVYGVSPNYDKWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVNAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQESSISDEVEKELGKQGVRGAVSTLLQAPELPTKTRTSRRAAEHRDTTDVPEMPHSKGQGESDPLDHEPAVSPLLPRKERGPPEGGLNEDERLLPKDKKTNLFSALIKKKKKTAPTPPKRSSSFREMDGQPERRGAGEEEGRDISNGALAFTPLDTADPAKSPKPSNGAGVPNGALRESGGSGFRSPHLWKKSSTLTSSRLATGEEEGGGSSSKRFLRSCSASCVPHGAKDTEWRSVTLPRDLQSTGRQFDSSTFGGHKSEKPALPRKRAGENRSDQVTRGTVTPPPRLVKKNEEAADEVFKDIMESSPGSSPPNLTPKPLRRQVTVAPASGLPHKEEAGKGSALGTPAAAEPVTPTSKAGSGAPGGTSKGPAEESRVRRHKHSSESPGRDKGKLSRLKPAPPPPPAASAGKAGGKPSQSPSQEAAGEAVLGAKTKATSLVDAVNSDAAKPSQPGEGLKKPVLPATPKPQSAKPSGTPISPAPVPSTLPSASSALAGDQPSSTAFIPLISTRVSLRKTRQPPERIASGAITKGVVLDSTEALCLAISRNSEQMASHSAVLEAGKNLYTFCVSYVDSIQQMRNKFAFREAINKLENNLRELQICPATAGSGPAATQDFSKLLSSVKEISDIVQR"
+    )
 
 
 def test_pfam():
@@ -247,11 +292,21 @@ def test_pfam():
     assert "start" in df_pfam.columns
     assert "end" in df_pfam.columns
     assert "name" in df_pfam.columns
-    assert df_pfam.loc[df_pfam["name"] == "Protein tyrosine and serine/threonine kinase", "start"].values[0] == 242
-    assert df_pfam.loc[df_pfam["name"] == "Protein tyrosine and serine/threonine kinase", "end"].values[0] == 492
-    assert pfam.find_pfam_domain(
-        input_id="p00519",
-        input_position=350,
-        df_ref=df_pfam,
-        col_ref_id="uniprot"
-    ) == "Protein tyrosine and serine/threonine kinase"
+    assert (
+        df_pfam.loc[
+            df_pfam["name"] == "Protein tyrosine and serine/threonine kinase", "start"
+        ].values[0]
+        == 242
+    )
+    assert (
+        df_pfam.loc[
+            df_pfam["name"] == "Protein tyrosine and serine/threonine kinase", "end"
+        ].values[0]
+        == 492
+    )
+    assert (
+        pfam.find_pfam_domain(
+            input_id="p00519", input_position=350, df_ref=df_pfam, col_ref_id="uniprot"
+        )
+        == "Protein tyrosine and serine/threonine kinase"
+    )

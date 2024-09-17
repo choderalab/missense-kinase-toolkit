@@ -1,13 +1,12 @@
 import os
-import pandas as pd
 
+import pandas as pd
 
 OUTPUT_DIR_VAR = "OUTPUT_DIR"
 """str: Environment variable for output directory"""
 
 
-def check_outdir_exists(
-) -> str:
+def check_outdir_exists() -> str:
     """Check if OUTPUT_DIR in environmental variables and create directory if doesn't exist.
 
     Returns
@@ -25,9 +24,7 @@ def check_outdir_exists(
     return path_data
 
 
-def convert_str2list(
-    input_str: str
-) -> list[str]:
+def convert_str2list(input_str: str) -> list[str]:
     """Convert a string to a list.
 
     Parameters
@@ -126,7 +123,7 @@ def concatenate_csv_files_with_glob(
     else:
         print(f"No files matching {str_find} found in {path_data}...")
 
-    #TODO: implement remove duplicates
+    # TODO: implement remove duplicates
 
     return df_combo
 

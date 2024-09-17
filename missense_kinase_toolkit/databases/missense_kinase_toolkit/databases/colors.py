@@ -70,7 +70,7 @@ def map_single_letter_aa_to_color(aa, dict_color):
     if aa_clean is None:
         print(f"{aa} is an invalid amino acid; using '-' as default symbol.")
         aa_clean = "-"
-    if aa_clean  in dict_color.keys():
+    if aa_clean in dict_color.keys():
         return dict_color[aa_clean]
     else:
         print(f"Invalid amino acid: {aa}")
@@ -102,68 +102,68 @@ AA_MAPPING = [
 
 DICT_COLORS = {
     # https://en.wikipedia.org/wiki/Help:Distinguishable_colors
-    "ALPHABET_PROJECT" : {
-        "DICT_COLORS" : {
-            "-" : "#FFFFFF",
-            "A" : "#F0A3FF",
-            "B" : "#0075DC",
-            "C" : "#993F00",
-            "D" : "#4C005C",
-            "E" : "#191919",
-            "F" : "#005C31",
-            "G" : "#2BCE48",
-            "H" : "#FFCC99",
-            "I" : "#808080",
-            "J" : "#94FFB5",
-            "K" : "#8F7C00",
-            "L" : "#9DCC00",
-            "M" : "#C20088",
-            "N" : "#003380",
-            "O" : "#FFA405",
-            "P" : "#FFA8BB",
-            "Q" : "#426600",
-            "R" : "#FF0010",
-            "S" : "#5EF1F2",
-            "T" : "#00998F",
-            "U" : "#E0FF66",
-            "V" : "#740AFF",
-            "W" : "#990000",
-            "X" : "#FFFF80",
-            "Y" : "#FFE100",
-            "Z" : "#FF5005"
+    "ALPHABET_PROJECT": {
+        "DICT_COLORS": {
+            "-": "#FFFFFF",
+            "A": "#F0A3FF",
+            "B": "#0075DC",
+            "C": "#993F00",
+            "D": "#4C005C",
+            "E": "#191919",
+            "F": "#005C31",
+            "G": "#2BCE48",
+            "H": "#FFCC99",
+            "I": "#808080",
+            "J": "#94FFB5",
+            "K": "#8F7C00",
+            "L": "#9DCC00",
+            "M": "#C20088",
+            "N": "#003380",
+            "O": "#FFA405",
+            "P": "#FFA8BB",
+            "Q": "#426600",
+            "R": "#FF0010",
+            "S": "#5EF1F2",
+            "T": "#00998F",
+            "U": "#E0FF66",
+            "V": "#740AFF",
+            "W": "#990000",
+            "X": "#FFFF80",
+            "Y": "#FFE100",
+            "Z": "#FF5005",
         },
-        "DICT_ANNOTATION" : None
+        "DICT_ANNOTATION": None,
     },
     # asapdiscovery-genetics/asapdiscovery/genetics/seq_alignment.py
-    "ASAP" : {
-        "DICT_COLORS" : {
-            "A": "red",         # Alanine (ALA)
-            "R": "blue",        # Arginine (ARG)
-            "N": "green",       # Asparagine (ASN)
-            "D": "yellow",      # Aspartic acid (ASP)
-            "C": "orange",      # Cysteine (CYS)
-            "Q": "purple",      # Glutamine (GLN)
-            "E": "cyan",        # Glutamic acid (GLU)
-            "G": "magenta",     # Glycine (GLY)
-            "H": "pink",        # Histidine (HIS)
-            "I": "brown",       # Isoleucine (ILE)
-            "L": "gray",        # Leucine (LEU)
-            "K": "lime",        # Lysine (LYS)
-            "M": "teal",        # Methionine (MET)
-            "F": "navy",        # Phenylalanine (PHE)
-            "P": "olive",       # Proline (PRO)
-            "S": "maroon",      # Serine (SER)
-            "T": "silver",      # Threonine (THR)
-            "W": "gold",        # Tryptophan (TRP)
-            "Y": "skyblue",     # Tyrosine (TYR)
-            "V": "violet",      # Valine (VAL)
+    "ASAP": {
+        "DICT_COLORS": {
+            "A": "red",  # Alanine (ALA)
+            "R": "blue",  # Arginine (ARG)
+            "N": "green",  # Asparagine (ASN)
+            "D": "yellow",  # Aspartic acid (ASP)
+            "C": "orange",  # Cysteine (CYS)
+            "Q": "purple",  # Glutamine (GLN)
+            "E": "cyan",  # Glutamic acid (GLU)
+            "G": "magenta",  # Glycine (GLY)
+            "H": "pink",  # Histidine (HIS)
+            "I": "brown",  # Isoleucine (ILE)
+            "L": "gray",  # Leucine (LEU)
+            "K": "lime",  # Lysine (LYS)
+            "M": "teal",  # Methionine (MET)
+            "F": "navy",  # Phenylalanine (PHE)
+            "P": "olive",  # Proline (PRO)
+            "S": "maroon",  # Serine (SER)
+            "T": "silver",  # Threonine (THR)
+            "W": "gold",  # Tryptophan (TRP)
+            "Y": "skyblue",  # Tyrosine (TYR)
+            "V": "violet",  # Valine (VAL)
             "-": "white",
         },
-        "DICT_ANNOTATION" : None
+        "DICT_ANNOTATION": None,
     },
     # http://openrasmol.org/doc/rasmol.html#aminocolours
-    "RASMOL" : {
-        "DICT_COLORS" : {
+    "RASMOL": {
+        "DICT_COLORS": {
             "A": "#C8C8C8",  # Alanine (ALA)
             "R": "#145AFF",  # Arginine (ARG)
             "N": "#00DCDC",  # Asparagine (ASN)
@@ -186,27 +186,26 @@ DICT_COLORS = {
             "V": "#0F820F",  # Valine (VAL)
             "-": "#BEA06E",
         },
-        "DICT_ANNOTATION" : {
-
-            "A"         :       "#C8C8C8",
-            "R, K"      :       "#145AFF",
-            "N, Q"      :       "#00DCDC",
-            "D, E"      :       "#E60A0A",
-            "C, M"      :       "#E6E600",
-            "G"         :       "#EBEBEB",
-            "H"         :       "#8282D2",
-            "I, L, V"   :       "#0F820F",
-            "F, Y"      :       "#3232AA",
-            "P"         :       "#DC9682",
-            "S, T"      :       "#FA9600",
-            "W"         :       "#B45AB4",
-            "-"         :       "#BEA06E",
-        }
+        "DICT_ANNOTATION": {
+            "A": "#C8C8C8",
+            "R, K": "#145AFF",
+            "N, Q": "#00DCDC",
+            "D, E": "#E60A0A",
+            "C, M": "#E6E600",
+            "G": "#EBEBEB",
+            "H": "#8282D2",
+            "I, L, V": "#0F820F",
+            "F, Y": "#3232AA",
+            "P": "#DC9682",
+            "S, T": "#FA9600",
+            "W": "#B45AB4",
+            "-": "#BEA06E",
+        },
     },
     # http://openrasmol.org/doc/rasmol.html#shapelycolours
     # https://www.dnastar.com/manuals/MegAlignPro/17.3.1/en/topic/change-the-analysis-view-color-scheme
-    "SHAPELY" : {
-        "DICT_COLORS" : {
+    "SHAPELY": {
+        "DICT_COLORS": {
             "A": "#8CFF8C",  # Alanine (ALA)
             "R": "#00007C",  # Arginine (ARG)
             "N": "#FF7C70",  # Asparagine (ASN)
@@ -229,61 +228,61 @@ DICT_COLORS = {
             "V": "#004C00",  # Valine (VAL)
             "-": "#000000",
         },
-        "DICT_ANNOTATION" : {
-            "A"         :       "#8CFF8C",
-            "R, K"      :       "#00007C",
-            "N, Q"      :       "#FF7C70",
-            "D, E"      :       "#A00042",
-            "C, M"      :       "#FFFF70",
-            "G"         :       "#FFFFFF",
-            "H"         :       "#7070FF",
-            "I, L, V"   :       "#004C00",
-            "F, Y"      :       "#534C42",
-            "P"         :       "#525252",
-            "S, T"      :       "#FF7042",
-            "W"         :       "#4F4600",
-            "-"         :       "#000000",
-        }
+        "DICT_ANNOTATION": {
+            "A": "#8CFF8C",
+            "R, K": "#00007C",
+            "N, Q": "#FF7C70",
+            "D, E": "#A00042",
+            "C, M": "#FFFF70",
+            "G": "#FFFFFF",
+            "H": "#7070FF",
+            "I, L, V": "#004C00",
+            "F, Y": "#534C42",
+            "P": "#525252",
+            "S, T": "#FF7042",
+            "W": "#4F4600",
+            "-": "#000000",
+        },
     },
     # https://www.jalview.org/help/html/colourSchemes/clustal.html
-    "CLUSTALX" : {
-        "DICT_COLORS" : {
-            "A": "blue",    # Alanine (ALA)
-            "R": "red",     # Arginine (ARG)
-            "N": "green",   # Asparagine (ASN)
-            "D": "magenta", # Aspartic acid (ASP)
-            "C": "pink",    # Cysteine (CYS)
-            "Q": "green",   # Glutamine (GLN)
-            "E": "magenta", # Glutamic acid (GLU)
+    "CLUSTALX": {
+        "DICT_COLORS": {
+            "A": "blue",  # Alanine (ALA)
+            "R": "red",  # Arginine (ARG)
+            "N": "green",  # Asparagine (ASN)
+            "D": "magenta",  # Aspartic acid (ASP)
+            "C": "pink",  # Cysteine (CYS)
+            "Q": "green",  # Glutamine (GLN)
+            "E": "magenta",  # Glutamic acid (GLU)
             "G": "orange",  # Glycine (GLY)
-            "H": "cyan",    # Histidine (HIS)
-            "I": "blue",    # Isoleucine (ILE)
-            "L": "blue",    # Leucine (LEU)
-            "K": "red",     # Lysine (LYS)
-            "M": "blue",    # Methionine (MET)
-            "F": "blue",    # Phenylalanine (PHE)
+            "H": "cyan",  # Histidine (HIS)
+            "I": "blue",  # Isoleucine (ILE)
+            "L": "blue",  # Leucine (LEU)
+            "K": "red",  # Lysine (LYS)
+            "M": "blue",  # Methionine (MET)
+            "F": "blue",  # Phenylalanine (PHE)
             "P": "yellow",  # Proline (PRO)
-            "S": "green",   # Serine (SER)
-            "T": "green",   # Threonine (THR)
-            "W": "blue",    # Tryptophan (TRP)
-            "Y": "cyan",    # Tyrosine (TYR)
-            "V": "blue",    # Valine (VAL)
+            "S": "green",  # Serine (SER)
+            "T": "green",  # Threonine (THR)
+            "W": "blue",  # Tryptophan (TRP)
+            "Y": "cyan",  # Tyrosine (TYR)
+            "V": "blue",  # Valine (VAL)
             "-": "white",
         },
-        "DICT_ANNOTATION" : {
+        "DICT_ANNOTATION": {
             "hydrophobic": "blue",  # A,I,L,M,F,W,V
-            "positive": "red",      # K,R
+            "positive": "red",  # K,R
             "negative": "magenta",  # D,E
-            "polar": "green",       # N,Q,S,T
-            "aromatic": "cyan",     # H,Y
-            "cysteine": "pink",     # C
-            "glycine": "orange",    # G
-            "proline": "yellow",    # P
-        }
+            "polar": "green",  # N,Q,S,T
+            "aromatic": "cyan",  # H,Y
+            "cysteine": "pink",  # C
+            "glycine": "orange",  # G
+            "proline": "yellow",  # P
+        },
     },
     # https://www.jalview.org/help/html/colourSchemes/zappo.html
-    "ZAPPO" : {
-        "DICT_COLORS" : {
+    "ZAPPO": {
+        "DICT_COLORS": {
             "A": "#ffafaf",  # Alanine (ALA)
             "R": "#6464ff",  # Arginine (ARG)
             "N": "#02ff00",  # Asparagine (ASN)
@@ -306,16 +305,16 @@ DICT_COLORS = {
             "V": "#ffafaf",  # Valine (VAL)
             "-": "#000000",
         },
-        "DICT_ANNOTATION" : {
-            "aliphatic hydrophobic"     :       "#ffafaf", # A,I,L,M,V
-            "aromatic"                  :       "#ffc803", # F,W,Y
-            "positive"                  :       "#6464ff", # R,H,K
-            "negative"                  :       "#ff0000", # D,E
-            "hydrophilic"               :       "#02ff00", # N,Q,S,T
-            "conformationally special"  :       "#ff00ff", # G,P
-            "cysteine"                  :       "#ffff00", # C
-        }
-    }
+        "DICT_ANNOTATION": {
+            "aliphatic hydrophobic": "#ffafaf",  # A,I,L,M,V
+            "aromatic": "#ffc803",  # F,W,Y
+            "positive": "#6464ff",  # R,H,K
+            "negative": "#ff0000",  # D,E
+            "hydrophilic": "#02ff00",  # N,Q,S,T
+            "conformationally special": "#ff00ff",  # G,P
+            "cysteine": "#ffff00",  # C
+        },
+    },
 }
 """dict[dict[str, str], dict[str, str]]: Mapping amino acid to color
     using specified dictionary. Dictionaries include color schemes from:

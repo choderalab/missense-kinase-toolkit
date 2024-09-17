@@ -1,16 +1,19 @@
-import requests
 import logging
+
+import requests
 
 from missense_kinase_toolkit.databases import requests_wrapper, utils_requests
 
 logger = logging.getLogger(__name__)
 
+
 class HGNC:
     """Class to interact with the HGNC API."""
+
     def __init__(
-            self,
-            input_symbol_or_id: str,
-            input_is_hgnc_symbol: bool = True,
+        self,
+        input_symbol_or_id: str,
+        input_is_hgnc_symbol: bool = True,
     ) -> None:
         """Initialize HGNC Class object.
 
@@ -69,17 +72,22 @@ class HGNC:
                 url = f"{self.url}/search/ensembl_gene_id:{self.ensembl}"
 
         res = requests_wrapper.get_cached_session().get(
-            url,
-            headers={"Accept": "application/json"}
+            url, headers={"Accept": "application/json"}
         )
 
         if res.ok:
-            list_hgnc_gene_name = self._extract_list_from_hgnc_response_docs(res, "symbol")
+            list_hgnc_gene_name = self._extract_list_from_hgnc_response_docs(
+                res, "symbol"
+            )
             if len(list_hgnc_gene_name) == 1:
                 if self.hgnc is not None:
-                    print(f"Gene name found for {self.hgnc}: {list_hgnc_gene_name[0]}. Overwriting HGNC gene name...")
+                    print(
+                        f"Gene name found for {self.hgnc}: {list_hgnc_gene_name[0]}. Overwriting HGNC gene name..."
+                    )
                 else:
-                    print(f"Gene name found for {self.ensembl}: {list_hgnc_gene_name[0]}. Adding HGNC gene name...")
+                    print(
+                        f"Gene name found for {self.ensembl}: {list_hgnc_gene_name[0]}. Adding HGNC gene name..."
+                    )
                 self.hgnc = list_hgnc_gene_name[0]
             elif len(list_hgnc_gene_name) == 0:
                 print(f"No gene names found for {self.hgnc}")
@@ -130,7 +138,9 @@ class HGNC:
                     if entry not in set_keys:
                         list_out.append(None)
                     else:
-                        list_entry = self._extract_list_from_hgnc_response_docs(res, entry)
+                        list_entry = self._extract_list_from_hgnc_response_docs(
+                            res, entry
+                        )
                         list_out.append(list_entry)
             else:
                 list_out = [None for _ in list_to_extract]
@@ -139,7 +149,9 @@ class HGNC:
             dict_out = dict(zip(list_to_extract, list_out))
 
         else:
-            print("No HGNC gene symbol provided; cannot fetch gene information from HGNC API with Ensembl gene ID {self.ensembl}")
+            print(
+                "No HGNC gene symbol provided; cannot fetch gene information from HGNC API with Ensembl gene ID {self.ensembl}"
+            )
             dict_out = None
 
         return dict_out
@@ -190,7 +202,9 @@ class HGNC:
 
         """
         try:
-            list_keys = [set(doc.keys()) for doc in res_input.json()["response"]["docs"]]
+            list_keys = [
+                set(doc.keys()) for doc in res_input.json()["response"]["docs"]
+            ]
             set_keys = set.union(*list_keys)
         except TypeError:
             set_keys = set()
