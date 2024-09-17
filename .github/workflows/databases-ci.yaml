@@ -63,8 +63,8 @@ jobs:
           # run each package test suite; append to coverage file
           # exit immediately if a command exits with a non-zero status
           set -e
-          # pytest -v --cov-report=xml --color=yes  \
-          pytest -n auto --durations=10 -v --cov-report=xml --cov-report=term --color=yes \
+          # pytest -n auto --durations=10 -v --cov-report=xml --cov-report=term --color=yes \
+          pytest -v --cov-report=xml --color=yes  \
             --cov=missense_kinase_toolkit/databases \
             missense_kinase_toolkit/databases/missense_kinase_toolkit/databases/tests/test_databases.py
 
