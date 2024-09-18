@@ -50,8 +50,12 @@ pytest-runner = "^6.0.1"
 # [tool.poetry.extras]
 # notebooks = ["jupyter", "ipykernel"]
 
-[tool.pytest.ini_options]
-pythonpath = ["missense_kinase_toolkit/databases"]
+# [tool.pytest.ini_options]
+# pythonpath = ["missense_kinase_toolkit/databases"]
+
+# [tool.coverage.run]
+# command_line = "--module pytest"
+# source = ["missense_kinase_toolkit.databases"]
 
 # [tool.poetry.scripts]
 # extract_cbioportal = "missense_kinase_toolkit.databases.cli.extract_cbioportal:main"
