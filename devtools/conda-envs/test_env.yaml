@@ -14,11 +14,7 @@ dependencies:
   - pytest-cov
   - codecov
 
-    # Pip-only installs
-  #- pip:
-  #  - codecov
-
-    # Other
+    # Databases
   - pandas
   - bravado
   - requests-cache
