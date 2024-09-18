@@ -10,7 +10,6 @@ class TestDatabases:
 
         assert "missense_kinase_toolkit.databases" in sys.modules
 
-
     def test_config(self):
         from missense_kinase_toolkit.databases import config
 
@@ -39,7 +38,6 @@ class TestDatabases:
         assert config.maybe_get_cbioportal_token() is None
         config.set_cbioportal_token("test")
         assert config.maybe_get_cbioportal_token() == "test"
-
 
     def test_io_utils(self):
         import os
@@ -70,7 +68,6 @@ class TestDatabases:
         assert io_utils.convert_str2list("a,b,c") == ["a", "b", "c"]
         assert io_utils.convert_str2list("a, b, c") == ["a", "b", "c"]
 
-
     def test_requests_wrapper(self, capsys):
         import requests
 
@@ -94,7 +91,6 @@ class TestDatabases:
         out, _ = capsys.readouterr()
         assert out == "Error code: 400\n"
 
-
     def test_cbioportal(self):
         import os
 
@@ -106,7 +102,10 @@ class TestDatabases:
         # test that the function to query the cBioPortal API works
         cbioportal_instance = cbioportal.cBioPortal()
         assert cbioportal_instance.get_instance() == "www.cbioportal.org"
-        assert cbioportal_instance.get_url() == "https://www.cbioportal.org/api/v2/api-docs"
+        assert (
+            cbioportal_instance.get_url()
+            == "https://www.cbioportal.org/api/v2/api-docs"
+        )
         assert cbioportal_instance._cbioportal is not None
 
         # test that server status is up
@@ -137,7 +136,6 @@ class TestDatabases:
 
         assert mutations_instance.get_study_id() == study
         assert mutations_instance._mutations is not None
-
 
     def test_hgnc(self):
         from missense_kinase_toolkit.databases import hgnc
@@ -174,7 +172,6 @@ class TestDatabases:
         )
         assert test.hgnc == "ABL1"
 
-
     def test_klifs(self):
         from missense_kinase_toolkit.databases import klifs
 
@@ -194,7 +191,6 @@ class TestDatabases:
         assert dict_egfr["species"] == "Human"
         assert dict_egfr["uniprot"] == "P00533"
 
-
     def test_scrapers(self):
         from missense_kinase_toolkit.databases import scrapers
 
@@ -204,7 +200,6 @@ class TestDatabases:
         assert df_kinhub.shape[1] == 8
         assert "HGNC Name" in df_kinhub.columns
         assert "UniprotID" in df_kinhub.columns
-
 
     def test_colors(self, capsys):
         from missense_kinase_toolkit.databases import colors
@@ -244,15 +239,21 @@ class TestDatabases:
             == "#F0A3FF"
         )
         assert (
-            colors.map_single_letter_aa_to_color("A", DICT_COLORS["ASAP"]["DICT_COLORS"])
+            colors.map_single_letter_aa_to_color(
+                "A", DICT_COLORS["ASAP"]["DICT_COLORS"]
+            )
             == "red"
         )
         assert (
-            colors.map_single_letter_aa_to_color("A", DICT_COLORS["RASMOL"]["DICT_COLORS"])
+            colors.map_single_letter_aa_to_color(
+                "A", DICT_COLORS["RASMOL"]["DICT_COLORS"]
+            )
             == "#C8C8C8"
         )
         assert (
-            colors.map_single_letter_aa_to_color("A", DICT_COLORS["SHAPELY"]["DICT_COLORS"])
+            colors.map_single_letter_aa_to_color(
+                "A", DICT_COLORS["SHAPELY"]["DICT_COLORS"]
+            )
             == "#8CFF8C"
         )
         assert (
@@ -262,10 +263,11 @@ class TestDatabases:
             == "blue"
         )
         assert (
-            colors.map_single_letter_aa_to_color("A", DICT_COLORS["ZAPPO"]["DICT_COLORS"])
+            colors.map_single_letter_aa_to_color(
+                "A", DICT_COLORS["ZAPPO"]["DICT_COLORS"]
+            )
             == "#ffafaf"
         )
-
 
     def test_uniprot(self):
         from missense_kinase_toolkit.databases import uniprot
@@ -275,7 +277,6 @@ class TestDatabases:
             abl1._sequence
             == "MLEICLKLVGCKSKKGLSSSSSCYLEEALQRPVASDFEPQGLSEAARWNSKENLLAGPSENDPNLFVALYDFVASGDNTLSITKGEKLRVLGYNHNGEWCEAQTKNGQGWVPSNYITPVNSLEKHSWYHGPVSRNAAEYLLSSGINGSFLVRESESSPGQRSISLRYEGRVYHYRINTASDGKLYVSSESRFNTLAELVHHHSTVADGLITTLHYPAPKRNKPTVYGVSPNYDKWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVNAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQESSISDEVEKELGKQGVRGAVSTLLQAPELPTKTRTSRRAAEHRDTTDVPEMPHSKGQGESDPLDHEPAVSPLLPRKERGPPEGGLNEDERLLPKDKKTNLFSALIKKKKKTAPTPPKRSSSFREMDGQPERRGAGEEEGRDISNGALAFTPLDTADPAKSPKPSNGAGVPNGALRESGGSGFRSPHLWKKSSTLTSSRLATGEEEGGGSSSKRFLRSCSASCVPHGAKDTEWRSVTLPRDLQSTGRQFDSSTFGGHKSEKPALPRKRAGENRSDQVTRGTVTPPPRLVKKNEEAADEVFKDIMESSPGSSPPNLTPKPLRRQVTVAPASGLPHKEEAGKGSALGTPAAAEPVTPTSKAGSGAPGGTSKGPAEESRVRRHKHSSESPGRDKGKLSRLKPAPPPPPAASAGKAGGKPSQSPSQEAAGEAVLGAKTKATSLVDAVNSDAAKPSQPGEGLKKPVLPATPKPQSAKPSGTPISPAPVPSTLPSASSALAGDQPSSTAFIPLISTRVSLRKTRQPPERIASGAITKGVVLDSTEALCLAISRNSEQMASHSAVLEAGKNLYTFCVSYVDSIQQMRNKFAFREAINKLENNLRELQICPATAGSGPAATQDFSKLLSSVKEISDIVQR"  # noqa E501
         )
-
 
     def test_pfam(self):
         from missense_kinase_toolkit.databases import pfam
@@ -290,7 +291,8 @@ class TestDatabases:
         assert "name" in df_pfam.columns
         assert (
             df_pfam.loc[
-                df_pfam["name"] == "Protein tyrosine and serine/threonine kinase", "start"
+                df_pfam["name"] == "Protein tyrosine and serine/threonine kinase",
+                "start",
             ].values[0]
             == 242
         )
@@ -302,7 +304,10 @@ class TestDatabases:
         )
         assert (
             pfam.find_pfam_domain(
-                input_id="p00519", input_position=350, df_ref=df_pfam, col_ref_id="uniprot"
+                input_id="p00519",
+                input_position=350,
+                df_ref=df_pfam,
+                col_ref_id="uniprot",
             )
             == "Protein tyrosine and serine/threonine kinase"
         )
