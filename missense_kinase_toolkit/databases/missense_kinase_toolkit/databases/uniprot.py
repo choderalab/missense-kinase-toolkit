@@ -1,13 +1,12 @@
-import requests
-
 from missense_kinase_toolkit.databases import requests_wrapper, utils_requests
 
 
-class UniProt():
+class UniProt:
     """Class to interact with the UniProt API."""
+
     def __init__(
-            self,
-            uniprot_id: str,
+        self,
+        uniprot_id: str,
     ) -> None:
         """Initialize UniProt Class object.
 
@@ -29,9 +28,9 @@ class UniProt():
         self._sequence = self.get_uniprot_fasta()
 
     def get_uniprot_fasta(
-            self,
-            bool_seq : bool = True,
-        ) -> str | None:
+        self,
+        bool_seq: bool = True,
+    ) -> str | None:
         """Get FASTA sequence for UniProt ID.
 
         Parameters

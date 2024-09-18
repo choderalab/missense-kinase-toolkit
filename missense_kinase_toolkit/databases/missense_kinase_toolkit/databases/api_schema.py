@@ -1,4 +1,5 @@
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
+
 from bravado.client import SwaggerClient
 from bravado.requests_client import RequestsClient
 
@@ -15,9 +16,7 @@ from bravado.requests_client import RequestsClient
 
 class SwaggerAPIClient(ABC):
     @abstractmethod
-    def query_api(
-        self
-    ) -> SwaggerClient:
+    def query_api(self) -> SwaggerClient:
         """Query a Swagger API and return result.
 
         Parameters
@@ -35,9 +34,7 @@ class SwaggerAPIClient(ABC):
 
 class APIKeySwaggerClient(SwaggerAPIClient, ABC):
     @abstractmethod
-    def maybe_get_token(
-        self
-    ) -> str | None:
+    def maybe_get_token(self) -> str | None:
         """Get API token, if available.
 
         Returns
@@ -48,9 +45,7 @@ class APIKeySwaggerClient(SwaggerAPIClient, ABC):
         """
         ...
 
-    def set_api_key(
-        self
-    ) -> RequestsClient:
+    def set_api_key(self) -> RequestsClient:
         """Set API key for cBioPortal API.
 
         Returns
@@ -66,7 +61,7 @@ class APIKeySwaggerClient(SwaggerAPIClient, ABC):
                 self.instance,
                 f"Bearer {token}",
                 param_name="Authorization",
-                param_in="header"
+                param_in="header",
             )
         else:
             print("No API token provided")
@@ -75,5 +70,4 @@ class APIKeySwaggerClient(SwaggerAPIClient, ABC):
 
 class RESTAPIClient(ABC):
     @abstractmethod
-    def query_api(self):
-        ...
+    def query_api(self): ...

@@ -1,8 +1,8 @@
-from requests_cache import CachedSession
 import os
 from functools import cache
-from requests.adapters import HTTPAdapter, Retry
 
+from requests.adapters import HTTPAdapter, Retry
+from requests_cache import CachedSession
 
 # this script was written by Jeff Quinn (MSKCC, Tansey lab)
 REQUEST_CACHE_VAR = "REQUEST_CACHE"

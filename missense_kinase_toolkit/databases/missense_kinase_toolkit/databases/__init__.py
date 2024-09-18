@@ -2,4 +2,4 @@
 
 from importlib.metadata import version
 
-__version__ = version("missense-kinase-toolkit")
+__version__ = version("databases")
