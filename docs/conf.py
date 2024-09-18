@@ -192,7 +192,7 @@ texinfo_documents = [
 # -- Extension configuration -------------------------------------------------
 
 here = os.path.dirname(__file__)
-repo = os.path.join(here,  '../src')
+repo = os.path.join(here,  '../missense-kinase-toolkit')
 
 # Ensure env.metadata[env.docname]['nbsphinx-link-target']
 # points relative to repo root:
