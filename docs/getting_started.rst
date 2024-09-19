@@ -1,12 +1,12 @@
 Getting Started
 ===============
 
-This page details how to get started with missense-kinase-toolkit. We have used a monorepo structure where all sub-packages are contained within the `missense-kinase-toolkit` sub-directory.
+This page details how to get started with missense-kinase-toolkit. We have used a monorepo structure where all sub-packages are contained within the :code:`missense-kinase-toolkit` sub-directory.
 
 Installation
 ++++++++++++
 
-To install the `databases` sub-package using a virtual environment:
+To install the :code:`databases` sub-package using a virtual environment:
 
 .. code-block:: bash
 
@@ -16,7 +16,7 @@ To install the `databases` sub-package using a virtual environment:
     source VE/bin/activate
     python3 -m pip install -e '.[dev,test]'
 
-Alternatively, since we have used `poetry` as our default package manager for this project. Once you have cloned the repository and have either installed `poetry` locally or in your environment of interest, you can install the package by running the following command in the root directory of the sub-package repository using the provided `poetry.lock` file and the following command
+Alternatively, since we have used :code:`poetry` as our default package manager for this project. Once you have cloned the repository and have either installed `poetry` locally or in your environment of interest, you can install the package by running the following command in the root directory of the sub-package repository using the provided :code:`poetry.lock` file and the following command
 
 .. code-block:: bash
 
