@@ -9,6 +9,7 @@ Installation
 To install the `databases` sub-package using a virtual environment:
 
 .. code-block:: bash
+    
     git clone https://github.com/choderalab/missense-kinase-toolkit.git
     cd missense-kinase-toolkit/missense-kinase-toolkit/databases
     python3 -m venv VE
