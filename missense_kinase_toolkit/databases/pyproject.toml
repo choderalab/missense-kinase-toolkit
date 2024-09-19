@@ -61,6 +61,9 @@ pytest-runner = "^6.0.1"
 # extract_cbioportal = "missense_kinase_toolkit.databases.cli.extract_cbioportal:main"
 # transform_cbioportal = "missense_kinase_toolkit.databases.cli.transform_cbioportal:main"
 
+[tool.setuptools.packages.find]
+where = ["."]
+
 [tool.poetry-dynamic-versioning]
 enable = false
 vcs = "git"
