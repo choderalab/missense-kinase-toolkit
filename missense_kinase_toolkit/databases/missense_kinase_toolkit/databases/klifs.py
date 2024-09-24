@@ -1,7 +1,6 @@
 import logging
 from dataclasses import dataclass
 
-import numpy as np
 from bravado.client import SwaggerClient
 
 from missense_kinase_toolkit.databases.api_schema import SwaggerAPIClient
