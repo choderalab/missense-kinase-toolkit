@@ -1,8 +1,8 @@
 import logging
+from dataclasses import dataclass
 
 import numpy as np
 from bravado.client import SwaggerClient
-from dataclasses import dataclass
 
 from missense_kinase_toolkit.databases.api_schema import SwaggerAPIClient
 
@@ -12,119 +12,119 @@ logger = logging.getLogger(__name__)
 # start/end and colors courtesy of OpenCADD
 DICT_POCKET_KLIFS_REGIONS = {
     "I": {
-        "start": 1, 
+        "start": 1,
         "end": 3,
         "contiguous": True,
         "color": "khaki",
-        },
+    },
     "g.l": {
-        "start": 4, 
+        "start": 4,
         "end": 9,
         "contiguous": True,
         "color": "green",
-        },
+    },
     "II": {
-        "start": 10, 
+        "start": 10,
         "end": 13,
         "contiguous": True,
         "color": "khaki",
-        },
+    },
     "III": {
-        "start": 14, 
+        "start": 14,
         "end": 19,
         "contiguous": False,
         "color": "khaki",
-        },
+    },
     "αC": {
-        "start": 20, 
+        "start": 20,
         "end": 30,
         "contiguous": True,
         "color": "red",
-        },
+    },
     "b.l": {
-        "start": 31, 
+        "start": 31,
         "end": 37,
         "contiguous": True,
         "color": "green",
-        },
+    },
     "IV": {
-        "start": 38, 
+        "start": 38,
         "end": 41,
         "contiguous": False,
         "color": "khaki",
-        },
+    },
     "V": {
-        "start": 42, 
+        "start": 42,
         "end": 44,
         "contiguous": True,
         "color": "khaki",
-        },
+    },
     "GK": {
-        "start": 45, 
+        "start": 45,
         "end": 45,
         "contiguous": True,
         "color": "orange",
-        },
+    },
     "hinge": {
-        "start": 46, 
-        "end": 48, 
+        "start": 46,
+        "end": 48,
         "contiguous": True,
         "color": "magenta",
-        },
+    },
     "linker": {
-        "start": 49, 
+        "start": 49,
         "end": 52,
         "contiguous": True,
         "color": "cyan",
-        },
+    },
     "αD": {
-        "start": 53, 
-        "end": 59, 
+        "start": 53,
+        "end": 59,
         "contiguous": False,
         "color": "red",
-        },
+    },
     "αE": {
-        "start": 60, 
+        "start": 60,
         "end": 64,
         "contiguous": True,
         "color": "red",
-        },
+    },
     "VI": {
-        "start": 65, 
+        "start": 65,
         "end": 67,
         "contiguous": True,
         "color": "khaki",
-        },
+    },
     "c.l": {
-        "start": 68, 
+        "start": 68,
         "end": 75,
         "contiguous": True,
         "color": "darkorange",
     },
     "VII": {
-        "start": 76, 
-        "end": 78, 
+        "start": 76,
+        "end": 78,
         "contiguous": False,
         "color": "khaki",
-        },
+    },
     "VIII": {
-        "start": 79, 
+        "start": 79,
         "end": 79,
         "contiguous": True,
         "color": "khaki",
-        },
+    },
     "xDFG": {
-        "start": 80, 
+        "start": 80,
         "end": 83,
         "contiguous": True,
         "color": "cornflowerblue",
-        },
+    },
     "a.l": {
-        "start": 84, 
+        "start": 84,
         "end": 85,
         "contiguous": False,
         "color": "cornflowerblue",
-        },
+    },
 }
 """dict[str, dict[str, int | bool | str]]: Mapping KLIFS pocket region to start and end indices, \
     boolean denoting if subsequent regions are contiguous, and colors."""
@@ -205,8 +205,7 @@ def align_klifs_pocket_to_uniprot_seq(
         list_idx = None
     else:
         list_idx = return_idx_of_substring_in_superstring(
-            str_uniprot, 
-            substring_klifs_narm
+            str_uniprot, substring_klifs_narm
         )
     return substring_klifs, list_idx
 
@@ -256,14 +255,14 @@ def iterate_klifs_alignment(
         )
 
         str_klifs, list_substring_idx = align_klifs_pocket_to_uniprot_seq(
-            idx_start   = klifs_idx_start,
-            idx_end     = klifs_idx_end,
-            str_uniprot = string_uniprot,
-            str_klifs   = string_klifs,
+            idx_start=klifs_idx_start,
+            idx_end=klifs_idx_end,
+            str_uniprot=string_uniprot,
+            str_klifs=string_klifs,
         )
         list_klifs_substr_actual.append(str_klifs)
 
-        # if None KLIFS all "-"; if multiple KLIFS regions, 
+        # if None KLIFS all "-"; if multiple KLIFS regions,
         # concatenate with contiguous regions to identify single match
         if list_substring_idx is not None and len(list_substring_idx) > 1:
             bool_cont = dict_klifs[klifs_region_start]["contiguous"]
@@ -280,15 +279,17 @@ def iterate_klifs_alignment(
                 dict_klifs[klifs_region_end]["end"],
             )
             str_klifs, list_substring_idx = align_klifs_pocket_to_uniprot_seq(
-                idx_start   = klifs_idx_start,
-                idx_end     = klifs_idx_end,
-                str_uniprot = string_uniprot,
-                str_klifs   = string_klifs,
+                idx_start=klifs_idx_start,
+                idx_end=klifs_idx_end,
+                str_uniprot=string_uniprot,
+                str_klifs=string_klifs,
             )
             # if concat with previous, offset by length of preceding KLIFS region with gaps removed
-            if not bool_cont and \
-                list_substring_idx is not None and \
-                    len(list_substring_idx) != 0:
+            if (
+                not bool_cont
+                and list_substring_idx is not None
+                and len(list_substring_idx) != 0
+            ):
                 len_offset = len(remove_gaps_from_klifs(str_klifs)) - len_klifs
                 list_substring_idx = [i + len_offset for i in list_substring_idx]
 
@@ -296,7 +297,7 @@ def iterate_klifs_alignment(
         list_klifs_substr_match.append(str_klifs)
         list_substring_idxs.append(list_substring_idx)
 
-    #TODO: if no match, try to find match with gaps
+    # TODO: if no match, try to find match with gaps
     # list_idx_no_match = [idx for idx, i in enumerate(list_substring_idxs)\
     #                       if not i and i is None]
     # for idx in list_idx_no_match:
@@ -306,7 +307,7 @@ def iterate_klifs_alignment(
     #     except:
     #         idx_start = 0
     #     idx_end = list_substring_idxs[idx+1] + len(remove_gaps_from_klifs(list_klifs_substr_actual[idx+1]))
-    #     substr_uniprot = 
+    #     substr_uniprot =
     #     substr_klifs = list_klifs_substr_actual[idx]
 
     dict_out = {
@@ -503,9 +504,7 @@ class KLIFSPocket:
         pass
 
     @staticmethod
-    def remove_gaps_from_klifs(
-        klifs_string: str
-    ) -> str:
+    def remove_gaps_from_klifs(klifs_string: str) -> str:
         """Remove gaps from KLIFS pocket sequence.
 
         Parameters
@@ -518,14 +517,13 @@ class KLIFSPocket:
             klifs_pocket_narm : str
                 KLIFS pocket sequence without gaps (i.e., "-" removed)
 
-            """
+        """
         klifs_pocket_narm = "".join([i for i in klifs_string if i != "-"])
         return klifs_pocket_narm
 
     @staticmethod
     def return_idx_of_substring_in_superstring(
-        superstring: str, 
-        substring: str
+        superstring: str, substring: str
     ) -> list[int] | None:
         """
 
@@ -575,7 +573,6 @@ class KLIFSPocket:
             list_idx = None
         else:
             list_idx = self.return_idx_of_substring_in_superstring(
-                self.uniprotSeq, 
-                substring_klifs_narm
+                self.uniprotSeq, substring_klifs_narm
             )
         return substring_klifs, list_idx
