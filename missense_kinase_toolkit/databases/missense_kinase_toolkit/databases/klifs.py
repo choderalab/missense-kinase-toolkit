@@ -209,6 +209,59 @@ def align_klifs_pocket_to_uniprot_seq(
     return substring_klifs, list_idx
 
 
+def find_start_or_end_recursively(
+    idx_in: int, 
+    list_idx: list[int],
+    list_substr: list[str],
+    idx_kd = None,
+    seq_uniprot = None,
+    bool_start = True,
+) -> int:
+    """Find the start or end indices in UniProt canonical sequence of flanking KLIFS regions recursively.
+
+    Parameters
+    ----------
+    idx_in : int
+        [TO COME]  
+    list_idx : list[int]
+        [TO COME]
+    list_substr: list[str]
+        [TO COME]
+    idx_kd
+    """
+    if bool_start:
+        # return sequence start if idx = 0
+        if idx_in == 0:
+            if idx_kd is None:
+                return 0
+            else:
+                return idx_kd
+        try:
+            idx_out = list_idx[idx_in-1][0] + \
+            len(remove_gaps_from_klifs(list_substr[idx_in-1]))
+        except IndexError or TypeError:
+            idx_out = find_start_or_end_recursively(idx_in-1,
+                                                    list_idx,
+                                                    list_substr,
+                                                    bool_start = True)
+    else:
+        # return sequence end if last region
+        if idx_in == len(DICT_POCKET_KLIFS_REGIONS) - 1:
+            try:
+                idx_out = int(list_idx[idx_in][0])
+            except:
+                idx_out = len(seq_uniprot)-1
+        try:
+            idx_out = int(list_idx[idx_in+1][0])
+        except IndexError or TypeError:
+            idx_out = find_start_or_end_recursively(idx_in+1,
+                                                    list_idx,
+                                                    list_substr,
+                                                    bool_start = False)
+
+    return idx_out
+
+
 def iterate_klifs_alignment(
     string_uniprot: str,
     string_klifs: str,
