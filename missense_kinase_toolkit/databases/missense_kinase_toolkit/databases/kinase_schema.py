@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import List
-
 from pydantic import BaseModel, constr
+import pandas as pd
 
 
 class Group(str, Enum):
@@ -20,7 +19,7 @@ class Group(str, Enum):
     Other = "Other"  # Other protein kinases
 
 
-class Family(str, Enum):
+class Family(Enum):
     """Enum class for kinase families (>=5 in KinHub)."""
 
     STE20 = "STE20"
@@ -53,13 +52,14 @@ class Family(str, Enum):
     MLCK = "MLCK"
     PKA = "PKA"
     MAPKAPK = "MAPKAPK"
-    RGC = "RGC"
-    CDKL = "CDKL"
-    MAST = "MAST"
-    TSSK = "TSSK"
-    ABC1 = "ABC1"
-    PDHK = "PDHK"
-    Other = "Other"
+    RGC     = "RGC"
+    CDKL    = "CDKL"
+    MAST    = "MAST"
+    TSSK    = "TSSK"
+    ABC1    = "ABC1"
+    PDHK    = "PDHK"
+    Other   = "Other"
+    Null    = None
 
 
 UniProtAlphabet = constr(pattern="^[ACDEFGHIKLMNPQRSTVWXY]+$")
@@ -83,4 +83,11 @@ class Kinase(BaseModel):
     pfam_end: int
     klifs_pocket_seq: str
     klifs_pocket_start: int
-    klifs_pocket_end: int
+    klifs_pocket_end: int    
+
+
+def create_kinase_models_from_df(
+    df: pd.DataFrame
+) -> BaseModel:
+    """Create Pydantic models for kinases from dataframes."""
+    raise NotImplementedError("This function is not implemented yet.")
