@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from enum import Enum
 from pydantic import BaseModel, constr
 import pandas as pd
@@ -52,38 +51,42 @@ class Family(Enum):
     MLCK = "MLCK"
     PKA = "PKA"
     MAPKAPK = "MAPKAPK"
-    RGC     = "RGC"
-    CDKL    = "CDKL"
-    MAST    = "MAST"
-    TSSK    = "TSSK"
-    ABC1    = "ABC1"
-    PDHK    = "PDHK"
-    Other   = "Other"
-    Null    = None
+    RGC = "RGC"
+    CDKL = "CDKL"
+    MAST = "MAST"
+    TSSK = "TSSK"
+    ABC1 = "ABC1"
+    PDHK = "PDHK"
+    Other = "Other"
+    Null = None
 
 
-UniProtAlphabet = constr(pattern="^[ACDEFGHIKLMNPQRSTVWXY]+$")
-KLIFSAlphabet = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWY\-]+$")
-
-
-class Kinase(BaseModel):
-    """Pydantic model for kinase information."""
-
-    hgnc_name: str
-    uniprot_id: str
+class KinHub(BaseModel):
+    """Pydantic model for KinHub information."""
     kinase_name: str
     manning_name: list[str]
     xname: list[str]
     group: list[Group]
     family: list[Family]
-    uniprot_seq: UniProtAlphabet
-    klifs_pocket: KLIFSAlphabet
-    pfam_id: str
-    pfam_start: int
-    pfam_end: int
-    klifs_pocket_seq: str
-    klifs_pocket_start: int
-    klifs_pocket_end: int    
+
+
+class UniProt(BaseModel):
+    """Pydantic model for UniProt information."""
+    canonical_seq: constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWXY]+$")
+
+
+class KLIFS(BaseModel):
+    """Pydantic model for KLIFS information."""
+    pocket_seq: constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWY\-]+$")
+
+
+class Kinase(BaseModel):
+    """Pydantic model for kinase information."""
+    hgnc_name: str
+    uniprot_id: str
+    KinHub: KinHub
+    UniProt: UniProt
+    KLIFS: KLIFS | None
 
 
 def create_kinase_models_from_df(
