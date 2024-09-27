@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "experiments"
+version = "0.1.0"
+description = "Tools to facilitate experimental analyses for missense_kinase_toolkit."
+authors = ["Jess White <jess.white@choderalab.org>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
