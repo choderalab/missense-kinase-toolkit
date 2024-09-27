@@ -1,60 +1,82 @@
+from enum import Enum
+from typing import List
 from dataclasses import dataclass
-
-# TODO create a Pydantic model to incorporate and UniProt, Pfam, and KLIFS data for all
-# eventually populate with AF2 active BLAminus+ structures from Dunbrack lab
+from pydantic import BaseModel, constr
 
 
-# TODO: Make Pydantic model instead of dataclass
-@dataclass
-class KLIFSPocket:
-    """Dataclass to hold KLIFS pocket alignment information per kinase.
+class Group(str, Enum):
+    """Enum class for kinase groups."""
+    AGC      = "AGC"        # Protein Kinase A, G, and C families
+    Atypical = "Atypical"   # Atypical protein kinases
+    CAMK     = "CAMK"       # Calcium/calmodulin-dependent protein kinase family
+    CK1      = "CK1"        # Casein kinase 1 family
+    CMGC     = "CMGC"       # Cyclin-dependent kinase, Mitogen-activated protein kinase, Glycogen synthase kinase, and CDK-like kinase families
+    RGC      = "RGC"        # Receptor guanylate cyclase family
+    STE      = "STE"        # Homologs of yeast Sterile 7, Sterile 11, Sterile 20 kinases
+    TK       = "TK"         # Tyrosine kinase family
+    TKL      = "TKL"        # Tyrosine kinase-like family
+    Other    = "Other"      # Other protein kinases
 
-    Attributes
-    ----------
-    uniprotID : str
-        UniProt ID
-    hgncName : str
-        HGNC name
-    uniprotSeq : str
-        UniProt canonical sequence
-    klifsSeq : str
-        KLIFS pocket sequence
-    list_klifs_region : list[str]
-        List of start and end regions of KLIFS pocket separated by ":"; end region will be the
-            same as start region if no concatenation necessary to find a single exact match
-    list_klifs_substr_actual : list[str]
-        List of substring of KLIFS pocket that maps to the *start region* of the KLIFS pocket
-    list_klifs_substr_match : list[str]
-        List of the actual substring used to match to the KLIFS pocket for the region(s) provided;
-            will be the same as list_klifs_substr_actual if no concatenation necessary to find a single exact match
-    list_substring_idxs : list[list[int] | None]
-        List of indices in UniProt sequence where KLIFS substring match starts;
-            offset by length of preceding KLIFS region with gaps removed
 
-    """
+class Family(str, Enum):
+    """Enum class for kinase families (>=5 in KinHub)."""
+    STE20   = "STE20"
+    CAMKL   = "CAMKL"
+    CDK     = "CDK"
+    Eph     = "Eph"
+    MAPK    = "MAPK"
+    STKR    = "STKR"
+    NEK     = "NEK"
+    Src     = "Src"
+    DYRK    = "DYRK"
+    PKC     = "PKC"
+    STE11   = "STE11"
+    RSK     = "RSK"
+    MLK     = "MLK"
+    GRK     = "GRK"
+    CK1     = "CK1"
+    DMPK    = "DMPK"
+    STE7    = "STE7"
+    PIKK    = "PIKK"
+    RSKb    = "RSKb"
+    Alpha   = "Alpha"
+    Tec     = "Tec"
+    CAMK1   = "CAMK1"
+    PDGFR   = "PDGFR"
+    ULK     = "ULK"
+    DAPK    = "DAPK"
+    RAF     = "RAF"
+    RIPK    = "RIPK"
+    MLCK    = "MLCK"
+    PKA     = "PKA"
+    MAPKAPK = "MAPKAPK"
+    RGC     = "RGC"
+    CDKL    = "CDKL"
+    MAST    = "MAST"
+    TSSK    = "TSSK"
+    ABC1    = "ABC1"
+    PDHK    = "PDHK"
+    Other   = "Other"
 
-    uniprotID: str
-    hgncName: str
-    uniprotSeq: str
-    klifsSeq: str
-    list_klifs_region: list[str]
-    list_klifs_substr_actual: list[str]
-    list_klifs_substr_match: list[str]
-    list_substring_idxs: list[list[int] | None]
 
-    def remove_klifs_list_gaps(self):
-        """Remove gaps from KLIFS pocket substring list.
+UniProtAlphabet = constr(pattern="^[ACDEFGHIKLMNPQRSTVWXY]+$")
+KLIFSAlphabet   = constr(pattern="^[ACDEFGHIKLMNPQRSTVWY\-]+$")
 
-        Returns
-        -------
-        list_substring_klifs_narm = list[str]
-            List of KLIFS pocket substrings with gaps removed
 
-        """
-        from missense_kinase_toolkit.databases.klifs import remove_gaps_from_klifs
-
-        list_substring_klifs_narm = [
-            remove_gaps_from_klifs(substring_klifs)
-            for substring_klifs in self.list_klifs_substring
-        ]
-        return list_substring_klifs_narm
+class Kinase(BaseModel):
+    """Pydantic model for kinase information."""
+    hgnc_name: str
+    uniprot_id: str
+    kinase_name: str
+    manning_name: List[str]
+    xname: List[str]
+    group: List[Group]
+    family: List[Family]
+    uniprot_seq: UniProtAlphabet
+    klifs_pocket: KLIFSAlphabet
+    pfam_id: str
+    pfam_start: int
+    pfam_end: int
+    klifs_pocket_seq: str
+    klifs_pocket_start: int
+    klifs_pocket_end: int    
