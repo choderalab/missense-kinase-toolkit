@@ -249,7 +249,7 @@ def find_start_or_end_recursively(
         if idx_in == len(DICT_POCKET_KLIFS_REGIONS) - 1:
             try:
                 idx_out = int(list_idx[idx_in][0])
-            except:
+            except IndexError or TypeError:
                 idx_out = len(seq_uniprot) - 1
         try:
             idx_out = int(list_idx[idx_in + 1][0])
