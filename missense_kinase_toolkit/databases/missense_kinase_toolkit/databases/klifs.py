@@ -423,7 +423,8 @@ class KinaseInfo(KLIFS):
 
     def __init__(
         self,
-        kinase_name: str,
+        search_term: str,
+        search_field: str | None = None,
         species: str = "Human",
     ) -> None:
         """Initialize KinaseInfo Class object.
@@ -432,23 +433,30 @@ class KinaseInfo(KLIFS):
 
         Parameters
         ----------
-        kinase_name : str
-            Name of the kinase
+        search_term : str
+            Search term used to query KLIFS API
+        search_field : str | None
+            Search field (optional; default: None); 
+            only used to post-hoc annotate column with search term in case of missing data
         species : str
             Species of the kinase; default "Human" but can also be "Mouse"
 
         Attributes
         ----------
-        kinase_name : str
-            Name of the kinase searched
+        search_term : str
+            Search term used to query KLIFS API
+        search_field : str | None
+            Search field (optional; default: None); 
+            only used to post-hoc annotate column with search term in case of missing data
         species : str
             Species of the kinase
         _kinase_info : dict[str, str | int | None]
-            KLIFS API object
+            KLIFS API object for search term
 
         """
         super().__init__()
-        self.kinase_name = kinase_name
+        self.search_term = search_term
+        self.search_field = search_field
         self.species = species
         self._kinase_info = self.query_kinase_info()
 
@@ -464,7 +472,7 @@ class KinaseInfo(KLIFS):
         try:
             kinase_info = (
                 self._klifs.Information.get_kinase_ID(
-                    kinase_name=[self.kinase_name], species=self.species
+                    kinase_name=[self.search_term], species=self.species
                 )
                 .response()
                 .result[0]
@@ -476,7 +484,7 @@ class KinaseInfo(KLIFS):
             dict_kinase_info = dict(zip(list_key, list_val))
 
         except Exception as e:
-            print(f"Error in query_kinase_info for {self.kinase_name}:")
+            print(f"Error in query_kinase_info for {self.search_term} (field: {self.search_field}):")
             print(e)
             list_key = [
                 "family",
@@ -492,20 +500,25 @@ class KinaseInfo(KLIFS):
                 "uniprot",
             ]
             dict_kinase_info = dict(zip(list_key, [None] * len(list_key)))
-            dict_kinase_info["name"] = self.kinase_name
+            if self.search_field is not None:
+                dict_kinase_info[self.search_field] = self.search_term
 
         return dict_kinase_info
 
-    def get_kinase_name(self):
-        """Get name of the kinase."""
-        return self.kinase_name
+    def get_search_term(self):
+        """Get search term used for query."""
+        return self.search_term
+
+    def get_search_field(self):
+        """Get search field used for query."""
+        return self.search_field
 
     def get_species(self):
-        """Get species of the kinase."""
+        """Get species used for query."""
         return self.species
 
     def get_kinase_info(self):
-        """Get information about the kinase."""
+        """Get information about the kinase from KLIFS query."""
         return self._kinase_info
 
 
