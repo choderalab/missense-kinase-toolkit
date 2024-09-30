@@ -436,7 +436,7 @@ class KinaseInfo(KLIFS):
         search_term : str
             Search term used to query KLIFS API
         search_field : str | None
-            Search field (optional; default: None); 
+            Search field (optional; default: None);
             only used to post-hoc annotate column with search term in case of missing data
         species : str
             Species of the kinase; default "Human" but can also be "Mouse"
@@ -446,7 +446,7 @@ class KinaseInfo(KLIFS):
         search_term : str
             Search term used to query KLIFS API
         search_field : str | None
-            Search field (optional; default: None); 
+            Search field (optional; default: None);
             only used to post-hoc annotate column with search term in case of missing data
         species : str
             Species of the kinase
@@ -484,7 +484,9 @@ class KinaseInfo(KLIFS):
             dict_kinase_info = dict(zip(list_key, list_val))
 
         except Exception as e:
-            print(f"Error in query_kinase_info for {self.search_term} (field: {self.search_field}):")
+            print(
+                f"Error in query_kinase_info for {self.search_term} (field: {self.search_field}):"
+            )
             print(e)
             list_key = [
                 "family",

@@ -1,6 +1,7 @@
 from enum import Enum
-from pydantic import BaseModel, constr
+
 import pandas as pd
+from pydantic import BaseModel, constr
 
 
 class Group(str, Enum):
@@ -63,6 +64,7 @@ class Family(Enum):
 
 class KinHub(BaseModel):
     """Pydantic model for KinHub information."""
+
     kinase_name: str
     manning_name: list[str]
     xname: list[str]
@@ -72,16 +74,19 @@ class KinHub(BaseModel):
 
 class UniProt(BaseModel):
     """Pydantic model for UniProt information."""
+
     canonical_seq: constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWXY]+$")
 
 
 class KLIFS(BaseModel):
     """Pydantic model for KLIFS information."""
+
     pocket_seq: constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWY\-]+$")
 
 
 class Kinase(BaseModel):
     """Pydantic model for kinase information."""
+
     hgnc_name: str
     uniprot_id: str
     KinHub: KinHub
@@ -89,8 +94,6 @@ class Kinase(BaseModel):
     KLIFS: KLIFS | None
 
 
-def create_kinase_models_from_df(
-    df: pd.DataFrame
-) -> BaseModel:
+def create_kinase_models_from_df(df: pd.DataFrame) -> BaseModel:
     """Create Pydantic models for kinases from dataframes."""
     raise NotImplementedError("This function is not implemented yet.")
