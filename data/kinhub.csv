@@ -140,9 +140,9 @@ IRAK3,IRAK3,IRAK3,Interleukin-1 receptor-associated kinase 3,TKL,IRAK,nan,Q9Y616
 ERN1,IRE1,IRE1,Serine/threonine-protein kinase/endoribonuclease IRE1,Other,IRE,nan,O75460
 INSRR,IRR,IRR,Insulin receptor-related protein,TK,InsR,nan,P14616
 ITK,ITK,ITK,Tyrosine-protein kinase ITK/TSK,TK,Tec,nan,Q08881
-JAK1,"JAK1, JAK1_b","JAK1, Domain2_JAK1",Tyrosine-protein kinase JAK1,TK,"Jak, JakB",nan,P23458
-JAK2,"JAK2_b, JAK2","Domain2_JAK2, JAK2",Tyrosine-protein kinase JAK2,TK,"Jak, JakB",nan,O60674
-JAK3,"JAK3, JAK3_b","Domain2_JAK3, JAK3",Tyrosine-protein kinase JAK3,TK,"Jak, JakB",nan,P52333
+JAK1,"JAK1, JAK1_b","JAK1, Domain2_JAK1",Tyrosine-protein kinase JAK1,TK,"JakB, Jak",nan,P23458
+JAK2,"JAK2_b, JAK2","Domain2_JAK2, JAK2",Tyrosine-protein kinase JAK2,TK,"JakB, Jak",nan,O60674
+JAK3,"JAK3_b, JAK3","JAK3, Domain2_JAK3",Tyrosine-protein kinase JAK3,TK,"JakB, Jak",nan,P52333
 MAPK8,JNK1,JNK1,Mitogen-activated protein kinase 8,CMGC,MAPK,JNK,P45983
 MAPK9,JNK2,JNK2,Mitogen-activated protein kinase 9,CMGC,MAPK,JNK,P45984
 MAPK10,JNK3,JNK3,Mitogen-activated protein kinase 10,CMGC,MAPK,JNK,P53779
@@ -190,8 +190,8 @@ MOS,MOS,MOS,Proto-oncogene serine/threonine-protein kinase mos,Other,MOS,nan,P00
 MAP2K3,MAP2K3,MAP2K3,Dual specificity mitogen-activated protein kinase kinase 3,STE,STE7,nan,P46734
 MAP2K4,MAP2K4,MAP2K4,Dual specificity mitogen-activated protein kinase kinase 4,STE,STE7,nan,P45985
 CDC42BPB,MRCKb,MRCKb,Serine/threonine-protein kinase MRCK beta,AGC,DMPK,GEK,Q9Y5S2
-RPS6KA5,"MSK1, MSK1_b","MSK1, Domain2_MSK1",Ribosomal protein S6 kinase alpha-5,"AGC, CAMK","RSK, RSKb","MSK, MSKb",O75582
-RPS6KA4,"MSK2, MSK2_b","Domain2_MSK2, MSK2",Ribosomal protein S6 kinase alpha-4,"AGC, CAMK","RSK, RSKb","MSK, MSKb",O75676
+RPS6KA5,"MSK1_b, MSK1","Domain2_MSK1, MSK1",Ribosomal protein S6 kinase alpha-5,"CAMK, AGC","RSKb, RSK","MSK, MSKb",O75582
+RPS6KA4,"MSK2_b, MSK2","MSK2, Domain2_MSK2",Ribosomal protein S6 kinase alpha-4,"CAMK, AGC","RSKb, RSK","MSK, MSKb",O75676
 STK4,MST1,MST1,Serine/threonine-protein kinase 4,STE,STE20,MST,Q13043
 STK3,MST2,MST2,Serine/threonine-protein kinase 3,STE,STE20,MST,Q13188
 STK24,MST3,MST3,Serine/threonine-protein kinase 24,STE,STE20,YSK,Q9Y6E0
@@ -267,9 +267,9 @@ MST1R,RON,RON,Macrophage-stimulating protein receptor,TK,Met,nan,Q04912
 ROR1,ROR1,ROR1,Tyrosine-protein kinase transmembrane receptor ROR1,TK,Ror,nan,Q01973
 ROR2,ROR2,ROR2,Tyrosine-protein kinase transmembrane receptor ROR2,TK,Ror,nan,Q01974
 ROS1,ROS,ROS,Proto-oncogene tyrosine-protein kinase ROS,TK,Sev,nan,P08922
-RPS6KA2,"RSK3_b, RSK3","RSK1, Domain2_RSK1",Ribosomal protein S6 kinase alpha-2,"AGC, CAMK","RSK, RSKb","RSKp90, RSKb",Q15349
-RPS6KA3,"RSK2_b, RSK2","RSK2, Domain2_RSK2",Ribosomal protein S6 kinase alpha-3,"AGC, CAMK","RSK, RSKb","RSKp90, RSKb",P51812
-RPS6KA1,"RSK1, RSK1_b","Domain2_RSK3, RSK3",Ribosomal protein S6 kinase alpha-1,"AGC, CAMK","RSK, RSKb","RSKp90, RSKb",Q15418
+RPS6KA2,"RSK3_b, RSK3","Domain2_RSK1, RSK1",Ribosomal protein S6 kinase alpha-2,"CAMK, AGC","RSKb, RSK","RSKp90, RSKb",Q15349
+RPS6KA3,"RSK2_b, RSK2","Domain2_RSK2, RSK2",Ribosomal protein S6 kinase alpha-3,"CAMK, AGC","RSKb, RSK","RSKp90, RSKb",P51812
+RPS6KA1,"RSK1_b, RSK1","Domain2_RSK3, RSK3",Ribosomal protein S6 kinase alpha-1,"CAMK, AGC","RSKb, RSK","RSKp90, RSKb",Q15418
 RYK,RYK,RYK,Tyrosine-protein kinase RYK,TK,Ryk,nan,P34925
 PLK4,PLK4,PLK4,Serine/threonine-protein kinase PLK4,Other,PLK,nan,O00444
 MAPK11,p38b,p38b,Mitogen-activated protein kinase 11,CMGC,MAPK,p38,Q15759
@@ -304,7 +304,7 @@ NTRK3,TRKC,TRKC,NT-3 growth factor receptor,TK,Trk,nan,Q16288
 TRRAP,TRRAP,TRRAP,Transformation/transcription domain-associated protein,Atypical,PIKK,TRRAP,Q9Y4A5
 TTK,TTK,TTK,Dual specificity protein kinase TTK,Other,TTK,nan,P33981
 TXK,TXK,TXK,Tyrosine-protein kinase TXK,TK,Tec,nan,P42681
-TYK2,"TYK2, TYK2_b","TYK2, Domain2_TYK2",Non-receptor tyrosine-protein kinase TYK2,TK,"Jak, JakB",nan,P29597
+TYK2,"TYK2_b, TYK2","TYK2, Domain2_TYK2",Non-receptor tyrosine-protein kinase TYK2,TK,"JakB, Jak",nan,P29597
 TYRO3,TYRO3,TYRO3,Tyrosine-protein kinase receptor TYRO3,TK,Axl,nan,Q06418
 ULK1,ULK1,ULK1,Serine/threonine-protein kinase ULK1,Other,ULK,nan,O75385
 ULK2,ULK2,ULK2,Serine/threonine-protein kinase ULK2,Other,ULK,nan,Q8IYT8
@@ -394,7 +394,7 @@ STK17A,DRAK1,DRAK1,Serine/threonine-protein kinase 17A,CAMK,DAPK,nan,Q9UEE5
 STK17B,DRAK2,DRAK2,Serine/threonine-protein kinase 17B,CAMK,DAPK,nan,O94768
 DYRK3,DYRK3,DYRK3,Dual specificity tyrosine-phosphorylation-regulated kinase 3,CMGC,DYRK,DYRK2,O43781
 PRKD3,PKD3,PKD3,Serine/threonine-protein kinase D3,CAMK,PKD,nan,O94806
-EIF2AK4,"GCN2, GCN2_b","Domain2_GCN2, GCN2",Eukaryotic translation initiation factor 2-alpha kinase 4,"Other, STE","PEK, STE-Unique","nan, GCN2",Q9P2K8
+EIF2AK4,"GCN2_b, GCN2","Domain2_GCN2, GCN2",Eukaryotic translation initiation factor 2-alpha kinase 4,"STE, Other","PEK, STE-Unique","nan, GCN2",Q9P2K8
 STK40,SgK495,SgK495,Serine/threonine-protein kinase 40,CAMK,SgK495,nan,Q8N2I9
 STK35,CLIK1,CLIK1,Serine/threonine-protein kinase 35,Other,NKF4,nan,Q8TDR2
 TNNI3K,HH498,HH498,Serine/threonine-protein kinase TNNI3K,TKL,MLK,HH498,Q59H18
@@ -418,7 +418,7 @@ SIK2,QIK,QIK,Serine/threonine-protein kinase SIK2,CAMK,CAMKL,QIK,Q9H0K1
 MARK4,MARK4,MARK4,MAP/microtubule affinity-regulating kinase 4,CAMK,CAMKL,MARK,Q96L34
 DSTYK,SgK496,SgK496,Dual serine/threonine and tyrosine protein kinase,Other,Dusty,nan,Q6XUX3
 RPS6KC1,RSKL1,RSKL1,Ribosomal protein S6 kinase delta-1,AGC,RSKL,nan,Q96S38
-RPS6KA6,"RSK4_b, RSK4","Domain2_RSK4, RSK4",Ribosomal protein S6 kinase alpha-6,"AGC, CAMK","RSK, RSKb","RSKp90, RSKb",Q9UK32
+RPS6KA6,"RSK4_b, RSK4","RSK4, Domain2_RSK4",Ribosomal protein S6 kinase alpha-6,"CAMK, AGC","RSKb, RSK","RSKp90, RSKb",Q9UK32
 NRBP2,NRBP2,NRBP2,Nuclear receptor-binding protein 2,Other,NRBP,nan,Q9NSY0
 STKLD1,SgK071,SgK071,Protein kinase-like protein SgK071,Other,SgK071,nan,Q8NE28
 SGK2,SGK2,SGK2,Serine/threonine-protein kinase Sgk2,AGC,SGK,nan,Q9HBY8
@@ -449,7 +449,7 @@ MYO3B,MYO3B,MYO3B,Myosin-IIIb,STE,STE20,NinaC,Q8WXR4
 WNK4,Wnk4,Wnk4,Serine/threonine-protein kinase WNK4,Other,WNK,nan,Q96J92
 SBK3,SgK110,SgK110,Putative uncharacterized serine/threonine-protein kinase SgK110,Other,NKF1,nan,P0C264
 BRSK1,BRSK1,BRSK1,Serine/threonine-protein kinase BRSK1,CAMK,CAMKL,BRSK,Q8TDC3
-OBSCN,"Obscn_b, Obscn","Domain2_Obscn, Obscn",Obscurin,CAMK,Trio,nan,Q5VST9
+OBSCN,"Obscn_b, Obscn","Obscn, Domain2_Obscn",Obscurin,CAMK,Trio,nan,Q5VST9
 PSKH2,PSKH2,PSKH2,Serine/threonine-protein kinase H2,CAMK,PSK,nan,Q96QS6
 SIK1,SIK,SIK,Serine/threonine-protein kinase SIK1,CAMK,CAMKL,QIK,P57059
 KSR2,KSR2,KSR2,Kinase suppressor of Ras 2,TKL,RAF,nan,Q6VAB6
@@ -481,7 +481,7 @@ TRIB3,Trb3,Trb3,Tribbles homolog 3,CAMK,Trbl,nan,Q96RU7
 CIT,CRIK,CRIK,Citron Rho-interacting kinase,AGC,DMPK,nan,O14578
 CAMKK1,CaMKK1,CaMKK1,Calcium/calmodulin-dependent protein kinase kinase 1,Other,CAMKK,CAMKK-Meta,Q8N5S9
 LRRK1,LRRK1,LRRK1,Leucine-rich repeat serine/threonine-protein kinase 1,TKL,LRRK,nan,Q38SD2
-TEX14,"SgK424, SgK307","SgK424, SgK307",Inactive serine/threonine-protein kinase TEX14,Other,NKF5,nan,Q8IWB6
+TEX14,"SgK307, SgK424","SgK307, SgK424",Inactive serine/threonine-protein kinase TEX14,Other,NKF5,nan,Q8IWB6
 MAST4,MAST4,MAST4,Microtubule-associated serine/threonine-protein kinase 4,AGC,MAST,nan,O15021
 CAMK2D,CaMK2d,CaMK2d,Calcium/calmodulin-dependent protein kinase type II subunit delta,CAMK,CAMK2,nan,Q13557
 BMP2K,BIKE,BIKE,BMP-2-inducible protein kinase,Other,NAK,nan,Q9NSY1
