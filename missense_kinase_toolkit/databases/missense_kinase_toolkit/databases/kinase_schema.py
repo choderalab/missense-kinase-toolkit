@@ -1,7 +1,14 @@
 from enum import Enum, StrEnum
-
+from pydantic import BaseModel, constr
+import numpy as np
 import pandas as pd
 from pydantic import BaseModel, constr
+
+LIST_PFAM_KD = [
+    "Protein kinase domain",
+    "Protein tyrosine and serine/threonine kinase",
+]
+
 
 LIST_PFAM_KD = [
     "Protein kinase domain",
@@ -69,13 +76,9 @@ class Family(Enum):
     Null = None
 
 
-KinaseDomainName = StrEnum(
-    "KinaseDomainName", {"KD" + str(idx + 1): kd for idx, kd in enumerate(LIST_PFAM_KD)}
-)
-
-UniProtSeq = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWXY]+$")
-KLIFSPocket = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWY\-]+$")
-UniProtID = constr(pattern=r"^[A-Z][0-9][A-Z0-9]{3}[0-9]$")
+KinaseDomainName = StrEnum("KinaseDomainName", 
+                           {"KD" + str(idx + 1): kd \
+                            for idx, kd in enumerate(LIST_PFAM_KD)})
 
 
 class KinHub(BaseModel):
@@ -96,7 +99,6 @@ class UniProt(BaseModel):
 
 class KLIFS(BaseModel):
     """Pydantic model for KLIFS information."""
-
     gene_name: str
     name: str
     full_name: str
@@ -104,12 +106,11 @@ class KLIFS(BaseModel):
     family: Family
     iuphar: int
     kinase_id: int
-    pocket_seq: KLIFSPocket | None
+    pocket_seq: constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWY\-]+$") | None
 
 
 class Pfam(BaseModel):
     """Pydantic model for Pfam information."""
-
     domain_name: KinaseDomainName
     start: int
     end: int
@@ -122,7 +123,7 @@ class KinaseInfo(BaseModel):
     """Pydantic model for kinase information."""
 
     hgnc_name: str
-    uniprot_id: UniProtID
+    uniprot_id: constr(pattern=r"^[A-Z][0-9][A-Z0-9]{3}[0-9]$")
     KinHub: KinHub
     UniProt: UniProt
     KLIFS: KLIFS | None
@@ -131,7 +132,6 @@ class KinaseInfo(BaseModel):
 
 class CollectionKinaseInfo(BaseModel):
     """Pydantic model for kinase information."""
-
     kinase_dict: dict[str, KinaseInfo]
 
 
@@ -162,12 +162,12 @@ def concatenate_source_dataframe(
     # columns to include in the final dataframe
     if col_pfam_include is None:
         col_pfam_include = [
-            "name",
+            "name", 
             "start",
             "end",
             "protein_length",
             "pfam_accession",
-            "in_alphafold",
+            "in_alphafold"
         ]
 
     # list of Pfam domains to include
@@ -177,12 +177,13 @@ def concatenate_source_dataframe(
     # set indices to merge columns
     kinhub_df_merge = kinhub_df.set_index(col_kinhub_merge)
     uniprot_df_merge = uniprot_df.set_index(col_uniprot_merge)
-    klifs_df_merge = klifs_df.set_index(col_klifs_merge)
+    klifs_df_merge = klifs_df.set_index(col_klifs_merge)    
     pfam_df_merge = pfam_df.set_index(col_pfam_merge)
 
     # filter Pfam dataframe for KD domains and columns to include
     df_pfam_kd = pfam_df_merge.loc[
-        pfam_df_merge["name"].isin(LIST_PFAM_KD), col_pfam_include
+        pfam_df_merge["name"].isin(LIST_PFAM_KD), 
+        col_pfam_include
     ]
 
     # rename "name" column in Pfam so doesn't conflict with KLIFS name
@@ -193,12 +194,17 @@ def concatenate_source_dataframe(
 
     # concat dataframes
     df_merge = pd.concat(
-        [kinhub_df_merge, uniprot_df_merge, klifs_df_merge, df_pfam_kd],
+        [
+            kinhub_df_merge,
+            uniprot_df_merge,
+            klifs_df_merge,
+            df_pfam_kd
+        ],
         join="outer",
-        axis=1,
-    ).reset_index()
+        axis=1
+    ).reset_index()    
 
-    return df_merge
+    return df_merge    
 
 
 def is_not_valid_string(str_input: str) -> bool:
@@ -208,9 +214,12 @@ def is_not_valid_string(str_input: str) -> bool:
         return False
 
 
-def convert_to_group(str_input: str, bool_list: bool = True) -> list[Group]:
+def convert_to_group(
+    str_input: str, 
+    bool_list: bool = True
+) -> list[Group]:
     """Convert KinHub group to Group enum.
-
+    
     Parameters
     ----------
     str_input : str
@@ -231,7 +240,7 @@ def convert_to_group(str_input: str, bool_list: bool = True) -> list[Group]:
 
 def convert_str2family(str_input: str) -> Family:
     """Convert string to Family enum.
-
+    
     Parameters
     ----------
     str_input : str
@@ -256,7 +265,7 @@ def convert_to_family(
     bool_list: bool = True,
 ) -> Family:
     """Convert KinHub family to Family enum.
-
+    
     Parameters
     ----------
     str_input : str
@@ -281,18 +290,20 @@ def create_kinase_models_from_df(
     # create KinHub model
     dict_kinase_models = {}
 
-    for _, row in df.iterrows():
-        # create KinHub model
+    for _, row in df.iterrows(): 
+        # create KinHub model           
         kinhub = KinHub(
             kinase_name=row["Kinase Name"],
             manning_name=row["Manning Name"].split(", "),
             xname=row["xName"].split(", "),
             group=convert_to_group(row["Group"]),
-            family=convert_to_family(row["Family"]),
+            family=convert_to_family(row["Family"])
         )
 
         # create UniProt model
-        uniprot = UniProt(canonical_seq=row["canonical_sequence"])
+        uniprot = UniProt(
+            canonical_seq=row["canonical_sequence"]
+        )
 
         # create KLIFS model
         if is_not_valid_string(row["family"]):
@@ -310,7 +321,7 @@ def create_kinase_models_from_df(
                 family=convert_to_family(row["family"], bool_list=False),
                 iuphar=row["iuphar"],
                 kinase_id=row["kinase_ID"],
-                pocket_seq=pocket,
+                pocket_seq=pocket
             )
 
         # create Pfam model
@@ -323,7 +334,7 @@ def create_kinase_models_from_df(
                 end=row["end"],
                 protein_length=row["protein_length"],
                 pfam_accession=row["pfam_accession"],
-                in_alphafold=row["in_alphafold"],
+                in_alphafold=row["in_alphafold"]
             )
 
         # create KinaseInfo model
@@ -333,7 +344,7 @@ def create_kinase_models_from_df(
             KinHub=kinhub,
             UniProt=uniprot,
             KLIFS=klifs,
-            Pfam=pfam,
+            Pfam=pfam
         )
 
         dict_kinase_models[row["HGNC Name"]] = kinase_info
