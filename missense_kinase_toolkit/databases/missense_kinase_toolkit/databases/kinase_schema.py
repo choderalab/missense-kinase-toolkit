@@ -1,6 +1,5 @@
 from enum import Enum, StrEnum
 
-import numpy as np
 import pandas as pd
 from pydantic import BaseModel, constr
 
@@ -74,6 +73,9 @@ KinaseDomainName = StrEnum(
     "KinaseDomainName", {"KD" + str(idx + 1): kd for idx, kd in enumerate(LIST_PFAM_KD)}
 )
 
+UniProtSeq = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWXY]+$")
+KLIFSPocket = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWY\-]+$")
+UniProtID = constr(pattern=r"^[A-Z][0-9][A-Z0-9]{3}[0-9]$")
 
 class KinHub(BaseModel):
     """Pydantic model for KinHub information."""
@@ -88,7 +90,7 @@ class KinHub(BaseModel):
 class UniProt(BaseModel):
     """Pydantic model for UniProt information."""
 
-    canonical_seq: constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWXY]+$")
+    canonical_seq: UniProtSeq
 
 
 class KLIFS(BaseModel):
@@ -101,7 +103,7 @@ class KLIFS(BaseModel):
     family: Family
     iuphar: int
     kinase_id: int
-    pocket_seq: constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWY\-]+$") | None
+    pocket_seq: KLIFSPocket | None
 
 
 class Pfam(BaseModel):
@@ -119,7 +121,7 @@ class KinaseInfo(BaseModel):
     """Pydantic model for kinase information."""
 
     hgnc_name: str
-    uniprot_id: constr(pattern=r"^[A-Z][0-9][A-Z0-9]{3}[0-9]$")
+    uniprot_id: UniProtID
     KinHub: KinHub
     UniProt: UniProt
     KLIFS: KLIFS | None
