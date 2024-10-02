@@ -77,6 +77,7 @@ UniProtSeq = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWXY]+$")
 KLIFSPocket = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWY\-]+$")
 UniProtID = constr(pattern=r"^[A-Z][0-9][A-Z0-9]{3}[0-9]$")
 
+
 class KinHub(BaseModel):
     """Pydantic model for KinHub information."""
 
