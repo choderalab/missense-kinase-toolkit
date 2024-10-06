@@ -43,22 +43,22 @@ class Measurement:
 
     def __init__(self, section) -> None:
         """Initialize Measurement Class object.
-        
+
         Parameters
         ----------
 
         Attributes
         ----------
-        
+
         """
-        self.label = section.attrib['Name']
+        self.label = section.attrib["Name"]
         self.parameters = {}
         self.time_start = datetime.fromisoformat(section[0].text)
         self.time_end = datetime.fromisoformat(section[-1].text)
 
         for parameters in section.iter("Parameters"):
             for parameter in parameters:
-                self.parameters[parameter.attrib['Name']] = parameter.attrib['Value']
+                self.parameters[parameter.attrib["Name"]] = parameter.attrib["Value"]
 
     def get_duration(self):
         duration = self.time_end - self.time_start
