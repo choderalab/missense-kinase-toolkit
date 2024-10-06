@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+from datetime import datetime
 
 # i-control manual: https://bif.wisc.edu/wp-content/uploads/sites/389/2017/11/i-control_Manual.pdf
 
@@ -52,7 +53,13 @@ class Measurement:
         """
         self.label = section.attrib['Name']
         self.parameters = {}
+        self.time_start = datetime.fromisoformat(section[0].text)
+        self.time_end = datetime.fromisoformat(section[-1].text)
 
         for parameters in section.iter("Parameters"):
             for parameter in parameters:
                 self.parameters[parameter.attrib['Name']] = parameter.attrib['Value']
+
+    def get_duration(self):
+        duration = self.time_end - self.time_start
+        return duration
