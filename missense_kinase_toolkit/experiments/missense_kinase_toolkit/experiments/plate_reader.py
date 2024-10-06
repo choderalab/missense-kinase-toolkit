@@ -7,7 +7,7 @@ from datetime import datetime
 class Experiment:
     """Class to process Tecan i-control .XML output."""
 
-    def __init__(self, filepath) -> None:
+    def __init__(self, filepath: str) -> None:
         """Initialize Experiment Class object.
 
         Parameters
@@ -20,18 +20,18 @@ class Experiment:
         self.filepath = filepath
         self.measurements = []
 
-        if filepath.lower()[-4:] != ".xml":
-            raise TypeError("Filepath does not point to .xml file")
+        if filepath.lower()[-4:] != '.xml':
+            raise TypeError('Filepath does not point to .xml file')
 
         tree = ET.parse(filepath)
         root = tree.getroot()
 
         # TODO: check if i-control allows duplicate labels
 
-        for section in root.iter("Section"):
+        for section in root.iter('Section'):
             self.measurements.append(Measurement(section))
 
-    def get_measurement_by_label(self, label):
+    def get_measurement_by_label(self, label: str):
 
         for i in range(len(self.measurements)):
             if self.measurements[i].label == label:
@@ -51,15 +51,37 @@ class Measurement:
         ----------
         
         """
+        self.section = section
         self.label = section.attrib['Name']
         self.parameters = {}
         self.time_start = datetime.fromisoformat(section[0].text)
         self.time_end = datetime.fromisoformat(section[-1].text)
 
-        for parameters in section.iter("Parameters"):
+        # TODO: add units and other info. as applicable
+
+        for parameters in section.iter('Parameters'):
             for parameter in parameters:
                 self.parameters[parameter.attrib['Name']] = parameter.attrib['Value']
 
     def get_duration(self):
         duration = self.time_end - self.time_start
         return duration
+    
+    def get_data(self, cycle=1):
+        for data in self.section.iter('Data'):
+            if int(data.attrib['Cycle']) == cycle:
+                return data
+    
+class Luminescence_Scan_Data:
+    """Class to process Luminescence Scan data."""
+
+    def __init__(self, data) -> None:
+        """Initialize Luminescence_Scan_Data Class object.
+        
+        Parameters
+        ----------
+
+        Attributes
+        ----------
+        
+        """
