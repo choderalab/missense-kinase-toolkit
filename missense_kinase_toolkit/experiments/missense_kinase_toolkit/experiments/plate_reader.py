@@ -22,15 +22,15 @@ class Experiment:
 
         # try except parsing an xml file
 
-        if filepath.lower()[-4:] != '.xml':
-            raise TypeError('Filepath does not point to .xml file')
+        if filepath.lower()[-4:] != ".xml":
+            raise TypeError("Filepath does not point to .xml file")
 
         tree = ET.parse(filepath)
         root = tree.getroot()
 
         # TODO: check if i-control allows duplicate labels
 
-        for section in root.iter('Section'):
+        for section in root.iter("Section"):
             self.measurements.append(Measurement(section))
 
     def get_measurement_by_label(self, label: str):
@@ -61,7 +61,7 @@ class Measurement:
 
         # TODO: add units and other info. as applicable
 
-        for parameters in section.iter('Parameters'):
+        for parameters in section.iter("Parameters"):
             for parameter in parameters:
                 self.parameters[parameter.attrib["Name"]] = parameter.attrib["Value"]
 
