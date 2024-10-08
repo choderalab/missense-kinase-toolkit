@@ -1,12 +1,13 @@
 import logging
 import xml.etree.ElementTree as ET
-from datetime import datetime
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime
 
 # i-control manual: https://bif.wisc.edu/wp-content/uploads/sites/389/2017/11/i-control_Manual.pdf
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class Measurement(ABC):
@@ -31,12 +32,11 @@ class Measurement(ABC):
         except ET.ParseError as e:
             logging.error("Could not parse input file", exc_info=e)
 
-    def get_parameter(self, parameter):
-        ...
+    def get_parameter(self, parameter): ...
 
     @abstractmethod
-    def get_data(self) -> int:
-        ...
+    def get_data(self) -> int: ...
+
 
 @dataclass
 class Luminescence_Scan(Measurement):
@@ -47,7 +47,9 @@ class Luminescence_Scan(Measurement):
         pass
 
     def get_data(self, cycle, temperature, well, wavelength):
-        data_element = self.section_element.find(f".//Data[@Cycle='{str(cycle)}'][@Temperature='{str(temperature)}']")
+        data_element = self.section_element.find(
+            f".//Data[@Cycle='{str(cycle)}'][@Temperature='{str(temperature)}']"
+        )
         if data_element is None:
             logger.error("Data not found.")
         else:
