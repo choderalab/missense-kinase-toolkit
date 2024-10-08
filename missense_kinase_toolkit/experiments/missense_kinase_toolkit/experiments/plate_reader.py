@@ -31,7 +31,7 @@ class Measurement(ABC):
             if self.section_element is None:
                 logger.error("Label not found.")
         except ET.ParseError as e:
-            logging.error("Could not parse input file", exc_info=e)
+            logging.error(f"Could not parse input {self.filepath}", exc_info=e)
 
     def parse_for_time(self):
         self.time_start = datetime.fromisoformat(
@@ -51,6 +51,12 @@ class Measurement(ABC):
     @abstractmethod
     def get_data(self) -> int: ...
 
+    @abstractmethod
+    def plot_data(
+        self
+    ) -> Tuple[matplotlib.figure.Figure, plt.Axes] | None:
+    ...
+
 
 @dataclass
 class Luminescence_Scan(Measurement):
@@ -66,3 +72,46 @@ class Luminescence_Scan(Measurement):
             well_element = data_element.find(f".//Well[@Pos='{well}']")
             scan_element = well_element.find(f".//Scan[@WL='{str(wavelength)}']")
             return int(scan_element.text)
+
+    def plot_data(
+        cycle: int
+        temperature: int,
+        well: str,
+        header: str,
+        plot_type: str | None = None,
+    ):    
+    if plot_type is None:
+        plot_type = "scatter"
+
+    list_plot_type = ["scatter"]
+    if plot_type not in list_plot_type:
+        logging.error(f"Plot type {plot_type} not yet supported...")
+        return None
+    
+    if plot_type == "scatter":
+        lmin = int(self.get_parameter("Wavelength Start"))
+        lmax = int(self.get_parameter("Wavelength End"))
+        lstep = int(self.get_parameter("Wavelength Step Size"))
+        ll = np.arange(lmin, lmax+lstep, lstep)
+
+        fig, ax = plt.subplots()
+
+        try:
+            counter = 0
+            for l in ll:
+                ax.plot(l, self.get_data(cycle, temperature, well, l), "b.", alpha=0.5)
+                counter += 1
+            assert counter == int(self.get_parameter("Scan Number"))
+            print(f"All {counter} points accounted for")
+        except AssertionError as e:
+            logging.error(f"{counter} / {int(self.get_parameter('Scan Number'))} points accounted for...")
+            return None
+
+        ax.set_box_aspect(1)
+        ax.set_title("Water") # make this a parameter?
+        ax.set_xlabel("Wavelength (nm)")
+        ax.set_ylabel("Luminescence (RLU)")
+        ax.set_xlim([lmin, lmax])
+        ax.set_xticks(np.arange(lmin, lmax+50, 50)) # make this a parameter?
+
+        return (fig, ax)
