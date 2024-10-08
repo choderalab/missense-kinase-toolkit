@@ -20,6 +20,8 @@ class Experiment:
         self.filepath = filepath
         self.measurements = []
 
+        # try except parsing an xml file
+
         if filepath.lower()[-4:] != '.xml':
             raise TypeError('Filepath does not point to .xml file')
 
