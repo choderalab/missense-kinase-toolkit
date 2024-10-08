@@ -79,7 +79,7 @@ class Luminescence_Scan(Measurement):
         well: str,
         header: str,
         plot_type: str | None = None,
-    ):    
+    ):
     if plot_type is None:
         plot_type = "scatter"
 
@@ -87,7 +87,7 @@ class Luminescence_Scan(Measurement):
     if plot_type not in list_plot_type:
         logging.error(f"Plot type {plot_type} not yet supported...")
         return None
-    
+
     if plot_type == "scatter":
         lmin = int(self.get_parameter("Wavelength Start"))
         lmax = int(self.get_parameter("Wavelength End"))
