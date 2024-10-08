@@ -32,7 +32,10 @@ class Measurement(ABC):
         except ET.ParseError as e:
             logging.error("Could not parse input file", exc_info=e)
 
-    def get_parameter(self, parameter): ...
+    def get_parameter(self, parameter: str) -> str:
+        # TODO: Add units handling
+        parameter_attribute = self.section_element.find(f".//Parameter[@Name='{parameter}']").attrib["Value"]
+        return parameter_attribute
 
     @abstractmethod
     def get_data(self) -> int: ...
@@ -42,11 +45,7 @@ class Measurement(ABC):
 class Luminescence_Scan(Measurement):
     """Class to parse Luminescence Scan measurement."""
 
-    def get_parameter(self, parameter):
-        # TODO
-        pass
-
-    def get_data(self, cycle, temperature, well, wavelength):
+    def get_data(self, cycle: int, temperature: int, well: str, wavelength: int):
         data_element = self.section_element.find(
             f".//Data[@Cycle='{str(cycle)}'][@Temperature='{str(temperature)}']"
         )
