@@ -19,9 +19,10 @@ class Measurement(ABC):
     """str: Label parameter in i-control."""
 
     def __post_init__(self):
-        self.parse_xml()
+        self.parse_for_section()
+        self.parse_for_time()
 
-    def parse_xml(self):
+    def parse_for_section(self):
         try:
             tree = ET.parse(self.filepath)
             root = tree.getroot()
@@ -31,6 +32,10 @@ class Measurement(ABC):
                 logger.error("Label not found.")
         except ET.ParseError as e:
             logging.error("Could not parse input file", exc_info=e)
+
+    def parse_for_time(self):
+        self.time_start = datetime.fromisoformat(self.section_element.find(f".//Time_Start").text)
+        self.time_end = datetime.fromisoformat(self.section_element.find(f".//Time_End").text)
 
     def get_parameter(self, parameter: str) -> str:
         # TODO: Add units handling
