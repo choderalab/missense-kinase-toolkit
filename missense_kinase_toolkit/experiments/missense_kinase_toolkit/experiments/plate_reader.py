@@ -1,70 +1,56 @@
+import logging
 import xml.etree.ElementTree as ET
 from datetime import datetime
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 # i-control manual: https://bif.wisc.edu/wp-content/uploads/sites/389/2017/11/i-control_Manual.pdf
 
+logger = logging.getLogger(__name__)
 
-class Experiment:
-    """Class to process Tecan i-control .XML output."""
+@dataclass
+class Measurement(ABC):
+    """Abstract class for measurements."""
 
-    def __init__(self, filepath: str) -> None:
-        """Initialize Experiment Class object.
+    filepath: str
+    """str: Filepath to i-control output .XML."""
+    label: str
+    """str: Label parameter in i-control."""
 
-        Parameters
-        ----------
+    def __post_init__(self):
+        self.parse_xml()
 
-        Attributes
-        ----------
+    def parse_xml(self):
+        try:
+            tree = ET.parse(self.filepath)
+            root = tree.getroot()
+            # TODO: check that i-control does not allow duplicate labels
+            self.section_element = root.find(f".//Section[@Name='{self.label}']")
+            if self.section_element is None:
+                logger.error("Label not found.")
+        except ET.ParseError as e:
+            logging.error("Could not parse input file", exc_info=e)
 
-        """
-        self.filepath = filepath
-        self.measurements = []
+    def get_parameter(self, parameter):
+        ...
 
-        # try except parsing an xml file
+    @abstractmethod
+    def get_data(self) -> int:
+        ...
 
-        if filepath.lower()[-4:] != ".xml":
-            raise TypeError("Filepath does not point to .xml file")
+@dataclass
+class Luminescence_Scan(Measurement):
+    """Class to parse Luminescence Scan measurement."""
 
-        tree = ET.parse(filepath)
-        root = tree.getroot()
+    def get_parameter(self, parameter):
+        # TODO
+        pass
 
-        # TODO: check if i-control allows duplicate labels
-
-        for section in root.iter("Section"):
-            self.measurements.append(Measurement(section))
-
-    def get_measurement_by_label(self, label: str):
-
-        for i in range(len(self.measurements)):
-            if self.measurements[i].label == label:
-                return self.measurements[i]
-
-
-class Measurement:
-    """Class to store measurement."""
-
-    def __init__(self, section) -> None:
-        """Initialize Measurement Class object.
-
-        Parameters
-        ----------
-
-        Attributes
-        ----------
-
-        """
-        self.section = section
-        self.label = section.attrib["Name"]
-        self.parameters = {}
-        self.time_start = datetime.fromisoformat(section[0].text)
-        self.time_end = datetime.fromisoformat(section[-1].text)
-
-        # TODO: add units and other info. as applicable
-
-        for parameters in section.iter("Parameters"):
-            for parameter in parameters:
-                self.parameters[parameter.attrib["Name"]] = parameter.attrib["Value"]
-
-    def get_duration(self):
-        duration = self.time_end - self.time_start
-        return duration
+    def get_data(self, cycle, temperature, well, wavelength):
+        data_element = self.section_element.find(f".//Data[@Cycle='{str(cycle)}'][@Temperature='{str(temperature)}']")
+        if data_element is None:
+            logger.error("Data not found.")
+        else:
+            well_element = data_element.find(f".//Well[@Pos='{well}']")
+            scan_element = well_element.find(f".//Scan[@WL='{str(wavelength)}']")
+            return int(scan_element.text)
