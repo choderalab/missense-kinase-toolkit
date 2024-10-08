@@ -35,10 +35,10 @@ class Measurement(ABC):
 
     def parse_for_time(self):
         self.time_start = datetime.fromisoformat(
-            self.section_element.find(f".//Time_Start").text
+            self.section_element.find(".//Time_Start").text
         )
         self.time_end = datetime.fromisoformat(
-            self.section_element.find(f".//Time_End").text
+            self.section_element.find(".//Time_End").text
         )
 
     def get_parameter(self, parameter: str) -> str:
