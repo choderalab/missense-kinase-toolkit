@@ -34,12 +34,18 @@ class Measurement(ABC):
             logging.error("Could not parse input file", exc_info=e)
 
     def parse_for_time(self):
-        self.time_start = datetime.fromisoformat(self.section_element.find(f".//Time_Start").text)
-        self.time_end = datetime.fromisoformat(self.section_element.find(f".//Time_End").text)
+        self.time_start = datetime.fromisoformat(
+            self.section_element.find(f".//Time_Start").text
+        )
+        self.time_end = datetime.fromisoformat(
+            self.section_element.find(f".//Time_End").text
+        )
 
     def get_parameter(self, parameter: str) -> str:
         # TODO: Add units handling
-        parameter_attribute = self.section_element.find(f".//Parameter[@Name='{parameter}']").attrib["Value"]
+        parameter_attribute = self.section_element.find(
+            f".//Parameter[@Name='{parameter}']"
+        ).attrib["Value"]
         return parameter_attribute
 
     @abstractmethod
