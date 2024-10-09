@@ -1,15 +1,15 @@
 import logging
 import os
 from enum import Enum, StrEnum
+
 import pandas as pd
-from pydantic import BaseModel, constr, ValidationError, model_validator
+from pydantic import BaseModel, ValidationError, constr, model_validator
 
 from missense_kinase_toolkit.databases.kincore import (
-    extract_pk_fasta_info_as_dict,
     align_kincore2uniprot,
+    extract_pk_fasta_info_as_dict,
 )
 from missense_kinase_toolkit.databases.utils import get_repo_root
-
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +91,7 @@ KLIFSPocket = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWY\-]{85}$")
 UniProtID = constr(pattern=r"^[A-Z][0-9][A-Z0-9]{3}[0-9]$")
 """Pydantic model for UniProt ID constraints."""
 
+
 class KinHub(BaseModel):
     """Pydantic model for KinHub information."""
 
@@ -133,6 +134,7 @@ class Pfam(BaseModel):
 
 class KinCore(BaseModel):
     """Pydantic model for KinCore information."""
+
     seq: UniProtSeq
     start: int | None
     end: int | None
@@ -166,7 +168,7 @@ class KinaseInfo(BaseModel):
         return values
 
 
-#TODO: Is this necessary? Just aggregate as a list of KinaseInfo objects or dict?
+# TODO: Is this necessary? Just aggregate as a list of KinaseInfo objects or dict?
 class CollectionKinaseInfo(BaseModel):
     """Pydantic model for kinase information."""
 
@@ -175,12 +177,12 @@ class CollectionKinaseInfo(BaseModel):
 
 def check_if_file_exists_then_load_dataframe(str_file: str) -> pd.DataFrame | None:
     """Check if file exists and load dataframe.
-    
+
     Parameters
     ----------
     str_file : str
         File to check and load.
-    
+
     Returns
     -------
     pd.DataFrame | None
@@ -205,7 +207,7 @@ def concatenate_source_dataframe(
     list_domains_include: list[str] | None = None,
 ) -> pd.DataFrame:
     """Concatenate database dataframes on UniProt ID.
-    
+
     Parameters
     ----------
     kinhub_df : pd.DataFrame | None, optional
@@ -228,7 +230,7 @@ def concatenate_source_dataframe(
         Columns to include in Pfam dataframe, by default None.
     list_domains_include : list[str] | None, optional
         List of Pfam domains to include, by default None.
-    
+
     Returns
     -------
     pd.DataFrame
@@ -254,7 +256,7 @@ def concatenate_source_dataframe(
             os.path.join(path_data, "kinhub_pfam.csv")
         )
     list_df = [kinhub_df, uniprot_df, klifs_df, pfam_df]
-    if any([True if i is None else False  for i in list_df]):
+    if any([True if i is None else False for i in list_df]):
         list_df_shape = [i.shape if i is not None else None for i in list_df]
         logger.error(f"One or more dataframes are None\n{list_df_shape}")
         return None
@@ -292,8 +294,7 @@ def concatenate_source_dataframe(
 
     # filter Pfam dataframe for KD domains and columns to include
     df_pfam_kd = pfam_df_merge.loc[
-        pfam_df_merge["name"].isin(LIST_PFAM_KD), 
-        col_pfam_include
+        pfam_df_merge["name"].isin(LIST_PFAM_KD), col_pfam_include
     ]
 
     # rename "name" column in Pfam so doesn't conflict with KLIFS name
@@ -304,12 +305,7 @@ def concatenate_source_dataframe(
 
     # concat dataframes
     df_merge = pd.concat(
-        [
-            kinhub_df_merge, 
-            uniprot_df_merge, 
-            klifs_df_merge, 
-            df_pfam_kd
-        ],
+        [kinhub_df_merge, uniprot_df_merge, klifs_df_merge, df_pfam_kd],
         join="outer",
         axis=1,
     ).reset_index()
@@ -393,7 +389,7 @@ def create_kinase_models_from_df(
     df: pd.DataFrame | None = None,
 ) -> dict[str, BaseModel]:
     """Create Pydantic models for kinases from dataframes.
-    
+
     Parameters
     ----------
     df : pd.DataFrame | None, optional
@@ -419,7 +415,7 @@ def create_kinase_models_from_df(
     DICT_KINCORE = extract_pk_fasta_info_as_dict()
 
     for _, row in df.iterrows():
-    
+
         id_uniprot = row["index"]
         name_hgnc = row["HGNC Name"]
 
@@ -490,7 +486,7 @@ def create_kinase_models_from_df(
 
         dict_kinase_models[name_hgnc] = kinase_info
 
-    #TODO: For entries in DICT_KINCORE that are not in df, add to dict_kinase_models
+    # TODO: For entries in DICT_KINCORE that are not in df, add to dict_kinase_models
 
     return dict_kinase_models
 
