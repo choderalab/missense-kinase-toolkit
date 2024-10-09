@@ -1,6 +1,6 @@
 from typing import Any
-
 import numpy as np
+import git
 
 
 def try_except_split_concat_str(
@@ -174,3 +174,11 @@ def try_except_convert_str2int(str_in: str):
         return int(str_in)
     except ValueError:
         return str_in
+
+
+def get_repo_root():
+    try:
+        repo = git.Repo('.', search_parent_directories=True)
+        return repo.working_tree_dir
+    except git.InvalidGitRepositoryError:
+        return None
