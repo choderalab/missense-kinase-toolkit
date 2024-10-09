@@ -313,7 +313,7 @@ def iterate_klifs_alignment(
         )
         list_klifs_substr_actual.append(str_klifs)
 
-        # if None KLIFS all "-"; if multiple KLIFS regions,
+        # if None KLIFS all "-" so disregard; if multiple KLIFS regions,
         # concatenate with contiguous regions to identify single match
         if list_substring_idx is not None and len(list_substring_idx) > 1:
             bool_cont = dict_klifs[klifs_region_start]["contiguous"]
@@ -343,6 +343,8 @@ def iterate_klifs_alignment(
             ):
                 len_offset = len(remove_gaps_from_klifs(str_klifs)) - len_klifs
                 list_substring_idx = [i + len_offset for i in list_substring_idx]
+
+        # b.l region alignment
 
         list_klifs_region.append(klifs_region_start + ":" + klifs_region_end)
         list_klifs_substr_match.append(str_klifs)
