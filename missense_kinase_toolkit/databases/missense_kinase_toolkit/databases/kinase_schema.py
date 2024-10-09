@@ -152,6 +152,13 @@ class KinaseInfo(BaseModel):
     Pfam: Pfam | None
     KinCore: KinCore | None
 
+    @model_validator(mode="after")
+    def change_wrong_klifs_pocket_seq(self) -> Self:
+        """ADCK3 KLIFS pocket has an error compared to UniProt sequence - fix this via validation."""
+        if self.hgnc_name == "ADCK3":
+            self.KLIFS.pocket_seq = "RPFAAASIGQVHLVAMKIQDYQREAACARKFRFYVPEIVDEVLTTELVSGFPLDQAEGLELFEFHFMQTDPNWSNFFYLLDFGAT"
+        return self
+
     # https://stackoverflow.com/questions/68082983/validating-a-nested-model-in-pydantic
     # skip if other validation errors occur in nested models first
     @model_validator(mode="after")
