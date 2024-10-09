@@ -491,7 +491,7 @@ def create_kinase_models_from_df(
     return dict_kinase_models
 
 
-### NOT IN USE - USE TO GENERATE ABOVE ###
+# # NOT IN USE - USE TO GENERATE ABOVE
 
 # import numpy as np
 # import pandas as pd

@@ -109,7 +109,7 @@ def align_kincore2uniprot(
     return dict_out
 
 
-### NOT IN USE - USED TO GENERATE ABOVE ###
+# # NOT IN USE - USED TO GENERATE ABOVE
 
 # import pandas as pd
 
