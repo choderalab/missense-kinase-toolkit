@@ -152,6 +152,7 @@ class KinaseInfo(BaseModel):
     Pfam: Pfam | None
     KinCore: KinCore | None
 
+    # https://docs.pydantic.dev/latest/examples/custom_validators/#validating-nested-model-fields
     @model_validator(mode="after")
     def change_wrong_klifs_pocket_seq(self) -> Self:
         """ADCK3 KLIFS pocket has an error compared to UniProt sequence - fix this via validation."""
