@@ -5,6 +5,11 @@ description = "Tools to facilitate experimental analyses for missense_kinase_too
 authors = ["Jess White <jess.white@choderalab.org>"]
 license = "MIT"
 readme = "README.md"
+#https://safjan.com/the-importance-of-adding-py-typed-file-to-your-typed-package/
+packages = [
+    {include = "missense_kinase_toolkit"},
+    {include = "missense_kinase_toolkit/py.typed"}
+]
 
 [tool.poetry.dependencies]
 python = "^3.9"
