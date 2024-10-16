@@ -6,12 +6,12 @@ import pandas as pd
 from pydantic import BaseModel, ValidationError, constr, model_validator
 from typing_extensions import Self
 
+from missense_kinase_toolkit.databases import klifs
 from missense_kinase_toolkit.databases.kincore import (
     align_kincore2uniprot,
     extract_pk_fasta_info_as_dict,
 )
 from missense_kinase_toolkit.databases.utils import get_repo_root
-from missense_kinase_toolkit.databases import klifs
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +154,7 @@ class KinaseInfo(BaseModel):
     Pfam: Pfam | None
     KinCore: KinCore | None
     bool_offset: bool = True
-    KLIFS2UniProt: dict[str, int] | None  = None
+    KLIFS2UniProt: dict[str, int] | None = None
 
     # https://docs.pydantic.dev/latest/examples/custom_validators/#validating-nested-model-fields
     @model_validator(mode="after")
@@ -185,30 +185,27 @@ class KinaseInfo(BaseModel):
                     "UniProt sequence length does not match Pfam protein length."
                 )
         return values
-    
+
     @model_validator(mode="after")
     def generate_klifs2uniprot_dict(self) -> Self:
         """Generate dictionary mapping KLIFS to UniProt indices."""
 
         if self.KinCore is not None:
-            kd_idx = (self.KinCore.start-1, self.KinCore.end-1)
+            kd_idx = (self.KinCore.start - 1, self.KinCore.end - 1)
         else:
             kd_idx = (None, None)
 
         if self.KLIFS is not None and self.KLIFS.pocket_seq is not None:
             temp_obj = klifs.KLIFSPocket(
-                uniprotSeq = self.UniProt.canonical_seq,
-                klifsSeq = self.KLIFS.pocket_seq,
-                idx_kd = kd_idx,
-                offset_bool = self.bool_offset
+                uniprotSeq=self.UniProt.canonical_seq,
+                klifsSeq=self.KLIFS.pocket_seq,
+                idx_kd=kd_idx,
+                offset_bool=self.bool_offset,
             )
 
             if temp_obj.list_align is not None:
                 self.KLIFS2UniProt = dict(
-                    zip(
-                        klifs.LIST_KLIFS_REGION,
-                        temp_obj.list_align
-                    )
+                    zip(klifs.LIST_KLIFS_REGION, temp_obj.list_align)
                 )
 
         return self

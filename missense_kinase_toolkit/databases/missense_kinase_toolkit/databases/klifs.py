@@ -1,7 +1,7 @@
 import logging
 import re
-from itertools import chain
 from dataclasses import dataclass, field
+from itertools import chain
 
 import numpy as np
 from Bio import Align
@@ -139,11 +139,14 @@ DICT_POCKET_KLIFS_REGIONS = {
 
 LIST_KLIFS_REGION = list(
     chain(
-        *[[f"{key}:{i}" for i in range(val["start"], val["end"] + 1)] \
-          for key, val in DICT_POCKET_KLIFS_REGIONS.items()]
+        *[
+            [f"{key}:{i}" for i in range(val["start"], val["end"] + 1)]
+            for key, val in DICT_POCKET_KLIFS_REGIONS.items()
+        ]
     )
 )
 """list[str]: List of string of all KLIFS pocket regions in format region:idx."""
+
 
 class KLIFS(SwaggerAPIClient):
     """Class to interact with the KLIFS API."""
@@ -327,6 +330,7 @@ class KLIFSPocket:
         List of final alignments to UniProt sequence
 
     """
+
     uniprotSeq: str
     klifsSeq: str
     idx_kd: tuple[int | None, int | None]
@@ -474,7 +478,6 @@ class KLIFSPocket:
                 return None
         else:
             alignment = alignments[list_idx[0]]
-
 
         return self.return_idx_of_alignment_match(alignment)
 
@@ -713,12 +716,9 @@ class KLIFSPocket:
                             i + start_global for i in list_global
                         ]
 
-    def generate_alignment_list(
-        self,
-        bool_offset: bool
-    ) -> list[str | None]:
+    def generate_alignment_list(self, bool_offset: bool) -> list[str | None]:
         """Generate and validate alignment list.
-        
+
         Parameters
         ----------
         bool_offset : bool
@@ -731,8 +731,7 @@ class KLIFSPocket:
         """
         list_align = []
         for list_idx, list_seq in zip(
-            self.list_substring_idxs,
-            self.list_klifs_substr_actual
+            self.list_substring_idxs, self.list_klifs_substr_actual
         ):
             if list_idx is not None and len(list_idx) == 1:
                 if bool_offset:
@@ -744,7 +743,7 @@ class KLIFSPocket:
                         list_align.append(None)
                     else:
                         list_align.append(temp_idx)
-                        temp_idx+=1
+                        temp_idx += 1
             elif list_idx is None:
                 list_align.extend([None] * len(list_seq))
             else:
@@ -757,7 +756,7 @@ class KLIFSPocket:
                             list_align.append(list_idx[idx] + 1)
                         else:
                             list_align.append(list_idx[idx])
-                        idx+=1
+                        idx += 1
 
         for idx, i in enumerate(list_align):
             if i is not None:
@@ -778,5 +777,5 @@ class KLIFSPocket:
                         f"KLIFS: {self.klifsSeq[idx]}\n"
                     )
                     return None
-        
+
         self.list_align = list_align
