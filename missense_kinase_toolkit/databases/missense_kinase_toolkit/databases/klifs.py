@@ -564,7 +564,6 @@ class KLIFSPocket:
 
         return idx_out
 
-
     def return_partial_alignments(
         self,
         idx: int,
