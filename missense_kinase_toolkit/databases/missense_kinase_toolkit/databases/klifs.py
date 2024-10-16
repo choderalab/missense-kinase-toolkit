@@ -1,372 +1,151 @@
 import logging
+import re
+from dataclasses import dataclass, field
+from itertools import chain
 
 import numpy as np
+from Bio import Align
 from bravado.client import SwaggerClient
 
+from missense_kinase_toolkit.databases.aligners import (
+    BL2UniProtAligner,
+    Kincore2UniProtAligner,
+)
 from missense_kinase_toolkit.databases.api_schema import SwaggerAPIClient
 
 logger = logging.getLogger(__name__)
 
 
-# courtesy of OpenCADD
-LIST_POCKET_KLIFS_REGIONS = [
-    (1, "I"),
-    (2, "I"),
-    (3, "I"),
-    (4, "g.l"),
-    (5, "g.l"),
-    (6, "g.l"),
-    (7, "g.l"),
-    (8, "g.l"),
-    (9, "g.l"),
-    (10, "II"),
-    (11, "II"),
-    (12, "II"),
-    (13, "II"),
-    (14, "III"),
-    (15, "III"),
-    (16, "III"),
-    (17, "III"),
-    (18, "III"),
-    (19, "III"),
-    (20, "αC"),
-    (21, "αC"),
-    (22, "αC"),
-    (23, "αC"),
-    (24, "αC"),
-    (25, "αC"),
-    (26, "αC"),
-    (27, "αC"),
-    (28, "αC"),
-    (29, "αC"),
-    (30, "αC"),
-    (31, "b.l"),
-    (32, "b.l"),
-    (33, "b.l"),
-    (34, "b.l"),
-    (35, "b.l"),
-    (36, "b.l"),
-    (37, "b.l"),
-    (38, "IV"),
-    (39, "IV"),
-    (40, "IV"),
-    (41, "IV"),
-    (42, "V"),
-    (43, "V"),
-    (44, "V"),
-    (45, "GK"),
-    (46, "hinge"),
-    (47, "hinge"),
-    (48, "hinge"),
-    (49, "linker"),
-    (50, "linker"),
-    (51, "linker"),
-    (52, "linker"),
-    (53, "αD"),
-    (54, "αD"),
-    (55, "αD"),
-    (56, "αD"),
-    (57, "αD"),
-    (58, "αD"),
-    (59, "αD"),
-    (60, "αE"),
-    (61, "αE"),
-    (62, "αE"),
-    (63, "αE"),
-    (64, "αE"),
-    (65, "VI"),
-    (66, "VI"),
-    (67, "VI"),
-    (68, "c.l"),
-    (69, "c.l"),
-    (70, "c.l"),
-    (71, "c.l"),
-    (72, "c.l"),
-    (73, "c.l"),
-    (74, "c.l"),
-    (75, "c.l"),
-    (76, "VII"),
-    (77, "VII"),
-    (78, "VII"),
-    (79, "VIII"),
-    (80, "xDFG"),
-    (81, "xDFG"),
-    (82, "xDFG"),
-    (83, "xDFG"),
-    (84, "a.l"),
-    (85, "a.l"),
-]
-"""list[tuple[int, str]]: Mapping KLIFS pocket ID to region"""
-
-
-def convert_pocket_region_list_to_dict() -> dict[str, dict[str, int]]:
-    """Convert list of pocket regions to dictionary.
-
-    Returns
-    -------
-    dict[str, dict[str, int]]
-        Dictionary with pocket regions as keys and start and end indices as values
-
-    """
-    list_klifs_region = list({i[1] for i in LIST_POCKET_KLIFS_REGIONS})
-
-    list_klifs_start = []
-    list_klifs_end = []
-    for region in list_klifs_region:
-        list_region = [i[0] for i in LIST_POCKET_KLIFS_REGIONS if i[1] == region]
-        start, end = min(list_region), max(list_region)
-        list_klifs_start.append(start), list_klifs_end.append(end)
-
-    idx_sort = np.argsort(np.array(list_klifs_start))
-    list_klifs_region = list(np.array(list_klifs_region)[idx_sort])
-    list_klifs_start = list(np.array(list_klifs_start)[idx_sort])
-    list_klifs_end = list(np.array(list_klifs_end)[idx_sort])
-
-    dict_klifs_regions = {
-        region: {"start": list_klifs_start[idx], "end": list_klifs_end[idx]}
-        for idx, region in enumerate(list_klifs_region)
-    }
-
-    return dict_klifs_regions
-
-
+# start/end and colors courtesy of OpenCADD
 DICT_POCKET_KLIFS_REGIONS = {
-    "I": {"start": 1, "end": 3},
-    "g.l": {"start": 4, "end": 9},
-    "II": {"start": 10, "end": 13},
-    "III": {"start": 14, "end": 19},
-    "αC": {"start": 20, "end": 30},
-    "b.l": {"start": 31, "end": 37},
-    "IV": {"start": 38, "end": 41},
-    "V": {"start": 42, "end": 44},
-    "GK": {"start": 45, "end": 45},
-    "hinge": {"start": 46, "end": 48},
-    "linker": {"start": 49, "end": 52},
-    "αD": {"start": 53, "end": 59},
-    "αE": {"start": 60, "end": 64},
-    "VI": {"start": 65, "end": 67},
-    "c.l": {"start": 68, "end": 75},
-    "VII": {"start": 76, "end": 78},
-    "VIII": {"start": 79, "end": 79},
-    "xDFG": {"start": 80, "end": 83},
-    "a.l": {"start": 84, "end": 85},
+    "I": {
+        "start": 1,
+        "end": 3,
+        "contiguous": True,
+        "color": "khaki",
+    },
+    "g.l": {
+        "start": 4,
+        "end": 9,
+        "contiguous": True,
+        "color": "green",
+    },
+    "II": {
+        "start": 10,
+        "end": 13,
+        "contiguous": True,
+        "color": "khaki",
+    },
+    "III": {
+        "start": 14,
+        "end": 19,
+        "contiguous": False,
+        "color": "khaki",
+    },
+    "αC": {
+        "start": 20,
+        "end": 30,
+        "contiguous": True,
+        "color": "red",
+    },
+    "b.l": {
+        "start": 31,
+        "end": 37,
+        "contiguous": True,
+        "color": "green",
+    },
+    "IV": {
+        "start": 38,
+        "end": 41,
+        "contiguous": False,
+        "color": "khaki",
+    },
+    "V": {
+        "start": 42,
+        "end": 44,
+        "contiguous": True,
+        "color": "khaki",
+    },
+    "GK": {
+        "start": 45,
+        "end": 45,
+        "contiguous": True,
+        "color": "orange",
+    },
+    "hinge": {
+        "start": 46,
+        "end": 48,
+        "contiguous": True,
+        "color": "magenta",
+    },
+    "linker": {
+        "start": 49,
+        "end": 52,
+        "contiguous": True,
+        "color": "cyan",
+    },
+    "αD": {
+        "start": 53,
+        "end": 59,
+        "contiguous": False,
+        "color": "red",
+    },
+    "αE": {
+        "start": 60,
+        "end": 64,
+        "contiguous": True,
+        "color": "red",
+    },
+    "VI": {
+        "start": 65,
+        "end": 67,
+        "contiguous": True,
+        "color": "khaki",
+    },
+    "c.l": {
+        "start": 68,
+        "end": 75,
+        "contiguous": True,
+        "color": "darkorange",
+    },
+    "VII": {
+        "start": 76,
+        "end": 78,
+        "contiguous": False,
+        "color": "khaki",
+    },
+    "VIII": {
+        "start": 79,
+        "end": 79,
+        "contiguous": True,
+        "color": "khaki",
+    },
+    "xDFG": {
+        "start": 80,
+        "end": 83,
+        "contiguous": True,
+        "color": "cornflowerblue",
+    },
+    "a.l": {
+        "start": 84,
+        "end": 85,
+        "contiguous": False,
+        "color": "cornflowerblue",
+    },
 }
-"""dict[str, dict[str, int]]: Mapping KLIFS pocket region to start and end indices"""
+"""dict[str, dict[str, int | bool | str]]: Mapping KLIFS pocket region to start and end indices, \
+    boolean denoting if subsequent regions are contiguous, and colors."""
 
 
-# courtesy of OpenCADD
-POCKET_KLIFS_REGION_COLORS = {
-    "I": "khaki",
-    "g.l": "green",
-    "II": "khaki",
-    "III": "khaki",
-    "αC": "red",
-    "b.l": "green",
-    "IV": "khaki",
-    "V": "khaki",
-    "GK": "orange",
-    "hinge": "magenta",
-    "linker": "cyan",
-    "αD": "red",
-    "αE": "red",
-    "VI": "khaki",
-    "c.l": "darkorange",
-    "VII": "khaki",
-    "VIII": "khaki",
-    "xDFG": "cornflowerblue",
-    "a.l": "cornflowerblue",
-}
-"""dict[str, str]: Mapping KLIFS pocket region to color"""
-
-
-def remove_gaps_from_klifs(klifs_string: str) -> str:
-    """Remove gaps from KLIFS pocket sequence.
-
-    Parameters
-    ----------
-    klifs_pocket : str
-        KLIFS pocket sequence; can be entire sequence or substring
-
-    Returns
-    -------
-    klifs_pocket_narm : str
-        KLIFS pocket sequence without gaps (i.e., "-" removed)
-
-    """
-    klifs_pocket_narm = "".join([i for i in klifs_string if i != "-"])
-    return klifs_pocket_narm
-
-
-def return_idx_of_substring_in_superstring(
-    superstring: str, substring: str
-) -> list[int] | None:
-    """
-
-    Parameters
-    ----------
-    superstring : str
-        String in which to find substring index
-    substring : str
-        String in which to find superstring index
-
-    Returns
-    -------
-    list_out : list[int] | None
-        Index where substring begins in superstring; None if substring not in superstring
-
-    """
-    list_out = [
-        i for i in range(len(superstring)) if superstring.startswith(substring, i)
-    ]
-    return list_out
-
-
-def align_klifs_pocket_to_uniprot_seq(
-    idx_start: int,
-    idx_end: int,
-    str_uniprot: str,
-    str_klifs: str,
-) -> list[int] | None:
-    """Align KLIFS region to UniProt canonical Uniprot sequence.
-
-    Parameters
-    ----------
-    idx_start : int
-        Start index of KLIFS region
-    idx_end : int
-        End index of KLIFS region
-    str_uniprot : str
-        UniProt canonical sequence
-    str_klifs : str
-        KLIFS pocket sequence
-
-    Returns
-    -------
-    substring_klifs : str
-        Substring of KLIFS pocket that maps to indices for the region(s) provided
-    list_substring_idx : list[int] | None
-        List of indices in UniProt sequence where KLIFS region starts
-
-    """
-    substring_klifs = str_klifs[idx_start:idx_end]
-    substring_klifs_narm = remove_gaps_from_klifs(substring_klifs)
-    if len(substring_klifs_narm) == 0:
-        list_idx = None
-    else:
-        list_idx = return_idx_of_substring_in_superstring(
-            str_uniprot, substring_klifs_narm
-        )
-    return substring_klifs, list_idx
-
-
-# TODO "b.l" algorithm since non-contiguous region
-# TODO keep match string separate from KLIFS substring at start region
-def iterate_klifs_alignment(
-    string_uniprot: str,
-    string_klifs: str,
-) -> dict[str, list[str | list[int] | None]]:
-    """Align KLIFS region to UniProt canonical Uniprot sequence.
-
-    Parameters
-    ----------
-    string_uniprot : str
-        UniProt canonical sequence
-    string_klifs : str
-        KLIFS pocket sequence
-
-    Returns
-    -------
-    dict_out : dict[str, list[str | list[int] | None]]
-        Dictionary with keys (match part of KLIFSPocket object):
-            list_klifs_region : list[str]
-                List of start and end regions of KLIFS pocket separated by ":"; end region will be the
-                    same as start region if no concatenation necessary to find a single exact match
-            list_klifs_substr_actual : list[str]
-                List of substring of KLIFS pocket that maps to the *start region* of the KLIFS pocket
-            list_klifs_substr_match : list[str]
-                List of the actual substring used to match to the KLIFS pocket for the region(s) provided;
-                    same as list_klifs_substr_actual if no concatenation necessary to find a single exact match
-            list_substring_idxs : list[list[int | None]]
-                List of indices in UniProt sequence where KLIFS region starts
-
-    """
-    list_klifs_region = []
-    list_klifs_substr_actual = []
-    list_klifs_substr_match = []
-    list_substring_idxs = []
-
-    dict_klifs = DICT_POCKET_KLIFS_REGIONS
-    list_klifs = list(dict_klifs.keys())
-
-    for klifs_index, klifs_region in enumerate(list_klifs):
-        klifs_region_start, klifs_region_end = klifs_region, klifs_region
-        klifs_idx_start, klifs_idx_end = (
-            dict_klifs[klifs_region_start]["start"] - 1,
-            dict_klifs[klifs_region_end]["end"],
-        )
-
-        str_klifs, list_substring_idx = align_klifs_pocket_to_uniprot_seq(
-            idx_start=klifs_idx_start,
-            idx_end=klifs_idx_end,
-            str_uniprot=string_uniprot,
-            str_klifs=string_klifs,
-        )
-        list_klifs_substr_actual.append(str_klifs)
-
-        # will no longer extract a single index here so can process elsewhere
-        # if list_substring_idx is None:
-        #     substring_idx = None
-
-        if list_substring_idx is not None:
-            # TODO: analyze KLIFS PDB structures to determine contiguous regions
-            if len(list_substring_idx) > 1:
-                # if not last KLIFs region concatenate with susbequent regions
-                if klifs_index + 1 < len(list_klifs):
-                    klifs_region_end = list_klifs[klifs_index + 1]
-                    klifs_idx_end = dict_klifs[klifs_region_end]["end"]
-                # if last KLIFs region concatenate with previous region
-                else:
-                    len_klifs = len(remove_gaps_from_klifs(str_klifs))
-                    klifs_region_start = list_klifs[klifs_index - 1]
-                    klifs_idx_start = dict_klifs[klifs_region_start]["start"]
-                klifs_idx_start, klifs_idx_end = (
-                    dict_klifs[klifs_region_start]["start"] - 1,
-                    dict_klifs[klifs_region_end]["end"],
-                )
-                str_klifs, list_substring_idx = align_klifs_pocket_to_uniprot_seq(
-                    idx_start=klifs_idx_start,
-                    idx_end=klifs_idx_end,
-                    str_uniprot=string_uniprot,
-                    str_klifs=string_klifs,
-                )
-                # if last KLIFS region offset by length of preceding KLIFS region with gaps removed
-                if klifs_index + 1 == len(list_klifs) and len(list_substring_idx) != 0:
-                    len_offset = len(remove_gaps_from_klifs(str_klifs)) - len_klifs
-                    list_substring_idx = [i + len_offset for i in list_substring_idx]
-
-        list_klifs_region.append(klifs_region_start + ":" + klifs_region_end)
-        list_klifs_substr_match.append(str_klifs)
-        list_substring_idxs.append(list_substring_idx)
-
-        # will no longer extract a single index here so can process multiple ways elsewhere
-        #     if len(list_substring_idx) != 1:
-        #         substring_idx = np.nan
-        #     else:
-        #         substring_idx = list_substring_idx[0]
-        # else:
-        #     try:
-        #         substring_idx = list_substring_idx[0]
-        #     except:
-        #         substring_idx = np.nan
-
-    dict_out = {
-        "list_klifs_region": list_klifs_region,
-        "list_klifs_substr_actual": list_klifs_substr_actual,
-        "list_klifs_substr_match": list_klifs_substr_match,
-        "list_substring_idxs": list_substring_idxs,
-    }
-
-    return dict_out
+LIST_KLIFS_REGION = list(
+    chain(
+        *[
+            [f"{key}:{i}" for i in range(val["start"], val["end"] + 1)]
+            for key, val in DICT_POCKET_KLIFS_REGIONS.items()
+        ]
+    )
+)
+"""list[str]: List of string of all KLIFS pocket regions in format region:idx."""
 
 
 class KLIFS(SwaggerAPIClient):
@@ -421,7 +200,8 @@ class KinaseInfo(KLIFS):
 
     def __init__(
         self,
-        kinase_name: str,
+        search_term: str,
+        search_field: str | None = None,
         species: str = "Human",
     ) -> None:
         """Initialize KinaseInfo Class object.
@@ -430,23 +210,30 @@ class KinaseInfo(KLIFS):
 
         Parameters
         ----------
-        kinase_name : str
-            Name of the kinase
+        search_term : str
+            Search term used to query KLIFS API
+        search_field : str | None
+            Search field (optional; default: None);
+            only used to post-hoc annotate column with search term in case of missing data
         species : str
             Species of the kinase; default "Human" but can also be "Mouse"
 
         Attributes
         ----------
-        kinase_name : str
-            Name of the kinase searched
+        search_term : str
+            Search term used to query KLIFS API
+        search_field : str | None
+            Search field (optional; default: None);
+            only used to post-hoc annotate column with search term in case of missing data
         species : str
             Species of the kinase
         _kinase_info : dict[str, str | int | None]
-            KLIFS API object
+            KLIFS API object for search term
 
         """
         super().__init__()
-        self.kinase_name = kinase_name
+        self.search_term = search_term
+        self.search_field = search_field
         self.species = species
         self._kinase_info = self.query_kinase_info()
 
@@ -462,7 +249,7 @@ class KinaseInfo(KLIFS):
         try:
             kinase_info = (
                 self._klifs.Information.get_kinase_ID(
-                    kinase_name=[self.kinase_name], species=self.species
+                    kinase_name=[self.search_term], species=self.species
                 )
                 .response()
                 .result[0]
@@ -474,7 +261,9 @@ class KinaseInfo(KLIFS):
             dict_kinase_info = dict(zip(list_key, list_val))
 
         except Exception as e:
-            print(f"Error in query_kinase_info for {self.kinase_name}:")
+            print(
+                f"Error in query_kinase_info for {self.search_term} (field: {self.search_field}):"
+            )
             print(e)
             list_key = [
                 "family",
@@ -490,18 +279,503 @@ class KinaseInfo(KLIFS):
                 "uniprot",
             ]
             dict_kinase_info = dict(zip(list_key, [None] * len(list_key)))
-            dict_kinase_info["name"] = self.kinase_name
+            if self.search_field is not None:
+                dict_kinase_info[self.search_field] = self.search_term
 
         return dict_kinase_info
 
-    def get_kinase_name(self):
-        """Get name of the kinase."""
-        return self.kinase_name
+    def get_search_term(self):
+        """Get search term used for query."""
+        return self.search_term
+
+    def get_search_field(self):
+        """Get search field used for query."""
+        return self.search_field
 
     def get_species(self):
-        """Get species of the kinase."""
+        """Get species used for query."""
         return self.species
 
     def get_kinase_info(self):
-        """Get information about the kinase."""
+        """Get information about the kinase from KLIFS query."""
         return self._kinase_info
+
+
+@dataclass
+class KLIFSPocket:
+    """Dataclass to hold KLIFS pocket alignment information per kinase.
+
+    Attributes
+    ----------
+    uniprotSeq : str
+        UniProt canonical sequence
+    klifsSeq : str
+        KLIFS pocket sequence
+    idx_kd : tuple[int | None, int | None]
+        Index of kinase domain in UniProt sequence (start, end)
+    offset_bool : bool
+        If True, offset indices by 1 to match 1-based indexing; default True
+    list_klifs_region : list[str]
+        List of start and end regions of KLIFS pocket separated by ":"; end region will be the
+            same as start region if no concatenation necessary to find a single exact match
+    list_klifs_substr_actual : list[str | None]
+        List of substring of KLIFS pocket that maps to the *start region* of the KLIFS pocket
+    list_klifs_substr_match : list[str | None]
+        List of the actual substring used to match to the KLIFS pocket for the region(s) provided;
+            will be the same as list_klifs_substr_actual if no concatenation necessary to find a single exact match
+    list_substring_idxs : list[list[int] | None]
+        List of indices in UniProt sequence where KLIFS substring match starts;
+            offset by length of preceding KLIFS region with gaps removed
+    list_align : list[str | None] | None
+        List of final alignments to UniProt sequence
+
+    """
+
+    uniprotSeq: str
+    klifsSeq: str
+    idx_kd: tuple[int | None, int | None]
+    offset_bool: bool = True
+    list_klifs_region: list[str | None] = field(default_factory=list)
+    list_klifs_substr_actual: list[str | None] = field(default_factory=list)
+    list_klifs_substr_match: list[str | None] = field(default_factory=list)
+    list_substring_idxs: list[list[int | None] | None] = field(default_factory=list)
+    list_align: list[str | None] | None = None
+
+    def __post_init__(self):
+        self.iterate_klifs_alignment()
+        self.generate_alignment_list(bool_offset=self.offset_bool)
+
+    @staticmethod
+    def remove_gaps_from_klifs(klifs_string: str) -> str:
+        """Remove gaps from KLIFS pocket sequence.
+
+        Parameters
+        ----------
+        klifs_pocket : str
+            KLIFS pocket sequence; can be entire sequence or substring
+
+        Returns
+        -------
+        klifs_pocket_narm : str
+            KLIFS pocket sequence without gaps (i.e., "-" removed)
+
+        """
+        klifs_pocket_narm = "".join([i for i in klifs_string if i != "-"])
+        return klifs_pocket_narm
+
+    @staticmethod
+    def return_idx_of_substring_in_superstring(
+        superstring: str,
+        substring: str,
+    ) -> list[int] | None:
+        """Returns the index where substring begins in superstring (does not require -1 offset).
+
+        Parameters
+        ----------
+        superstring : str
+            String in which to find substring index
+        substring : str
+            String in which to find superstring index
+
+        Returns
+        -------
+        list_out : list[int] | None
+            Index where substring begins in superstring; None if substring not in superstring
+
+        """
+        list_out = [
+            i for i in range(len(superstring)) if superstring.startswith(substring, i)
+        ]
+        return list_out
+
+    @staticmethod
+    def return_idx_of_alignment_match(
+        align: Align.PairwiseAlignments,
+    ) -> list[int]:
+        """Return indices of alignment match.
+
+        Parameters
+        ----------
+        align : Align.PairwiseAlignments
+            Pairwise alignments
+
+        Returns
+        -------
+        list[int]
+            List of indices for alignment match
+
+        """
+        # extract target (b.l) and query (UniProt) sequences
+        target = align.indices[0]
+        query = align.indices[1]
+
+        # where target is aligned, set to 1; where target is not aligned, set to np.nan
+        target[target >= 0] = 1
+        target = np.where(target == -1, np.nan, target)
+
+        # keep only indices where target is aligned to query
+        output = target * query
+        output = output[~np.isnan(output)]
+        output = [int(i) for i in output.tolist()]
+
+        return output
+
+    def select_correct_alignment(
+        self,
+        alignments: Align.PairwiseAlignments,
+        bool_bl: bool = True,
+    ) -> list[int]:
+        """Select correct alignment for b.l region.
+
+        Parameters
+        ----------
+        alignments : Align.PairwiseAlignments
+            Pairwise alignments
+        bool_bl : bool
+            If True, select correct alignment for b.l region; if False, select correct alignment for linker region
+
+        Returns
+        -------
+        list[int]
+            List of indices for correct alignment
+
+        """
+        list_alignments = [
+            re.findall(r"[A-Z]+", alignment[0, :]) for alignment in alignments
+        ]
+
+        if bool_bl:
+            # manual review showed 2 matches + gap + 5 matches
+            list_idx = [
+                idx
+                for idx, i in enumerate(list_alignments)
+                if len(i) == 2 and len(i[0]) == 2
+            ]
+            region = "b.l"
+        else:
+            # manual review showed 1 matches + gap + 3 matches
+            list_idx = [
+                idx
+                for idx, i in enumerate(list_alignments)
+                if len(i) == 2 and len(i[0]) == 1
+            ]
+            region = "linker"
+
+        if len(list_idx) > 1:
+            logging.error(
+                f"{len(list_idx)} correct alignments found for {region} region\n{list_alignments}"
+            )
+            return None
+        # BUB1B and PIK3R4 have "-" in b.l region so will not obey heuristic in list_idx
+        elif len(list_idx) == 0:
+            if len(alignments) == 1:
+                alignment = alignments[0]
+            else:
+                logging.error(
+                    f"{len(alignments)} non-heuristic alignments found for {region} region\n"
+                    f"{[print(i) for i in alignments]}"
+                )
+                return None
+        else:
+            alignment = alignments[list_idx[0]]
+
+        return self.return_idx_of_alignment_match(alignment)
+
+    def align_klifs_pocket_to_uniprot_seq(
+        self,
+        idx_start: int,
+        idx_end: int,
+    ) -> tuple[str, list[int] | None]:
+        """Align KLIFS region to UniProt canonical Uniprot sequence.
+
+        Parameters
+        ----------
+        idx_start : int
+            Start index of KLIFS region
+        idx_end : int
+            End index of KLIFS region
+
+        Returns
+        -------
+        substring_klifs : str
+            Substring of KLIFS pocket that maps to indices for the region(s) provided
+        list_idx : list[int] | None
+            List of indices in UniProt sequence where KLIFS region starts
+
+        """
+        substring_klifs = self.klifsSeq[idx_start:idx_end]
+        substring_klifs_narm = self.remove_gaps_from_klifs(substring_klifs)
+        if len(substring_klifs_narm) == 0:
+            list_idx = None
+        else:
+            list_idx = self.return_idx_of_substring_in_superstring(
+                self.uniprotSeq, substring_klifs_narm
+            )
+        return substring_klifs, list_idx
+
+    def find_start_or_end_idx_recursively(
+        self,
+        idx_in: int,
+        bool_start: bool = True,
+    ) -> int:
+        """Find the start or end indices in UniProt canonical sequence of flanking KLIFS regions recursively.
+
+        Parameters
+        ----------
+        idx_in : int
+            Index of KLIFS region (e.g., I is 0, g.l is 1, etc.)
+        bool_start : bool
+            If True, find start index (default); if False, find end index
+        """
+        # if looking for preceding region, start at idx_in - 1
+        if bool_start:
+            # if first region
+            if idx_in == 0:
+                # if KD start is None, return 0
+                if self.idx_kd[0] is None:
+                    return 0
+                # if KD start is provided, return KD start
+                else:
+                    return self.idx_kd[0]
+            idx_temp = self.list_substring_idxs[idx_in - 1]
+            str_temp = self.list_klifs_substr_actual[idx_in - 1]
+            if idx_temp is not None and len(idx_temp) == 1:
+                idx_out = idx_temp[0] + len(self.remove_gaps_from_klifs(str_temp))
+            else:
+                idx_out = self.find_start_or_end_idx_recursively(
+                    idx_in - 1, bool_start=True
+                )
+        # if looking for subsequent region, start at idx_in + 1
+        else:
+            # if last region
+            if idx_in == len(DICT_POCKET_KLIFS_REGIONS) - 1:
+                # if KD end is None, return len(self.uniprotSeq) - 1
+                if self.idx_kd[1] is None:
+                    return len(self.uniprotSeq) - 1
+                # if KD end is provided, return KD end
+                else:
+                    return self.idx_kd[1]
+            idx_temp = self.list_substring_idxs[idx_in + 1]
+            if idx_temp is not None and len(idx_temp) == 1:
+                idx_out = idx_temp[0]
+            else:
+                idx_out = self.find_start_or_end_idx_recursively(
+                    idx_in + 1, bool_start=False
+                )
+
+        return idx_out
+
+    def return_partial_alignments(
+        self,
+        idx: int,
+        align_fn: Align.PairwiseAligner | None = None,
+    ) -> tuple[int, int, Align.PairwiseAlignments | list[int | None] | None]:
+        """Return partial alignments for b.l region.
+
+        Parameters
+        ----------
+        idx : int
+            Index of region (e.g., I is 0, g.l is 1, etc.)
+        align_fn : Align.PairwiseAligner | None
+            Alignment function; if none provided will use exact match
+
+        Returns
+        -------
+        tuple[int, int, Align.PairwiseAlignments | list[int | None] | None]
+            Start, end, and alignments (either indices or alignments or None) for region
+
+        """
+        start_idx = self.find_start_or_end_idx_recursively(idx, bool_start=True)
+        end_idx = self.find_start_or_end_idx_recursively(idx, bool_start=False)
+
+        str_klifs = self.remove_gaps_from_klifs(self.list_klifs_substr_actual[idx])
+        str_uniprot = self.uniprotSeq[start_idx:end_idx]
+
+        if len(str_klifs) == 0:
+            return start_idx, end_idx, None
+        else:
+            if align_fn is not None:
+                aligned = align_fn.align(str_klifs, str_uniprot)
+            else:
+                aligned = self.return_idx_of_substring_in_superstring(
+                    str_uniprot, str_klifs
+                )
+
+            return start_idx, end_idx, aligned
+
+    def iterate_klifs_alignment(
+        self,
+    ) -> None:
+        """Align KLIFS region to UniProt canonical Uniprot sequence."""
+        dict_klifs = DICT_POCKET_KLIFS_REGIONS
+        list_klifs = list(dict_klifs.keys())
+
+        for klifs_index, klifs_region in enumerate(list_klifs):
+            klifs_region_start, klifs_region_end = klifs_region, klifs_region
+            klifs_idx_start, klifs_idx_end = (
+                dict_klifs[klifs_region_start]["start"] - 1,
+                dict_klifs[klifs_region_end]["end"],
+            )
+
+            str_klifs, list_substring_idx = self.align_klifs_pocket_to_uniprot_seq(
+                idx_start=klifs_idx_start,
+                idx_end=klifs_idx_end,
+            )
+            self.list_klifs_substr_actual.append(str_klifs)
+
+            # if None KLIFS all "-" so disregard; if multiple idxs returned,
+            # concatenate with contiguous regions to identify single match
+            if list_substring_idx is not None and len(list_substring_idx) > 1:
+                bool_cont = dict_klifs[klifs_region_start]["contiguous"]
+                # if contiguous with subsequent, concatenate with susbequent region
+                if bool_cont:
+                    klifs_region_end = list_klifs[klifs_index + 1]
+                # if not contiguous with subsequent, concatenate with previous region
+                else:
+                    klifs_region_start = list_klifs[klifs_index - 1]
+                    # need for offset later
+                    len_klifs = len(self.remove_gaps_from_klifs(str_klifs))
+                klifs_idx_start, klifs_idx_end = (
+                    dict_klifs[klifs_region_start]["start"] - 1,
+                    dict_klifs[klifs_region_end]["end"],
+                )
+                str_klifs, list_substring_idx = self.align_klifs_pocket_to_uniprot_seq(
+                    idx_start=klifs_idx_start,
+                    idx_end=klifs_idx_end,
+                )
+                # if concat with previous, offset by length of preceding KLIFS region with gaps removed
+                if (
+                    not bool_cont
+                    and list_substring_idx is not None
+                    and len(list_substring_idx) != 0
+                ):
+                    len_offset = len(self.remove_gaps_from_klifs(str_klifs)) - len_klifs
+                    list_substring_idx = [i + len_offset for i in list_substring_idx]
+
+            self.list_klifs_region.append(klifs_region_start + ":" + klifs_region_end)
+            self.list_klifs_substr_match.append(str_klifs)
+            self.list_substring_idxs.append(list_substring_idx)
+
+        # post-hoc adjustments
+
+        # b.l region non-contiguous alignment
+        idx_bl = [i for i, x in enumerate(list_klifs) if x == "b.l"][0]
+        # STK40 has no b.l region, so skip entirely
+        if self.list_substring_idxs[idx_bl] is None:
+            pass
+        else:
+            start, _, bl_alignments = self.return_partial_alignments(
+                idx=idx_bl,
+                align_fn=BL2UniProtAligner(),
+            )
+            list_bl = self.select_correct_alignment(bl_alignments)
+            self.list_substring_idxs[idx_bl] = [i + start for i in list_bl]
+
+        # interpolate multi-matching using previous and subsequent regions
+        for idx, substr_idx in enumerate(self.list_substring_idxs):
+            if idx != idx_bl and substr_idx is not None and len(substr_idx) > 1:
+                start = self.find_start_or_end_idx_recursively(idx, bool_start=True)
+                end = self.find_start_or_end_idx_recursively(idx, bool_start=False)
+                self.list_substring_idxs[idx] = [
+                    i for i in substr_idx if i >= start and i <= end
+                ]
+
+        # final partial alignment algorithm
+        for idx, substr_idx in enumerate(self.list_substring_idxs):
+            if substr_idx == []:
+                # check exact match
+                start_exact, _, align_exact = self.return_partial_alignments(idx=idx)
+                if align_exact != [] and len(align_exact) == 1:
+                    self.list_substring_idxs[idx] = [
+                        i + start_exact for i in align_exact
+                    ]
+                # if no exact match, try local alignment
+                else:
+                    start_local, _, align_local = self.return_partial_alignments(
+                        idx=idx,
+                        align_fn=Kincore2UniProtAligner(),
+                    )
+                    if len(align_local) == 1 and align_local[
+                        0
+                    ].target == self.remove_gaps_from_klifs(align_local[0][0, :]):
+                        list_local = self.return_idx_of_alignment_match(align_local[0])
+                        self.list_substring_idxs[idx] = [
+                            i + start_local for i in list_local
+                        ]
+                    # if no exact match, try global alignment
+                    else:
+                        start_global, _, align_global = self.return_partial_alignments(
+                            idx=idx,
+                            align_fn=BL2UniProtAligner(),
+                        )
+                        # all that remains is linker region where some gaps (1 + 3) occur
+                        list_global = self.select_correct_alignment(
+                            align_global, bool_bl=False
+                        )
+                        self.list_substring_idxs[idx] = [
+                            i + start_global for i in list_global
+                        ]
+
+    def generate_alignment_list(self, bool_offset: bool) -> list[str | None]:
+        """Generate and validate alignment list.
+
+        Parameters
+        ----------
+        bool_offset : bool
+            If True, offset indices by 1 to match 1-based indexing
+
+        Returns
+        -------
+        list[str | None]
+            List of alignments
+        """
+        list_align = []
+        for list_idx, list_seq in zip(
+            self.list_substring_idxs, self.list_klifs_substr_actual
+        ):
+            if list_idx is not None and len(list_idx) == 1:
+                if bool_offset:
+                    temp_idx = list_idx[0] + 1
+                else:
+                    temp_idx = list_idx[0]
+                for aa in list_seq:
+                    if aa == "-":
+                        list_align.append(None)
+                    else:
+                        list_align.append(temp_idx)
+                        temp_idx += 1
+            elif list_idx is None:
+                list_align.extend([None] * len(list_seq))
+            else:
+                idx = 0
+                for aa in list_seq:
+                    if aa == "-":
+                        list_align.append(None)
+                    else:
+                        if bool_offset:
+                            list_align.append(list_idx[idx] + 1)
+                        else:
+                            list_align.append(list_idx[idx])
+                        idx += 1
+
+        for idx, i in enumerate(list_align):
+            if i is not None:
+                if bool_offset:
+                    i = i - 1
+                if self.uniprotSeq[i] != self.klifsSeq[idx]:
+                    logging.error(
+                        f"Alignment mismatch at {idx} position in KLIFS pocket and {i} of UniProt\n"
+                        f"UniProt: {self.uniprotSeq[i]}\n"
+                        f"KLIFS: {self.klifsSeq[idx]}\n"
+                    )
+                    return None
+            else:
+                if self.klifsSeq[idx] != "-":
+                    logging.error(
+                        f"Alignment mismatch at {idx + 1} position in KLIFS pocket and {i} of UniProt\n"
+                        f"UniProt: -\n"
+                        f"KLIFS: {self.klifsSeq[idx]}\n"
+                    )
+                    return None
+
+        self.list_align = list_align
