@@ -155,9 +155,16 @@ class KinaseInfo(BaseModel):
     # https://docs.pydantic.dev/latest/examples/custom_validators/#validating-nested-model-fields
     @model_validator(mode="after")
     def change_wrong_klifs_pocket_seq(self) -> Self:
-        """ADCK3 KLIFS pocket has an error compared to UniProt sequence - fix this via validation."""
+        """KLIFS pocket has some errors compared to UniProt sequence - fix this via validation."""
+        # https://klifs.net/details.php?structure_id=9122 "NFM" > "HFM" but "H" present in canonical UniProt seq
         if self.hgnc_name == "ADCK3":
             self.KLIFS.pocket_seq = "RPFAAASIGQVHLVAMKIQDYQREAACARKFRFYVPEIVDEVLTTELVSGFPLDQAEGLELFEFHFMQTDPNWSNFFYLLDFGAT"
+        # https://klifs.net/details.php?structure_id=15054 shows "FLL" only change and region I flanks g.l
+        if self.hgnc_name == "LRRK2":
+            self.KLIFS.pocket_seq = "FLLGDGSFGSVYRVAVKIFLLRQELVVLCHLHPSLISLLAAMLVMELASKGSLDRLLQQYLHSAMIIYRDLKPHNVLLIADYGIA"
+        # https://klifs.net/details.php?structure_id=9709 just a misalignment vs. UniProt[130:196] aligns matches structure seq
+        if self.hgnc_name == "CAMKK1":
+            self.KLIFS.pocket_seq = "QSEIGKGAYGVVRHYAMKVERVYQEIAILKKLHVNVVKLIENLYLVFDLRKGPVMEVPCEYLHCQKIVHRDIKPSNLLKIADFGV"
         return self
 
     # https://stackoverflow.com/questions/68082983/validating-a-nested-model-in-pydantic
