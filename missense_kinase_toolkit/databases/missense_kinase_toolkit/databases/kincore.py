@@ -32,12 +32,6 @@ def extract_pk_fasta_info_as_dict(
 
     list_uniprot = [x.split(" ")[-1] for x in list_description]
 
-    # this didn't seem to perfectly match UniProt canonical sequences
-    # will need to align to canonical sequences (implemented in align_kincore2uniprot)
-    # list_idxs = [x.split("/")[1].split(" ")[0] for x in list_description]
-    # list_start = [x.split("-")[0] for x in list_idxs]
-    # list_end = [x.split("-")[1] for x in list_idxs]
-
     dict_out = {
         list_uniprot[i]: {
             "seq": list_seq[i],
