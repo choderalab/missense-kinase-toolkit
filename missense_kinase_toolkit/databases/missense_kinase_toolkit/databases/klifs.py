@@ -466,17 +466,6 @@ class KLIFSPocket:
         else:
             alignment = alignments[list_idx[0]]
 
-        # # extract target (b.l) and query (UniProt) sequences
-        # target = alignment.indices[0]
-        # query = alignment.indices[1]
-        # # where target is aligned, set to 1; where target is not aligned, set to np.nan
-        # target[target >= 0] = 1
-        # target = np.where(target == -1, np.nan, target)
-        # # keep only indices where target is aligned to query
-        # output = target * query
-        # output = output[~np.isnan(output)]
-        # output = [int(i) for i in output.tolist()]
-        # return output
 
         return self.return_idx_of_alignment_match(alignment)
 
