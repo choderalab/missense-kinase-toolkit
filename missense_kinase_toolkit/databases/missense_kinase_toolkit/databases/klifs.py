@@ -1,5 +1,6 @@
 import logging
 import re
+from itertools import chain
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -135,6 +136,14 @@ DICT_POCKET_KLIFS_REGIONS = {
 """dict[str, dict[str, int | bool | str]]: Mapping KLIFS pocket region to start and end indices, \
     boolean denoting if subsequent regions are contiguous, and colors."""
 
+
+LIST_KLIFS_REGION = list(
+    chain(
+        *[[f"{key}:{i}" for i in range(val["start"], val["end"] + 1)] \
+          for key, val in DICT_POCKET_KLIFS_REGIONS.items()]
+    )
+)
+"""list[str]: List of string of all KLIFS pocket regions in format region:idx."""
 
 class KLIFS(SwaggerAPIClient):
     """Class to interact with the KLIFS API."""
@@ -295,16 +304,14 @@ class KLIFSPocket:
 
     Attributes
     ----------
-    uniprotID : str
-        UniProt ID
-    hgncName : str
-        HGNC name
     uniprotSeq : str
         UniProt canonical sequence
     klifsSeq : str
         KLIFS pocket sequence
     idx_kd : tuple[int | None, int | None]
         Index of kinase domain in UniProt sequence (start, end)
+    offset_bool : bool
+        If True, offset indices by 1 to match 1-based indexing; default True
     list_klifs_region : list[str]
         List of start and end regions of KLIFS pocket separated by ":"; end region will be the
             same as start region if no concatenation necessary to find a single exact match
@@ -316,21 +323,23 @@ class KLIFSPocket:
     list_substring_idxs : list[list[int] | None]
         List of indices in UniProt sequence where KLIFS substring match starts;
             offset by length of preceding KLIFS region with gaps removed
+    list_align : list[str | None] | None
+        List of final alignments to UniProt sequence
 
     """
-
-    uniprotID: str
-    hgncName: str
     uniprotSeq: str
     klifsSeq: str
     idx_kd: tuple[int | None, int | None]
+    offset_bool: bool = True
     list_klifs_region: list[str | None] = field(default_factory=list)
     list_klifs_substr_actual: list[str | None] = field(default_factory=list)
     list_klifs_substr_match: list[str | None] = field(default_factory=list)
     list_substring_idxs: list[list[int | None] | None] = field(default_factory=list)
+    list_align: list[str | None] | None = None
 
     def __post_init__(self):
         self.iterate_klifs_alignment()
+        self.generate_alignment_list(bool_offset=self.offset_bool)
 
     @staticmethod
     def remove_gaps_from_klifs(klifs_string: str) -> str:
@@ -703,3 +712,71 @@ class KLIFSPocket:
                         self.list_substring_idxs[idx] = [
                             i + start_global for i in list_global
                         ]
+
+    def generate_alignment_list(
+        self,
+        bool_offset: bool
+    ) -> list[str | None]:
+        """Generate and validate alignment list.
+        
+        Parameters
+        ----------
+        bool_offset : bool
+            If True, offset indices by 1 to match 1-based indexing
+
+        Returns
+        -------
+        list[str | None]
+            List of alignments
+        """
+        list_align = []
+        for list_idx, list_seq in zip(
+            self.list_substring_idxs,
+            self.list_klifs_substr_actual
+        ):
+            if list_idx is not None and len(list_idx) == 1:
+                if bool_offset:
+                    temp_idx = list_idx[0] + 1
+                else:
+                    temp_idx = list_idx[0]
+                for aa in list_seq:
+                    if aa == "-":
+                        list_align.append(None)
+                    else:
+                        list_align.append(temp_idx)
+                        temp_idx+=1
+            elif list_idx is None:
+                list_align.extend([None] * len(list_seq))
+            else:
+                idx = 0
+                for aa in list_seq:
+                    if aa == "-":
+                        list_align.append(None)
+                    else:
+                        if bool_offset:
+                            list_align.append(list_idx[idx] + 1)
+                        else:
+                            list_align.append(list_idx[idx])
+                        idx+=1
+
+        for idx, i in enumerate(list_align):
+            if i is not None:
+                if bool_offset:
+                    i = i - 1
+                if self.uniprotSeq[i] != self.klifsSeq[idx]:
+                    logging.error(
+                        f"Alignment mismatch at {idx} position in KLIFS pocket and {i} of UniProt\n"
+                        f"UniProt: {self.uniprotSeq[i]}\n"
+                        f"KLIFS: {self.klifsSeq[idx]}\n"
+                    )
+                    return None
+            else:
+                if self.klifsSeq[idx] != "-":
+                    logging.error(
+                        f"Alignment mismatch at {idx + 1} position in KLIFS pocket and {i} of UniProt\n"
+                        f"UniProt: -\n"
+                        f"KLIFS: {self.klifsSeq[idx]}\n"
+                    )
+                    return None
+        
+        self.list_align = list_align
