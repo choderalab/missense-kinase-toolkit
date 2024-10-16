@@ -11,6 +11,7 @@ from missense_kinase_toolkit.databases.kincore import (
     extract_pk_fasta_info_as_dict,
 )
 from missense_kinase_toolkit.databases.utils import get_repo_root
+from missense_kinase_toolkit.databases import klifs
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +153,8 @@ class KinaseInfo(BaseModel):
     KLIFS: KLIFS | None
     Pfam: Pfam | None
     KinCore: KinCore | None
+    bool_offset: bool = True
+    KLIFS2UniProt: dict[str, int] | None  = None
 
     # https://docs.pydantic.dev/latest/examples/custom_validators/#validating-nested-model-fields
     @model_validator(mode="after")
@@ -182,13 +185,33 @@ class KinaseInfo(BaseModel):
                     "UniProt sequence length does not match Pfam protein length."
                 )
         return values
+    
+    @model_validator(mode="after")
+    def generate_klifs2uniprot_dict(self) -> Self:
+        """Generate dictionary mapping KLIFS to UniProt indices."""
 
+        if self.KinCore is not None:
+            kd_idx = (self.KinCore.start-1, self.KinCore.end-1)
+        else:
+            kd_idx = (None, None)
 
-# TODO: Is this necessary? Just aggregate as a list of KinaseInfo objects or dict?
-class CollectionKinaseInfo(BaseModel):
-    """Pydantic model for kinase information."""
+        if self.KLIFS is not None and self.KLIFS.pocket_seq is not None:
+            temp_obj = klifs.KLIFSPocket(
+                uniprotSeq = self.UniProt.canonical_seq,
+                klifsSeq = self.KLIFS.pocket_seq,
+                idx_kd = kd_idx,
+                offset_bool = self.bool_offset
+            )
 
-    kinase_dict: dict[str, KinaseInfo]
+            if temp_obj.list_align is not None:
+                self.KLIFS2UniProt = dict(
+                    zip(
+                        klifs.LIST_KLIFS_REGION,
+                        temp_obj.list_align
+                    )
+                )
+
+        return self
 
 
 def check_if_file_exists_then_load_dataframe(str_file: str) -> pd.DataFrame | None:
@@ -420,6 +443,7 @@ def create_kinase_models_from_df(
     # load dataframe if not provided
     if df is None:
         df = concatenate_source_dataframe()
+
     if df is None:
         logger.error("Dataframe is None. Cannot create kinase models.")
         return None
