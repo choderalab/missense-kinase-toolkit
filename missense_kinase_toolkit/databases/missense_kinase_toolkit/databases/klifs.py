@@ -564,7 +564,7 @@ class KLIFSPocket:
 
         return idx_out
 
-    # TODO find_start_or_end_idx_recursively kwargs
+
     def return_partial_alignments(
         self,
         idx: int,
@@ -680,7 +680,7 @@ class KLIFSPocket:
                     i for i in substr_idx if i >= start and i <= end
                 ]
 
-        # TODO: final partial alignment algorithm
+        # final partial alignment algorithm
         for idx, substr_idx in enumerate(self.list_substring_idxs):
             if substr_idx == []:
                 # check exact match
