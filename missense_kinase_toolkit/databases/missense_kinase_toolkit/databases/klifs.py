@@ -1,12 +1,16 @@
 import logging
 import re
 from dataclasses import dataclass, field
-import numpy as np
-from bravado.client import SwaggerClient
-from Bio import Align
 
+import numpy as np
+from Bio import Align
+from bravado.client import SwaggerClient
+
+from missense_kinase_toolkit.databases.aligners import (
+    BL2UniProtAligner,
+    Kincore2UniProtAligner,
+)
 from missense_kinase_toolkit.databases.api_schema import SwaggerAPIClient
-from missense_kinase_toolkit.databases.aligners import BL2UniProtAligner, Kincore2UniProtAligner
 
 logger = logging.getLogger(__name__)
 
@@ -325,10 +329,8 @@ class KLIFSPocket:
     list_klifs_substr_match: list[str | None] = field(default_factory=list)
     list_substring_idxs: list[list[int | None] | None] = field(default_factory=list)
 
-
     def __post_init__(self):
         self.iterate_klifs_alignment()
-
 
     @staticmethod
     def remove_gaps_from_klifs(klifs_string: str) -> str:
@@ -348,10 +350,9 @@ class KLIFSPocket:
         klifs_pocket_narm = "".join([i for i in klifs_string if i != "-"])
         return klifs_pocket_narm
 
-
     @staticmethod
     def return_idx_of_substring_in_superstring(
-        superstring: str, 
+        superstring: str,
         substring: str,
     ) -> list[int] | None:
         """Returns the index where substring begins in superstring (does not require -1 offset).
@@ -373,7 +374,6 @@ class KLIFSPocket:
             i for i in range(len(superstring)) if superstring.startswith(substring, i)
         ]
         return list_out
-
 
     @staticmethod
     def return_idx_of_alignment_match(
@@ -407,7 +407,6 @@ class KLIFSPocket:
 
         return output
 
-
     def select_correct_alignment(
         self,
         alignments: Align.PairwiseAlignments,
@@ -421,37 +420,48 @@ class KLIFSPocket:
             Pairwise alignments
         bool_bl : bool
             If True, select correct alignment for b.l region; if False, select correct alignment for linker region
-        
+
         Returns
         -------
         list[int]
             List of indices for correct alignment
 
         """
-        list_alignments = [re.findall(r"[A-Z]+", alignment[0, :]) \
-                           for alignment in alignments]
+        list_alignments = [
+            re.findall(r"[A-Z]+", alignment[0, :]) for alignment in alignments
+        ]
 
         if bool_bl:
             # manual review showed 2 matches + gap + 5 matches
-            list_idx = [idx for idx, i in enumerate(list_alignments) \
-                        if len(i) == 2 and len(i[0]) == 2]
+            list_idx = [
+                idx
+                for idx, i in enumerate(list_alignments)
+                if len(i) == 2 and len(i[0]) == 2
+            ]
             region = "b.l"
         else:
             # manual review showed 1 matches + gap + 3 matches
-            list_idx = [idx for idx, i in enumerate(list_alignments) \
-                        if len(i) == 2 and len(i[0]) == 1]
+            list_idx = [
+                idx
+                for idx, i in enumerate(list_alignments)
+                if len(i) == 2 and len(i[0]) == 1
+            ]
             region = "linker"
 
         if len(list_idx) > 1:
-            logging.error(f"{len(list_idx)} correct alignments found for {region} region\n{list_alignments}")
+            logging.error(
+                f"{len(list_idx)} correct alignments found for {region} region\n{list_alignments}"
+            )
             return None
         # BUB1B and PIK3R4 have "-" in b.l region so will not obey heuristic in list_idx
         elif len(list_idx) == 0:
             if len(alignments) == 1:
                 alignment = alignments[0]
             else:
-                logging.error(f"{len(alignments)} non-heuristic alignments found for {region} region\n"\
-                              f"{[print(i) for i in alignments]}")
+                logging.error(
+                    f"{len(alignments)} non-heuristic alignments found for {region} region\n"
+                    f"{[print(i) for i in alignments]}"
+                )
                 return None
         else:
             alignment = alignments[list_idx[0]]
@@ -469,7 +479,6 @@ class KLIFSPocket:
         # return output
 
         return self.return_idx_of_alignment_match(alignment)
-
 
     def align_klifs_pocket_to_uniprot_seq(
         self,
@@ -503,7 +512,6 @@ class KLIFSPocket:
             )
         return substring_klifs, list_idx
 
-
     def find_start_or_end_idx_recursively(
         self,
         idx_in: int,
@@ -533,7 +541,9 @@ class KLIFSPocket:
             if idx_temp is not None and len(idx_temp) == 1:
                 idx_out = idx_temp[0] + len(self.remove_gaps_from_klifs(str_temp))
             else:
-                idx_out = self.find_start_or_end_idx_recursively(idx_in - 1, bool_start=True)
+                idx_out = self.find_start_or_end_idx_recursively(
+                    idx_in - 1, bool_start=True
+                )
         # if looking for subsequent region, start at idx_in + 1
         else:
             # if last region
@@ -548,12 +558,13 @@ class KLIFSPocket:
             if idx_temp is not None and len(idx_temp) == 1:
                 idx_out = idx_temp[0]
             else:
-                idx_out = self.find_start_or_end_idx_recursively(idx_in + 1, bool_start=False)
+                idx_out = self.find_start_or_end_idx_recursively(
+                    idx_in + 1, bool_start=False
+                )
 
         return idx_out
 
-
-    #TODO find_start_or_end_idx_recursively kwargs
+    # TODO find_start_or_end_idx_recursively kwargs
     def return_partial_alignments(
         self,
         idx: int,
@@ -567,12 +578,12 @@ class KLIFSPocket:
             Index of region (e.g., I is 0, g.l is 1, etc.)
         align_fn : Align.PairwiseAligner | None
             Alignment function; if none provided will use exact match
-        
+
         Returns
         -------
         tuple[int, int, Align.PairwiseAlignments | list[int | None] | None]
             Start, end, and alignments (either indices or alignments or None) for region
-        
+
         """
         start_idx = self.find_start_or_end_idx_recursively(idx, bool_start=True)
         end_idx = self.find_start_or_end_idx_recursively(idx, bool_start=False)
@@ -586,10 +597,11 @@ class KLIFSPocket:
             if align_fn is not None:
                 aligned = align_fn.align(str_klifs, str_uniprot)
             else:
-                aligned = self.return_idx_of_substring_in_superstring(str_uniprot, str_klifs)
+                aligned = self.return_idx_of_substring_in_superstring(
+                    str_uniprot, str_klifs
+                )
 
             return start_idx, end_idx, aligned
-
 
     def iterate_klifs_alignment(
         self,
@@ -639,7 +651,7 @@ class KLIFSPocket:
                 ):
                     len_offset = len(self.remove_gaps_from_klifs(str_klifs)) - len_klifs
                     list_substring_idx = [i + len_offset for i in list_substring_idx]
-                
+
             self.list_klifs_region.append(klifs_region_start + ":" + klifs_region_end)
             self.list_klifs_substr_match.append(str_klifs)
             self.list_substring_idxs.append(list_substring_idx)
@@ -664,7 +676,9 @@ class KLIFSPocket:
             if idx != idx_bl and substr_idx is not None and len(substr_idx) > 1:
                 start = self.find_start_or_end_idx_recursively(idx, bool_start=True)
                 end = self.find_start_or_end_idx_recursively(idx, bool_start=False)
-                self.list_substring_idxs[idx] = [i for i in substr_idx if i >= start and i <= end]
+                self.list_substring_idxs[idx] = [
+                    i for i in substr_idx if i >= start and i <= end
+                ]
 
         # TODO: final partial alignment algorithm
         for idx, substr_idx in enumerate(self.list_substring_idxs):
@@ -672,17 +686,22 @@ class KLIFSPocket:
                 # check exact match
                 start_exact, _, align_exact = self.return_partial_alignments(idx=idx)
                 if align_exact != [] and len(align_exact) == 1:
-                    self.list_substring_idxs[idx] = [i + start_exact for i in align_exact]
+                    self.list_substring_idxs[idx] = [
+                        i + start_exact for i in align_exact
+                    ]
                 # if no exact match, try local alignment
                 else:
                     start_local, _, align_local = self.return_partial_alignments(
                         idx=idx,
                         align_fn=Kincore2UniProtAligner(),
                     )
-                    if len(align_local) == 1 and \
-                        align_local[0].target == self.remove_gaps_from_klifs(align_local[0][0, :]):
+                    if len(align_local) == 1 and align_local[
+                        0
+                    ].target == self.remove_gaps_from_klifs(align_local[0][0, :]):
                         list_local = self.return_idx_of_alignment_match(align_local[0])
-                        self.list_substring_idxs[idx] = [i + start_local for i in list_local]
+                        self.list_substring_idxs[idx] = [
+                            i + start_local for i in list_local
+                        ]
                     # if no exact match, try global alignment
                     else:
                         start_global, _, align_global = self.return_partial_alignments(
@@ -690,5 +709,9 @@ class KLIFSPocket:
                             align_fn=BL2UniProtAligner(),
                         )
                         # all that remains is linker region where some gaps (1 + 3) occur
-                        list_global = self.select_correct_alignment(align_global, bool_bl=False)
-                        self.list_substring_idxs[idx] = [i + start_global for i in list_global]                
+                        list_global = self.select_correct_alignment(
+                            align_global, bool_bl=False
+                        )
+                        self.list_substring_idxs[idx] = [
+                            i + start_global for i in list_global
+                        ]

@@ -1,9 +1,10 @@
 import logging
 import os
 from enum import Enum, StrEnum
+
 import pandas as pd
-from typing_extensions import Self
 from pydantic import BaseModel, ValidationError, constr, model_validator
+from typing_extensions import Self
 
 from missense_kinase_toolkit.databases.kincore import (
     align_kincore2uniprot,
