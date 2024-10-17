@@ -2,12 +2,12 @@
 
 ## databases
 
-| Data               | Source                                                        | Description                                                                      |
-| :------------------| :-----------------------------------------------------------: | :--------------------------------------------------------------------------------|
-| kinhub.csv         |  [Kinhub](http://www.kinhub.org/kinases.html)                 | Database containing human kinases with properties and identifier annotations     |
-| kinhub_uniprot.csv |  [UniProt](https://www.uniprot.org/uniprotkb)                 | Database containing canonical sequence information                               |
-| kinhub_pfam.csv    |  [Pfam](https://www.ebi.ac.uk/interpro/)                      | Database containing annotated domains - kinase domain extracted here             |
-| kinhub_klifs.csv   |  [KLIFS](https://klifs.net/)                                  | Database containing Kinase-Ligand Interaction Fingerprint and Structures (KLIFS) |
+| Data               | Source                                           | Description                                                                      |
+| :------------------| :----------------------------------------------: | :--------------------------------------------------------------------------------|
+| kinhub.csv         |  [Kinhub](http://www.kinhub.org/kinases.html)    | Database containing human kinases with properties and identifier annotations     |
+| kinhub_uniprot.csv |  [UniProt](https://www.uniprot.org/uniprotkb)    | Database containing canonical sequence information                               |
+| kinhub_pfam.csv    |  [Pfam](https://www.ebi.ac.uk/interpro/)         | Database containing annotated domains - kinase domain extracted here             |
+| kinhub_klifs.csv   |  [KLIFS](https://klifs.net/)                     | Database containing Kinase-Ligand Interaction Fingerprint and Structures (KLIFS) |
 
 The below provides code to generate and save these files:
 
@@ -17,6 +17,7 @@ The below provides code to generate and save these files:
 from missense_kinase_toolkit.databases import scrapers
 
 df_kinhub = scrapers.kinhub()
+
 df_kinhub.to_csv("../data/kinhub.csv", index=False)
 ```
 
@@ -64,16 +65,10 @@ from tqdm import tqdm
 import pandas as pd
 from missense_kinase_toolkit.databases import klifs
 
-list_uniprot, list_hgnc, list_sequence = [], [], []
-
-for index, row in tqdm(df_kinhub.iterrows(), total = df_kinhub.shape[0]):
-    list_uniprot.append(row["UniprotID"])
-    list_hgnc.append(row["HGNC Name"])
-    list_sequence.append(uniprot.UniProt(row["UniprotID"])._sequence)
-
-dict_uniprot = dict(zip(["uniprot_id", "hgnc_name", "canonical_sequence"], 
-                        [list_uniprot, list_hgnc, list_sequence]))
-df_uniprot = pd.DataFrame.from_dict(dict_uniprot)
+df_klifs = pd.DataFrame()
+for index, row in tqdm(df_kinhub.iterrows(), total=df_kinhub.shape[0]):
+    df_temp = pd.DataFrame(klifs.KinaseInfo(row["UniprotID"], "uniprot")._kinase_info, index=[0])
+    df_klifs = pd.concat([df_klifs, df_temp]).reset_index(drop=True)
 
 df_klifs.to_csv("../data/kinhub_klifs.csv", index=False)
 ```
