@@ -36,3 +36,6 @@ python:
     - requirements: docs/requirements.txt
     - method: pip
       path: missense_kinase_toolkit/databases
+    - requirements: docs/requirements.txt
+    - method: pip
+      path: missense_kinase_toolkit/databases

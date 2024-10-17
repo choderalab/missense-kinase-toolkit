@@ -35,7 +35,7 @@ for index, row in tqdm(df_kinhub.iterrows(), total = df_kinhub.shape[0]):
     list_hgnc.append(row["HGNC Name"])
     list_sequence.append(uniprot.UniProt(row["UniprotID"])._sequence)
 
-dict_uniprot = dict(zip(["uniprot_id", "hgnc_name", "canonical_sequence"], 
+dict_uniprot = dict(zip(["uniprot_id", "hgnc_name", "canonical_sequence"],
                         [list_uniprot, list_hgnc, list_sequence]))
 df_uniprot = pd.DataFrame.from_dict(dict_uniprot)
 
