@@ -19,7 +19,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = ">=3.10,<4.0"
 setuptools = "^70.0.0"
 pydantic = "^2.7.4"
 tqdm = "4.66.3"
@@ -36,6 +36,8 @@ bokeh = "^3.4.1"
 seaborn = "^0.13.2"
 scipy = "^1.13.1"
 matplotlib-venn = "^1.1.1"
+pyhmmer = "^0.10.15"
+biotite = "^1.0.1"
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.3.0"
