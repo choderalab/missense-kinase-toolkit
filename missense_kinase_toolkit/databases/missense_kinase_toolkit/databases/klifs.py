@@ -2,6 +2,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from itertools import chain
+from copy import deepcopy
 
 import numpy as np
 from Bio import Align
@@ -340,10 +341,13 @@ class KLIFSPocket:
     list_klifs_substr_match: list[str | None] = field(default_factory=list)
     list_substring_idxs: list[list[int | None] | None] = field(default_factory=list)
     list_align: list[str | None] | None = None
+    KLIFS2UniProt: dict[str, int | None] = {i: None for i in LIST_KLIFS_REGION}
 
     def __post_init__(self):
         self.iterate_klifs_alignment()
         self.generate_alignment_list(bool_offset=self.offset_bool)
+        if self.list_align is not None:
+            self.KLIFS2UniProt.update(dict(zip(LIST_KLIFS_REGION, self.list_align)))
 
     @staticmethod
     def remove_gaps_from_klifs(klifs_string: str) -> str:
@@ -445,7 +449,7 @@ class KLIFSPocket:
         ]
 
         if bool_bl:
-            # manual review showed 2 matches + gap + 5 matches
+            # manual review showed 2 matches + gap + 5 matches in b.l region
             list_idx = [
                 idx
                 for idx, i in enumerate(list_alignments)
@@ -453,7 +457,7 @@ class KLIFSPocket:
             ]
             region = "b.l"
         else:
-            # manual review showed 1 matches + gap + 3 matches
+            # manual review showed 1 matches + gap + 3 matches in linker region
             list_idx = [
                 idx
                 for idx, i in enumerate(list_alignments)
@@ -779,3 +783,157 @@ class KLIFSPocket:
                     return None
 
         self.list_align = list_align
+
+    
+    def recursive_idx_search(
+        self,
+        idx: int, 
+        decreasing: bool,
+    ) -> int | str:
+        """Recursively search for preceding or subsequent alignment index if current value is None.
+        
+        Parameters
+        ----------
+        idx : int
+            Current index
+
+        Returns
+        -------
+        idx : int
+            Index of alignment
+
+        """
+        if idx == 0:
+            return "NONE"
+        list_keys = list(self.KLIFS2UniProt.keys())
+        if self.KLIFS2UniProt[list_keys[idx]] is None:
+            if decreasing:
+                idx = self.recursive_idx_search(idx-1, self.KLIFS2UniProt, True)
+            else:
+                idx = self.recursive_idx_search(idx+1, self.KLIFS2UniProt, False)
+        return idx
+    
+
+    def find_intra_gaps(
+        self, 
+        dict_temp: dict[str, int | None],
+        bool_bl: bool = True,
+    ) -> tuple[int, int] | None:
+        """Find intra-pocket gaps in KLIFS pocket region.
+        
+        Parameters
+        ----------
+        bool_bl : bool
+            If True, find intra-pocket gaps in b.l region; if False, find intra-pocket gaps in linker region
+
+        Returns
+        -------
+        tuple[int, int] | None
+            Start and end indices of intra-pocket gaps in KLIFS pocket region; if None found, return None
+
+        """
+        if bool_bl:
+            region,idx_in, idx_out = "b.l", 1, 2
+        else:
+            region, idx_in, idx_out = "linker", 0, 1
+
+        list_keys = list(self.KLIFS2UniProt.keys())
+        list_idx = [idx for idx, i in enumerate(self.KLIFS2UniProt.keys()) if region in i]
+        
+        #TODO: ATR and CAMKK1 have inter hinge:linker region
+        start = list_idx[idx_in]
+        end = list_idx[idx_out]
+
+        if dict_temp[list_keys[start]] is None:
+            start = self.recursive_idx_search(start-1, dict_temp, True)
+        if dict_temp[list_keys[end]] is None:
+            end = self.recursive_idx_search(end+1, dict_temp, False)
+
+        # STK40 has no b.l region or preceding
+        if start == "NONE":
+            return None
+
+        return (dict_temp[list_keys[start]], dict_temp[list_keys[end]])
+
+
+    def return_intra_gap_substr(
+        self,
+        bl_bool: bool = True,
+    ) -> str | None:
+        tuple_idx = self.find_intra_gaps(self.KLIFS2UniProt, bl_bool)
+        if tuple_idx is None:
+            return None
+        else:
+            start, end = tuple_idx[0], tuple_idx[1]
+            if end - start == 1:
+                return None
+            else:
+                return self.uniprotSeq[start-1:end-1]
+            
+
+    @staticmethod
+    def reverse_order_dict_of_dict(
+        dict_in: dict[str, dict[str, str | int | None]],
+    ) -> dict[str, dict[str, str | int | None]]:
+        """Reverse order of dictionary of dictionaries.
+        
+        Parameters
+        ----------
+        dict_in : dict[str, dict[str, str | int | None]]
+            Dictionary of dictionaries
+            
+        Returns
+        -------
+        dict_out : dict[str, dict[str, str | int | None]]
+            Dictionary of dictionaries with reversed order
+
+        """
+        dict_out = {key1: {key2 : dict_in[key2][key1] for key2 in dict_in.keys()}\
+                    for key1 in set(chain(*[list(j.keys()) for j in dict_in.values()]))}
+        return dict_out
+    
+
+    @staticmethod
+    def replace_none_with_max_len_gap(
+        dict_in: dict[str, dict[str, str | int | None]],
+    ) -> dict[str, dict[str, str | int | None]]:
+        """Replace None values with maximum length gap in dictionary of dictionaries.
+        
+        Parameters
+        ----------
+        dict_in : dict[str, dict[str, str | int | None]]
+            Dictionary of dictionaries
+            
+        Returns
+        -------
+        dict_out : dict[str, dict[str, str | int | None]]
+            Dictionary of dictionaries with None values replaced with maximum length gap
+
+        """
+        dict_max_len = {key1: max([len(val2) for val2 in val1.values() if val2 is not None])\
+                        for key1, val1 in dict_in.items()}
+
+        dict_out = deepcopy(dict_in)
+        for key1, length in dict_max_len.items():
+            for key2, val in dict_out[key1].items():
+                if val is None:
+                    dict_out[key1][key2] = "-" * length
+
+        return dict_out
+
+
+    def find_and_align_inter_and_intra_klifs_regions(
+        self,
+        list_cols: list[str] | None = None,
+    ):
+        if list_cols is None:
+            ['II:III', 'III:αC', 'IV:V', 'hinge:linker', 'αD:αE', 'αE:VI', 'VII:VIII']
+        pass
+
+
+# # NOT IN USE - USE TO GENERATE ABOVE
+
+# list_multi = [list(val.KLIFSPocket.list_klifs_region[idx] for idx, entry \
+#                    in enumerate(val.KLIFSPocket.list_substring_idxs) if entry is not None and len(entry)>1)\
+#               for key, val in dict_klifs.items()]
+# set(chain(*list_multi)) # {'b.l:b.l', 'linker:linker'}
