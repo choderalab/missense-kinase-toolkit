@@ -187,6 +187,6 @@ def get_repo_root():
 
 def try_except_substraction(a, b):
     try:
-        return b-a
+        return b - a
     except TypeError:
         return None

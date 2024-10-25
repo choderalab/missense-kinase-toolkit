@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 
 class CustomAligner(ABC):
@@ -22,27 +22,22 @@ class ClustalOmegaAligner(CustomAligner):
     """list[str]: List of sequences to align."""
     path_bin: str = "/usr/local/bin/clustalo"
     """str: Path to clustalo binary. Default is "/usr/local/bin/clustalo"."""
-    
+
     def __post_init__(self):
         from biotite.sequence import ProteinSequence, align
 
         self.alphabet = ProteinSequence.alphabet
         self.matrix_substitution = align.SubstitutionMatrix(
-            self.alphabet, 
-            self.alphabet, 
-            self.substitution_matrix
+            self.alphabet, self.alphabet, self.substitution_matrix
         )
         self.list_sequences = [ProteinSequence(seq) for seq in self.list_sequences]
         self.align()
-
 
     def align(self) -> str:
         from biotite.application import clustalo
 
         app = clustalo.ClustalOmegaApp(
-            self.list_sequences, 
-            self.path_bin, 
-            self.matrix_substitution
+            self.list_sequences, self.path_bin, self.matrix_substitution
         )
 
         app.start()
@@ -54,6 +49,7 @@ class ClustalOmegaAligner(CustomAligner):
 @dataclass
 class BioAligner(CustomAligner):
     """BioPython aligner class for aligning sequences. Initialized without sequences"""
+
     from Bio import Align
 
     mode: str = "local"
@@ -65,7 +61,7 @@ class BioAligner(CustomAligner):
 
     def __post_init__(self):
         from Bio import Align
-    
+
         self.aligner = Align.PairwiseAligner()
         self.aligner.mode = self.mode
         self.aligner.substitution_matrix = Align.substitution_matrices.load(
@@ -76,6 +72,7 @@ class BioAligner(CustomAligner):
 
     def align(self, seq1: str, seq2: str) -> Align.MultipleSeqAlignment:
         return self.aligner.align(seq1, seq2)
+
 
 @dataclass
 class BL2UniProtAligner(BioAligner):
