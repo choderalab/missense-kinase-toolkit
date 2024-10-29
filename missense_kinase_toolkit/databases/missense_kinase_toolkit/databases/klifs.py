@@ -1,6 +1,5 @@
 import logging
 import re
-from copy import deepcopy
 from dataclasses import dataclass, field
 from itertools import chain
 
@@ -8,7 +7,6 @@ import numpy as np
 from Bio import Align
 from bravado.client import SwaggerClient
 
-from missense_kinase_toolkit.databases import kinase_schema
 from missense_kinase_toolkit.databases.aligners import (
     BL2UniProtAligner,
     Kincore2UniProtAligner,
