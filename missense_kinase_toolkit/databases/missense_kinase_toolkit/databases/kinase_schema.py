@@ -1,20 +1,20 @@
 import logging
 import os
+from copy import deepcopy
 from enum import Enum, StrEnum
 from itertools import chain
-from copy import deepcopy
 
 import pandas as pd
 from pydantic import BaseModel, ValidationError, constr, model_validator
 from typing_extensions import Self
 
 from missense_kinase_toolkit.databases import klifs
+from missense_kinase_toolkit.databases.aligners import ClustalOmegaAligner
 from missense_kinase_toolkit.databases.kincore import (
     align_kincore2uniprot,
     extract_pk_fasta_info_as_dict,
 )
 from missense_kinase_toolkit.databases.utils import get_repo_root
-from missense_kinase_toolkit.databases.aligners import ClustalOmegaAligner
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +210,7 @@ class KinaseInfo(BaseModel):
                 self.KLIFS2UniProtSeq = temp_obj.KLIFS2UniProtSeq
 
         return self
+
 
 def check_if_file_exists_then_load_dataframe(str_file: str) -> pd.DataFrame | None:
     """Check if file exists and load dataframe.
@@ -527,9 +528,12 @@ def create_kinase_models_from_df(
 
     return dict_kinase_models
 
+
 def replace_none_with_max_len(dict_in):
-    dict_max_len = {key1: max([len(val2) for val2 in val1.values() \
-                               if val2 is not None]) for key1, val1 in dict_in.items()}
+    dict_max_len = {
+        key1: max([len(val2) for val2 in val1.values() if val2 is not None])
+        for key1, val1 in dict_in.items()
+    }
 
     for region, length in dict_max_len.items():
         for hgnc, seq in dict_in[region].items():
@@ -538,11 +542,12 @@ def replace_none_with_max_len(dict_in):
 
     return dict_in
 
+
 def align_inter_intra_region(
     dict_in: dict[str, KinaseInfo],
 ) -> dict[str, dict[str, str]]:
     """Align inter and intra region sequences.
-    
+
     Parameters
     ----------
     dict_in : dict[str, KinaseInfo]
@@ -556,9 +561,10 @@ def align_inter_intra_region(
 
     list_inter_intra = klifs.LIST_INTER_REGIONS + klifs.LIST_INTRA_REGIONS
 
-    dict_align = {region: {hgnc: None for hgnc in dict_in.keys()}\
-                  for region in list_inter_intra}
-    
+    dict_align = {
+        region: {hgnc: None for hgnc in dict_in.keys()} for region in list_inter_intra
+    }
+
     for region in list_inter_intra:
         list_hgnc, list_seq = [], []
         for hgnc, kinase_info in dict_in.items():
@@ -568,7 +574,9 @@ def align_inter_intra_region(
                 list_seq.append(seq)
         if len(list_seq) > 2:
             aligner_temp = ClustalOmegaAligner(list_seq)
-            dict_align[region].update(dict(zip(list_hgnc, aligner_temp.list_alignments)))
+            dict_align[region].update(
+                dict(zip(list_hgnc, aligner_temp.list_alignments))
+            )
         else:
             # hinge:linker - {'ATR': 'N', 'CAMKK1': 'L'}
             # αE:VI - {'MKNK1': 'DKVSLCHLGWSAMAPSGLTAAPTSLGSSDPPTSASQVAGTT'}
@@ -578,25 +586,29 @@ def align_inter_intra_region(
 
     return dict_align
 
-def reverse_order_dict_of_dict(
-        dict_in: dict[str, dict[str, str | int | None]],
-    ) -> dict[str, dict[str, str | int | None]]:
-        """Reverse order of dictionary of dictionaries.
-        
-        Parameters
-        ----------
-        dict_in : dict[str, dict[str, str | int | None]]
-            Dictionary of dictionaries
-            
-        Returns
-        -------
-        dict_out : dict[str, dict[str, str | int | None]]
-            Dictionary of dictionaries with reversed order
 
-        """
-        dict_out = {key1: {key2 : dict_in[key2][key1] for key2 in dict_in.keys()}\
-                    for key1 in set(chain(*[list(j.keys()) for j in dict_in.values()]))}
-        return dict_out
+def reverse_order_dict_of_dict(
+    dict_in: dict[str, dict[str, str | int | None]],
+) -> dict[str, dict[str, str | int | None]]:
+    """Reverse order of dictionary of dictionaries.
+
+    Parameters
+    ----------
+    dict_in : dict[str, dict[str, str | int | None]]
+        Dictionary of dictionaries
+
+    Returns
+    -------
+    dict_out : dict[str, dict[str, str | int | None]]
+        Dictionary of dictionaries with reversed order
+
+    """
+    dict_out = {
+        key1: {key2: dict_in[key2][key1] for key2 in dict_in.keys()}
+        for key1 in set(chain(*[list(j.keys()) for j in dict_in.values()]))
+    }
+    return dict_out
+
 
 # # NOT IN USE - USE TO GENERATE ABOVE
 

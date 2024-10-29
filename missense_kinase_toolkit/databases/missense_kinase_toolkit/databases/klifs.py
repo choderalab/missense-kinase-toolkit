@@ -8,12 +8,12 @@ import numpy as np
 from Bio import Align
 from bravado.client import SwaggerClient
 
+from missense_kinase_toolkit.databases import kinase_schema
 from missense_kinase_toolkit.databases.aligners import (
     BL2UniProtAligner,
     Kincore2UniProtAligner,
 )
 from missense_kinase_toolkit.databases.api_schema import SwaggerAPIClient
-from missense_kinase_toolkit.databases import kinase_schema
 
 logger = logging.getLogger(__name__)
 
@@ -152,11 +152,11 @@ LIST_KLIFS_REGION = list(
 
 # αC:b.l - {'BUB1B': 'E'} - need to skip this, seems to be in b.l gap region
 LIST_INTER_REGIONS = [
-    "II:III", 
-    "III:αC", 
-    "IV:V", 
-    "hinge:linker", 
-    "αD:αE", 
+    "II:III",
+    "III:αC",
+    "IV:V",
+    "hinge:linker",
+    "αD:αE",
     "αE:VI",
     "VII:VIII",
 ]
@@ -164,8 +164,8 @@ LIST_INTER_REGIONS = [
 
 
 LIST_INTRA_REGIONS = [
-    "b.l_intra", 
-    "linker_intra", 
+    "b.l_intra",
+    "linker_intra",
 ]
 """list[str]: List of intra-region region gaps that exist given analysis."""
 
@@ -811,15 +811,21 @@ class KLIFSPocket:
         """Get inter-region sequences."""
 
         list_region = list(DICT_POCKET_KLIFS_REGIONS.keys())
-        dict_start_end = {list_region[i-1]:list_region[i] for i in range(1, len(list_region)-1)}
-        dict_cols = {key: list(i for i in LIST_KLIFS_REGION \
-                            if i.split(":")[0] == key) for key in list_region}
-        
+        dict_start_end = {
+            list_region[i - 1]: list_region[i] for i in range(1, len(list_region) - 1)
+        }
+        dict_cols = {
+            key: list(i for i in LIST_KLIFS_REGION if i.split(":")[0] == key)
+            for key in list_region
+        }
+
         list_inter = []
         for key1, val1 in dict_start_end.items():
             keys_start, keys_end = dict_cols[key1], dict_cols[val1]
-            
-            start = [val for key, val in self.KLIFS2UniProtIdx.items() if key in keys_start]
+
+            start = [
+                val for key, val in self.KLIFS2UniProtIdx.items() if key in keys_start
+            ]
             if all(v is None for v in start):
                 max_start = None
             else:
@@ -833,17 +839,18 @@ class KLIFSPocket:
 
             list_inter.append((max_start, min_end))
 
-        dict_inter = dict(zip([f"{key}:{val}" for key, val in \
-                               dict_start_end.items()], list_inter))
+        dict_inter = dict(
+            zip([f"{key}:{val}" for key, val in dict_start_end.items()], list_inter)
+        )
 
         dict_fasta = {i: {} for i in LIST_INTER_REGIONS}
         for region in LIST_INTER_REGIONS:
             start, end = dict_inter[region][0], dict_inter[region][1]
             if start is not None and end is not None:
-                if end-start == 0:
+                if end - start == 0:
                     dict_fasta[region] = None
                 else:
-                    dict_fasta[region] = self.uniprotSeq[int(start)-1:int(end)-1]
+                    dict_fasta[region] = self.uniprotSeq[int(start) - 1 : int(end) - 1]
             else:
                 dict_fasta[region] = None
 
@@ -851,8 +858,8 @@ class KLIFSPocket:
 
     def recursive_idx_search(
         self,
-        idx: int, 
-        in_dict: dict[str, int], 
+        idx: int,
+        in_dict: dict[str, int],
         decreasing: bool,
     ):
         """Recursively search for index in dictionary.
@@ -877,9 +884,9 @@ class KLIFSPocket:
         list_keys = list(in_dict.keys())
         if in_dict[list_keys[idx]] is None:
             if decreasing:
-                idx = self.recursive_idx_search(idx-1, in_dict, True)
+                idx = self.recursive_idx_search(idx - 1, in_dict, True)
             else:
-                idx = self.recursive_idx_search(idx+1, in_dict, False)
+                idx = self.recursive_idx_search(idx + 1, in_dict, False)
         return idx
 
     def find_intra_gaps(
@@ -895,7 +902,7 @@ class KLIFSPocket:
             Dictionary of KLIFS regions and their corresponding indices
         bool_bl : bool
             If True, find intra-region gaps for b.l region; if False, find intra-region gaps for linker region
-        
+
         Returns
         -------
         tuple[str, str] | None
@@ -910,33 +917,30 @@ class KLIFSPocket:
 
         list_keys = list(dict_in.keys())
         list_idx = [idx for idx, i in enumerate(dict_in.keys()) if region in i]
-        
-        #TODO: ATR and CAMKK1 have inter hinge:linker region
+
+        # TODO: ATR and CAMKK1 have inter hinge:linker region
         start = list_idx[idx_in]
         end = list_idx[idx_out]
 
         if dict_in[list_keys[start]] is None:
-            start = self.recursive_idx_search(start-1, dict_in, True)
+            start = self.recursive_idx_search(start - 1, dict_in, True)
         if dict_in[list_keys[end]] is None:
-            end = self.recursive_idx_search(end+1, dict_in, False)
+            end = self.recursive_idx_search(end + 1, dict_in, False)
 
         # STK40 has no b.l region or preceding
         if start == "NONE":
             return None
 
-        return (dict_in[list_keys[start]], dict_in[list_keys[end]])    
+        return (dict_in[list_keys[start]], dict_in[list_keys[end]])
 
-    def return_intra_gap_substr(
-        self,
-        bl_bool
-    ) -> str | None:
+    def return_intra_gap_substr(self, bl_bool) -> str | None:
         """Return intra-region gap substring.
 
         Parameters
         ----------
         bl_bool : bool
             If True, find intra-region gaps for b.l region; if False, find intra-region gaps for linker region
-        
+
         Returns
         -------
         str | None
@@ -951,8 +955,8 @@ class KLIFSPocket:
             if end - start == 1:
                 return None
             else:
-                return self.uniprotSeq[start:end-1]
-            
+                return self.uniprotSeq[start : end - 1]
+
     def get_intra_region(self):
         """Get intra-region sequences."""
         list_seq = []
@@ -971,28 +975,36 @@ class KLIFSPocket:
         dict_inter = self.get_inter_region()
 
         list_inter_regions = list(dict_inter.keys())
-        list_idx_inter = list(chain(*[list(idx for idx, j in enumerate(list_region) \
-                                        if j == i.split(":")[0]) for i in list_inter_regions]))
-        
+        list_idx_inter = list(
+            chain(
+                *[
+                    list(
+                        idx for idx, j in enumerate(list_region) if j == i.split(":")[0]
+                    )
+                    for i in list_inter_regions
+                ]
+            )
+        )
+
         list_region_combo = list(list_region)
         i = 0
         for idx, val in zip(list_idx_inter, list_inter_regions):
-            list_region_combo.insert(idx+i+1, val)
+            list_region_combo.insert(idx + i + 1, val)
             i += 1
 
         # intra region
         dict_intra = self.get_intra_region()
-        
+
         idx = list_region_combo.index("b.l")
-        list_region_combo[idx:idx+1] = "b.l_1", "b.l_intra", "b.l_2"
+        list_region_combo[idx : idx + 1] = "b.l_1", "b.l_intra", "b.l_2"
 
         idx = list_region_combo.index("linker")
-        list_region_combo[idx:idx+1] = "linker_1", "linker_intra", "linker_2"
+        list_region_combo[idx : idx + 1] = "linker_1", "linker_intra", "linker_2"
 
         dict_full_klifs_region = {region: None for region in list_region_combo}
 
         dict_actual = dict(zip(list_region, self.list_klifs_substr_actual))
-        # for region in list_region_combo:KL    
+        # for region in list_region_combo:KL
         for region, seq in dict_actual.items():
             if region == "b.l":
                 dict_full_klifs_region["b.l_1"] = seq[0:2]
@@ -1011,6 +1023,7 @@ class KLIFSPocket:
             dict_full_klifs_region[region] = seq
 
         self.KLIFS2UniProtSeq = dict_full_klifs_region
+
 
 # # NOT IN USE - USE TO GENERATE ABOVE
 
@@ -1034,9 +1047,9 @@ class KLIFSPocket:
 
 #     list_temp = []
 #     for idx, row in df_klifs_idx.iterrows():
-        
+
 #         cols_start, cols_end = dict_cols[key], dict_cols[val]
-        
+
 #         start = row.loc[cols_start].values
 #         if np.all(np.isnan(start)):
 #             max_start = None
@@ -1048,9 +1061,9 @@ class KLIFSPocket:
 #             min_end = None
 #         else:
 #             min_end = np.nanmin(end)
-            
+
 #         list_temp.append((max_start, min_end))
-    
+
 #     list_inter.append(list_temp)
 
 # df_inter = pd.DataFrame(list_inter,
