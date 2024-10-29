@@ -13,6 +13,7 @@ from missense_kinase_toolkit.databases.aligners import (
     Kincore2UniProtAligner,
 )
 from missense_kinase_toolkit.databases.api_schema import SwaggerAPIClient
+from missense_kinase_toolkit.databases import kinase_schema
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,26 @@ LIST_KLIFS_REGION = list(
     )
 )
 """list[str]: List of string of all KLIFS pocket regions in format region:idx."""
+
+
+# αC:b.l - {'BUB1B': 'E'} - need to skip this, seems to be in b.l gap region
+LIST_INTER_REGIONS = [
+    "II:III", 
+    "III:αC", 
+    "IV:V", 
+    "hinge:linker", 
+    "αD:αE", 
+    "αE:VI",
+    "VII:VIII",
+]
+"""list[str]: List of inter-region region gaps that exist given analysis."""
+
+
+LIST_INTRA_REGIONS = [
+    "b.l_intra", 
+    "linker_intra", 
+]
+"""list[str]: List of intra-region region gaps that exist given analysis."""
 
 
 class KLIFS(SwaggerAPIClient):
@@ -341,13 +362,15 @@ class KLIFSPocket:
     list_klifs_substr_match: list[str | None] = field(default_factory=list)
     list_substring_idxs: list[list[int | None] | None] = field(default_factory=list)
     list_align: list[str | None] | None = None
-    KLIFS2UniProt: dict[str, int | None] = {i: None for i in LIST_KLIFS_REGION}
+    KLIFS2UniProtIdx: dict[str, int | None] = field(default_factory=dict)
+    KLIFS2UniProtSeq: dict[str, str | None] = field(default_factory=dict)
 
     def __post_init__(self):
         self.iterate_klifs_alignment()
         self.generate_alignment_list(bool_offset=self.offset_bool)
         if self.list_align is not None:
-            self.KLIFS2UniProt.update(dict(zip(LIST_KLIFS_REGION, self.list_align)))
+            self.KLIFS2UniProtIdx.update(dict(zip(LIST_KLIFS_REGION, self.list_align)))
+            self.generate_alignment_list_including_gaps()
 
     @staticmethod
     def remove_gaps_from_klifs(klifs_string: str) -> str:
@@ -784,82 +807,143 @@ class KLIFSPocket:
 
         self.list_align = list_align
 
+    def get_inter_region(self):
+        """Get inter-region sequences."""
+
+        list_region = list(DICT_POCKET_KLIFS_REGIONS.keys())
+        dict_start_end = {list_region[i-1]:list_region[i] for i in range(1, len(list_region)-1)}
+        dict_cols = {key: list(i for i in LIST_KLIFS_REGION \
+                            if i.split(":")[0] == key) for key in list_region}
+        
+        list_inter = []
+        for key1, val1 in dict_start_end.items():
+            keys_start, keys_end = dict_cols[key1], dict_cols[val1]
+            
+            start = [val for key, val in self.KLIFS2UniProtIdx.items() if key in keys_start]
+            if all(v is None for v in start):
+                max_start = None
+            else:
+                max_start = np.nanmax(np.array(start, dtype=float)) + 1
+
+            end = [val for key, val in self.KLIFS2UniProtIdx.items() if key in keys_end]
+            if all(v is None for v in end):
+                min_end = None
+            else:
+                min_end = np.nanmin(np.array(end, dtype=float))
+
+            list_inter.append((max_start, min_end))
+
+        dict_inter = dict(zip([f"{key}:{val}" for key, val in \
+                               dict_start_end.items()], list_inter))
+
+        dict_fasta = {i: {} for i in LIST_INTER_REGIONS}
+        for region in LIST_INTER_REGIONS:
+            start, end = dict_inter[region][0], dict_inter[region][1]
+            if start is not None and end is not None:
+                if end-start == 0:
+                    dict_fasta[region] = None
+                else:
+                    dict_fasta[region] = self.uniprotSeq[int(start)-1:int(end)-1]
+            else:
+                dict_fasta[region] = None
+
+        return dict_fasta
+
     def recursive_idx_search(
         self,
-        idx: int,
+        idx: int, 
+        in_dict: dict[str, int], 
         decreasing: bool,
-    ) -> int | str:
-        """Recursively search for preceding or subsequent alignment index if current value is None.
+    ):
+        """Recursively search for index in dictionary.
 
         Parameters
         ----------
         idx : int
-            Current index
+            Index to start search
+        in_dict : dict[str, int]
+            Dictionary to search
+        decreasing : bool
+            If True, search in decreasing order; if False, search in increasing order
 
         Returns
         -------
         idx : int
-            Index of alignment
+            Index in dictionary
 
         """
         if idx == 0:
             return "NONE"
-        list_keys = list(self.KLIFS2UniProt.keys())
-        if self.KLIFS2UniProt[list_keys[idx]] is None:
+        list_keys = list(in_dict.keys())
+        if in_dict[list_keys[idx]] is None:
             if decreasing:
-                idx = self.recursive_idx_search(idx - 1, self.KLIFS2UniProt, True)
+                idx = self.recursive_idx_search(idx-1, in_dict, True)
             else:
-                idx = self.recursive_idx_search(idx + 1, self.KLIFS2UniProt, False)
+                idx = self.recursive_idx_search(idx+1, in_dict, False)
         return idx
 
     def find_intra_gaps(
         self,
-        dict_temp: dict[str, int | None],
+        dict_in: dict[str, int],
         bool_bl: bool = True,
-    ) -> tuple[int, int] | None:
+    ) -> tuple[int, str] | None:
         """Find intra-pocket gaps in KLIFS pocket region.
 
         Parameters
         ----------
+        dict_in : dict[str, int]
+            Dictionary of KLIFS regions and their corresponding indices
         bool_bl : bool
-            If True, find intra-pocket gaps in b.l region; if False, find intra-pocket gaps in linker region
-
+            If True, find intra-region gaps for b.l region; if False, find intra-region gaps for linker region
+        
         Returns
         -------
-        tuple[int, int] | None
-            Start and end indices of intra-pocket gaps in KLIFS pocket region; if None found, return None
+        tuple[str, str] | None
+            Tuple of intra-region gaps
 
         """
         if bool_bl:
             region, idx_in, idx_out = "b.l", 1, 2
+            region, idx_in, idx_out = "b.l", 1, 2
         else:
             region, idx_in, idx_out = "linker", 0, 1
 
-        list_keys = list(self.KLIFS2UniProt.keys())
-        list_idx = [
-            idx for idx, i in enumerate(self.KLIFS2UniProt.keys()) if region in i
-        ]
-
-        # TODO: ATR and CAMKK1 have inter hinge:linker region
+        list_keys = list(dict_in.keys())
+        list_idx = [idx for idx, i in enumerate(dict_in.keys()) if region in i]
+        
+        #TODO: ATR and CAMKK1 have inter hinge:linker region
         start = list_idx[idx_in]
         end = list_idx[idx_out]
 
-        if dict_temp[list_keys[start]] is None:
-            start = self.recursive_idx_search(start - 1, dict_temp, True)
-        if dict_temp[list_keys[end]] is None:
-            end = self.recursive_idx_search(end + 1, dict_temp, False)
+        if dict_in[list_keys[start]] is None:
+            start = self.recursive_idx_search(start-1, dict_in, True)
+        if dict_in[list_keys[end]] is None:
+            end = self.recursive_idx_search(end+1, dict_in, False)
 
         # STK40 has no b.l region or preceding
         if start == "NONE":
             return None
 
-        return (dict_temp[list_keys[start]], dict_temp[list_keys[end]])
+        return (dict_in[list_keys[start]], dict_in[list_keys[end]])    
 
     def return_intra_gap_substr(
         self,
-        bl_bool: bool = True,
+        bl_bool
     ) -> str | None:
-        tuple_idx = self.find_intra_gaps(self.KLIFS2UniProt, bl_bool)
+        """Return intra-region gap substring.
+
+        Parameters
+        ----------
+        bl_bool : bool
+            If True, find intra-region gaps for b.l region; if False, find intra-region gaps for linker region
+        
+        Returns
+        -------
+        str | None
+            Intra-region gap substring
+
+        """
+        tuple_idx = self.find_intra_gaps(self.KLIFS2UniProtIdx, bl_bool)
         if tuple_idx is None:
             return None
         else:
@@ -867,69 +951,66 @@ class KLIFSPocket:
             if end - start == 1:
                 return None
             else:
-                return self.uniprotSeq[start - 1 : end - 1]
+                return self.uniprotSeq[start:end-1]
+            
+    def get_intra_region(self):
+        """Get intra-region sequences."""
+        list_seq = []
+        for region in LIST_INTRA_REGIONS:
+            if region.split("_")[0] == "b.l":
+                list_seq.append(self.return_intra_gap_substr(True))
+            else:
+                list_seq.append(self.return_intra_gap_substr(False))
+        return dict(zip(LIST_INTRA_REGIONS, list_seq))
 
-    @staticmethod
-    def reverse_order_dict_of_dict(
-        dict_in: dict[str, dict[str, str | int | None]],
-    ) -> dict[str, dict[str, str | int | None]]:
-        """Reverse order of dictionary of dictionaries.
+    def generate_alignment_list_including_gaps(self):
+        """Return fully aligned KLIFS pocket."""
+        list_region = list(DICT_POCKET_KLIFS_REGIONS.keys())
 
-        Parameters
-        ----------
-        dict_in : dict[str, dict[str, str | int | None]]
-            Dictionary of dictionaries
+        # inter region
+        dict_inter = self.get_inter_region()
 
-        Returns
-        -------
-        dict_out : dict[str, dict[str, str | int | None]]
-            Dictionary of dictionaries with reversed order
+        list_inter_regions = list(dict_inter.keys())
+        list_idx_inter = list(chain(*[list(idx for idx, j in enumerate(list_region) \
+                                        if j == i.split(":")[0]) for i in list_inter_regions]))
+        
+        list_region_combo = list(list_region)
+        i = 0
+        for idx, val in zip(list_idx_inter, list_inter_regions):
+            list_region_combo.insert(idx+i+1, val)
+            i += 1
 
-        """
-        dict_out = {
-            key1: {key2: dict_in[key2][key1] for key2 in dict_in.keys()}
-            for key1 in set(chain(*[list(j.keys()) for j in dict_in.values()]))
-        }
-        return dict_out
+        # intra region
+        dict_intra = self.get_intra_region()
+        
+        idx = list_region_combo.index("b.l")
+        list_region_combo[idx:idx+1] = "b.l_1", "b.l_intra", "b.l_2"
 
-    @staticmethod
-    def replace_none_with_max_len_gap(
-        dict_in: dict[str, dict[str, str | int | None]],
-    ) -> dict[str, dict[str, str | int | None]]:
-        """Replace None values with maximum length gap in dictionary of dictionaries.
+        idx = list_region_combo.index("linker")
+        list_region_combo[idx:idx+1] = "linker_1", "linker_intra", "linker_2"
 
-        Parameters
-        ----------
-        dict_in : dict[str, dict[str, str | int | None]]
-            Dictionary of dictionaries
+        dict_full_klifs_region = {region: None for region in list_region_combo}
 
-        Returns
-        -------
-        dict_out : dict[str, dict[str, str | int | None]]
-            Dictionary of dictionaries with None values replaced with maximum length gap
+        dict_actual = dict(zip(list_region, self.list_klifs_substr_actual))
+        # for region in list_region_combo:KL    
+        for region, seq in dict_actual.items():
+            if region == "b.l":
+                dict_full_klifs_region["b.l_1"] = seq[0:2]
+                dict_full_klifs_region["b.l_2"] = seq[2:]
+                pass
+            elif region == "linker":
+                dict_full_klifs_region["linker_1"] = seq[0:1]
+                dict_full_klifs_region["linker_2"] = seq[1:]
+            else:
+                dict_full_klifs_region[region] = seq
 
-        """
-        dict_max_len = {
-            key1: max([len(val2) for val2 in val1.values() if val2 is not None])
-            for key1, val1 in dict_in.items()
-        }
+        for region, seq in dict_inter.items():
+            dict_full_klifs_region[region] = seq
 
-        dict_out = deepcopy(dict_in)
-        for key1, length in dict_max_len.items():
-            for key2, val in dict_out[key1].items():
-                if val is None:
-                    dict_out[key1][key2] = "-" * length
+        for region, seq in dict_intra.items():
+            dict_full_klifs_region[region] = seq
 
-        return dict_out
-
-    def find_and_align_inter_and_intra_klifs_regions(
-        self,
-        list_cols: list[str] | None = None,
-    ):
-        if list_cols is None:
-            ["II:III", "III:αC", "IV:V", "hinge:linker", "αD:αE", "αE:VI", "VII:VIII"]
-        pass
-
+        self.KLIFS2UniProtSeq = dict_full_klifs_region
 
 # # NOT IN USE - USE TO GENERATE ABOVE
 
@@ -937,3 +1018,57 @@ class KLIFSPocket:
 #                    in enumerate(val.KLIFSPocket.list_substring_idxs) if entry is not None and len(entry)>1)\
 #               for key, val in dict_klifs.items()]
 # set(chain(*list_multi)) # {'b.l:b.l', 'linker:linker'}
+
+# df_klifs_idx = pd.DataFrame([list(j for i, j in val.KLIFS2UniProt.items()) for key, val in dict_klifs.items()],
+#                             columns=klifs.LIST_KLIFS_REGION, index=dict_klifs.keys())
+
+# # dict_temp = klifs.DICT_POCKET_KLIFS_REGIONS
+# list_region = list(klifs.DICT_POCKET_KLIFS_REGIONS.keys())
+
+# dict_start_end = {list_region[i-1]:list_region[i] for i in range(1, len(list_region)-1)}
+# dict_cols = {key: list(i for i in df_klifs_idx.columns.tolist() \
+#                        if i.split(":")[0] == key) for key in list_region}
+
+# list_inter = []
+# for key, val in dict_start_end.items():
+
+#     list_temp = []
+#     for idx, row in df_klifs_idx.iterrows():
+        
+#         cols_start, cols_end = dict_cols[key], dict_cols[val]
+        
+#         start = row.loc[cols_start].values
+#         if np.all(np.isnan(start)):
+#             max_start = None
+#         else:
+#             max_start = np.nanmax(start) + 1
+
+#         end = row.loc[cols_end].values
+#         if np.all(np.isnan(end)):
+#             min_end = None
+#         else:
+#             min_end = np.nanmin(end)
+            
+#         list_temp.append((max_start, min_end))
+    
+#     list_inter.append(list_temp)
+
+# df_inter = pd.DataFrame(list_inter,
+#                         index=[f"{key}:{val}" for key, val in dict_start_end.items()],
+#                         columns=df_klifs_idx.index).T
+# df_length = df_inter.map(lambda x: try_except_substraction(x[0], x[1]))
+
+# # df_one = df_length.loc[:, df_length.apply(lambda x: any(x == 1))]
+# # df_multi = df_length.loc[:, df_length.apply(lambda x: any(x > 1))]
+# df_multi = df_length.loc[:, df_length.apply(lambda x: any(x > 0))]
+# # αC:b.l - {'BUB1B': 'E'} - need to skip this, seems to be in b.l gap region
+
+# df_bl = pd.DataFrame([list(j for i, j in val.KLIFS2UniProt.items() if i in list_idx_dict[0]) \
+#                       for key, val in dict_klifs.items()],
+#                      columns=list_idx_dict[0], index=dict_klifs.keys())
+# df_bl[df_bl.isnull().any(axis=1)]
+
+# df_linker = pd.DataFrame([list(j for i, j in val.KLIFS2UniProt.items() if i in list_idx_dict[1]) \
+#                           for key, val in dict_klifs.items()],
+#                          columns=list_idx_dict[1], index=dict_klifs.keys())
+# df_linker[df_linker.isnull().any(axis=1)]

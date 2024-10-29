@@ -1,6 +1,8 @@
 import logging
 import os
 from enum import Enum, StrEnum
+from itertools import chain
+from copy import deepcopy
 
 import pandas as pd
 from pydantic import BaseModel, ValidationError, constr, model_validator
@@ -12,6 +14,7 @@ from missense_kinase_toolkit.databases.kincore import (
     extract_pk_fasta_info_as_dict,
 )
 from missense_kinase_toolkit.databases.utils import get_repo_root
+from missense_kinase_toolkit.databases.aligners import ClustalOmegaAligner
 
 logger = logging.getLogger(__name__)
 
@@ -86,9 +89,9 @@ KinaseDomainName = StrEnum(
     "KinaseDomainName", {"KD" + str(idx + 1): kd for idx, kd in enumerate(LIST_PFAM_KD)}
 )
 
-UniProtSeq = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWXY]+$")
+SeqUniProt = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWXY]+$")
 """Pydantic model for UniProt sequence constraints."""
-KLIFSSeq = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWY\-]{85}$")
+SeqKLIFS = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWY\-]{85}$")
 """Pydantic model for KLIFS pocket sequence constraints."""
 UniProtID = constr(pattern=r"^[A-Z][0-9][A-Z0-9]{3}[0-9]$")
 """Pydantic model for UniProt ID constraints."""
@@ -107,7 +110,7 @@ class KinHub(BaseModel):
 class UniProt(BaseModel):
     """Pydantic model for UniProt information."""
 
-    canonical_seq: UniProtSeq
+    canonical_seq: SeqUniProt
 
 
 class KLIFS(BaseModel):
@@ -120,7 +123,7 @@ class KLIFS(BaseModel):
     family: Family
     iuphar: int
     kinase_id: int
-    pocket_seq: KLIFSSeq | None
+    pocket_seq: SeqKLIFS | None
 
 
 class Pfam(BaseModel):
@@ -137,7 +140,7 @@ class Pfam(BaseModel):
 class KinCore(BaseModel):
     """Pydantic model for KinCore information."""
 
-    seq: UniProtSeq
+    seq: SeqUniProt
     start: int | None
     end: int | None
     mismatch: list[int] | None
@@ -154,8 +157,9 @@ class KinaseInfo(BaseModel):
     Pfam: Pfam | None
     KinCore: KinCore | None
     bool_offset: bool = True
-    KLIFS2UniProt: dict[str, int] | None = None
-    KLIFSPocket: klifs.KLIFSPocket | None = None
+    KLIFS2UniProtIdx: dict[str, int | None] | None = None
+    KLIFS2UniProtSeq: dict[str, str | None] | None = None
+    # KLIFSPocket: klifs.KLIFSPocket | None = None
 
     # https://docs.pydantic.dev/latest/examples/custom_validators/#validating-nested-model-fields
     @model_validator(mode="after")
@@ -175,17 +179,14 @@ class KinaseInfo(BaseModel):
     # https://stackoverflow.com/questions/68082983/validating-a-nested-model-in-pydantic
     # skip if other validation errors occur in nested models first
     @model_validator(mode="after")
-    @classmethod
-    def validate_uniprot_length(cls, values):
+    def validate_uniprot_length(self) -> Self:
         """Validate canonical UniProt sequence length matches Pfam length if Pfam not None."""
-        pfam = values.Pfam
-        uniprot = values.UniProt
-        if pfam is not None:
-            if len(uniprot.canonical_seq) != pfam.protein_length:
+        if self.Pfam is not None:
+            if len(self.UniProt.canonical_seq) != self.Pfam.protein_length:
                 raise ValidationError(
                     "UniProt sequence length does not match Pfam protein length."
                 )
-        return values
+        return self
 
     @model_validator(mode="after")
     def generate_klifs2uniprot_dict(self) -> Self:
@@ -205,157 +206,10 @@ class KinaseInfo(BaseModel):
             )
 
             if temp_obj.list_align is not None:
-                self.KLIFS2UniProt = temp_obj.KLIFS2UniProt
-                # self.KLIFSPocket = temp_obj
+                self.KLIFS2UniProtIdx = temp_obj.KLIFS2UniProtIdx
+                self.KLIFS2UniProtSeq = temp_obj.KLIFS2UniProtSeq
 
         return self
-
-    def recursive_idx_search(
-        self,
-        idx: int,
-        decreasing: bool,
-    ) -> int | str:
-        """Recursively search for preceding or subsequent alignment index if current value is None.
-
-        Parameters
-        ----------
-        idx : int
-            Current index
-
-        Returns
-        -------
-        idx : int
-            Index of alignment
-
-        """
-        if idx == 0:
-            return "NONE"
-        list_keys = list(self.KLIFS2UniProt.keys())
-        if self.KLIFS2UniProt[list_keys[idx]] is None:
-            if decreasing:
-                idx = self.recursive_idx_search(idx - 1, self.KLIFS2UniProt, True)
-            else:
-                idx = self.recursive_idx_search(idx + 1, self.KLIFS2UniProt, False)
-        return idx
-
-    def find_intra_gaps(
-        self,
-        dict_temp: dict[str, int | None],
-        bool_bl: bool = True,
-    ) -> tuple[int, int] | None:
-        """Find intra-pocket gaps in KLIFS pocket region.
-
-        Parameters
-        ----------
-        bool_bl : bool
-            If True, find intra-pocket gaps in b.l region; if False, find intra-pocket gaps in linker region
-
-        Returns
-        -------
-        tuple[int, int] | None
-            Start and end indices of intra-pocket gaps in KLIFS pocket region; if None found, return None
-
-        """
-        if bool_bl:
-            region, idx_in, idx_out = "b.l", 1, 2
-        else:
-            region, idx_in, idx_out = "linker", 0, 1
-
-        list_keys = list(self.KLIFS2UniProt.keys())
-        list_idx = [
-            idx for idx, i in enumerate(self.KLIFS2UniProt.keys()) if region in i
-        ]
-
-        # TODO: ATR and CAMKK1 have inter hinge:linker region
-        start = list_idx[idx_in]
-        end = list_idx[idx_out]
-
-        if dict_temp[list_keys[start]] is None:
-            start = self.recursive_idx_search(start - 1, dict_temp, True)
-        if dict_temp[list_keys[end]] is None:
-            end = self.recursive_idx_search(end + 1, dict_temp, False)
-
-        # STK40 has no b.l region or preceding
-        if start == "NONE":
-            return None
-
-        return (dict_temp[list_keys[start]], dict_temp[list_keys[end]])
-
-    def return_intra_gap_substr(
-        self,
-        bl_bool: bool = True,
-    ) -> str | None:
-        tuple_idx = self.find_intra_gaps(self.KLIFS2UniProt, bl_bool)
-        if tuple_idx is None:
-            return None
-        else:
-            start, end = tuple_idx[0], tuple_idx[1]
-            if end - start == 1:
-                return None
-            else:
-                return self.uniprotSeq[start - 1 : end - 1]
-
-    @staticmethod
-    def reverse_order_dict_of_dict(
-        dict_in: dict[str, dict[str, str | int | None]],
-    ) -> dict[str, dict[str, str | int | None]]:
-        """Reverse order of dictionary of dictionaries.
-
-        Parameters
-        ----------
-        dict_in : dict[str, dict[str, str | int | None]]
-            Dictionary of dictionaries
-
-        Returns
-        -------
-        dict_out : dict[str, dict[str, str | int | None]]
-            Dictionary of dictionaries with reversed order
-
-        """
-        dict_out = {
-            key1: {key2: dict_in[key2][key1] for key2 in dict_in.keys()}
-            for key1 in set(chain(*[list(j.keys()) for j in dict_in.values()]))
-        }
-        return dict_out
-
-    @staticmethod
-    def replace_none_with_max_len_gap(
-        dict_in: dict[str, dict[str, str | int | None]],
-    ) -> dict[str, dict[str, str | int | None]]:
-        """Replace None values with maximum length gap in dictionary of dictionaries.
-
-        Parameters
-        ----------
-        dict_in : dict[str, dict[str, str | int | None]]
-            Dictionary of dictionaries
-
-        Returns
-        -------
-        dict_out : dict[str, dict[str, str | int | None]]
-            Dictionary of dictionaries with None values replaced with maximum length gap
-
-        """
-        dict_max_len = {
-            key1: max([len(val2) for val2 in val1.values() if val2 is not None])
-            for key1, val1 in dict_in.items()
-        }
-
-        dict_out = deepcopy(dict_in)
-        for key1, length in dict_max_len.items():
-            for key2, val in dict_out[key1].items():
-                if val is None:
-                    dict_out[key1][key2] = "-" * length
-
-        return dict_out
-
-    def find_and_align_inter_and_intra_klifs_regions(
-        self,
-        list_cols: list[str] | None = None,
-    ):
-        if list_cols is None:
-            ["II:III", "III:αC", "IV:V", "hinge:linker", "αD:αE", "αE:VI", "VII:VIII"]
-        pass
-
 
 def check_if_file_exists_then_load_dataframe(str_file: str) -> pd.DataFrame | None:
     """Check if file exists and load dataframe.
@@ -673,6 +527,76 @@ def create_kinase_models_from_df(
 
     return dict_kinase_models
 
+def replace_none_with_max_len(dict_in):
+    dict_max_len = {key1: max([len(val2) for val2 in val1.values() \
+                               if val2 is not None]) for key1, val1 in dict_in.items()}
+
+    for region, length in dict_max_len.items():
+        for hgnc, seq in dict_in[region].items():
+            if seq is None:
+                dict_in[region][hgnc] = "-" * length
+
+    return dict_in
+
+def align_inter_intra_region(
+    dict_in: dict[str, KinaseInfo],
+) -> dict[str, dict[str, str]]:
+    """Align inter and intra region sequences.
+    
+    Parameters
+    ----------
+    dict_in : dict[str, KinaseInfo]
+        Dictionary of kinase information models
+
+    Returns
+    -------
+    dict[str, dict[str, str]]
+        Dictionary of aligned inter and intra region
+    """
+
+    list_inter_intra = klifs.LIST_INTER_REGIONS + klifs.LIST_INTRA_REGIONS
+
+    dict_align = {region: {hgnc: None for hgnc in dict_in.keys()}\
+                  for region in list_inter_intra}
+    
+    for region in list_inter_intra:
+        list_hgnc, list_seq = [], []
+        for hgnc, kinase_info in dict_in.items():
+            seq = kinase_info.KLIFS2UniProtSeq[region]
+            if seq is not None:
+                list_hgnc.append(hgnc)
+                list_seq.append(seq)
+        if len(list_seq) > 2:
+            aligner_temp = ClustalOmegaAligner(list_seq)
+            dict_align[region].update(dict(zip(list_hgnc, aligner_temp.list_alignments)))
+        else:
+            # hinge:linker - {'ATR': 'N', 'CAMKK1': 'L'}
+            # αE:VI - {'MKNK1': 'DKVSLCHLGWSAMAPSGLTAAPTSLGSSDPPTSASQVAGTT'}
+            dict_align[region].update(dict(zip(list_hgnc, list_seq)))
+
+    replace_none_with_max_len(dict_align)
+
+    return dict_align
+
+def reverse_order_dict_of_dict(
+        dict_in: dict[str, dict[str, str | int | None]],
+    ) -> dict[str, dict[str, str | int | None]]:
+        """Reverse order of dictionary of dictionaries.
+        
+        Parameters
+        ----------
+        dict_in : dict[str, dict[str, str | int | None]]
+            Dictionary of dictionaries
+            
+        Returns
+        -------
+        dict_out : dict[str, dict[str, str | int | None]]
+            Dictionary of dictionaries with reversed order
+
+        """
+        dict_out = {key1: {key2 : dict_in[key2][key1] for key2 in dict_in.keys()}\
+                    for key1 in set(chain(*[list(j.keys()) for j in dict_in.values()]))}
+        return dict_out
 
 # # NOT IN USE - USE TO GENERATE ABOVE
 
@@ -700,7 +624,7 @@ def create_kinase_models_from_df(
 # df_pivot = pd.DataFrame(df_kinhub[["Family", "SubFamily"]].value_counts()).reset_index().pivot(columns="Family", index="SubFamily", values="count")
 # df_pivot.loc[df_pivot.index.isin([key for key, val in dict_subfamily.items() if val >= 5]),].dropna(axis=1, how="all")
 
-# # kinase_schema.UniProtSeq
+# # kinase_schema.SeqUniProt
 # "".join(sorted(list(set(chain.from_iterable(df_uniprot["canonical_sequence"].apply(lambda x: list(x)).tolist())))))
 
 # # kinase_schema.KLIFSPocket
