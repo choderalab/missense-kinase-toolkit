@@ -1,6 +1,7 @@
-import logging
 import json
+import logging
 from enum import Enum
+
 from pydantic.dataclasses import dataclass
 
 from missense_kinase_toolkit.databases import requests_wrapper
@@ -11,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 class ScoreDatabase(str, Enum):
     """Enum class to define the score database."""
+
     Conservation = "CONSERV"
     EVE = "EVE"
     ESM1b = "ESM"
@@ -20,7 +22,7 @@ class ScoreDatabase(str, Enum):
 @dataclass
 class ProtvarScore(RESTAPIClient):
     """Class to interact with Protvar API."""
-    
+
     database: ScoreDatabase
     """Database to query for score: Conservation (CONSERV), EVE (EVE), ESM1b (ESM) and AlphaMissense (AM) scores."""
     uniprot_id: str
@@ -47,12 +49,11 @@ class ProtvarScore(RESTAPIClient):
             mut_new = self.mut
 
         self.url_query = (
-            self.url
-                .replace("<UNIPROT>", self.uniprot_id)
-                .replace("<POS>", str(self.pos))
-                .replace(mut_old, mut_new)
-                .replace("<DATABASE>", self.database)
-            )
+            self.url.replace("<UNIPROT>", self.uniprot_id)
+            .replace("<POS>", str(self.pos))
+            .replace(mut_old, mut_new)
+            .replace("<DATABASE>", self.database)
+        )
 
     def query_api(self) -> dict:
         header = {"Accept": "application/json"}

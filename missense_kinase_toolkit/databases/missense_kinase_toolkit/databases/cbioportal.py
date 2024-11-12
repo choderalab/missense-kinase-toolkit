@@ -173,4 +173,3 @@ def try_except_middle_int(str_in):
         return int(str_in[1:-1])
     except ValueError:
         return None
-    

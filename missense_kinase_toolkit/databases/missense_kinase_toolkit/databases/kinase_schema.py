@@ -525,7 +525,8 @@ def create_kinase_models_from_df(
 
     return dict_kinase_models
 
-def get_sequence_max_with_exception(list_in: list[int| None]) -> int:
+
+def get_sequence_max_with_exception(list_in: list[int | None]) -> int:
     """Get maximum sequence length from dictionary of dictionaries.
 
     Parameters
@@ -543,9 +544,12 @@ def get_sequence_max_with_exception(list_in: list[int| None]) -> int:
     except ValueError:
         return 0
 
+
 def replace_none_with_max_len(dict_in):
     dict_max_len = {
-        key1: get_sequence_max_with_exception([len(val2) for val2 in val1.values() if val2 is not None])
+        key1: get_sequence_max_with_exception(
+            [len(val2) for val2 in val1.values() if val2 is not None]
+        )
         for key1, val1 in dict_in.items()
     }
 
