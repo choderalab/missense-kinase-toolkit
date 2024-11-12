@@ -3,8 +3,6 @@
 import os
 
 import pandas as pd
-import torch
-import transformers
 from datasets import load_dataset
 from transformers import (
     AutoTokenizer,

@@ -1,13 +1,11 @@
 import argparse
 import datetime
 import os
-
 import numpy as np
 import pandas as pd
-import torch
 from datasets import Dataset, load_dataset
 from sklearn.metrics import mean_squared_error
-from transformers import AutoTokenizer
+import matplotlib.pyplot as plt
 
 
 def parsearg_utils():
@@ -236,7 +234,7 @@ def save_csv2csv(
     -------
     None
     """
-    df = df.loc[df["Mutant"] == False,].reset_index(drop=True)
+    df = df.loc[df["Mutant"].apply(lambda x: x is False), ].reset_index(drop=True)
     df_shuffle = df.copy().sample(frac=1, random_state=seed).reset_index(drop=True)
     df_out = df_shuffle[[col_seq, col_lab]]
     df_out.columns = ["seq", "label"]
@@ -326,27 +324,27 @@ def plot_label_histogram(
     -------
     None
     """
-    list_fold = df_val["fold"].unique().tolist()
-    list_replace = [f"Fold: {i}\n(n = {sum(df_val["fold"] == i)})" for i in list_fold]
-    df_val["fold_label"] = df_val["fold"].map(dict(zip(list_fold, list_replace)))
+    list_fold = val_df["fold"].unique().tolist()
+    list_replace = [f"Fold: {i}\n(n = {sum(val_df["fold"] == i)})" for i in list_fold]
+    val_df["fold_label"] = val_df["fold"].map(dict(zip(list_fold, list_replace)))
 
     if bool_orig:
-        df_val["orig_label"] = invert_zscore(df_val["label"], labels)
-        df_val["orig_label"] = df_val["orig_label"].apply(lambda x: 10**x)
+        val_df["orig_label"] = invert_zscore(val_df["label"], labels)
+        val_df["orig_label"] = val_df["orig_label"].apply(lambda x: 10**x)
 
-    g = sns.FacetGrid(df_val, col="fold_label", hue="fold")
+    g = sns.FacetGrid(val_df, col="fold_label", hue="fold")
 
     if bool_orig:
         g.map(plt.hist, "orig_label")
         g.set_axis_labels("Km, ATP", "Frequency")
-        y, x, _ = plt.hist(df_val["orig_label"])
+        y, x, _ = plt.hist(val_df["orig_label"])
     else:
         g.map(plt.hist, "label")
         g.set_axis_labels("z-score, $log_{10}$Km, ATP", "Frequency")
-        y, x, _ = plt.hist(df_val["label"])
+        y, x, _ = plt.hist(val_df["label"])
 
     for idx, ax in enumerate(g.axes.flat):
-        loc = df_val.loc[df_val["fold"] == idx + 1, "label"].mean()
+        loc = val_df.loc[val_df["fold"] == idx + 1, "label"].mean()
         ax.axvline(loc, color="r", linestyle="dashed", linewidth=1)
         ax.text(
             loc + (x.max() - x.min()) * 0.1,

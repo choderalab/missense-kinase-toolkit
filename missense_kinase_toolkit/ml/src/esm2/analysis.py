@@ -9,7 +9,7 @@ import pandas as pd
 import seaborn as sns
 
 # os.chdir("/data1/tanseyw/projects/whitej/esm_km_atp/src")
-from utils import invert_zscore, load_csv2dataset, parse_stats_dataframes, save_csv2csv
+from utils import invert_zscore, load_csv2dataset, parse_stats_dataframes
 
 path = "/data1/tanseyw/projects/whitej/esm_km_atp/"
 list_files = glob.glob(os.path.join(path, "*/fold-*.csv"))
@@ -29,7 +29,7 @@ list_logs = [
 
 dict_logs = dict(zip(list_runs, list_logs))
 
-### Load and process training and evaluation loss ###
+# Load and process training and evaluation loss #
 
 df_train, df_eval, df_final = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 for exp, list_file in dict_logs.items():
@@ -42,7 +42,7 @@ for exp, list_file in dict_logs.items():
         df_eval = pd.concat([df_eval, df_eval_temp]).reset_index(drop=True)
         df_final = pd.concat([df_final, df_final_temp]).reset_index(drop=True)
 
-### Load validation and training datasets ###
+# Load validation and training datasets #
 
 # TODO: Look at all files
 ds_val, ds_train = load_csv2dataset(path, 5, "KLIFS_FULL_data.csv")
@@ -52,7 +52,7 @@ for idx, ds in enumerate(ds_val):
     df_val_temp["fold"] = idx + 1
     df_val = pd.concat([df_val, df_val_temp]).reset_index(drop=True)
 
-### Plot training loss ###
+# Plot training loss #
 
 list_fold = df_train["fold"].unique().tolist()
 list_replace = [f"Fold: {i}\n(n = {sum(df_val["fold"] != i)})" for i in list_fold]
@@ -75,7 +75,7 @@ plt.savefig(os.path.join(path, "images/train_loss_2024.10.30.png"))
 # g.set_titles('{col_name}')
 # plt.savefig(os.path.join(path, "images/train_loss.png"))
 
-### Plot evaluation RMSE ###
+# Plot evaluation RMSE #
 
 list_fold = df_eval["fold"].unique().tolist()
 list_replace = [f"Fold: {i}\n(n = {sum(df_val["fold"] == i)})" for i in list_fold]
@@ -124,7 +124,7 @@ g.set_axis_labels("Steps", "RMSE, Eval (Converted)")
 g.set_titles("{col_name}")
 plt.savefig(os.path.join(path, "images/eval_rmse_converted.png"))
 
-### Plot histogram of labels for validation set ###
+# Plot histogram of labels for validation set #
 
 list_fold = df_val["fold"].unique().tolist()
 list_replace = [f"Fold: {i}\n(n = {sum(df_val["fold"] == i)})" for i in list_fold]

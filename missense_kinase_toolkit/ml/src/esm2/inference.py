@@ -1,8 +1,7 @@
-import matplotlib as mpl
-import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 import seaborn as sns
-import torch
 from transformers import AutoTokenizer, EsmForSequenceClassification
 
 path_model = "/data1/tanseyw/projects/whitej/esm_km_atp/5CV-KLIFS_MIN-esm2_t6_8M_UR50D/full/results/checkpoint-12500"
