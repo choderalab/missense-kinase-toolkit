@@ -166,3 +166,10 @@ class Mutations(cBioPortal):
 
 
 # TODO: implement clinical annotations class
+
+
+def try_except_middle_int(str_in):
+    try:
+        return int(str_in[1:-1])
+    except ValueError:
+        return None

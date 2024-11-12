@@ -183,3 +183,10 @@ def get_repo_root():
         return repo.working_tree_dir
     except git.InvalidGitRepositoryError:
         return None
+
+
+def try_except_substraction(a, b):
+    try:
+        return b - a
+    except TypeError:
+        return None
