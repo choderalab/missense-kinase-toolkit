@@ -1,11 +1,12 @@
 import argparse
 import datetime
 import os
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from datasets import Dataset, load_dataset
 from sklearn.metrics import mean_squared_error
-import matplotlib.pyplot as plt
 
 
 def parsearg_utils():
@@ -234,7 +235,7 @@ def save_csv2csv(
     -------
     None
     """
-    df = df.loc[df["Mutant"].apply(lambda x: x is False), ].reset_index(drop=True)
+    df = df.loc[df["Mutant"].apply(lambda x: x is False),].reset_index(drop=True)
     df_shuffle = df.copy().sample(frac=1, random_state=seed).reset_index(drop=True)
     df_out = df_shuffle[[col_seq, col_lab]]
     df_out.columns = ["seq", "label"]
