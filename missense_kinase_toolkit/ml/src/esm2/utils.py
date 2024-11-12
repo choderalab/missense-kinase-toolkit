@@ -3,6 +3,7 @@ import datetime
 import os
 
 import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
 import pandas as pd
 from datasets import Dataset, load_dataset
@@ -310,6 +311,7 @@ def parse_stats_dataframes(
 def plot_label_histogram(
     val_df: pd.DataFrame,
     bool_orig: bool = True,
+    labels: list[float] | None = None,
     path: str = "/data1/tanseyw/projects/whitej/esm_km_atp/",
 ):
     """Plot histograms of labels for validation set.
@@ -320,6 +322,8 @@ def plot_label_histogram(
         Validation dataframe from trainer state log.
     bool_orig : bool
         If True, plot labels in original scale.
+    labels : list[float] | None
+        List of labels for original scale.
 
     Returns
     -------
@@ -329,7 +333,7 @@ def plot_label_histogram(
     list_replace = [f"Fold: {i}\n(n = {sum(val_df["fold"] == i)})" for i in list_fold]
     val_df["fold_label"] = val_df["fold"].map(dict(zip(list_fold, list_replace)))
 
-    if bool_orig:
+    if bool_orig and labels is not None:
         val_df["orig_label"] = invert_zscore(val_df["label"], labels)
         val_df["orig_label"] = val_df["orig_label"].apply(lambda x: 10**x)
 
