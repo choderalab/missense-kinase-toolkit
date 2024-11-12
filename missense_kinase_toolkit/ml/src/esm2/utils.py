@@ -3,9 +3,9 @@ import datetime
 import os
 
 import matplotlib.pyplot as plt
-import seaborn as sns
 import numpy as np
 import pandas as pd
+import seaborn as sns
 from datasets import Dataset, load_dataset
 from sklearn.metrics import mean_squared_error
 
