@@ -87,7 +87,6 @@ class Family(Enum):
 KinaseDomainName = StrEnum(
     "KinaseDomainName", {"KD" + str(idx + 1): kd for idx, kd in enumerate(LIST_PFAM_KD)}
 )
-
 SeqUniProt = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWXY]+$")
 """Pydantic model for UniProt sequence constraints."""
 SeqKLIFS = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWY\-]{85}$")
@@ -158,7 +157,6 @@ class KinaseInfo(BaseModel):
     bool_offset: bool = True
     KLIFS2UniProtIdx: dict[str, int | None] | None = None
     KLIFS2UniProtSeq: dict[str, str | None] | None = None
-    # KLIFSPocket: klifs.KLIFSPocket | None = None
 
     # https://docs.pydantic.dev/latest/examples/custom_validators/#validating-nested-model-fields
     @model_validator(mode="after")
@@ -527,10 +525,27 @@ def create_kinase_models_from_df(
 
     return dict_kinase_models
 
+def get_sequence_max_with_exception(list_in: list[int| None]) -> int:
+    """Get maximum sequence length from dictionary of dictionaries.
+
+    Parameters
+    ----------
+    dict_in : dict[str, dict[str, str | None]]
+        Dictionary of dictionaries.
+
+    Returns
+    -------
+    int
+        Maximum sequence length.
+    """
+    try:
+        return max(list_in)
+    except ValueError:
+        return 0
 
 def replace_none_with_max_len(dict_in):
     dict_max_len = {
-        key1: max([len(val2) for val2 in val1.values() if val2 is not None])
+        key1: get_sequence_max_with_exception([len(val2) for val2 in val1.values() if val2 is not None])
         for key1, val1 in dict_in.items()
     }
 
@@ -567,7 +582,10 @@ def align_inter_intra_region(
     for region in list_inter_intra:
         list_hgnc, list_seq = [], []
         for hgnc, kinase_info in dict_in.items():
-            seq = kinase_info.KLIFS2UniProtSeq[region]
+            try:
+                seq = kinase_info.KLIFS2UniProtSeq[region]
+            except TypeError:
+                seq = None
             if seq is not None:
                 list_hgnc.append(hgnc)
                 list_seq.append(seq)
