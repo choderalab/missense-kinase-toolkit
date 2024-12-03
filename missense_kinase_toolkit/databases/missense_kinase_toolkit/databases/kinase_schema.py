@@ -439,6 +439,7 @@ def create_kinase_models_from_df(
     if df is None:
         df = concatenate_source_dataframe()
 
+    # concatenate_source_dataframe could return None
     if df is None:
         logger.error("Dataframe is None. Cannot create kinase models.")
         return None

@@ -125,7 +125,6 @@ class SequenceAlignment:
             text="text",
             text_align="center",
             text_color="black",
-            # text_font           = "monospace",
             text_font_size=f"{str(self.font_size)}pt",
         )
         rects = Rect(
@@ -150,9 +149,10 @@ class SequenceAlignment:
         """Show sequence alignment plot via Bokeh."""
         from bokeh.plotting import show
 
+        # show in separate window
+        show(self.plot)
+
         # notebook alternative
         # import panel as pn
         # pn.extension()
         # pn.pane.Bokeh(alignment_klifs_min.plot)
-
-        show(self.plot)
