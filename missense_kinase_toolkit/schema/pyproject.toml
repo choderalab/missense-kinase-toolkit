@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "schema"
+version = "0.1.0"
+description = "Module in missense-kinase-toolkit for schema management."
+authors = ["Jess White <jess.white@choderalab.org>"]
+license = "MIT"
+readme = "README.md"
+packages = [
+    {include = "missense_kinase_toolkit"},
+    {include = "missense_kinase_toolkit/py.typed"}
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+gitpython = "^3.1.43"
+pydantic = "^2.10.3"
+
+[tool.poetry.group.dev.dependencies]
+black = "^24.3.0"
+flake8 = "^7.0.0"
+sphinx = "^7.3.7"
+sphinx-rtd-theme = "^2.0.0"
+
+[tool.poetry.group.test.dependencies]
+pytest = "^8.0.1"
+pytest-runner = "^6.0.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
