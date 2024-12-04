@@ -1,7 +1,8 @@
-import git
-from typing import Any, Callable, Optional
-import json
 import glob
+import json
+from typing import Any, Callable, Optional
+
+import git
 
 from missense_kinase_toolkit.schema import kinase_schema
 
@@ -43,12 +44,12 @@ def serialize_kinase_dict(
         str_path = str_path
 
     for key, val in kinase_dict.items():
-        with open(f"{str_path}/{key}.json", "w") as outfile:   
+        with open(f"{str_path}/{key}.json", "w") as outfile:
             val_serialized = serialization_function(
-                val, 
+                val,
                 **serialization_kwargs,
             )
-            #TODO: Fix this
+            # TODO: Fix this
             json.dump(val_serialized, outfile)
 
 
@@ -85,7 +86,7 @@ def deserialize_kinase_dict(
 
     dict_import = {}
     for file in list_file:
-        with open(file, "r") as openfile:
+        with open(file) as openfile:
             val_deserialized = deserialization_function(
                 openfile,
                 **deserialization_kwargs,

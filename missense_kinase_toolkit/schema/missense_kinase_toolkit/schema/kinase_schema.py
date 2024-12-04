@@ -3,7 +3,6 @@ from enum import Enum, StrEnum
 
 from pydantic import BaseModel, constr
 
-
 logger = logging.getLogger(__name__)
 
 
