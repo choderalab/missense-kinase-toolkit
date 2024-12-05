@@ -142,6 +142,5 @@ class KinaseInfo(BaseModel):
     KLIFS: KLIFS | None
     Pfam: Pfam | None
     KinCore: KinCore | None
-    bool_offset: bool = True
     KLIFS2UniProtIdx: dict[str, int | None] | None = None
     KLIFS2UniProtSeq: dict[str, str | None] | None = None
