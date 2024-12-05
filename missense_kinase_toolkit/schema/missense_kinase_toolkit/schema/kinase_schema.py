@@ -1,7 +1,8 @@
 import logging
-from enum import Enum, StrEnum
+from enum import Enum
 
 from pydantic import BaseModel, constr
+from strenum import StrEnum
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +13,7 @@ LIST_PFAM_KD = [
 ]
 
 
-class Group(str, Enum):
+class Group(StrEnum):
     """Enum class for kinase groups."""
 
     AGC = "AGC"  # Protein Kinase A, G, and C families
@@ -142,6 +143,5 @@ class KinaseInfo(BaseModel):
     KLIFS: KLIFS | None
     Pfam: Pfam | None
     KinCore: KinCore | None
-    bool_offset: bool = True
     KLIFS2UniProtIdx: dict[str, int | None] | None = None
     KLIFS2UniProtSeq: dict[str, str | None] | None = None
