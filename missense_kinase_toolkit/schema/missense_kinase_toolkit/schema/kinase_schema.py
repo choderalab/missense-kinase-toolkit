@@ -1,5 +1,6 @@
 import logging
-from enum import Enum, StrEnum
+from enum import Enum
+from strenum import StrEnum
 
 from pydantic import BaseModel, constr
 
@@ -12,7 +13,7 @@ LIST_PFAM_KD = [
 ]
 
 
-class Group(str, Enum):
+class Group(StrEnum):
     """Enum class for kinase groups."""
 
     AGC = "AGC"  # Protein Kinase A, G, and C families
