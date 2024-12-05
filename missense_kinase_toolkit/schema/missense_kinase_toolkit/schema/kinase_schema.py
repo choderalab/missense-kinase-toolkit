@@ -1,8 +1,8 @@
 import logging
 from enum import Enum
-from strenum import StrEnum
 
 from pydantic import BaseModel, constr
+from strenum import StrEnum
 
 logger = logging.getLogger(__name__)
 
