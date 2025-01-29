@@ -159,12 +159,12 @@ class Mutations(cBioPortal):
     @staticmethod
     def try_except_middle_int(str_in):
         """Try to convert string [1:-1] characters to integer.
-        
+
         Parameters
         ----------
         str_in : str
             String to convert to integer
-        
+
         Returns
         -------
         int | None
