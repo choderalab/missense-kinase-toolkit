@@ -156,6 +156,27 @@ class Mutations(cBioPortal):
         else:
             return df_combo
 
+    @staticmethod
+    def try_except_middle_int(str_in):
+        """Try to convert string [1:-1] characters to integer.
+
+        Parameters
+        ----------
+        str_in : str
+            String to convert to integer
+
+        Returns
+        -------
+        int | None
+            Integer if successful, otherwise None
+
+        """
+
+        try:
+            return int(str_in[1:-1])
+        except ValueError:
+            return None
+
     def get_study_id(self):
         """Get cBioPortal study ID."""
         return self.study_id
@@ -166,10 +187,3 @@ class Mutations(cBioPortal):
 
 
 # TODO: implement clinical annotations class
-
-
-def try_except_middle_int(str_in):
-    try:
-        return int(str_in[1:-1])
-    except ValueError:
-        return None
