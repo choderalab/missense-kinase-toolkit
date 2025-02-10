@@ -1,3 +1,4 @@
+import ast
 import json
 import logging
 from enum import Enum
@@ -32,9 +33,13 @@ class ProtvarScore(RESTAPIClient):
     mut: str | None = None
     """Mutant residue (1 or 3 letter code); disregarded for Conservation score and optional for the other scores;
         if None will provide all ."""
+    url: str = "https://www.ebi.ac.uk/ProtVar/api/score/<UNIPROT>/<POS>?mt=<MUT>&name=<DATABASE>"
+    """URL for Protvar score API query."""
+    header: str = "{'Accept': 'application/json'}"
+    """Header for the API request."""
 
     def __post_init__(self):
-        self.url = "https://www.ebi.ac.uk/ProtVar/api/score/<UNIPROT>/<POS>?mt=<MUT>&name=<DATABASE>"
+        # self.url = "https://www.ebi.ac.uk/ProtVar/api/score/<UNIPROT>/<POS>?mt=<MUT>&name=<DATABASE>"
         self.create_query_url()
         self.query_api()
 
@@ -49,15 +54,19 @@ class ProtvarScore(RESTAPIClient):
             mut_new = self.mut
 
         self.url_query = (
-            self.url.replace("<UNIPROT>", self.uniprot_id)
+            self.url
+            .replace("<UNIPROT>", self.uniprot_id)
             .replace("<POS>", str(self.pos))
             .replace(mut_old, mut_new)
             .replace("<DATABASE>", self.database)
         )
 
     def query_api(self) -> dict:
-        header = {"Accept": "application/json"}
-        res = requests_wrapper.get_cached_session().get(self.url_query, headers=header)
+        # header = {"Accept": "application/json"}
+        res = requests_wrapper.get_cached_session().get(
+            self.url_query, 
+            headers=ast.literal_eval(self.header),
+        )
 
         if res.ok:
             self._protvar_score = json.loads(res.text)
