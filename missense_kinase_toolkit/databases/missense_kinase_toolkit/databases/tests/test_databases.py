@@ -312,6 +312,14 @@ class TestDatabases:
             == "Protein tyrosine and serine/threonine kinase"
         )
 
+def test_protvar():
+    from missense_kinase_toolkit.databases.protvar import ProtvarScore
+
+    temp_obj = ProtvarScore(database="AM", uniprot_id="P00519", pos=292, mut="D")
+    assert len(temp_obj._protvar_score) == 1
+    assert temp_obj._protvar_score[0]["amPathogenicity"] == 0.4217
+    assert temp_obj._protvar_score[0]["amClass"] == "AMBIGUOUS"
+
 
 def test_ncbi():
     from missense_kinase_toolkit.databases import ncbi
