@@ -312,6 +312,7 @@ class TestDatabases:
             == "Protein tyrosine and serine/threonine kinase"
         )
 
+
 def test_protvar():
     from missense_kinase_toolkit.databases.protvar import ProtvarScore
 
