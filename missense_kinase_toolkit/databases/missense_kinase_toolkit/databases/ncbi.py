@@ -1,17 +1,18 @@
-import os.path
 import ast
-from io import BytesIO
-from zipfile import ZipFile
-from io import StringIO
-from Bio import SeqIO
 import logging
-from pydantic.dataclasses import dataclass
+import os.path
 from dataclasses import field
+from io import BytesIO, StringIO
+from zipfile import ZipFile
+
+from Bio import SeqIO
+from pydantic.dataclasses import dataclass
 
 from missense_kinase_toolkit.databases import requests_wrapper
 from missense_kinase_toolkit.databases.api_schema import RESTAPIClient
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class ProteinNCBI(RESTAPIClient):
@@ -19,10 +20,12 @@ class ProteinNCBI(RESTAPIClient):
 
     accession: str
     """Accession ID for the protein."""
-    url: str = "https://api.ncbi.nlm.nih.gov/datasets/v2/protein/accession/<ACC>/download?"
+    url: str = (
+        "https://api.ncbi.nlm.nih.gov/datasets/v2/protein/accession/<ACC>/download?"
+    )
     """URL for the NCBI Protein API."""
     annotation: str | None = "FASTA_PROTEIN"
-    """Annotation type to include in the download: FASTA_UNSPECIFIED ┃ FASTA_GENE ┃ FASTA_RNA ┃ 
+    """Annotation type to include in the download: FASTA_UNSPECIFIED ┃ FASTA_GENE ┃ FASTA_RNA ┃
         FASTA_PROTEIN ┃ FASTA_GENE_FLANK ┃ FASTA_CDS ┃ FASTA_5P_UTR ┃ FASTA_3P_UTR."""
     headers: str = "{'Accept': 'application/zip'}"
     """Header for the API request."""
@@ -42,14 +45,14 @@ class ProteinNCBI(RESTAPIClient):
 
         if self.annotation is not None:
             if self.annotation not in [
-                "FASTA_UNSPECIFIED", 
-                "FASTA_GENE", 
-                "FASTA_RNA", 
+                "FASTA_UNSPECIFIED",
+                "FASTA_GENE",
+                "FASTA_RNA",
                 "FASTA_PROTEIN",
-                "FASTA_GENE_FLANK", 
-                "FASTA_CDS", 
-                "FASTA_5P_UTR", 
-                "FASTA_3P_UTR"
+                "FASTA_GENE_FLANK",
+                "FASTA_CDS",
+                "FASTA_5P_UTR",
+                "FASTA_3P_UTR",
             ]:
                 logger.error("Annotation type not valid.")
             else:
@@ -60,15 +63,19 @@ class ProteinNCBI(RESTAPIClient):
             self.url_query,
             headers=ast.literal_eval(self.headers),
         )
-        
+
         if res.ok:
             zip_ref = ZipFile(BytesIO(res.content))
             info_list = zip_ref.infolist()
-            list_ext = [os.path.splitext(file_info.filename)[1] for file_info in info_list]
+            list_ext = [
+                os.path.splitext(file_info.filename)[1] for file_info in info_list
+            ]
             list_idx = [idx for idx, i in enumerate(list_ext) if i == ".faa"]
 
             if len(list_idx) == 0:
-                logging.error(f"Failed to download any FASTA files using following query: {self.url_query}.")
+                logging.error(
+                    f"Failed to download any FASTA files using following query: {self.url_query}."
+                )
 
             for idx in list_idx:
                 str_fasta = zip_ref.open(info_list[idx]).read().decode()
@@ -77,4 +84,6 @@ class ProteinNCBI(RESTAPIClient):
                 self.list_headers.extend([fasta[0] for fasta in list_fasta])
                 self.list_seq.extend([fasta[1] for fasta in list_fasta])
         else:
-            logging.error(f"Status code {res.status_code} using following query: {self.url_query}.")
+            logging.error(
+                f"Status code {res.status_code} using following query: {self.url_query}."
+            )

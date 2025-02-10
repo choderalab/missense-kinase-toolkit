@@ -33,7 +33,9 @@ class ProtvarScore(RESTAPIClient):
     mut: str | None = None
     """Mutant residue (1 or 3 letter code); disregarded for Conservation score and optional for the other scores;
         if None will provide all ."""
-    url: str = "https://www.ebi.ac.uk/ProtVar/api/score/<UNIPROT>/<POS>?mt=<MUT>&name=<DATABASE>"
+    url: str = (
+        "https://www.ebi.ac.uk/ProtVar/api/score/<UNIPROT>/<POS>?mt=<MUT>&name=<DATABASE>"
+    )
     """URL for Protvar score API query."""
     header: str = "{'Accept': 'application/json'}"
     """Header for the API request."""
@@ -54,8 +56,7 @@ class ProtvarScore(RESTAPIClient):
             mut_new = self.mut
 
         self.url_query = (
-            self.url
-            .replace("<UNIPROT>", self.uniprot_id)
+            self.url.replace("<UNIPROT>", self.uniprot_id)
             .replace("<POS>", str(self.pos))
             .replace(mut_old, mut_new)
             .replace("<DATABASE>", self.database)
@@ -64,7 +65,7 @@ class ProtvarScore(RESTAPIClient):
     def query_api(self) -> dict:
         # header = {"Accept": "application/json"}
         res = requests_wrapper.get_cached_session().get(
-            self.url_query, 
+            self.url_query,
             headers=ast.literal_eval(self.header),
         )
 
