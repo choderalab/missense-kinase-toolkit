@@ -348,7 +348,7 @@ class TestDatabases:
             "a.l:84": 858,
             "a.l:85": 859,
         }
-        assert egfr_pocket.KLIFS2UniProtSq == {
+        assert egfr_pocket.KLIFS2UniProtSeq == {
             "I": "KVL",
             "g.l": "GSGAFG",
             "II": "TVYK",
@@ -502,7 +502,7 @@ class TestDatabases:
             == "Protein tyrosine and serine/threonine kinase"
         )
 
-    def test_protvar():
+    def test_protvar(self):
         from missense_kinase_toolkit.databases.protvar import ProtvarScore
 
         temp_obj = ProtvarScore(database="AM", uniprot_id="P00519", pos=292, mut="D")
@@ -510,7 +510,7 @@ class TestDatabases:
         assert temp_obj._protvar_score[0]["amPathogenicity"] == 0.4217
         assert temp_obj._protvar_score[0]["amClass"] == "AMBIGUOUS"
 
-    def test_ncbi():
+    def test_ncbi(self):
         from missense_kinase_toolkit.databases import ncbi
 
         seq_obj = ncbi.ProteinNCBI(accession="EAX02438.1")
