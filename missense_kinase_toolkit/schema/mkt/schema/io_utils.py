@@ -1,16 +1,15 @@
-from os import path
 import glob
 import json
-from typing import Any, Callable, Optional
-import pkg_resources
-from pydantic import BaseModel 
-import json
-import yaml
-import toml
-import git
 import logging
+from os import path
+from typing import Any, Callable, Optional
 
+import git
+import pkg_resources
+import toml
+import yaml
 from mkt.schema import kinase_schema
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +27,7 @@ def get_repo_root() -> str | None:
         return repo.working_tree_dir
     except git.InvalidGitRepositoryError:
         return None
+
 
 def load_package_if_present(package_name: str):
     """Load a package if it is present.
@@ -49,9 +49,8 @@ def load_package_if_present(package_name: str):
     except ImportError:
         return None
 
-def return_str_path(
-    str_path: str | None = None
-) -> str:
+
+def return_str_path(str_path: str | None = None) -> str:
     """Return the path to the KinaseInfo directory.
 
     Parameters
@@ -67,22 +66,19 @@ def return_str_path(
     if str_path is None:
         try:
             str_path = pkg_resources.resource_filename(
-                "mkt.schema", 
-                "KinaseInfo/*.json"
+                "mkt.schema", "KinaseInfo/*.json"
             )
         except Exception as e:
             str_path = path.join(
-                get_repo_root(),
-                "missense_kinase_toolkit/mkt/schema/KinaseInfo/*.json"
+                get_repo_root(), "missense_kinase_toolkit/mkt/schema/KinaseInfo/*.json"
             )
     else:
         str_path = str_path
 
     return str_path
 
-def return_file_suffix(
-    serialization_function: Callable[[Any], str]
-) -> str | None:
+
+def return_file_suffix(serialization_function: Callable[[Any], str]) -> str | None:
     if serialization_function == json.dumps:
         suffix = ".json"
     elif serialization_function == yaml.safe_dump:
@@ -98,13 +94,16 @@ def return_file_suffix(
     #                     f"; must be json.dumps, yaml.safe_dump, or toml.dumps.")
     #         return
     else:
-        logger.error(f"Serialization function not supported"
-                    f"; must be json.dumps, yaml.safe_dump, or toml.dumps.")
+        logger.error(
+            f"Serialization function not supported"
+            f"; must be json.dumps, yaml.safe_dump, or toml.dumps."
+        )
         return
     return suffix
 
+
 # adapted from https://axeldonath.com/scipy-2023-pydantic-tutorial/notebooks-rendered/4-serialisation-and-deserialisation.html
-#TODO make yaml.safe_dump and toml.dumps compatible
+# TODO make yaml.safe_dump and toml.dumps compatible
 def serialize_kinase_dict(
     kinase_dict: dict[str, BaseModel],
     serialization_function: Callable[[Any], str],
@@ -132,14 +131,15 @@ def serialize_kinase_dict(
         serialization_kwargs = {}
 
     suffix = return_file_suffix(serialization_function)
-    
+
     for key, val in kinase_dict.items():
         with open(f"{str_path}/{key}{suffix}", "w") as outfile:
-           val_serialized =  serialization_function(
+            val_serialized = serialization_function(
                 val,
                 **serialization_kwargs,
             )
-           outfile.write(val_serialized)
+            outfile.write(val_serialized)
+
 
 def deserialize_kinase_dict(
     deserialization_function: Callable[[Any], str] = json.load,
