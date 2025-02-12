@@ -1,31 +1,56 @@
-[tool.poetry]
-name = "schema"
-version = "0.1.0"
-description = "Module in missense-kinase-toolkit for schema management."
-authors = ["Jess White <jess.white@choderalab.org>"]
-license = "MIT"
+[build-system]
+requires = ["setuptools>=61.0", "versioningit"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mkt-schema"
+dynamic = ["version"]
+authors = [
+  { name="Jess White", email="jessica.white@choderalab.org" },
+]
+description = "Module in missense-kinase-toolkit for schema management"
 readme = "README.md"
-packages = [
-    {include = "missense_kinase_toolkit"},
-    {include = "missense_kinase_toolkit/py.typed"}
+requires-python = ">=3.9,<3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
 ]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-gitpython = "^3.1.43"
-pydantic = "^2.10.3"
-strenum = "^0.4.15"
+dependencies = [
+    "gitpython==3.1.43",
+    "pydantic==2.10.3",
+    "strenum==0.4.15",
+    "toml",
+    "pyyaml",
+]
 
-[tool.poetry.group.dev.dependencies]
-black = "^24.3.0"
-flake8 = "^7.0.0"
-sphinx = "^7.3.7"
-sphinx-rtd-theme = "^2.0.0"
+[project.optional-dependencies]
+dev = ["black==24.3.0", "flake8==7.0.0", "sphinx==7.3.7", "sphinx-rtd-theme==2.0.0"]
+test = ["pytest==8.0.1", "pytest-runner==6.0.1"]
 
-[tool.poetry.group.test.dependencies]
-pytest = "^8.0.1"
-pytest-runner = "^6.0.1"
+[tool.setuptools.package-data]
+schema = [
+    "KinaseInfo/*.json",
+]
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[project.urls]
+"Homepage" = "https://github.com/choderalab/missense-kinase-toolkit"
+"Bug Tracker" = "https://github.com/choderalab/missense-kinase-toolkit/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.versioningit]
+default-version = "1+unknown"
+
+[tool.versioningit.format]
+distance = "{base_version}+{distance}.{vcs}{rev}"
+dirty = "{base_version}+{distance}.{vcs}{rev}.dirty"
+distance-dirty = "{base_version}+{distance}.{vcs}{rev}.dirty"
+
+[tool.versioningit.vcs]
+method = "git"
+match = ["*"]
+default-tag = "0.0.0"
