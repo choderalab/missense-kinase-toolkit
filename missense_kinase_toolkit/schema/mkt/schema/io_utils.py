@@ -75,7 +75,8 @@ def return_str_path(str_path: str | None = None) -> str:
             )
             try:
                 str_path = path.join(
-                    get_repo_root(), "missense_kinase_toolkit/mkt/schema/KinaseInfo/*.json"
+                    get_repo_root(),
+                    "missense_kinase_toolkit/mkt/schema/KinaseInfo/*.json",
                 )
             except Exception as e:
                 logger.error(
