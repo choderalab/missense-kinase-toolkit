@@ -69,9 +69,19 @@ def return_str_path(str_path: str | None = None) -> str:
                 "mkt.schema", "KinaseInfo/*.json"
             )
         except Exception as e:
-            str_path = path.join(
-                get_repo_root(), "missense_kinase_toolkit/mkt/schema/KinaseInfo/*.json"
+            logger.warning(
+                f"Could not find KinaseInfo directory within package; {e}"
+                f"\nPlease provide a path to the KinaseInfo directory."
             )
+            try:
+                str_path = path.join(
+                    get_repo_root(), "missense_kinase_toolkit/mkt/schema/KinaseInfo/*.json"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Could not find KinaseInfo directory in the repository; {e}"
+                    f"\nPlease provide a path to the KinaseInfo directory."
+                )
     else:
         str_path = str_path
 
@@ -95,7 +105,7 @@ def return_file_suffix(serialization_function: Callable[[Any], str]) -> str | No
     #         return
     else:
         logger.error(
-            f"Serialization function not supported"
+            f"Serialization function ({serialization_function}) not supported"
             f"; must be json.dumps, yaml.safe_dump, or toml.dumps."
         )
         return
