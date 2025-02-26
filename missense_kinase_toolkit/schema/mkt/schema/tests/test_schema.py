@@ -1,5 +1,6 @@
 from os import name
 
+
 class TestSchema:
     def test_missense_kinase_toolkit_database_imported(self):
         """Test if module is imported."""

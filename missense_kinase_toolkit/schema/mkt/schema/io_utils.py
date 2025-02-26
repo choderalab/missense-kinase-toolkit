@@ -1,7 +1,7 @@
 import glob
 import json
 import logging
-from os import path, name
+from os import name, path
 from typing import Any, Optional
 
 import git
