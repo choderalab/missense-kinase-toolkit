@@ -1,16 +1,16 @@
-import logging
-from typing import Any, Callable, Optional
-from os import path
 import glob
+import json
+import logging
+from os import path
+from typing import Any, Callable, Optional
+
 import git
 import pkg_resources
-from tqdm import tqdm
-import json
 import toml
 import yaml
-from pydantic import BaseModel
-
 from mkt.schema import kinase_schema
+from pydantic import BaseModel
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ DICT_FUNCS = {
 }
 """dict[str, dict[str, Callable]]: Dictionary of serialization and deserialization functions supported."""
 
+
 def get_repo_root() -> str | None:
     """Get the root directory of the repository.
 
@@ -44,6 +45,7 @@ def get_repo_root() -> str | None:
         return repo.working_tree_dir
     except git.InvalidGitRepositoryError:
         return None
+
 
 def return_str_path(str_path: str | None = None) -> str:
     """Return the path to the KinaseInfo directory.
@@ -61,9 +63,7 @@ def return_str_path(str_path: str | None = None) -> str:
     if str_path is None:
         # first look in package resources
         try:
-            str_path = pkg_resources.resource_filename(
-                "mkt.schema", "KinaseInfo"
-            )
+            str_path = pkg_resources.resource_filename("mkt.schema", "KinaseInfo")
         except Exception as e:
             logger.warning(
                 f"Could not find KinaseInfo directory within package; {e}"
@@ -85,6 +85,7 @@ def return_str_path(str_path: str | None = None) -> str:
             path.os.makedirs(str_path)
 
     return str_path
+
 
 # adapted from https://axeldonath.com/scipy-2023-pydantic-tutorial/notebooks-rendered/4-serialisation-and-deserialisation.html
 def serialize_kinase_dict(
@@ -126,6 +127,7 @@ def serialize_kinase_dict(
             )
             outfile.write(val_serialized)
 
+
 def deserialize_kinase_dict(
     suffix: str = "json",
     deserialization_kwargs: Optional[dict[str, Any]] = None,
@@ -154,9 +156,7 @@ def deserialize_kinase_dict(
         return
 
     if str_path is None and suffix != "json":
-        logger.error(
-            "Only json deserialization is supported without providing a path."
-        )
+        logger.error("Only json deserialization is supported without providing a path.")
         return
 
     str_path = return_str_path(str_path)
