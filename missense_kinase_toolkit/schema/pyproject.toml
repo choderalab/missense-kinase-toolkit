@@ -24,6 +24,7 @@ dependencies = [
     "strenum==0.4.15",
     "toml",
     "pyyaml",
+    "tqdm",
 ]
 
 [project.optional-dependencies]

@@ -30,3 +30,4 @@ dependencies:
   - strenum
   - toml
   - pyyaml
+  - tqdm
