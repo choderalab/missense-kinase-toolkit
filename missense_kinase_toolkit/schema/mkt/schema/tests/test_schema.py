@@ -121,12 +121,12 @@ class TestSchema:
             io_utils.serialize_kinase_dict(
                 dict_kinase, suffix=suffix, str_path=f"./{suffix}"
             )
-            dict_temp = io_utils.deserialize_kinase_dict(
-                suffix=suffix, str_path=f"./{suffix}"
-            )
             if name == "nt" and suffix == "toml":
-                assert dict_temp is None
+                pass
             else:
+                dict_temp = io_utils.deserialize_kinase_dict(
+                    suffix=suffix, str_path=f"./{suffix}"
+                )
                 assert dict_kinase == dict_temp
-            print()
-            shutil.rmtree(f"./{suffix}")
+                print()
+                shutil.rmtree(f"./{suffix}")

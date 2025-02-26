@@ -115,7 +115,7 @@ def serialize_kinase_dict(
         return
 
     if name == "nt" and suffix == "toml":
-        logger.error("TOML serialization is not supported on Windows.")
+        logger.info("TOML serialization is not supported on Windows.")
         return
 
     str_path = return_str_path(str_path)
