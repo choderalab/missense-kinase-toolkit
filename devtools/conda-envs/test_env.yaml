@@ -23,3 +23,10 @@ dependencies:
   - biopython
   - pydantic
   - GitPython
+
+    # schema
+  - gitpython
+  - pydantic
+  - strenum
+  - toml
+  - pyyaml
