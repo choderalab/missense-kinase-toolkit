@@ -5,10 +5,19 @@ coverage:
     project:
       default:
         threshold: 50%
+
+flags:
+  schema:
+    paths:
+      - missense_kinase_toolkit/schema/mkt/schema
+  database:
+    paths:
+      - missense_kinase_toolkit/schema/mkt/database
+
 comment:
-  layout: "header"
+  layout: "header, flags"
   require_changes: false
   branches: null
   behavior: default
-  flags: null
+  # flags: null
   paths: null
