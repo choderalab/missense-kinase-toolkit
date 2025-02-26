@@ -10,14 +10,16 @@ flags:
   schema:
     paths:
       - missense_kinase_toolkit/schema/mkt/schema
+    carryforward: true
   database:
     paths:
       - missense_kinase_toolkit/schema/mkt/database
+    carryforward: true
 
 comment:
   layout: "header, flags"
   require_changes: false
   branches: null
   behavior: default
-  # flags: null
   paths: null
+  show_carryforward_flags: true
