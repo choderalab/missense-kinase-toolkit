@@ -1,8 +1,9 @@
 import logging
-from pydantic import BaseModel, constr, ConfigDict, field_validator
 from enum import Enum
-from strenum import StrEnum
 from itertools import chain
+
+from pydantic import BaseModel, ConfigDict, constr, field_validator
+from strenum import StrEnum
 
 logger = logging.getLogger(__name__)
 
@@ -14,36 +15,36 @@ LIST_PFAM_KD = [
 """list[str]: List of Pfam kinase domain names."""
 
 LIST_FULL_KLIFS_REGION = [
-    'I', 
-    'g.l', 
-    'II', 
-    'II:III', 
-    'III', 
-    'III:αC', 
-    'αC', 
-    'b.l_1', 
-    'b.l_intra', 
-    'b.l_2', 
-    'IV', 
-    'IV:V', 
-    'V', 
-    'GK', 
-    'hinge', 
-    'hinge:linker', 
-    'linker_1', 
-    'linker_intra', 
-    'linker_2', 
-    'αD', 
-    'αD:αE',
-    'αE',
-    'αE:VI',
-    'VI',
-    'c.l',
-    'VII',
-    'VII:VIII',
-    'VIII',
-    'xDFG',
-    'a.l'
+    "I",
+    "g.l",
+    "II",
+    "II:III",
+    "III",
+    "III:αC",
+    "αC",
+    "b.l_1",
+    "b.l_intra",
+    "b.l_2",
+    "IV",
+    "IV:V",
+    "V",
+    "GK",
+    "hinge",
+    "hinge:linker",
+    "linker_1",
+    "linker_intra",
+    "linker_2",
+    "αD",
+    "αD:αE",
+    "αE",
+    "αE:VI",
+    "VI",
+    "c.l",
+    "VII",
+    "VII:VIII",
+    "VIII",
+    "xDFG",
+    "a.l",
 ]
 """list[str]: List of KLIFS region, including intra and inter regions in order."""
 
@@ -177,6 +178,7 @@ LIST_KLIFS_REGION = list(
 )
 """list[str]: List of string of all KLIFS pocket regions in format region:idx."""
 
+
 class Group(StrEnum):
     """Enum class for kinase groups."""
 
@@ -190,6 +192,7 @@ class Group(StrEnum):
     TK = "TK"  # Tyrosine kinase family
     TKL = "TKL"  # Tyrosine kinase-like family
     Other = "Other"  # Other protein kinases
+
 
 class Family(Enum):
     """Enum class for kinase families (>=5 in KinHub)."""
@@ -235,6 +238,7 @@ class Family(Enum):
     Other = "Other"
     Null = None
 
+
 KinaseDomainName = StrEnum(
     "KinaseDomainName", {"KD" + str(idx + 1): kd for idx, kd in enumerate(LIST_PFAM_KD)}
 )
@@ -245,8 +249,10 @@ SeqKLIFS = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWY\-]{85}$")
 UniProtID = constr(pattern=r"^[A-Z][0-9][A-Z0-9]{3}[0-9]$")
 """Pydantic model for UniProt ID constraints."""
 
+
 class KinHub(BaseModel):
     """Pydantic model for KinHub information."""
+
     model_config = ConfigDict(use_enum_values=True)
 
     kinase_name: str
@@ -255,13 +261,16 @@ class KinHub(BaseModel):
     group: list[Group]
     family: list[Family]
 
+
 class UniProt(BaseModel):
     """Pydantic model for UniProt information."""
 
     canonical_seq: SeqUniProt
 
+
 class KLIFS(BaseModel):
     """Pydantic model for KLIFS information."""
+
     model_config = ConfigDict(use_enum_values=True)
 
     gene_name: str
@@ -273,8 +282,10 @@ class KLIFS(BaseModel):
     kinase_id: int
     pocket_seq: SeqKLIFS | None = None
 
+
 class Pfam(BaseModel):
     """Pydantic model for Pfam information."""
+
     model_config = ConfigDict(use_enum_values=True)
 
     domain_name: KinaseDomainName
@@ -284,13 +295,15 @@ class Pfam(BaseModel):
     pfam_accession: str
     in_alphafold: bool
 
+
 class KinCore(BaseModel):
     """Pydantic model for KinCore information."""
-    
+
     seq: SeqUniProt
     start: int
     end: int
     mismatch: list[int] | None = None
+
 
 class KinaseInfo(BaseModel):
     """Pydantic model for kinase information."""
@@ -308,7 +321,7 @@ class KinaseInfo(BaseModel):
     @field_validator("KLIFS2UniProtIdx", mode="before")
     @classmethod
     def validate_klifs2uniprotidx(
-        cls, 
+        cls,
         value: dict[str, int | None] | None,
     ) -> dict[str, int | None] | None:
         """Validate KLIFS2UniProtIdx dictionary to include all regions since TOML doesn't save None.
@@ -324,7 +337,7 @@ class KinaseInfo(BaseModel):
             Dictionary mapping KLIFS residue to UniProt indices.
         """
         dict_temp = dict.fromkeys(LIST_KLIFS_REGION, None)
-        
+
         if value is not None:
             for key, val in value.items():
                 dict_temp[key] = val
@@ -335,7 +348,7 @@ class KinaseInfo(BaseModel):
     @field_validator("KLIFS2UniProtSeq", mode="before")
     @classmethod
     def validate_klifs2uniprotseq(
-        cls, 
+        cls,
         value: dict[str, str | None] | None,
     ) -> dict[str, str | None] | None:
         """Validate KLIFS2UniProtSeq dictionary to include all regions since TOML doesn't save None.
@@ -351,7 +364,7 @@ class KinaseInfo(BaseModel):
             Dictionary mapping KLIFS residue to UniProt residue.
         """
         dict_temp = dict.fromkeys(LIST_FULL_KLIFS_REGION, None)
-        
+
         if value is not None:
             for key, val in value.items():
                 dict_temp[key] = val
