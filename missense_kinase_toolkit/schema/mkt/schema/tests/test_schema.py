@@ -52,7 +52,7 @@ class TestSchema:
 
         assert obj_abl1.uniprot_id == "P00519"
 
-        assert obj_abl1.kinhub.name == "Tyrosine-protein kinase ABL1"
+        assert obj_abl1.kinhub.kinase_name == "Tyrosine-protein kinase ABL1"
         assert obj_abl1.kinhub.manning_name == ["ABL"]
         assert obj_abl1.kinhub.xname == ["ABL1"]
         assert obj_abl1.kinhub.group == ["TK"]
