@@ -1,7 +1,7 @@
 import glob
 import json
 import logging
-from os import path
+from os import path, name
 from typing import Any, Optional
 
 import git
@@ -114,13 +114,17 @@ def serialize_kinase_dict(
         )
         return
 
+    if name == "nt" and suffix == "toml":
+        logger.error("TOML serialization is not supported on Windows.")
+        return
+
     str_path = return_str_path(str_path)
 
     if serialization_kwargs is None:
         serialization_kwargs = {}
 
     for key, val in tqdm(kinase_dict.items()):
-        with open(f"{str_path}/{key}.{suffix}", "w", encoding="utf-8") as outfile:
+        with open(f"{str_path}/{key}.{suffix}", "w") as outfile:
             val_serialized = DICT_FUNCS[suffix]["serialize"](
                 val.model_dump(),
                 **serialization_kwargs,

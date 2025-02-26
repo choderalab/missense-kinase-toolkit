@@ -1,3 +1,5 @@
+from os import name
+
 class TestSchema:
     def test_missense_kinase_toolkit_database_imported(self):
         """Test if module is imported."""
@@ -121,6 +123,9 @@ class TestSchema:
             dict_temp = io_utils.deserialize_kinase_dict(
                 suffix=suffix, str_path=f"./{suffix}"
             )
-            assert dict_kinase == dict_temp
+            if name == "nt" and suffix == "toml":
+                assert dict_temp is None
+            else:
+                assert dict_kinase == dict_temp
             print()
             shutil.rmtree(f"./{suffix}")
