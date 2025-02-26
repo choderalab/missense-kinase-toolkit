@@ -1,6 +1,3 @@
-import pytest
-
-
 class TestSchema:
     def test_missense_kinase_toolkit_database_imported(self):
         """Test if module is imported."""
@@ -87,7 +84,7 @@ class TestSchema:
         assert obj_abl1.pfam.start == 242
         assert obj_abl1.pfam.end == 492
         assert obj_abl1.pfam.pfam_accession == "PF07714"
-        assert obj_abl1.pfam.in_alphafold == True
+        assert obj_abl1.pfam.in_alphafold is True
 
         assert (
             obj_abl1.kincore.seq
