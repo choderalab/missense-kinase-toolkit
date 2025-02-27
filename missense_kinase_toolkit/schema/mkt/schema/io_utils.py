@@ -66,7 +66,7 @@ def return_str_path(str_path: str | None = None) -> str:
             str_path = pkg_resources.resource_filename("mkt.schema", "KinaseInfo")
         except Exception as e:
             logger.warning(
-                f"Could not find KinaseInfo directory within package; {e}"
+                f"Could not find KinaseInfo directory within package: {e}"
                 f"\nPlease provide a path to the KinaseInfo directory."
             )
             try:
@@ -77,7 +77,7 @@ def return_str_path(str_path: str | None = None) -> str:
                 )
             except Exception as e:
                 logger.error(
-                    f"Could not find KinaseInfo directory in the repository; {e}"
+                    f"Could not find KinaseInfo directory in the Github repository: {e}"
                     f"\nPlease provide a path to the KinaseInfo directory."
                 )
     else:
@@ -118,10 +118,13 @@ def serialize_kinase_dict(
         logger.info("TOML serialization is not supported on Windows.")
         return
 
-    str_path = return_str_path(str_path)
-
     if serialization_kwargs is None:
-        serialization_kwargs = {}
+        if str_path is None and suffix == "json":
+            serialization_kwargs = {"indent": 4}
+        else:
+            serialization_kwargs = {}
+
+    str_path = return_str_path(str_path)
 
     for key, val in tqdm(kinase_dict.items()):
         with open(f"{str_path}/{key}.{suffix}", "w") as outfile:
@@ -163,11 +166,11 @@ def deserialize_kinase_dict(
         logger.error("Only json deserialization is supported without providing a path.")
         return
 
-    str_path = return_str_path(str_path)
-    list_file = glob.glob(path.join(str_path, f"*.{suffix}"))
-
     if deserialization_kwargs is None:
         deserialization_kwargs = {}
+
+    str_path = return_str_path(str_path)
+    list_file = glob.glob(path.join(str_path, f"*.{suffix}"))
 
     dict_import = {}
     for file in tqdm(list_file):
