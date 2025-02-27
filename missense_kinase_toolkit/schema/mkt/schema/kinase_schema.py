@@ -1,10 +1,9 @@
 import logging
 from enum import Enum
 
+from mkt.schema.constants import LIST_FULL_KLIFS_REGION, LIST_KLIFS_REGION, LIST_PFAM_KD
 from pydantic import BaseModel, ConfigDict, constr, field_validator
 from strenum import StrEnum
-
-from mkt.schema.constants import LIST_PFAM_KD, LIST_KLIFS_REGION, LIST_FULL_KLIFS_REGION
 
 logger = logging.getLogger(__name__)
 
