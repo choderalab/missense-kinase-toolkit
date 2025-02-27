@@ -1,1 +1,36 @@
-{"hgnc_name": "PDK4", "uniprot_id": "Q16654", "kinhub": {"kinase_name": "[Pyruvate dehydrogenase [lipoamide]] kinase isozyme 4", "manning_name": ["PDHK4"], "xname": ["PDHK4"], "group": ["Atypical"], "family": ["PDHK"]}, "uniprot": {"canonical_seq": "MKAARFVLRSAGSLNGAGLVPREVEHFSRYSPSPLSMKQLLDFGSENACERTSFAFLRQELPVRLANILKEIDILPTQLVNTSSVQLVKSWYIQSLMDLVEFHEKSPDDQKALSDFVDTLIKVRNRHHNVVPTMAQGIIEYKDACTVDPVTNQNLQYFLDRFYMNRISTRMLMNQHILIFSDSQTGNPSHIGSIDPNCDVVAVVQDAFECSRMLCDQYYLSSPELKLTQVNGKFPDQPIHIVYVPSHLHHMLFELFKNAMRATVEHQENQPSLTPIEVIVVLGKEDLTIKISDRGGGVPLRIIDRLFSYTYSTAPTPVMDNSRNAPLAGFGYGLPISRLYAKYFQGDLNLYSLSGYGTDAIIYLKALSSESIEKLPVFNKSAFKHYQMSSEADDWCIPSREPKNLAKEVAM"}, "klifs": {"gene_name": "PDK4", "name": "PDHK4", "full_name": "[Pyruvate dehydrogenase (acetyl-transferring)] kinase isozyme 4, mitochondrial", "group": "Atypical", "family": "PDHK", "iuphar": 2144, "kinase_id": 93, "pocket_seq": null}, "pfam": null, "kincore": null, "KLIFS2UniProtIdx": null, "KLIFS2UniProtSeq": null}
+{
+    "hgnc_name": "PDK4",
+    "uniprot_id": "Q16654",
+    "kinhub": {
+        "kinase_name": "[Pyruvate dehydrogenase [lipoamide]] kinase isozyme 4",
+        "manning_name": [
+            "PDHK4"
+        ],
+        "xname": [
+            "PDHK4"
+        ],
+        "group": [
+            "Atypical"
+        ],
+        "family": [
+            "PDHK"
+        ]
+    },
+    "uniprot": {
+        "canonical_seq": "MKAARFVLRSAGSLNGAGLVPREVEHFSRYSPSPLSMKQLLDFGSENACERTSFAFLRQELPVRLANILKEIDILPTQLVNTSSVQLVKSWYIQSLMDLVEFHEKSPDDQKALSDFVDTLIKVRNRHHNVVPTMAQGIIEYKDACTVDPVTNQNLQYFLDRFYMNRISTRMLMNQHILIFSDSQTGNPSHIGSIDPNCDVVAVVQDAFECSRMLCDQYYLSSPELKLTQVNGKFPDQPIHIVYVPSHLHHMLFELFKNAMRATVEHQENQPSLTPIEVIVVLGKEDLTIKISDRGGGVPLRIIDRLFSYTYSTAPTPVMDNSRNAPLAGFGYGLPISRLYAKYFQGDLNLYSLSGYGTDAIIYLKALSSESIEKLPVFNKSAFKHYQMSSEADDWCIPSREPKNLAKEVAM"
+    },
+    "klifs": {
+        "gene_name": "PDK4",
+        "name": "PDHK4",
+        "full_name": "[Pyruvate dehydrogenase (acetyl-transferring)] kinase isozyme 4, mitochondrial",
+        "group": "Atypical",
+        "family": "PDHK",
+        "iuphar": 2144,
+        "kinase_id": 93,
+        "pocket_seq": null
+    },
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null
+}
