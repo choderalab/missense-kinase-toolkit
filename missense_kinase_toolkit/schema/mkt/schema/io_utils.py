@@ -4,7 +4,6 @@ import logging
 import os
 from typing import Any, Optional
 
-import git
 import pkg_resources
 import toml
 import yaml
