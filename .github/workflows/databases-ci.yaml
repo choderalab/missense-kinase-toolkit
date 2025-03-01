@@ -66,7 +66,7 @@ jobs:
           # pytest -n auto --durations=10 -v --cov-report=xml --cov-report=term --color=yes \
           pytest -v --cov-report=xml --color=yes  \
             --cov=missense_kinase_toolkit/databases \
-            missense_kinase_toolkit/databases/missense_kinase_toolkit/databases/tests/
+            missense_kinase_toolkit/databases/mkt/databases/tests/
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4.0.1
