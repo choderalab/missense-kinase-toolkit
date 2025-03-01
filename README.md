@@ -43,6 +43,7 @@ We would like to express gratitude to the creators of the following resources on
 + [KinHub](http://www.kinhub.org/)
 + [KLIFS](https://klifs.net/)
 + [KinCore](http://dunbrack.fccc.edu/kincore/home)
++ [KinoML](https://github.com/openkinome/kinoml)
 
 Project based on the
 [Computational Molecular Science Python Cookiecutter](https://github.com/molssi/cookiecutter-cms) version 1.1.
