@@ -324,7 +324,9 @@ class KinaseInfo(KLIFS):
 
     def handle_page_not_found(self):
         """Handle page not found error."""
-        dict_kinase_info = dict(zip(LIST_KINASEINFO_KEYS, [None] * len(LIST_KINASEINFO_KEYS)))
+        dict_kinase_info = dict(
+            zip(LIST_KINASEINFO_KEYS, [None] * len(LIST_KINASEINFO_KEYS))
+        )
         if self.search_field is not None:
             dict_kinase_info[self.search_field] = self.search_term
         return dict_kinase_info

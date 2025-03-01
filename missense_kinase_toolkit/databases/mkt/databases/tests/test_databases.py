@@ -366,7 +366,6 @@ class TestDatabases:
         if 500 <= temp_obj.status_code < 600:
             assert dict_egfr is None
 
-
     def test_kincore(self):
         from mkt.databases.kincore import (
             align_kincore2uniprot,
@@ -390,7 +389,6 @@ class TestDatabases:
         assert egfr_align["start"] == 712
         assert egfr_align["end"] == 970
         assert egfr_align["mismatch"] is None
-
 
     def test_scrapers(self):
         from mkt.databases import scrapers
