@@ -2,7 +2,6 @@ import os
 import re
 
 from Bio import SeqIO
-
 from mkt.databases.aligners import Kincore2UniProtAligner
 from mkt.databases.utils import get_repo_root
 

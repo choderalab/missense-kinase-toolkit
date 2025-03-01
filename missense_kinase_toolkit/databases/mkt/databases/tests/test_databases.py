@@ -43,7 +43,6 @@ class TestDatabases:
         import os
 
         import pandas as pd
-
         from mkt.databases import config, io_utils
 
         # os.environ["OUTPUT_DIR"] = "."
@@ -70,7 +69,6 @@ class TestDatabases:
 
     def test_requests_wrapper(self, capsys):
         import requests
-
         from mkt.databases import uniprot, utils_requests
 
         uniprot.UniProt("TEST")

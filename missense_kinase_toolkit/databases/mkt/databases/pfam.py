@@ -1,7 +1,6 @@
 import json
 
 import pandas as pd
-
 from mkt.databases import requests_wrapper, utils_requests
 
 

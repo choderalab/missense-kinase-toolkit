@@ -3,10 +3,9 @@ import json
 import logging
 from enum import Enum
 
-from pydantic.dataclasses import dataclass
-
 from mkt.databases import requests_wrapper
 from mkt.databases.api_schema import RESTAPIClient
+from pydantic.dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 

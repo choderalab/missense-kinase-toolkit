@@ -1,20 +1,16 @@
 import logging
-import sys
 import os
+import sys
 from enum import Enum, StrEnum
 from itertools import chain
 
 import pandas as pd
-from pydantic import BaseModel, ValidationError, constr, model_validator
-from typing_extensions import Self
-
 from mkt.databases import klifs
 from mkt.databases.aligners import ClustalOmegaAligner
-from mkt.databases.kincore import (
-    align_kincore2uniprot,
-    extract_pk_fasta_info_as_dict,
-)
+from mkt.databases.kincore import align_kincore2uniprot, extract_pk_fasta_info_as_dict
 from mkt.databases.utils import get_repo_root
+from pydantic import BaseModel, ValidationError, constr, model_validator
+from typing_extensions import Self
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +19,7 @@ LIST_PFAM_KD = [
     "Protein kinase domain",
     "Protein tyrosine and serine/threonine kinase",
 ]
+
 
 class Group(str, Enum):
     """Enum class for kinase groups."""
@@ -144,7 +141,7 @@ class KinCore(BaseModel):
     mismatch: list[int] | None
 
 
-#TODO: make mkt.schema a dependency in pyproject.toml and turn this into "KinaseInfoGenerator"
+# TODO: make mkt.schema a dependency in pyproject.toml and turn this into "KinaseInfoGenerator"
 class KinaseInfo(BaseModel):
     """Pydantic model for kinase information."""
 
@@ -468,7 +465,7 @@ def create_kinase_models_from_df(
         # create UniProt model
         uniprot_model = UniProt(canonical_seq=row["canonical_sequence"])
 
-        #TODO: include all KLIFS entries rather than just those in KinHub
+        # TODO: include all KLIFS entries rather than just those in KinHub
         # create KLIFS model
         if is_not_valid_string(row["family"]):
             klifs_model = None

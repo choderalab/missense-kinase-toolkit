@@ -1,5 +1,6 @@
-import os
 import logging
+import os
+
 import pytest
 
 
@@ -142,7 +143,7 @@ class TestSchema:
         if not os.path.exists(path_new):
             shutil.copytree(path_original, path_new)
         shutil.rmtree(path_original)
-        
+
         # check that this produces a warning
         with caplog.at_level(logging.WARNING):
             path_temp = io_utils.return_str_path()
@@ -153,7 +154,7 @@ class TestSchema:
             # )
             # assert warn_msg in caplog.records[0].message
             assert path_temp == path_new
-        
+
         # check that deserialization still works
         dict_temp = io_utils.deserialize_kinase_dict()
         assert dict_kinase == dict_temp

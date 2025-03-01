@@ -1,7 +1,6 @@
 import logging
 
 import requests
-
 from mkt.databases import requests_wrapper, utils_requests
 
 logger = logging.getLogger(__name__)

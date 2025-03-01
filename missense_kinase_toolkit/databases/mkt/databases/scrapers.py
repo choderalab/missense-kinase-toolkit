@@ -1,5 +1,4 @@
 import pandas as pd
-
 from mkt.databases import requests_wrapper
 
 

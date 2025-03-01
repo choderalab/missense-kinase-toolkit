@@ -6,11 +6,7 @@ from itertools import chain
 import numpy as np
 from Bio import Align
 from bravado.client import SwaggerClient
-
-from mkt.databases.aligners import (
-    BL2UniProtAligner,
-    Kincore2UniProtAligner,
-)
+from mkt.databases.aligners import BL2UniProtAligner, Kincore2UniProtAligner
 from mkt.databases.api_schema import SwaggerAPIClient
 
 logger = logging.getLogger(__name__)

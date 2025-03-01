@@ -33,7 +33,7 @@ DICT_FUNCS = {
 
 
 def return_filenotfound_error_if_empty_or_missing(
-    str_path_in: str
+    str_path_in: str,
 ) -> FileNotFoundError | None:
     """Return FileNotFoundError for the given path.
 
