@@ -170,10 +170,33 @@ class TestDatabases:
         )
         assert test.hgnc == "ABL1"
 
-    def test_klifs(self):
+    def test_kincore_klifs(self):
         from mkt.databases import klifs
+        from mkt.databases.kincore import (
+            align_kincore2uniprot,
+            extract_pk_fasta_info_as_dict,
+        )
         from mkt.databases.uniprot import UniProt
 
+        # test KinCore
+        uniprot_id = "P00533"
+        egfr_uniprot = UniProt(uniprot_id)
+        dict_kincore = extract_pk_fasta_info_as_dict()
+
+        egfr_align = align_kincore2uniprot(
+            str_kincore=dict_kincore[uniprot_id]["seq"],
+            str_uniprot=egfr_uniprot._sequence,
+        )
+
+        assert (
+            egfr_align["seq"]
+            == "FKKIKVLGSGAFGTVYKGLWIPEGEKVKIPVAIKELREATSPKANKEILDEAYVMASVDNPHVCRLLGICLTSTVQLITQLMPFGCLLDYVREHKDNIGSQYLLNWCVQIAKGMNYLEDRRLVHRDLAARNVLVKTPQHVKITDFGLAKLLGAEEKEYHAEGGKVPIKWMALESILHRIYTHQSDVWSYGVTVWELMTFGSKPYDGIPASEISSILEKGERLPQPPICTIDVYMIMVKCWMIDADSRPKFRELIIEFSK"
+        )
+        assert egfr_align["start"] == 712
+        assert egfr_align["end"] == 970
+        assert egfr_align["mismatch"] is None
+
+        # test KLIFS
         temp_obj = klifs.KinaseInfo("EGFR")
         dict_egfr = temp_obj._kinase_info
         if temp_obj.status_code == 200:
@@ -365,30 +388,6 @@ class TestDatabases:
 
         if 500 <= temp_obj.status_code < 600:
             assert dict_egfr is None
-
-    def test_kincore(self):
-        from mkt.databases.kincore import (
-            align_kincore2uniprot,
-            extract_pk_fasta_info_as_dict,
-        )
-        from mkt.databases.uniprot import UniProt
-
-        uniprot_id = "P00533"
-        egfr_uniprot = UniProt(uniprot_id)
-        dict_kincore = extract_pk_fasta_info_as_dict()
-
-        egfr_align = align_kincore2uniprot(
-            str_kincore=dict_kincore[uniprot_id]["seq"],
-            str_uniprot=egfr_uniprot._sequence,
-        )
-
-        assert (
-            egfr_align["seq"]
-            == "FKKIKVLGSGAFGTVYKGLWIPEGEKVKIPVAIKELREATSPKANKEILDEAYVMASVDNPHVCRLLGICLTSTVQLITQLMPFGCLLDYVREHKDNIGSQYLLNWCVQIAKGMNYLEDRRLVHRDLAARNVLVKTPQHVKITDFGLAKLLGAEEKEYHAEGGKVPIKWMALESILHRIYTHQSDVWSYGVTVWELMTFGSKPYDGIPASEISSILEKGERLPQPPICTIDVYMIMVKCWMIDADSRPKFRELIIEFSK"
-        )
-        assert egfr_align["start"] == 712
-        assert egfr_align["end"] == 970
-        assert egfr_align["mismatch"] is None
 
     def test_scrapers(self):
         from mkt.databases import scrapers
