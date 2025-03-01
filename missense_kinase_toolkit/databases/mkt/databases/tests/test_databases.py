@@ -6,12 +6,12 @@ class TestDatabases:
         """Test if module is imported."""
         import sys
 
-        import missense_kinase_toolkit.databases  # noqa F401
+        import mkt.databases  # noqa F401
 
-        assert "missense_kinase_toolkit.databases" in sys.modules
+        assert "mkt.databases" in sys.modules
 
     def test_config(self):
-        from missense_kinase_toolkit.databases import config
+        from mkt.databases import config
 
         # test that the function to set the output directory works
         with pytest.raises(SystemExit) as sample:
@@ -44,7 +44,7 @@ class TestDatabases:
 
         import pandas as pd
 
-        from missense_kinase_toolkit.databases import config, io_utils
+        from mkt.databases import config, io_utils
 
         # os.environ["OUTPUT_DIR"] = "."
         config.set_output_dir(".")
@@ -71,7 +71,7 @@ class TestDatabases:
     def test_requests_wrapper(self, capsys):
         import requests
 
-        from missense_kinase_toolkit.databases import uniprot, utils_requests
+        from mkt.databases import uniprot, utils_requests
 
         uniprot.UniProt("TEST")
         out, _ = capsys.readouterr()
@@ -94,7 +94,7 @@ class TestDatabases:
     def test_cbioportal(self):
         import os
 
-        from missense_kinase_toolkit.databases import cbioportal, config
+        from mkt.databases import cbioportal, config
 
         config.set_cbioportal_instance("www.cbioportal.org")
         config.set_output_dir(".")
@@ -138,7 +138,7 @@ class TestDatabases:
         assert mutations_instance._mutations is not None
 
     def test_hgnc(self):
-        from missense_kinase_toolkit.databases import hgnc
+        from mkt.databases import hgnc
 
         abl1 = hgnc.HGNC("Abl1", True)
         abl1.maybe_get_symbol_from_hgnc_search()
@@ -173,12 +173,12 @@ class TestDatabases:
         assert test.hgnc == "ABL1"
 
     def test_klifs_kincore(self):
-        from missense_kinase_toolkit.databases import klifs
-        from missense_kinase_toolkit.databases.kincore import (
+        from mkt.databases import klifs
+        from mkt.databases.kincore import (
             align_kincore2uniprot,
             extract_pk_fasta_info_as_dict,
         )
-        from missense_kinase_toolkit.databases.uniprot import UniProt
+        from mkt.databases.uniprot import UniProt
 
         dict_egfr = klifs.KinaseInfo("EGFR")._kinase_info
 
@@ -382,7 +382,7 @@ class TestDatabases:
         }
 
     def test_scrapers(self):
-        from missense_kinase_toolkit.databases import scrapers
+        from mkt.databases import scrapers
 
         # test that the function to scrape the KinHub database works
         df_kinhub = scrapers.kinhub()
@@ -392,7 +392,7 @@ class TestDatabases:
         assert "UniprotID" in df_kinhub.columns
 
     def test_colors(self, capsys):
-        from missense_kinase_toolkit.databases import colors
+        from mkt.databases import colors
 
         # correct mappings
         assert colors.map_aa_to_single_letter_code("Ala") == "A"
@@ -460,7 +460,7 @@ class TestDatabases:
         )
 
     def test_uniprot(self):
-        from missense_kinase_toolkit.databases import uniprot
+        from mkt.databases import uniprot
 
         abl1 = uniprot.UniProt("P00519")
         assert (
@@ -469,7 +469,7 @@ class TestDatabases:
         )
 
     def test_pfam(self):
-        from missense_kinase_toolkit.databases import pfam
+        from mkt.databases import pfam
 
         # test that the function to find Pfam domain for a given HGNC symbol and position works
         df_pfam = pfam.Pfam("P00519")._pfam
@@ -503,7 +503,7 @@ class TestDatabases:
         )
 
     def test_protvar(self):
-        from missense_kinase_toolkit.databases.protvar import ProtvarScore
+        from mkt.databases.protvar import ProtvarScore
 
         temp_obj = ProtvarScore(database="AM", uniprot_id="P00519", pos=292, mut="D")
         assert len(temp_obj._protvar_score) == 1
@@ -511,7 +511,7 @@ class TestDatabases:
         assert temp_obj._protvar_score[0]["amClass"] == "AMBIGUOUS"
 
     def test_ncbi(self):
-        from missense_kinase_toolkit.databases import ncbi
+        from mkt.databases import ncbi
 
         seq_obj = ncbi.ProteinNCBI(accession="EAX02438.1")
         assert seq_obj.list_headers == [

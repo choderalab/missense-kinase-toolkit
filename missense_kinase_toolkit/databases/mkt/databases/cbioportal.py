@@ -3,12 +3,12 @@ import logging
 import pandas as pd
 from bravado.client import SwaggerClient
 
-from missense_kinase_toolkit.databases.api_schema import APIKeySwaggerClient
-from missense_kinase_toolkit.databases.config import (
+from mkt.databases.api_schema import APIKeySwaggerClient
+from mkt.databases.config import (
     get_cbioportal_instance,
     maybe_get_cbioportal_token,
 )
-from missense_kinase_toolkit.databases.io_utils import (
+from mkt.databases.io_utils import (
     parse_iterabc2dataframe,
     save_dataframe_to_csv,
 )

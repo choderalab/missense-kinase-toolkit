@@ -3,8 +3,8 @@ import re
 
 from Bio import SeqIO
 
-from missense_kinase_toolkit.databases.aligners import Kincore2UniProtAligner
-from missense_kinase_toolkit.databases.utils import get_repo_root
+from mkt.databases.aligners import Kincore2UniProtAligner
+from mkt.databases.utils import get_repo_root
 
 
 def extract_pk_fasta_info_as_dict(
@@ -107,7 +107,7 @@ def align_kincore2uniprot(
 
 # import pandas as pd
 
-# from missense_kinase_toolkit.databases import kinase_schema
+# from mkt.databases import kinase_schema
 
 # # generate these in databases.ipynb
 # df_kinhub = pd.read_csv("../data/kinhub.csv")

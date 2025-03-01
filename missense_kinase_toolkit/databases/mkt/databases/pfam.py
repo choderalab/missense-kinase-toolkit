@@ -2,7 +2,7 @@ import json
 
 import pandas as pd
 
-from missense_kinase_toolkit.databases import requests_wrapper, utils_requests
+from mkt.databases import requests_wrapper, utils_requests
 
 
 class Pfam:

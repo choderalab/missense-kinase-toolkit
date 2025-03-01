@@ -7,11 +7,11 @@ import numpy as np
 from Bio import Align
 from bravado.client import SwaggerClient
 
-from missense_kinase_toolkit.databases.aligners import (
+from mkt.databases.aligners import (
     BL2UniProtAligner,
     Kincore2UniProtAligner,
 )
-from missense_kinase_toolkit.databases.api_schema import SwaggerAPIClient
+from mkt.databases.api_schema import SwaggerAPIClient
 
 logger = logging.getLogger(__name__)
 

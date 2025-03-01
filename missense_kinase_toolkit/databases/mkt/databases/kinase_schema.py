@@ -1,4 +1,5 @@
 import logging
+import sys
 import os
 from enum import Enum, StrEnum
 from itertools import chain
@@ -7,13 +8,13 @@ import pandas as pd
 from pydantic import BaseModel, ValidationError, constr, model_validator
 from typing_extensions import Self
 
-from missense_kinase_toolkit.databases import klifs
-from missense_kinase_toolkit.databases.aligners import ClustalOmegaAligner
-from missense_kinase_toolkit.databases.kincore import (
+from mkt.databases import klifs
+from mkt.databases.aligners import ClustalOmegaAligner
+from mkt.databases.kincore import (
     align_kincore2uniprot,
     extract_pk_fasta_info_as_dict,
 )
-from missense_kinase_toolkit.databases.utils import get_repo_root
+from mkt.databases.utils import get_repo_root
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,6 @@ LIST_PFAM_KD = [
     "Protein kinase domain",
     "Protein tyrosine and serine/threonine kinase",
 ]
-
 
 class Group(str, Enum):
     """Enum class for kinase groups."""
@@ -144,19 +144,20 @@ class KinCore(BaseModel):
     mismatch: list[int] | None
 
 
+#TODO: make mkt.schema a dependency in pyproject.toml and turn this into "KinaseInfoGenerator"
 class KinaseInfo(BaseModel):
     """Pydantic model for kinase information."""
 
     hgnc_name: str
     uniprot_id: UniProtID
-    KinHub: KinHub
-    UniProt: UniProt
-    KLIFS: KLIFS | None
-    Pfam: Pfam | None
-    KinCore: KinCore | None
-    bool_offset: bool = True
+    kinhub: KinHub
+    uniprot: UniProt
+    klifs: KLIFS | None = None
+    pfam: Pfam | None = None
+    kincore: KinCore | None = None
     KLIFS2UniProtIdx: dict[str, int | None] | None = None
     KLIFS2UniProtSeq: dict[str, str | None] | None = None
+    bool_offset: bool = True
 
     # https://docs.pydantic.dev/latest/examples/custom_validators/#validating-nested-model-fields
     @model_validator(mode="after")
@@ -164,13 +165,13 @@ class KinaseInfo(BaseModel):
         """KLIFS pocket has some errors compared to UniProt sequence - fix this via validation."""
         # https://klifs.net/details.php?structure_id=9122 "NFM" > "HFM" but "H" present in canonical UniProt seq
         if self.hgnc_name == "ADCK3":
-            self.KLIFS.pocket_seq = "RPFAAASIGQVHLVAMKIQDYQREAACARKFRFYVPEIVDEVLTTELVSGFPLDQAEGLELFEFHFMQTDPNWSNFFYLLDFGAT"
+            self.klifs.pocket_seq = "RPFAAASIGQVHLVAMKIQDYQREAACARKFRFYVPEIVDEVLTTELVSGFPLDQAEGLELFEFHFMQTDPNWSNFFYLLDFGAT"
         # https://klifs.net/details.php?structure_id=15054 shows "FLL" only change and region I flanks g.l
         if self.hgnc_name == "LRRK2":
-            self.KLIFS.pocket_seq = "FLLGDGSFGSVYRVAVKIFLLRQELVVLCHLHPSLISLLAAMLVMELASKGSLDRLLQQYLHSAMIIYRDLKPHNVLLIADYGIA"
+            self.klifs.pocket_seq = "FLLGDGSFGSVYRVAVKIFLLRQELVVLCHLHPSLISLLAAMLVMELASKGSLDRLLQQYLHSAMIIYRDLKPHNVLLIADYGIA"
         # https://klifs.net/details.php?structure_id=9709 just a misalignment vs. UniProt[130:196] aligns matches structure seq
         if self.hgnc_name == "CAMKK1":
-            self.KLIFS.pocket_seq = "QSEIGKGAYGVVRHYAMKVERVYQEIAILKKLHVNVVKLIENLYLVFDLRKGPVMEVPCEYLHCQKIVHRDIKPSNLLKIADFGV"
+            self.klifs.pocket_seq = "QSEIGKGAYGVVRHYAMKVERVYQEIAILKKLHVNVVKLIENLYLVFDLRKGPVMEVPCEYLHCQKIVHRDIKPSNLLKIADFGV"
         return self
 
     # https://stackoverflow.com/questions/68082983/validating-a-nested-model-in-pydantic
@@ -178,8 +179,8 @@ class KinaseInfo(BaseModel):
     @model_validator(mode="after")
     def validate_uniprot_length(self) -> Self:
         """Validate canonical UniProt sequence length matches Pfam length if Pfam not None."""
-        if self.Pfam is not None:
-            if len(self.UniProt.canonical_seq) != self.Pfam.protein_length:
+        if self.pfam is not None:
+            if len(self.uniprot.canonical_seq) != self.pfam.protein_length:
                 raise ValidationError(
                     "UniProt sequence length does not match Pfam protein length."
                 )
@@ -189,15 +190,15 @@ class KinaseInfo(BaseModel):
     def generate_klifs2uniprot_dict(self) -> Self:
         """Generate dictionary mapping KLIFS to UniProt indices."""
 
-        if self.KinCore is not None:
-            kd_idx = (self.KinCore.start - 1, self.KinCore.end - 1)
+        if self.kincore is not None:
+            kd_idx = (self.kincore.start - 1, self.kincore.end - 1)
         else:
             kd_idx = (None, None)
 
-        if self.KLIFS is not None and self.KLIFS.pocket_seq is not None:
+        if self.klifs is not None and self.klifs.pocket_seq is not None:
             temp_obj = klifs.KLIFSPocket(
-                uniprotSeq=self.UniProt.canonical_seq,
-                klifsSeq=self.KLIFS.pocket_seq,
+                uniprotSeq=self.uniprot.canonical_seq,
+                klifsSeq=self.klifs.pocket_seq,
                 idx_kd=kd_idx,
                 offset_bool=self.bool_offset,
             )
@@ -467,6 +468,7 @@ def create_kinase_models_from_df(
         # create UniProt model
         uniprot_model = UniProt(canonical_seq=row["canonical_sequence"])
 
+        #TODO: include all KLIFS entries rather than just those in KinHub
         # create KLIFS model
         if is_not_valid_string(row["family"]):
             klifs_model = None
@@ -513,11 +515,11 @@ def create_kinase_models_from_df(
         kinase_info = KinaseInfo(
             hgnc_name=name_hgnc,
             uniprot_id=id_uniprot,
-            KinHub=kinhub_model,
-            UniProt=uniprot_model,
-            KLIFS=klifs_model,
-            Pfam=pfam_model,
-            KinCore=kincore_model,
+            kinhub=kinhub_model,
+            uniprot=uniprot_model,
+            klifs=klifs_model,
+            pfam=pfam_model,
+            kincore=kincore_model,
         )
 
         dict_kinase_models[name_hgnc] = kinase_info
