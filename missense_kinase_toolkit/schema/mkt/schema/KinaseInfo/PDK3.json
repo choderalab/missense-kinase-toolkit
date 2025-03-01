@@ -1,1 +1,36 @@
-{"hgnc_name": "PDK3", "uniprot_id": "Q15120", "kinhub": {"kinase_name": "[Pyruvate dehydrogenase [lipoamide]] kinase isozyme 3", "manning_name": ["PDHK3"], "xname": ["PDHK3"], "group": ["Atypical"], "family": ["PDHK"]}, "uniprot": {"canonical_seq": "MRLFRWLLKQPVPKQIERYSRFSPSPLSIKQFLDFGRDNACEKTSYMFLRKELPVRLANTMREVNLLPDNLLNRPSVGLVQSWYMQSFLELLEYENKSPEDPQVLDNFLQVLIKVRNRHNDVVPTMAQGVIEYKEKFGFDPFISTNIQYFLDRFYTNRISFRMLINQHTLLFGGDTNPVHPKHIGSIDPTCNVADVVKDAYETAKMLCEQYYLVAPELEVEEFNAKAPDKPIQVVYVPSHLFHMLFELFKNSMRATVELYEDRKEGYPAVKTLVTLGKEDLSIKISDLGGGVPLRKIDRLFNYMYSTAPRPSLEPTRAAPLAGFGYGLPISRLYARYFQGDLKLYSMEGVGTDAVIYLKALSSESFERLPVFNKSAWRHYKTTPEADDWSNPSSEPRDASKYKAKQ"}, "klifs": {"gene_name": "PDK3", "name": "PDHK3", "full_name": "[Pyruvate dehydrogenase (acetyl-transferring)] kinase isozyme 3, mitochondrial", "group": "Atypical", "family": "PDHK", "iuphar": 2143, "kinase_id": 92, "pocket_seq": null}, "pfam": null, "kincore": null, "KLIFS2UniProtIdx": null, "KLIFS2UniProtSeq": null}
+{
+    "hgnc_name": "PDK3",
+    "uniprot_id": "Q15120",
+    "kinhub": {
+        "kinase_name": "[Pyruvate dehydrogenase [lipoamide]] kinase isozyme 3",
+        "manning_name": [
+            "PDHK3"
+        ],
+        "xname": [
+            "PDHK3"
+        ],
+        "group": [
+            "Atypical"
+        ],
+        "family": [
+            "PDHK"
+        ]
+    },
+    "uniprot": {
+        "canonical_seq": "MRLFRWLLKQPVPKQIERYSRFSPSPLSIKQFLDFGRDNACEKTSYMFLRKELPVRLANTMREVNLLPDNLLNRPSVGLVQSWYMQSFLELLEYENKSPEDPQVLDNFLQVLIKVRNRHNDVVPTMAQGVIEYKEKFGFDPFISTNIQYFLDRFYTNRISFRMLINQHTLLFGGDTNPVHPKHIGSIDPTCNVADVVKDAYETAKMLCEQYYLVAPELEVEEFNAKAPDKPIQVVYVPSHLFHMLFELFKNSMRATVELYEDRKEGYPAVKTLVTLGKEDLSIKISDLGGGVPLRKIDRLFNYMYSTAPRPSLEPTRAAPLAGFGYGLPISRLYARYFQGDLKLYSMEGVGTDAVIYLKALSSESFERLPVFNKSAWRHYKTTPEADDWSNPSSEPRDASKYKAKQ"
+    },
+    "klifs": {
+        "gene_name": "PDK3",
+        "name": "PDHK3",
+        "full_name": "[Pyruvate dehydrogenase (acetyl-transferring)] kinase isozyme 3, mitochondrial",
+        "group": "Atypical",
+        "family": "PDHK",
+        "iuphar": 2143,
+        "kinase_id": 92,
+        "pocket_seq": null
+    },
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null
+}

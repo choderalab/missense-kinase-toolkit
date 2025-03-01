@@ -1,4 +1,4 @@
-from os import name
+import os
 
 
 class TestSchema:
@@ -109,7 +109,7 @@ class TestSchema:
         assert min(obj_abl1.KLIFS2UniProtIdx.values()) == 246
         assert max(obj_abl1.KLIFS2UniProtIdx.values()) == 385
 
-    def test_serialization(self):
+    def test_serialization(self, caplog):
         import shutil
 
         from mkt.schema import io_utils
@@ -121,7 +121,7 @@ class TestSchema:
             io_utils.serialize_kinase_dict(
                 dict_kinase, suffix=suffix, str_path=f"./{suffix}"
             )
-            if name == "nt" and suffix == "toml":
+            if os.name == "nt" and suffix == "toml":
                 pass
             else:
                 dict_temp = io_utils.deserialize_kinase_dict(
@@ -130,3 +130,42 @@ class TestSchema:
                 assert dict_kinase == dict_temp
                 print()
                 shutil.rmtree(f"./{suffix}")
+
+        # TODO: Fix this test
+        # # move to data subdir in Github repo
+        # path_original = io_utils.return_str_path()
+        # path_gitroot = io_utils.get_repo_root()
+        # path_new = os.path.join(path_gitroot, "data/KinaseInfo")
+        # print(path_new)
+        # if not os.path.exists(path_new):
+        #     shutil.copytree(path_original, path_new)
+        # shutil.rmtree(path_original)
+
+        # # check that this produces a warning
+        # with caplog.at_level(logging.WARNING):
+        #     path_temp = io_utils.return_str_path()
+        #     # assert caplog.records[0].levelname == "WARNING"
+        #     # warn_msg = (
+        #     #     "Could not find KinaseInfo directory within package: FileNotFoundError\n"
+        #     #     "Please provide a path to the KinaseInfo directory."
+        #     # )
+        #     # assert warn_msg in caplog.records[0].message
+        #     assert path_temp == path_new
+
+        # # check that deserialization still works
+        # dict_temp = io_utils.deserialize_kinase_dict()
+        # assert dict_kinase == dict_temp
+
+        # # delete all KinaseInfo files
+        # shutil.rmtree(path_new)
+
+        # # check that this oproduces an error
+        # with caplog.at_level(logging.ERROR):
+        #     path_temp = io_utils.return_str_path()
+        #     assert caplog.records[0].levelname == "ERROR"
+        #     warn_msg = (
+        #         "Could not find KinaseInfo directory within package: FileNotFoundError\n"
+        #         "Please provide a path to the KinaseInfo directory."
+        #     )
+        #     assert warn_msg in caplog.records[0].message
+        #     assert path_temp is None

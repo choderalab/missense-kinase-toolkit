@@ -1,10 +1,9 @@
 import glob
 import json
 import logging
-from os import name, path
+import os
 from typing import Any, Optional
 
-import git
 import pkg_resources
 import toml
 import yaml
@@ -32,18 +31,24 @@ DICT_FUNCS = {
 """dict[str, dict[str, Callable]]: Dictionary of serialization and deserialization functions supported."""
 
 
-def get_repo_root() -> str | None:
-    """Get the root directory of the repository.
+def return_filenotfound_error_if_empty_or_missing(
+    str_path_in: str,
+) -> FileNotFoundError | None:
+    """Return FileNotFoundError for the given path.
+
+    Parameters
+    ----------
+    str_path_in : str
+        Path that was not found.
 
     Returns
     -------
-    str
-        Path to the root directory of the repository.
+    FileNotFoundError | None
+        FileNotFoundError for the given path. If the path is not empty, return None.
     """
-    try:
-        repo = git.Repo(".", search_parent_directories=True)
-        return repo.working_tree_dir
-    except git.InvalidGitRepositoryError:
+    if not os.path.exists(str_path_in) or len(os.listdir(str_path_in)) == 0:
+        return FileNotFoundError
+    else:
         return None
 
 
@@ -61,29 +66,17 @@ def return_str_path(str_path: str | None = None) -> str:
         Path to the KinaseInfo directory.
     """
     if str_path is None:
-        # first look in package resources
         try:
             str_path = pkg_resources.resource_filename("mkt.schema", "KinaseInfo")
+            return_filenotfound_error_if_empty_or_missing(str_path)
         except Exception as e:
-            logger.warning(
-                f"Could not find KinaseInfo directory within package; {e}"
+            logger.error(
+                f"Could not find KinaseInfo directory within package: {e}"
                 f"\nPlease provide a path to the KinaseInfo directory."
             )
-            try:
-                # otherwise look in root of github repo
-                str_path = path.join(
-                    get_repo_root(),
-                    "missense_kinase_toolkit/mkt/schema/KinaseInfo",
-                )
-            except Exception as e:
-                logger.error(
-                    f"Could not find KinaseInfo directory in the repository; {e}"
-                    f"\nPlease provide a path to the KinaseInfo directory."
-                )
     else:
-        if not path.exists(str_path):
-            path.os.makedirs(str_path)
-
+        if not os.path.exists(str_path):
+            os.makedirs(str_path)
     return str_path
 
 
@@ -112,16 +105,19 @@ def serialize_kinase_dict(
         logger.error(
             f"Serialization type ({suffix}) not supported; must be json, yaml, or toml."
         )
-        return
+        return None
 
-    if name == "nt" and suffix == "toml":
+    if os.name == "nt" and suffix == "toml":
         logger.info("TOML serialization is not supported on Windows.")
-        return
-
-    str_path = return_str_path(str_path)
+        return None
 
     if serialization_kwargs is None:
-        serialization_kwargs = {}
+        if str_path is None and suffix == "json":
+            serialization_kwargs = {"indent": 4}
+        else:
+            serialization_kwargs = {}
+
+    str_path = return_str_path(str_path)
 
     for key, val in tqdm(kinase_dict.items()):
         with open(f"{str_path}/{key}.{suffix}", "w") as outfile:
@@ -157,17 +153,17 @@ def deserialize_kinase_dict(
         logger.error(
             f"Serialization type ({suffix}) not supported; must be json, yaml, or toml."
         )
-        return
+        return None
 
     if str_path is None and suffix != "json":
         logger.error("Only json deserialization is supported without providing a path.")
-        return
-
-    str_path = return_str_path(str_path)
-    list_file = glob.glob(path.join(str_path, f"*.{suffix}"))
+        return None
 
     if deserialization_kwargs is None:
         deserialization_kwargs = {}
+
+    str_path = return_str_path(str_path)
+    list_file = glob.glob(os.path.join(str_path, f"*.{suffix}"))
 
     dict_import = {}
     for file in tqdm(list_file):

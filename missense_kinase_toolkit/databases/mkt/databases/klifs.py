@@ -6,12 +6,8 @@ from itertools import chain
 import numpy as np
 from Bio import Align
 from bravado.client import SwaggerClient
-
-from missense_kinase_toolkit.databases.aligners import (
-    BL2UniProtAligner,
-    Kincore2UniProtAligner,
-)
-from missense_kinase_toolkit.databases.api_schema import SwaggerAPIClient
+from mkt.databases.aligners import BL2UniProtAligner, Kincore2UniProtAligner
+from mkt.databases.api_schema import SwaggerAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +211,22 @@ class KLIFS(SwaggerAPIClient):
         return self._klifs
 
 
+LIST_KINASEINFO_KEYS = [
+    "family",
+    "full_name",
+    "gene_name",
+    "group",
+    "iuphar",
+    "kinase_ID",
+    "name",
+    "pocket",
+    "species",
+    "subfamily",
+    "uniprot",
+]
+"""list[str]: List of keys for kinase information; use to populate if 404 error."""
+
+
 class KinaseInfo(KLIFS):
     """Class to get information about a kinase from KLIFS."""
 
@@ -247,6 +259,8 @@ class KinaseInfo(KLIFS):
             only used to post-hoc annotate column with search term in case of missing data
         species : str
             Species of the kinase
+        status_code : int | None
+            Status code of the query; None if query fails
         _kinase_info : dict[str, str | int | None]
             KLIFS API object for search term
 
@@ -255,6 +269,7 @@ class KinaseInfo(KLIFS):
         self.search_term = search_term
         self.search_field = search_field
         self.species = species
+        self.status_code = 200
         self._kinase_info = self.query_kinase_info()
 
     def query_kinase_info(self) -> dict[str, str | int | None]:
@@ -274,34 +289,46 @@ class KinaseInfo(KLIFS):
                 .response()
                 .result[0]
             )
-
+        except Exception as e:
+            if hasattr(e, "status_code"):
+                # 404 error: kinase not found in KLIFS
+                if e.status_code == 404:
+                    print(
+                        f"Kinase {self.search_term} "
+                        f"(field: {self.search_field} not found in KLIFS"
+                    )
+                    dict_kinase_info = self.handle_page_not_found()
+                    self.status_code = 404
+                # 500 error: server error
+                elif 500 <= e.status_code < 600:
+                    print(f"Server error: {e.status_code}")
+                    self.status_code = e.status_code
+                    dict_kinase_info = None
+                # all other errors (e.g., 400)
+                else:
+                    print(
+                        f"Error {e} in query_kinase_info for "
+                        f"{self.search_term} (field: {self.search_field})"
+                    )
+                    self.status_code = e.status_code
+                    dict_kinase_info = None
+            else:
+                print(f"Error {e} in query_kinase_info for {self.search_term}")
+                self.status_code = None
+        if self.status_code == 200:
             list_key = dir(kinase_info)
             list_val = [getattr(kinase_info, key) for key in list_key]
-
             dict_kinase_info = dict(zip(list_key, list_val))
 
-        except Exception as e:
-            print(
-                f"Error in query_kinase_info for {self.search_term} (field: {self.search_field}):"
-            )
-            print(e)
-            list_key = [
-                "family",
-                "full_name",
-                "gene_name",
-                "group",
-                "iuphar",
-                "kinase_ID",
-                "name",
-                "pocket",
-                "species",
-                "subfamily",
-                "uniprot",
-            ]
-            dict_kinase_info = dict(zip(list_key, [None] * len(list_key)))
-            if self.search_field is not None:
-                dict_kinase_info[self.search_field] = self.search_term
+        return dict_kinase_info
 
+    def handle_page_not_found(self):
+        """Handle page not found error."""
+        dict_kinase_info = dict(
+            zip(LIST_KINASEINFO_KEYS, [None] * len(LIST_KINASEINFO_KEYS))
+        )
+        if self.search_field is not None:
+            dict_kinase_info[self.search_field] = self.search_term
         return dict_kinase_info
 
     def get_search_term(self):
@@ -315,6 +342,10 @@ class KinaseInfo(KLIFS):
     def get_species(self):
         """Get species used for query."""
         return self.species
+
+    def get_status_code(self):
+        """Get status code of the query."""
+        return self.status_code
 
     def get_kinase_info(self):
         """Get information about the kinase from KLIFS query."""

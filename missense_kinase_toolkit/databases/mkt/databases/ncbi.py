@@ -6,10 +6,9 @@ from io import BytesIO, StringIO
 from zipfile import ZipFile
 
 from Bio import SeqIO
+from mkt.databases import requests_wrapper
+from mkt.databases.api_schema import RESTAPIClient
 from pydantic.dataclasses import dataclass
-
-from missense_kinase_toolkit.databases import requests_wrapper
-from missense_kinase_toolkit.databases.api_schema import RESTAPIClient
 
 logger = logging.getLogger(__name__)
 

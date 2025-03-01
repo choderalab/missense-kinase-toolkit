@@ -1,6 +1,5 @@
 import pandas as pd
-
-from missense_kinase_toolkit.databases import requests_wrapper
+from mkt.databases import requests_wrapper
 
 
 def kinhub(

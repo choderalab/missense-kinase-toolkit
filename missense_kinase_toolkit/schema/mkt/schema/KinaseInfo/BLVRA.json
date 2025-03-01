@@ -1,1 +1,27 @@
-{"hgnc_name": "BLVRA", "uniprot_id": "P53004", "kinhub": {"kinase_name": "Biliverdin reductase A", "manning_name": ["BLVRA"], "xname": ["BLVRA"], "group": ["Atypical"], "family": ["Other"]}, "uniprot": {"canonical_seq": "MNAEPERKFGVVVVGVGRAGSVRMRDLRNPHPSSAFLNLIGFVSRRELGSIDGVQQISLEDALSSQEVEVAYICSESSSHEDYIRQFLNAGKHVLVEYPMTLSLAAAQELWELAEQKGKVLHEEHVELLMEEFAFLKKEVVGKDLLKGSLLFTAGPLEEERFGFPAFSGISRLTWLVSLFGELSLVSATLEERKEDQYMKMTVCLETEKKSPLSWIEEKGPGLKRNRYLSFHFKSGSLENVPNVGVNKNIFLKDQNIFVQKLLGQFSEKELAAEKKRILHCLGLAEEIQKYCCSRK"}, "klifs": null, "pfam": null, "kincore": null, "KLIFS2UniProtIdx": null, "KLIFS2UniProtSeq": null}
+{
+    "hgnc_name": "BLVRA",
+    "uniprot_id": "P53004",
+    "kinhub": {
+        "kinase_name": "Biliverdin reductase A",
+        "manning_name": [
+            "BLVRA"
+        ],
+        "xname": [
+            "BLVRA"
+        ],
+        "group": [
+            "Atypical"
+        ],
+        "family": [
+            "Other"
+        ]
+    },
+    "uniprot": {
+        "canonical_seq": "MNAEPERKFGVVVVGVGRAGSVRMRDLRNPHPSSAFLNLIGFVSRRELGSIDGVQQISLEDALSSQEVEVAYICSESSSHEDYIRQFLNAGKHVLVEYPMTLSLAAAQELWELAEQKGKVLHEEHVELLMEEFAFLKKEVVGKDLLKGSLLFTAGPLEEERFGFPAFSGISRLTWLVSLFGELSLVSATLEERKEDQYMKMTVCLETEKKSPLSWIEEKGPGLKRNRYLSFHFKSGSLENVPNVGVNKNIFLKDQNIFVQKLLGQFSEKELAAEKKRILHCLGLAEEIQKYCCSRK"
+    },
+    "klifs": null,
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null
+}

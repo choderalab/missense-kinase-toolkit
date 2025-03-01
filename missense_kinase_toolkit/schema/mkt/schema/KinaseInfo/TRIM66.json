@@ -1,1 +1,27 @@
-{"hgnc_name": "TRIM66", "uniprot_id": "B5MCJ9", "kinhub": {"kinase_name": "Tripartite motif-containing protein 66", "manning_name": ["TIF1D"], "xname": ["TIF1D"], "group": ["Atypical"], "family": ["Other"]}, "uniprot": {"canonical_seq": "XLLRKDCFQGLIQELGQIAKAHETVADATA"}, "klifs": null, "pfam": null, "kincore": null, "KLIFS2UniProtIdx": null, "KLIFS2UniProtSeq": null}
+{
+    "hgnc_name": "TRIM66",
+    "uniprot_id": "B5MCJ9",
+    "kinhub": {
+        "kinase_name": "Tripartite motif-containing protein 66",
+        "manning_name": [
+            "TIF1D"
+        ],
+        "xname": [
+            "TIF1D"
+        ],
+        "group": [
+            "Atypical"
+        ],
+        "family": [
+            "Other"
+        ]
+    },
+    "uniprot": {
+        "canonical_seq": "XLLRKDCFQGLIQELGQIAKAHETVADATA"
+    },
+    "klifs": null,
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null
+}
