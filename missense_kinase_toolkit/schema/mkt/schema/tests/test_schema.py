@@ -132,7 +132,7 @@ class TestSchema:
                 print()
                 shutil.rmtree(f"./{suffix}")
 
-        #TODO: Fix this test
+        # TODO: Fix this test
         # # move to data subdir in Github repo
         # path_original = io_utils.return_str_path()
         # path_gitroot = io_utils.get_repo_root()
