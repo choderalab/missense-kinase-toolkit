@@ -1,6 +1,5 @@
 import logging
 import os
-from enum import Enum, StrEnum
 from itertools import chain
 
 import pandas as pd
@@ -19,7 +18,7 @@ from mkt.schema.kinase_schema import (
     Pfam,
     UniProt,
 )
-from pydantic import BaseModel, ValidationError, constr, model_validator
+from pydantic import BaseModel, ValidationError, model_validator
 from typing_extensions import Self
 
 logger = logging.getLogger(__name__)
