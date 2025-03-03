@@ -17,6 +17,6 @@ python:
     install:
     - requirements: docs/requirements.txt
     - method: pip
-      path: missense_kinase_toolkit/databases
-    - method: pip
       path: missense_kinase_toolkit/schema
+    - method: pip
+      path: missense_kinase_toolkit/databases

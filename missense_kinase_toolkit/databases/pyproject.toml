@@ -19,6 +19,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "mkt.schema",
     "gitpython==3.1.43",
     "pydantic>=2.7.4",
     "tqdm>=4.66.3",

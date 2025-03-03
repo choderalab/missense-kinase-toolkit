@@ -53,6 +53,7 @@ jobs:
         # conda setup requires this special shell
         shell: bash -l {0}
         run: |
+          python -m pip install ./missense_kinase_toolkit/schema --no-deps
           python -m pip install ./missense_kinase_toolkit/databases --no-deps
           micromamba list
 
