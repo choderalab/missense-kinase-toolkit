@@ -10,14 +10,14 @@ from mkt.databases.kincore import align_kincore2uniprot, extract_pk_fasta_info_a
 from mkt.databases.utils import get_repo_root
 from mkt.schema.constants import LIST_PFAM_KD
 from mkt.schema.kinase_schema import (
-    KinaseInfo,
-    Group,
-    Family,
-    KinHub,
-    UniProt,
     KLIFS,
-    Pfam,
+    Family,
+    Group,
+    KinaseInfo,
     KinCore,
+    KinHub,
+    Pfam,
+    UniProt,
 )
 from pydantic import BaseModel, ValidationError, constr, model_validator
 from typing_extensions import Self
