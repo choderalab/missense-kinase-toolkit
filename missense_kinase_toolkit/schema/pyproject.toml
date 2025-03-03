@@ -19,7 +19,6 @@ classifiers = [
 ]
 
 dependencies = [
-    "gitpython==3.1.43",
     "pydantic==2.10.3",
     "strenum==0.4.15",
     "toml",
