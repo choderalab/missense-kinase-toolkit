@@ -15,9 +15,10 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath("../src"))
+sys.path.insert(0, os.path.abspath("../missense_kinase_toolkit"))
 
 import missense_kinase_toolkit
+import mkt.schema
 
 
 # -- Project information -----------------------------------------------------
@@ -183,7 +184,7 @@ texinfo_documents = [
         "missense-kinase-toolkit Documentation",
         author,
         "missense_kinase_toolkit",
-        "An ETL pipeline package to facilitate structure-based ML for human kinase property prediction",
+        "A Python package to generate sequence and structure-based representations for human kinase property prediction",
         "Miscellaneous",
     ),
 ]
@@ -192,7 +193,7 @@ texinfo_documents = [
 # -- Extension configuration -------------------------------------------------
 
 here = os.path.dirname(__file__)
-repo = os.path.join(here,  '../missense-kinase-toolkit')
+repo = os.path.join(here,  '..')
 
 # Ensure env.metadata[env.docname]['nbsphinx-link-target']
 # points relative to repo root:
