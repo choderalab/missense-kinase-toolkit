@@ -38,6 +38,8 @@ class ProteinEntrez:
             )
             logging.error(e)
 
+            self.fasta_record = None
+
 
 @dataclass
 class ProteinNCBI(RESTAPIClient):
