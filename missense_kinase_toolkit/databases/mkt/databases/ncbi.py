@@ -5,12 +5,38 @@ from dataclasses import field
 from io import BytesIO, StringIO
 from zipfile import ZipFile
 
-from Bio import SeqIO
+from Bio import Entrez, SeqIO
 from mkt.databases import requests_wrapper
 from mkt.databases.api_schema import RESTAPIClient
 from pydantic.dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ProteinEntrez:
+    """Class to interact with query NCBI Protein API; only FASTA download supported."""
+
+    accession: str
+    """Accession ID for the protein."""
+    email: str | None = None
+    """Email address for the user; may be necessary to prevent blocking of access in case of excessive usage."""
+
+    def __post_init__(self):
+        if self.email is not None:
+            Entrez.email = self.email
+
+        try:
+            stream = Entrez.efetch(db="protein", id=self.accession, rettype="fasta")
+            record = SeqIO.read(stream, "fasta")
+            stream.close()
+
+            self.fasta_record = record
+        except Exception as e:
+            logging.error(
+                f"Failed to download FASTA file for accession {self.accession}."
+            )
+            logging.error(e)
 
 
 @dataclass
