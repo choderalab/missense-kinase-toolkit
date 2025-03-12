@@ -71,7 +71,7 @@ class TestDatabases:
         import requests
         from mkt.databases import uniprot, utils_requests
 
-        uniprot.UniProt("TEST")
+        uniprot.UniProtFASTA("TEST")
         out, _ = capsys.readouterr()
         assert out == "Error code: 400 (Bad request)\n"
 
@@ -171,16 +171,15 @@ class TestDatabases:
         assert test.hgnc == "ABL1"
 
     def test_kincore_klifs(self):
-        from mkt.databases import klifs
+        from mkt.databases import klifs, uniprot
         from mkt.databases.kincore import (
             align_kincore2uniprot,
             extract_pk_fasta_info_as_dict,
         )
-        from mkt.databases.uniprot import UniProt
 
         # test KinCore
         uniprot_id = "P00533"
-        egfr_uniprot = UniProt(uniprot_id)
+        egfr_uniprot = uniprot.UniProtFASTA(uniprot_id)
         dict_kincore = extract_pk_fasta_info_as_dict()
 
         egfr_align = align_kincore2uniprot(
@@ -214,7 +213,7 @@ class TestDatabases:
             assert dict_egfr["species"] == "Human"
             assert dict_egfr["uniprot"] == "P00533"
 
-            egfr_uniprot = UniProt(dict_egfr["uniprot"])
+            egfr_uniprot = uniprot.UniProtFASTA(dict_egfr["uniprot"])
 
             # check KLIFS pocket alignment to UniProt sequence
             egfr_pocket = klifs.KLIFSPocket(
@@ -470,7 +469,7 @@ class TestDatabases:
     def test_uniprot(self):
         from mkt.databases import uniprot
 
-        abl1 = uniprot.UniProt("P00519")
+        abl1 = uniprot.UniProtFASTA("P00519")
         assert (
             abl1._sequence
             == "MLEICLKLVGCKSKKGLSSSSSCYLEEALQRPVASDFEPQGLSEAARWNSKENLLAGPSENDPNLFVALYDFVASGDNTLSITKGEKLRVLGYNHNGEWCEAQTKNGQGWVPSNYITPVNSLEKHSWYHGPVSRNAAEYLLSSGINGSFLVRESESSPGQRSISLRYEGRVYHYRINTASDGKLYVSSESRFNTLAELVHHHSTVADGLITTLHYPAPKRNKPTVYGVSPNYDKWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVNAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQESSISDEVEKELGKQGVRGAVSTLLQAPELPTKTRTSRRAAEHRDTTDVPEMPHSKGQGESDPLDHEPAVSPLLPRKERGPPEGGLNEDERLLPKDKKTNLFSALIKKKKKTAPTPPKRSSSFREMDGQPERRGAGEEEGRDISNGALAFTPLDTADPAKSPKPSNGAGVPNGALRESGGSGFRSPHLWKKSSTLTSSRLATGEEEGGGSSSKRFLRSCSASCVPHGAKDTEWRSVTLPRDLQSTGRQFDSSTFGGHKSEKPALPRKRAGENRSDQVTRGTVTPPPRLVKKNEEAADEVFKDIMESSPGSSPPNLTPKPLRRQVTVAPASGLPHKEEAGKGSALGTPAAAEPVTPTSKAGSGAPGGTSKGPAEESRVRRHKHSSESPGRDKGKLSRLKPAPPPPPAASAGKAGGKPSQSPSQEAAGEAVLGAKTKATSLVDAVNSDAAKPSQPGEGLKKPVLPATPKPQSAKPSGTPISPAPVPSTLPSASSALAGDQPSSTAFIPLISTRVSLRKTRQPPERIASGAITKGVVLDSTEALCLAISRNSEQMASHSAVLEAGKNLYTFCVSYVDSIQQMRNKFAFREAINKLENNLRELQICPATAGSGPAATQDFSKLLSSVKEISDIVQR"  # noqa E501
