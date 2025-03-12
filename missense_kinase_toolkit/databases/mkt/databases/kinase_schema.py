@@ -5,8 +5,8 @@ from itertools import chain
 import pandas as pd
 from mkt.databases import klifs
 from mkt.databases.aligners import ClustalOmegaAligner
+from mkt.databases.io_utils import get_repo_root
 from mkt.databases.kincore import align_kincore2uniprot, extract_pk_fasta_info_as_dict
-from mkt.databases.utils import get_repo_root
 from mkt.schema.constants import LIST_PFAM_KD
 from mkt.schema.kinase_schema import (
     KLIFS,
