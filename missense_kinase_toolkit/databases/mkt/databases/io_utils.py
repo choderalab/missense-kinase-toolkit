@@ -1,5 +1,6 @@
 import os
 
+import git
 import pandas as pd
 
 OUTPUT_DIR_VAR = "OUTPUT_DIR"
@@ -159,3 +160,11 @@ def parse_iterabc2dataframe(
     df = df[sorted(df.columns.to_list())]
 
     return df
+
+
+def get_repo_root():
+    try:
+        repo = git.Repo(".", search_parent_directories=True)
+        return repo.working_tree_dir
+    except git.InvalidGitRepositoryError:
+        return None
