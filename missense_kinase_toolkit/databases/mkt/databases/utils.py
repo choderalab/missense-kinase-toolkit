@@ -1,6 +1,5 @@
 from typing import Any
 
-import git
 import numpy as np
 
 
@@ -175,14 +174,6 @@ def try_except_convert_str2int(str_in: str):
         return int(str_in)
     except ValueError:
         return str_in
-
-
-def get_repo_root():
-    try:
-        repo = git.Repo(".", search_parent_directories=True)
-        return repo.working_tree_dir
-    except git.InvalidGitRepositoryError:
-        return None
 
 
 def try_except_substraction(a, b):
