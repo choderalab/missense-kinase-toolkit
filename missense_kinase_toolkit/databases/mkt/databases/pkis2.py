@@ -50,6 +50,6 @@ def read_xlsx_file(
 
 
 # def main():
-df_pkis2_km_atp = pd.read_csv("data/pkis2_km_atp.csv")
+# df_pkis2_km_atp = pd.read_csv("data/pkis2_km_atp.csv")
 
 # plot stacked barchart of PKIS2 ATP Km values where X-axis is the

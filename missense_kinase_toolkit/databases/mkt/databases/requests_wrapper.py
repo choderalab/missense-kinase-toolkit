@@ -1,11 +1,10 @@
-import os
 from functools import cache
 
+from mkt.databases.config import maybe_get_request_cache
 from requests.adapters import HTTPAdapter, Retry
 from requests_cache import CachedSession
 
 # this script was written by Jeff Quinn (MSKCC, Tansey lab)
-REQUEST_CACHE_VAR = "REQUEST_CACHE"
 
 
 def add_retry_to_session(
@@ -55,9 +54,9 @@ def get_cached_session():
         Cached session object
 
     """
-    if REQUEST_CACHE_VAR in os.environ:
-        cache_location = os.environ[REQUEST_CACHE_VAR]
+    cache_location = maybe_get_request_cache()
 
+    if cache_location:
         session = CachedSession(
             cache_location, allowable_codes=(200, 404, 400), backend="sqlite"
         )

@@ -1,20 +1,26 @@
+import logging
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
+import requests
 from bravado.client import SwaggerClient
 from bravado.requests_client import RequestsClient
 
-# TODO: Define Pydantic data models for the following data sources:
-# REST API and Swagger API clients
-# https://pypi.org/project/abstract-http-client/
-# cBioPortal mutations
-# cBioPortal clinical annotations
-# Pfam annotations
-# UniProt annotations (cannonical sequence)
-# Kinase lists
-# KLIFs annotations
+logger = logging.getLogger(__name__)
 
 
-class SwaggerAPIClient(ABC):
+@dataclass
+class APIClient:
+    @staticmethod
+    def check_response(res: requests.Response) -> None:
+        """Check the response status code for errors."""
+        try:
+            res.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            logger.error("Error at %s", "division", exc_info=e)
+
+
+class SwaggerAPIClient(APIClient, ABC):
     @abstractmethod
     def query_api(self) -> SwaggerClient:
         """Query a Swagger API and return result.
@@ -68,6 +74,6 @@ class APIKeySwaggerClient(SwaggerAPIClient, ABC):
         return http_client
 
 
-class RESTAPIClient(ABC):
+class RESTAPIClient(APIClient, ABC):
     @abstractmethod
     def query_api(self): ...

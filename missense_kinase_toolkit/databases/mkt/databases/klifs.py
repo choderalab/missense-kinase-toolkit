@@ -272,7 +272,7 @@ class KinaseInfo(KLIFS):
         self.status_code = 200
         self._kinase_info = self.query_kinase_info()
 
-    def query_kinase_info(self) -> dict[str, str | int | None]:
+    def query_kinase_info(self) -> dict[str, str | int | None] | None:
         """Get information about a kinase from KLIFS.
 
         Returns
@@ -304,7 +304,7 @@ class KinaseInfo(KLIFS):
                     print(f"Server error: {e.status_code}")
                     self.status_code = e.status_code
                     dict_kinase_info = None
-                # all other errors (e.g., 400)
+                # all other Exceptions
                 else:
                     print(
                         f"Error {e} in query_kinase_info for "
@@ -319,6 +319,9 @@ class KinaseInfo(KLIFS):
             list_key = dir(kinase_info)
             list_val = [getattr(kinase_info, key) for key in list_key]
             dict_kinase_info = dict(zip(list_key, list_val))
+        # 400 error: bad request does not throw an Exception above
+        else:
+            dict_kinase_info = None
 
         return dict_kinase_info
 
