@@ -1,3 +1,5 @@
+from transformers import AutoModel, AutoTokenizer
+import torch
 import pandas as pd
 import torch
 from mkt.ml.utils import generate_similarity_matrix, return_device
@@ -8,11 +10,11 @@ from transformers import AutoConfig, AutoModel, AutoTokenizer, EsmForMaskedLM
 # 2. Factor model
 # 3. Separate tokenzier?
 
-### SET-UP ###
+# SET-UP
 
 device = return_device()
 
-### LOAD DATA ###
+# LOAD DATA
 
 df_pkis2 = pd.read_csv(
     "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv"
@@ -21,7 +23,7 @@ df_pkis2 = pd.read_csv(
 df_pkis_rev = df_pkis2.set_index("Smiles").iloc[:, 6:]
 # df_pkis_rev.index
 
-### DRUG MODEL ###
+# DRUG MODEL
 
 # MTR = multi-task regression
 model_drug_name = "DeepChem/ChemBERTa-77M-MTR"
@@ -49,65 +51,16 @@ with torch.no_grad():
 for layer in outputs.hidden_states:
     print(layer.shape)
 
-mx_similarity = generate_similarity_matrix(outputs.pooler_output)
+# mx_similarity = generate_similarity_matrix(outputs.pooler_output)
 
-torch.allclose(mx_similarity, mx_similarity.T)
-torch.all(torch.diag(mx_similarity) == 1.0000)
+# torch.allclose(mx_similarity, mx_similarity.T)
+# torch.all(torch.diag(mx_similarity) == 1.0000)
 
 # cosi = torch.nn.CosineSimilarity(dim=1)
 # cosi(outputs.pooler_output, outputs.pooler_output).shape
 
 mx_norm = outputs.pooler_output / outputs.pooler_output.norm(dim=1, p=2, keepdim=True)
 mx_dotprod = mx_norm @ mx_norm.T
-
-
-def generate_similarity_matrix(
-    mx_input: torch.Tensor,
-    bool_row: bool = True,
-):
-    """Generate similarity matrix
-
-    Params:
-    -------
-    mx_input: torch.Tensor
-        Input matrix
-    bool_row: bool
-        Whether to calculate similarity by row; default is True
-
-    Returns:
-    --------
-    mx_similarity: torch.Tensor
-        Square, symmetrix similarity matrix containing pairwise cosine similarities
-    """
-    if bool_row:
-        mx_norm = mx_input / mx_input.norm(dim=1, p=2, keepdim=True)
-        mx_similarity = mx_norm @ mx_norm.T
-    else:
-        mx_norm = mx_input / mx_input.norm(dim=0, p=2, keepdim=True)
-        mx_similarity = mx_norm.T @ mx_norm
-
-    return mx_dotprod
-
-
-def create_laplacian(
-    mx_input: torch.Tensor,
-):
-    """Create graph Laplacian
-
-    Params:
-    -------
-    mx_input: torch.Tensor
-        Input matrix
-
-    Returns:
-    --------
-    mx_laplacian: torch.Tensor
-        Graph Laplacian
-    """
-
-    mx_laplacian = sparse.csgraph.laplacian(csgraph=mx_adjacency, normed=True)
-    return mx_laplacian
-
 
 dir(outputs)
 outputs.last_hidden_state.squeeze().shape
@@ -116,7 +69,7 @@ len(outputs.hidden_states)
 
 torch.allclose(mx_dotprod, mx_dotprod.T)
 
-### KINASE MODEL ###
+# KINASE MODEL
 
 model_kinase_name = "facebook/esm2_t6_8M_UR50D"
 
