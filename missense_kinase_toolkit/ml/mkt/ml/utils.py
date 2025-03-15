@@ -60,23 +60,3 @@ def create_laplacian(
     mx_laplacian = sparse.csgraph.laplacian(csgraph=mx_input, normed=True)
 
     return mx_laplacian
-
-
-def create_laplacian(
-    mx_input: torch.Tensor,
-):
-    """Create graph Laplacian
-
-    Params:
-    -------
-    mx_input: torch.Tensor
-        Input matrix
-
-    Returns:
-    --------
-    mx_laplacian: torch.Tensor
-        Graph Laplacian
-    """
-
-    mx_laplacian = sparse.csgraph.laplacian(csgraph=mx_adjacency, normed=True)
-    return mx_laplacian

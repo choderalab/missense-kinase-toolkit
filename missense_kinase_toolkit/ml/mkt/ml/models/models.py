@@ -1,7 +1,7 @@
 import pandas as pd
 import torch
 from mkt.ml.utils import generate_similarity_matrix, return_device
-from transformers import AutoConfig, AutoModel, AutoTokenizer, EsmForMaskedLM
+from transformers import AutoModel, AutoTokenizer
 
 # TODO:
 # 1. MLP
@@ -49,23 +49,12 @@ with torch.no_grad():
 for layer in outputs.hidden_states:
     print(layer.shape)
 
-# mx_similarity = generate_similarity_matrix(outputs.pooler_output)
+mx_similarity = generate_similarity_matrix(outputs.pooler_output)
 
 # torch.allclose(mx_similarity, mx_similarity.T)
 # torch.all(torch.diag(mx_similarity) == 1.0000)
 
-# cosi = torch.nn.CosineSimilarity(dim=1)
-# cosi(outputs.pooler_output, outputs.pooler_output).shape
-
-mx_norm = outputs.pooler_output / outputs.pooler_output.norm(dim=1, p=2, keepdim=True)
-mx_dotprod = mx_norm @ mx_norm.T
-
-dir(outputs)
-outputs.last_hidden_state.squeeze().shape
-outputs.last_hidden_state.shape
-len(outputs.hidden_states)
-
-torch.allclose(mx_dotprod, mx_dotprod.T)
+# torch.allclose(mx_dotprod, mx_dotprod.T)
 
 # KINASE MODEL
 
@@ -87,19 +76,19 @@ model_kinase = AutoModel.from_pretrained(
 
 # config_automodel.architectures
 
-type(model_kinase)
-isinstance(model_kinase, torch.nn.Module)
+# type(model_kinase)
+# isinstance(model_kinase, torch.nn.Module)
 
-list_keep = ["encoder", "embeddings"]
-set_drop = set()
-for k, v in model_kinase.state_dict().items():
-    if k.split(".")[0] not in list_keep:
-        set_drop.add(k.split(".")[0])
-for drop in set_drop:
-    delattr(model_kinase, drop)
+# list_keep = ["encoder", "embeddings"]
+# set_drop = set()
+# for k, v in model_kinase.state_dict().items():
+#     if k.split(".")[0] not in list_keep:
+#         set_drop.add(k.split(".")[0])
+# for drop in set_drop:
+#     delattr(model_kinase, drop)
 
 
-for k, v in model_kinase.state_dict().items():
-    print(k)
-    print(v.shape)
-    print()
+# for k, v in model_kinase.state_dict().items():
+#     print(k)
+#     print(v.shape)
+#     print()
