@@ -1,6 +1,6 @@
 import pandas as pd
 import torch
-from mkt.ml.utils import generate_similarity_matrix, return_device
+from mkt.ml.utils import generate_similarity_matrix, return_device # noqa: F401
 from transformers import AutoModel, AutoTokenizer
 
 # TODO:
