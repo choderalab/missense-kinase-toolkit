@@ -1,5 +1,6 @@
 import torch
 
+
 def return_device():
     """Return device
 
@@ -9,6 +10,7 @@ def return_device():
         Device; either "cuda" or "cpu"
     """
     return "cuda" if torch.cuda.is_available() else "cpu"
+
 
 def generate_similarity_matrix(
     mx_input: torch.Tensor,

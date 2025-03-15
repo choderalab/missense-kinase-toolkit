@@ -1,12 +1,9 @@
-from transformers import AutoConfig, AutoModel, EsmForMaskedLM, AutoTokenizer
-import torch
 import pandas as pd
-from mkt.ml.utils import (
-    return_device, 
-    generate_similarity_matrix
-)
+import torch
+from mkt.ml.utils import generate_similarity_matrix, return_device
+from transformers import AutoConfig, AutoModel, AutoTokenizer, EsmForMaskedLM
 
-#TODO:
+# TODO:
 # 1. MLP
 # 2. Factor model
 # 3. Separate tokenzier?
@@ -17,7 +14,9 @@ device = return_device()
 
 ### LOAD DATA ###
 
-df_pkis2 = pd.read_csv("https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv")
+df_pkis2 = pd.read_csv(
+    "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv"
+)
 
 df_pkis_rev = df_pkis2.set_index("Smiles").iloc[:, 6:]
 # df_pkis_rev.index
@@ -35,16 +34,14 @@ model_drug = AutoModel.from_pretrained(
 )
 # model_drug
 
-tokenizer_drug = AutoTokenizer.from_pretrained(
-    model_drug_name
-)
+tokenizer_drug = AutoTokenizer.from_pretrained(model_drug_name)
 # {v: k for k, v in tokenizer_drug.vocab.items()}[12] # [CLS]
 
 drug_tokens = tokenizer_drug(
-    df_pkis_rev.index.to_list(), 
-    return_tensors="pt", 
-    padding=True, 
- ).to(device)
+    df_pkis_rev.index.to_list(),
+    return_tensors="pt",
+    padding=True,
+).to(device)
 
 with torch.no_grad():
     outputs = model_drug(**drug_tokens, output_hidden_states=True)
@@ -62,6 +59,7 @@ torch.all(torch.diag(mx_similarity) == 1.0000)
 
 mx_norm = outputs.pooler_output / outputs.pooler_output.norm(dim=1, p=2, keepdim=True)
 mx_dotprod = mx_norm @ mx_norm.T
+
 
 def generate_similarity_matrix(
     mx_input: torch.Tensor,
@@ -90,6 +88,7 @@ def generate_similarity_matrix(
 
     return mx_dotprod
 
+
 def create_laplacian(
     mx_input: torch.Tensor,
 ):
@@ -106,12 +105,8 @@ def create_laplacian(
         Graph Laplacian
     """
 
-
     mx_laplacian = sparse.csgraph.laplacian(csgraph=mx_adjacency, normed=True)
     return mx_laplacian
-
-
-
 
 
 dir(outputs)
