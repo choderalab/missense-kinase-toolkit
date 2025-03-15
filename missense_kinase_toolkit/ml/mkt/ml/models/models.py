@@ -1,5 +1,3 @@
-from transformers import AutoModel, AutoTokenizer
-import torch
 import pandas as pd
 import torch
 from mkt.ml.utils import generate_similarity_matrix, return_device

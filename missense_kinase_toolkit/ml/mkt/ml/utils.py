@@ -39,6 +39,7 @@ def generate_similarity_matrix(
 
     return mx_similarity
 
+
 def create_laplacian(
     mx_input: torch.Tensor,
 ):
@@ -57,8 +58,9 @@ def create_laplacian(
     from scipy import sparse
 
     mx_laplacian = sparse.csgraph.laplacian(csgraph=mx_input, normed=True)
-    
+
     return mx_laplacian
+
 
 def create_laplacian(
     mx_input: torch.Tensor,
