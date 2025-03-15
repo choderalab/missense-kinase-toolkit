@@ -38,3 +38,24 @@ def generate_similarity_matrix(
         mx_similarity = mx_norm.T @ mx_norm
 
     return mx_similarity
+
+def create_laplacian(
+    mx_input: torch.Tensor,
+):
+    """Create graph Laplacian
+
+    Params:
+    -------
+    mx_input: torch.Tensor
+        Input matrix
+
+    Returns:
+    --------
+    mx_laplacian: torch.Tensor
+        Graph Laplacian
+    """
+    from scipy import sparse
+
+    mx_laplacian = sparse.csgraph.laplacian(csgraph=mx_input, normed=True)
+    
+    return mx_laplacian
