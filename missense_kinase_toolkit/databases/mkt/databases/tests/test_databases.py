@@ -197,7 +197,8 @@ class TestDatabases:
 
         # test KLIFS
         temp_obj = klifs.KinaseInfo("EGFR")
-        dict_egfr = temp_obj._kinase_info
+        assert len(temp_obj._kinase_info) == 1
+        dict_egfr = temp_obj.get_kinase_info()[0]
         if temp_obj.status_code == 200:
             assert dict_egfr["family"] == "EGFR"
             assert dict_egfr["full_name"] == "epidermal growth factor receptor"
