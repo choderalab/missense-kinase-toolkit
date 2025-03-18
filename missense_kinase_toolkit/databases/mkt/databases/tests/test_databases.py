@@ -72,9 +72,9 @@ class TestDatabases:
         from mkt.databases import uniprot, utils_requests
 
         # conform with SwissProt ID pattern
-        uniprot.UniProtFASTA("A9AAA9")
+        uniprot.UniProtFASTA("L91119")
         out, _ = capsys.readouterr()
-        assert out == "Error code: 404 (Not found)\n"
+        assert out == "Error code: 400 (Bad request)\n"
 
         utils_requests.print_status_code_if_res_not_ok(
             requests.get("https://rest.uniprot.org/uniprotkb/TEST"),
