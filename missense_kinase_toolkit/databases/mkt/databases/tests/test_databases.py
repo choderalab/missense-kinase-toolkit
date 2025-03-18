@@ -67,13 +67,14 @@ class TestDatabases:
         assert io_utils.convert_str2list("a,b,c") == ["a", "b", "c"]
         assert io_utils.convert_str2list("a, b, c") == ["a", "b", "c"]
 
-    def test_requests_wrapper(self, capsys):
+    def test_utils_requests(self, capsys):
         import requests
         from mkt.databases import uniprot, utils_requests
 
-        uniprot.UniProtFASTA("TEST")
+        # conform with TrEMBL ID pattern
+        uniprot.UniProtFASTA("Z1Z111Z111")
         out, _ = capsys.readouterr()
-        assert out == "Error code: 400 (Bad request)\n"
+        assert out == "Error code: 404 (Not found)\n"
 
         utils_requests.print_status_code_if_res_not_ok(
             requests.get("https://rest.uniprot.org/uniprotkb/TEST"),
