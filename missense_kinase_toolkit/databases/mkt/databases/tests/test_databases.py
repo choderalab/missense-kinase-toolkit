@@ -71,8 +71,8 @@ class TestDatabases:
         import requests
         from mkt.databases import uniprot, utils_requests
 
-        # conform with TrEMBL ID pattern
-        uniprot.UniProtFASTA("Z1Z111Z111")
+        # conform with SwissProt ID pattern
+        uniprot.UniProtFASTA("A9AAA9")
         out, _ = capsys.readouterr()
         assert out == "Error code: 404 (Not found)\n"
 
