@@ -71,12 +71,22 @@ class Family(Enum):
 KinaseDomainName = StrEnum(
     "KinaseDomainName", {"KD" + str(idx + 1): kd for idx, kd in enumerate(LIST_PFAM_KD)}
 )
+
 SeqUniProt = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWXY]+$")
 """Pydantic model for UniProt sequence constraints."""
 SeqKLIFS = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWY\-]{85}$")
 """Pydantic model for KLIFS pocket sequence constraints."""
-UniProtID = constr(pattern=r"^[A-Z][0-9][A-Z0-9]{3}[0-9]$")
-"""Pydantic model for UniProt ID constraints."""
+
+SwissProtPattern = r"^[A-Z][0-9][A-Z0-9]{3}[0-9]$"
+"""Regex pattern for SwissProt ID."""
+SwissProtID = constr(pattern=SwissProtPattern)
+"""Pydantic model for SwissProt ID constraints."""
+TrEMBLPattern = r"^[A-Z][0-9][A-Z][A-Z0-9]{2}[0-9][A-Z][A-Z0-9]{2}[0-9]$"
+"""Regex pattern for TrEBML ID."""
+TrEMBLID = constr(pattern=TrEMBLPattern)
+"""Pydantic model for TrEMBL ID constraints."""
+# UniProtID = constr(pattern=r"^[A-Z][0-9][A-Z0-9]{3}[0-9]$")
+# """Pydantic model for UniProt ID constraints."""
 
 
 class KinHub(BaseModel):
@@ -138,8 +148,8 @@ class KinaseInfo(BaseModel):
     """Pydantic model for kinase information."""
 
     hgnc_name: str
-    uniprot_id: UniProtID
-    kinhub: KinHub
+    uniprot_id: SwissProtID | TrEMBLID  # UniProtID
+    kinhub: KinHub | None = None
     uniprot: UniProt
     klifs: KLIFS | None = None
     pfam: Pfam | None = None
