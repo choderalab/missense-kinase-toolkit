@@ -68,11 +68,11 @@ class UniProtFASTA(UniProt, RESTAPIClient):
         if res.ok:
             str_fasta = res.text
             if bool_seq:
-                str_fasta = self._convert_fasta2seq(str_fasta)
+                header, seq = self._convert_fasta2seq(str_fasta)
         else:
             utils_requests.print_status_code_if_res_not_ok(res)
-            str_fasta = None
-        return str_fasta
+            header, seq = None, None
+        return header, seq
 
     @staticmethod
     def _convert_fasta2seq(str_fasta) -> tuple[str, str]:
