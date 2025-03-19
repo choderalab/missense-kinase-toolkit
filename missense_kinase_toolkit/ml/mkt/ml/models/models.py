@@ -44,12 +44,16 @@ drug_tokens = tokenizer_drug(
 ).to(device)
 
 with torch.no_grad():
-    outputs = model_drug(**drug_tokens, output_hidden_states=True)
+    outputs_drug = model_drug(
+        **drug_tokens, 
+        output_hidden_states=True
+    )
 
-for layer in outputs.hidden_states:
+for layer in outputs_drug.hidden_states:
     print(layer.shape)
 
-mx_similarity = generate_similarity_matrix(outputs.pooler_output)
+mx_drug_sim = generate_similarity_matrix(outputs_drug.pooler_output)
+
 
 # torch.allclose(mx_similarity, mx_similarity.T)
 # torch.all(torch.diag(mx_similarity) == 1.0000)
@@ -64,6 +68,36 @@ model_kinase = AutoModel.from_pretrained(
     model_kinase_name,
     device_map="auto",
 )
+
+tokenizer_kinase = AutoTokenizer.from_pretrained(model_kinase_name)
+
+kinase_tokens = tokenizer_kinase(
+    df_pkis_rev.columns.to_list(),
+    return_tensors="pt",
+    padding=True,
+).to(device)
+
+with torch.no_grad():
+    outputs_kinase = model_drug(
+        **kinase_tokens, 
+        output_hidden_states=True
+    )
+
+for layer in outputs_kinase.hidden_states:
+    print(layer.shape)
+
+mx_kinase_sim = generate_similarity_matrix(outputs_kinase.pooler_output)
+
+## CLUSTERING
+
+from sklearn.cluster import DBSCAN, SpectralClustering
+import numpy as np
+
+model_DB = DBSCAN(eps=0.1, metric='cosine').fit(mx_similarity.cpu().numpy())
+labels = model_DB.labels_
+unique, counts = np.unique(labels, return_counts=True)
+
+
 # config_automodel = AutoConfig.from_pretrained(model_name)
 # [i for i in model_kinase.state_dict().keys()]
 # [dir(i) for i in model_kinase.state_dict().keys()]
