@@ -1,5 +1,6 @@
 import pandas as pd
 from mkt.databases import requests_wrapper
+from mkt.databases.utils import aggregate_df_by_col_set
 
 
 def kinhub(
@@ -20,12 +21,6 @@ def kinhub(
     """
     import numpy as np
     from bs4 import BeautifulSoup
-
-    # TODO: to fix ImportError
-    # .venv/lib/python3.11/site-packages/janitor.py line 6
-    # "import ConfigParser" to "import configparser"
-    # perhaps just write own function to clean column names
-    # from janitor import clean_names
 
     page = requests_wrapper.get_cached_session().get(url)
     soup = BeautifulSoup(page.content, "html.parser")
@@ -50,16 +45,7 @@ def kinhub(
             i += 1
 
     df_kinhub = pd.DataFrame.from_dict(dict_kinhub)
-    # df_kinhub = clean_names(df_kinhub)
 
-    # aggregate rows with the same HGNC Name (e.g., multiple kinase domains like JAK)
-    list_cols = df_kinhub.columns.to_list()
-    list_cols.remove("HGNC Name")
-    df_kinhub_agg = df_kinhub.groupby(["HGNC Name"], as_index=False, sort=False).agg(
-        set
-    )
-    df_kinhub_agg[list_cols] = df_kinhub_agg[list_cols].map(
-        lambda x: ", ".join(str(s) for s in x)
-    )
+    df_kinhub_agg = aggregate_df_by_col_set(df_kinhub, "HGNC Name")
 
     return df_kinhub_agg

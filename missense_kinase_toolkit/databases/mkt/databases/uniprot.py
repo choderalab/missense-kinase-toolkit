@@ -1,8 +1,12 @@
 import ast
+import logging
 from dataclasses import dataclass
 
 from mkt.databases import requests_wrapper, utils_requests
 from mkt.databases.api_schema import RESTAPIClient
+from mkt.schema.kinase_schema import SwissProtPattern, TrEMBLPattern
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -12,17 +16,36 @@ class UniProt:
     uniprot_id: str
     """UniProt ID."""
     url: str = "https://rest.uniprot.org/uniprotkb"
-    """UniProt API URL."""
+    """URL for the UniProt API."""
 
 
 @dataclass
 class UniProtFASTA(UniProt, RESTAPIClient):
     """Class to interact UniProt API for FASTA download."""
 
+    url_fasta: str | None = None
+    """URL for the UniProt FASTA API including UniProt ID."""
+    _header: str | None = None
+    """FASTA header."""
     _sequence: str | None = None
+    """FASTA sequence."""
 
     def __post_init__(self):
-        self._sequence = self.query_api()
+        self.url = self.set_url()
+        self.url_fasta = self.url.replace("<ID>", self.uniprot_id)
+        self._header, self._sequence = self.query_api()
+
+    def set_url(self):
+        """Set URL for UniProt API; UniProtKB if SwissProt or Unisave if TrEMBL."""
+        import re
+
+        if re.match(SwissProtPattern, self.uniprot_id):
+            return "https://rest.uniprot.org/uniprotkb/<ID>.fasta"
+        elif re.match(TrEMBLPattern, self.uniprot_id):
+            return "https://rest.uniprot.org/unisave/<ID>?format=fasta&versions=67"
+        else:
+            logging.error(f"Invalid UniProt ID: {self.uniprot_id}")
+            raise ValueError(f"Invalid UniProt ID: {self.uniprot_id}")
 
     def query_api(
         self,
@@ -41,20 +64,18 @@ class UniProtFASTA(UniProt, RESTAPIClient):
             FASTA sequences for UniProt ID; None if request fails
 
         """
-        self.url_fasta = f"{self.url}/{self.uniprot_id}.fasta"
-
         res = requests_wrapper.get_cached_session().get(self.url_fasta)
         if res.ok:
             str_fasta = res.text
             if bool_seq:
-                str_fasta = self._convert_fasta2seq(str_fasta)
+                header, seq = self._convert_fasta2seq(str_fasta)
         else:
-            str_fasta = None
             utils_requests.print_status_code_if_res_not_ok(res)
-        return str_fasta
+            header, seq = None, None
+        return header, seq
 
     @staticmethod
-    def _convert_fasta2seq(str_fasta):
+    def _convert_fasta2seq(str_fasta) -> tuple[str, str]:
         """Convert FASTA sequence to string sequence (i.e., remove header line breaks).
 
         Parameters
@@ -64,12 +85,13 @@ class UniProtFASTA(UniProt, RESTAPIClient):
 
         Returns
         -------
-        str_seq : str
-            Sequence string (excluding header and line breaks)
+        header, seq : tuple[str, str]
+            FASTA header and sequence strings (excluding line breaks)
 
         """
-        str_seq = [i.split("\n", 1)[1].replace("\n", "") for i in [str_fasta]][0]
-        return str_seq
+        header = str_fasta.split("\n")[0]
+        seq = [i.split("\n", 1)[1].replace("\n", "") for i in [str_fasta]][0]
+        return header, seq
 
 
 @dataclass

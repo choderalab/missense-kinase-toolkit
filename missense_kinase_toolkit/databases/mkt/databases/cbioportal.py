@@ -6,10 +6,6 @@ from mkt.databases.api_schema import APIKeySwaggerClient
 from mkt.databases.config import get_cbioportal_instance, maybe_get_cbioportal_token
 from mkt.databases.io_utils import parse_iterabc2dataframe, save_dataframe_to_csv
 
-# from pydantic import BaseModel as PydanticBaseModel
-# from dataclasses import dataclass
-
-
 logger = logging.getLogger(__name__)
 
 

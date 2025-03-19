@@ -1,6 +1,7 @@
 from typing import Any
 
 import numpy as np
+import pandas as pd
 
 
 def try_except_split_concat_str(
@@ -181,3 +182,21 @@ def try_except_substraction(a, b):
         return b - a
     except TypeError:
         return None
+
+
+def aggregate_df_by_col_set(
+    df_in: pd.DataFrame,
+    col_group: str,
+) -> pd.DataFrame:
+    list_cols = df_in.columns.to_list()
+    list_cols.remove(col_group)
+
+    # aggregate rows with the same HGNC Name (e.g., multiple kinase domains like JAK)
+    df_in_agg = df_in.groupby([col_group], as_index=False, sort=False).agg(set)
+
+    # join set elements into a single string
+    df_in_agg[list_cols] = df_in_agg[list_cols].map(
+        lambda x: ", ".join(str(s) for s in x)
+    )
+
+    return df_in_agg
