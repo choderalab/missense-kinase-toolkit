@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import torch
 from mkt.ml.utils import generate_similarity_matrix, return_device  # noqa: F401
+from sklearn.cluster import DBSCAN, SpectralClustering  # noqa: F401
 from transformers import AutoModel, AutoTokenizer
-from sklearn.cluster import DBSCAN, SpectralClustering # noqa: F401
 
 # TODO:
 # 1. MLP
