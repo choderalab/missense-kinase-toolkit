@@ -1,7 +1,9 @@
+import numpy as np
 import pandas as pd
 import torch
 from mkt.ml.utils import generate_similarity_matrix, return_device  # noqa: F401
 from transformers import AutoModel, AutoTokenizer
+from sklearn.cluster import DBSCAN, SpectralClustering # noqa: F401
 
 # TODO:
 # 1. MLP
@@ -82,12 +84,9 @@ for layer in outputs_kinase.hidden_states:
 
 mx_kinase_sim = generate_similarity_matrix(outputs_kinase.pooler_output)
 
-## CLUSTERING
+# CLUSTERING
 
-import numpy as np
-from sklearn.cluster import DBSCAN, SpectralClustering
-
-model_DB = DBSCAN(eps=0.1, metric="cosine").fit(mx_similarity.cpu().numpy())
+model_DB = DBSCAN(eps=0.1, metric="cosine").fit(mx_kinase_sim.cpu().numpy())
 labels = model_DB.labels_
 unique, counts = np.unique(labels, return_counts=True)
 
