@@ -65,10 +65,11 @@ def plot_dim_red_scatter(
     if df_input.shape[1] != 2:
         raise ValueError("Input DataFrame must have exactly two columns")
     else:
+        col1, col2 = df_input.columns
         plt.scatter(
             data=df_input,
-            x=df_input.columns[0],
-            y=df_input.columns[1],
+            x=col1,
+            y=col2,
             c=kmeans.labels_ + 1,
             cmap=cmap,
             alpha=0.5,
@@ -96,9 +97,10 @@ def try_except_entry_in_list(str_in, list_in):
 
 def scatter_plot_binary_grid(
     dfs_dict: pd.DataFrame,
-    df_tsne: pd.DataFrame,
+    df_input: pd.DataFrame,
     kmeans: KMeans,
     col: str = "group",
+    method: str = "tSNE",
     n_cutoff: int = 5,
     n_cols: int = 5,
 ) -> None:
@@ -109,7 +111,7 @@ def scatter_plot_binary_grid(
     -----------
     dfs_dict : dict
         Dictionary with family names as keys and their counts as values
-    df_tsne : DataFrame
+    df_input : DataFrame
         DataFrame containing the t-SNE coordinates
     kmeans : KMeans object
         Fitted KMeans object with labels_ attribute
@@ -136,14 +138,22 @@ def scatter_plot_binary_grid(
     # Flatten axes array for easy indexing
     axes = axes.flatten() if n_rows > 1 else axes
 
+    if df_input.shape[1] != 2:
+        raise ValueError("Input DataFrame must have exactly two columns")
+
+    col1, col2 = df_input.columns
     # Create kmeans plot in position (1,1)
     n_clusters = len(np.unique(kmeans.labels_))
     cmap = plt.get_cmap("Set1", n_clusters)
     axes[0].scatter(
-        df_tsne["tSNE1"], df_tsne["tSNE2"], c=kmeans.labels_ + 1, cmap=cmap, alpha=0.5
+        df_input[col1], 
+        df_input[col2], 
+        c=kmeans.labels_ + 1, 
+        cmap=cmap, 
+        alpha=0.5,
     )
-    axes[0].set_xlabel("tSNE1")
-    axes[0].set_ylabel("tSNE2")
+    axes[0].set_xlabel(col1)
+    axes[0].set_ylabel(col2)
     axes[0].set_title(f"KMeans Clustering (k={n_clusters})")
 
     # Create colormap for binary plots
@@ -156,10 +166,14 @@ def scatter_plot_binary_grid(
             vx_fam = df_annot[col].apply(lambda x: try_except_entry_in_list(fam, x))
 
             ax.scatter(
-                df_tsne["tSNE1"], df_tsne["tSNE2"], c=vx_fam, cmap=cmap_bin, alpha=0.5
+                df_input[col1], 
+                df_input[col2],
+                c=vx_fam, 
+                cmap=cmap_bin, 
+                alpha=0.5
             )
-            ax.set_xlabel("tSNE1")
-            ax.set_ylabel("tSNE2")
+            ax.set_xlabel(col1)
+            ax.set_ylabel(col2)
             ax.set_title(f"{fam} (n={count})")
 
     # Hide any unused subplots
@@ -169,10 +183,10 @@ def scatter_plot_binary_grid(
         axes[j].axis("off")
 
     # Add overall title with additional top padding
-    fig.suptitle(f"t-SNE of Kinase Embeddings by {col.upper()}", fontsize=16, y=0.98)
+    fig.suptitle(f"{method} of Kinase Embeddings by {col.upper()}", fontsize=16, y=0.98)
 
-    # Save the figure
-    plt.savefig(f"./plots/tsne_{col}_grid.png", dpi=300, bbox_inches="tight")
+    method_print = ''.join(ch.lower() for ch in method if ch.isalnum())
+    plt.savefig(f"./plots/{method_print}_{col}_grid.png", dpi=300, bbox_inches="tight")
     plt.close()
 
 
@@ -266,6 +280,7 @@ tsne = TSNE(
 
 # PLOT
 
+# PCA
 plot_dim_red_scatter(
     pd.DataFrame(principal_components, columns=["PC1", "PC2"]),
     kmeans,
@@ -274,12 +289,14 @@ plot_dim_red_scatter(
 # centers = pca.transform(kmeans.cluster_centers_)
 # plt.scatter(centers[:, 0], centers[:, 1], c="red", s=100, alpha=0.5)
 
+# t-SNE
 plot_dim_red_scatter(
     pd.DataFrame(tsne, columns=["tSNE1", "tSNE2"]),
     kmeans,
     method="tSNE",
 )
 
+# UMAP
 # plot_dim_red_scatter(
 #     pd.DataFrame(umap_components, columns=["UMAP1", "UMAP2"]),
 #     kmeans,
@@ -298,7 +315,8 @@ dict_annot = {
 dict_annot = dict(sorted(dict_annot.items(), key=lambda item: item[1], reverse=True))
 
 # Call the function with your dictionary of families and kmeans object
-scatter_plot_binary_grid(dict_annot, df_tsne, kmeans)
+df_plot = pd.DataFrame(tsne, columns=["tSNE1", "tSNE2"])
+scatter_plot_binary_grid(dict_annot, df_plot, kmeans)
 
 # NOT IN USE
 # config_automodel = AutoConfig.from_pretrained(model_name)
