@@ -44,10 +44,7 @@ drug_tokens = tokenizer_drug(
 ).to(device)
 
 with torch.no_grad():
-    outputs_drug = model_drug(
-        **drug_tokens, 
-        output_hidden_states=True
-    )
+    outputs_drug = model_drug(**drug_tokens, output_hidden_states=True)
 
 for layer in outputs_drug.hidden_states:
     print(layer.shape)
@@ -78,10 +75,7 @@ kinase_tokens = tokenizer_kinase(
 ).to(device)
 
 with torch.no_grad():
-    outputs_kinase = model_drug(
-        **kinase_tokens, 
-        output_hidden_states=True
-    )
+    outputs_kinase = model_drug(**kinase_tokens, output_hidden_states=True)
 
 for layer in outputs_kinase.hidden_states:
     print(layer.shape)
@@ -90,10 +84,10 @@ mx_kinase_sim = generate_similarity_matrix(outputs_kinase.pooler_output)
 
 ## CLUSTERING
 
-from sklearn.cluster import DBSCAN, SpectralClustering
 import numpy as np
+from sklearn.cluster import DBSCAN, SpectralClustering
 
-model_DB = DBSCAN(eps=0.1, metric='cosine').fit(mx_similarity.cpu().numpy())
+model_DB = DBSCAN(eps=0.1, metric="cosine").fit(mx_similarity.cpu().numpy())
 labels = model_DB.labels_
 unique, counts = np.unique(labels, return_counts=True)
 
