@@ -1,23 +1,23 @@
-import numpy as np
-import pandas as pd
 from ast import literal_eval
 from itertools import chain
 
+import matplotlib.colors as colors
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import torch
-from transformers import AutoModel, AutoTokenizer
-from mkt.ml.utils import generate_similarity_matrix, return_device  # noqa: F401
-
-from sklearn.cluster import DBSCAN, SpectralClustering, KMeans # noqa: F401
-from sklearn.metrics import silhouette_score
 from kneed import KneeLocator
-from sklearn.preprocessing import StandardScaler
+from mkt.ml.utils import generate_similarity_matrix, return_device  # noqa: F401
+from sklearn.cluster import DBSCAN, KMeans, SpectralClustering  # noqa: F401
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
+from sklearn.metrics import silhouette_score
+from sklearn.preprocessing import StandardScaler
+from transformers import AutoModel, AutoTokenizer
+
 # from umap import UMAP # need to install umap-learn if want to use
 
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import matplotlib.colors as colors
 
 # TODO:
 # 1. MLP
@@ -26,29 +26,33 @@ import matplotlib.colors as colors
 
 # FUNCTIONS
 
+
 def find_kmeans(
-    mx_input, 
-    dict_kwarg, 
+    mx_input,
+    dict_kwarg,
     n_clust=30,
 ):
     list_sse = []
     list_silhouette = []
-    
-    for k in range(1, n_clust+1):
+
+    for k in range(1, n_clust + 1):
         kmeans = KMeans(n_clusters=k, **dict_kwarg)
         kmeans.fit(mx_input)
         list_sse.append(kmeans.inertia_)
         if k > 1:
             score = silhouette_score(mx_input, kmeans.labels_)
             list_silhouette.append(score)
-    
-    kl = KneeLocator(range(1, n_clust+1), list_sse, curve="convex", direction="decreasing")
+
+    kl = KneeLocator(
+        range(1, n_clust + 1), list_sse, curve="convex", direction="decreasing"
+    )
     n_clust = kl.elbow
-    
+
     kmeans = KMeans(n_clusters=n_clust, **dict_kwarg)
     kmeans.fit(mx_input)
-    
+
     return kmeans, list_sse, list_silhouette
+
 
 def plot_dim_red_scatter(
     df_input: pd.DataFrame,
@@ -62,23 +66,26 @@ def plot_dim_red_scatter(
         raise ValueError("Input DataFrame must have exactly two columns")
     else:
         plt.scatter(
-            data=df_input, 
+            data=df_input,
             x=df_input.columns[0],
-            y=df_input.columns[1], 
-            c=kmeans.labels_ + 1, 
-            cmap=cmap, 
-            alpha=0.5
+            y=df_input.columns[1],
+            c=kmeans.labels_ + 1,
+            cmap=cmap,
+            alpha=0.5,
         )
-    
-    patches = [mpatches.Patch(color=cmap(i), label=str(i + 1)) for i in range(n_clusters)]
-    plt.legend(handles=patches, loc='upper right', bbox_to_anchor=(1.14, 1))
-    
+
+    patches = [
+        mpatches.Patch(color=cmap(i), label=str(i + 1)) for i in range(n_clusters)
+    ]
+    plt.legend(handles=patches, loc="upper right", bbox_to_anchor=(1.14, 1))
+
     plt.xlabel(col1)
     plt.ylabel(col2)
     plt.title(f"{method} of Kinase Embeddings")
-    
+
     plt.savefig(f"./plots/{method.lower()}.png")
     plt.close()
+
 
 def try_except_entry_in_list(str_in, list_in):
     try:
@@ -86,17 +93,18 @@ def try_except_entry_in_list(str_in, list_in):
     except:
         return False
 
+
 def scatter_plot_binary_grid(
-    dfs_dict: pd.DataFrame, 
-    df_tsne: pd.DataFrame, 
+    dfs_dict: pd.DataFrame,
+    df_tsne: pd.DataFrame,
     kmeans: KMeans,
     col: str = "group",
-    n_cutoff: int = 5, 
+    n_cutoff: int = 5,
     n_cols: int = 5,
 ) -> None:
     """
     Create a grid of scatter plots for multiple families with kmeans clustering in first position
-    
+
     Parameters:
     -----------
     dfs_dict : dict
@@ -109,53 +117,64 @@ def scatter_plot_binary_grid(
         Number of columns in the grid
     """
     # Filter families according to cutoff
-    filtered_families = {fam: count for fam, count in dfs_dict.items() if count >= n_cutoff}
-    
+    filtered_families = {
+        fam: count for fam, count in dfs_dict.items() if count >= n_cutoff
+    }
+
     # Calculate grid dimensions
     n_plots = len(filtered_families) + 1  # +1 for the kmeans plot
     n_rows = (n_plots + n_cols - 1) // n_cols  # Ceiling division
-    
+
     # Create figure and axes
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4*n_cols, 4*n_rows))
-    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 4 * n_rows))
+
     # Add top padding to prevent title overlap
-    fig.tight_layout(pad=4.0, rect=[0, 0, 1, 0.975])  # Adjust rect to leave space for suptitle
-    
+    fig.tight_layout(
+        pad=4.0, rect=[0, 0, 1, 0.975]
+    )  # Adjust rect to leave space for suptitle
+
     # Flatten axes array for easy indexing
     axes = axes.flatten() if n_rows > 1 else axes
-    
+
     # Create kmeans plot in position (1,1)
     n_clusters = len(np.unique(kmeans.labels_))
     cmap = plt.get_cmap("Set1", n_clusters)
-    axes[0].scatter(df_tsne["tSNE1"], df_tsne["tSNE2"], c=kmeans.labels_ + 1, cmap=cmap, alpha=0.5)
+    axes[0].scatter(
+        df_tsne["tSNE1"], df_tsne["tSNE2"], c=kmeans.labels_ + 1, cmap=cmap, alpha=0.5
+    )
     axes[0].set_xlabel("tSNE1")
     axes[0].set_ylabel("tSNE2")
     axes[0].set_title(f"KMeans Clustering (k={n_clusters})")
-    
+
     # Create colormap for binary plots
     cmap_bin = colors.ListedColormap(["grey", "red"])
-    
+
     # Create plots for each family
     for i, (fam, count) in enumerate(filtered_families.items()):
-        if i+1 < len(axes):  # +1 because we used the first position for kmeans
-            ax = axes[i+1]
+        if i + 1 < len(axes):  # +1 because we used the first position for kmeans
+            ax = axes[i + 1]
             vx_fam = df_annot[col].apply(lambda x: try_except_entry_in_list(fam, x))
-            
-            ax.scatter(df_tsne["tSNE1"], df_tsne["tSNE2"], c=vx_fam, cmap=cmap_bin, alpha=0.5)
+
+            ax.scatter(
+                df_tsne["tSNE1"], df_tsne["tSNE2"], c=vx_fam, cmap=cmap_bin, alpha=0.5
+            )
             ax.set_xlabel("tSNE1")
             ax.set_ylabel("tSNE2")
             ax.set_title(f"{fam} (n={count})")
-    
+
     # Hide any unused subplots
-    for j in range(i+2, len(axes)):  # +2 because we used the first position for kmeans
-        axes[j].axis('off')
-    
+    for j in range(
+        i + 2, len(axes)
+    ):  # +2 because we used the first position for kmeans
+        axes[j].axis("off")
+
     # Add overall title with additional top padding
     fig.suptitle(f"t-SNE of Kinase Embeddings by {col.upper()}", fontsize=16, y=0.98)
-    
+
     # Save the figure
-    plt.savefig(f"./plots/tsne_{col}_grid.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"./plots/tsne_{col}_grid.png", dpi=300, bbox_inches="tight")
     plt.close()
+
 
 # SET-UP
 
@@ -170,12 +189,18 @@ df_pkis2 = pd.read_csv(
 df_pkis_rev = df_pkis2.set_index("Smiles").iloc[:, 6:]
 
 # added kinase groups manually
-#TODO: automate this
-df_annot = pd.read_csv("/data1/tanseyw/projects/whitej/missense-kinase-toolkit/data/pkis2_annotated_group.csv")
+# TODO: automate this
+df_annot = pd.read_csv(
+    "/data1/tanseyw/projects/whitej/missense-kinase-toolkit/data/pkis2_annotated_group.csv"
+)
 list_to_drop = ["-phosphorylated", "-cyclin", "-autoinhibited"]
-idx_drop = df_annot["DiscoverX Gene Symbol"].apply(lambda x: any([i in x for i in list_to_drop]))
+idx_drop = df_annot["DiscoverX Gene Symbol"].apply(
+    lambda x: any([i in x for i in list_to_drop])
+)
 df_annot = df_annot.loc[~idx_drop, :].reset_index(drop=True)
-df_annot = df_annot.loc[df_annot["sequence_partial"].notnull(), :].reset_index(drop=True)
+df_annot = df_annot.loc[df_annot["sequence_partial"].notnull(), :].reset_index(
+    drop=True
+)
 
 # all NA (e.g., no start/end)
 # list_dup = df_annot.loc[df_annot["sequence_partial"].duplicated(), "sequence_partial"].to_list()
@@ -219,10 +244,7 @@ np.save("./kinase_pooler_layer.npy", X)
 seed = 42
 np.random.seed(seed)
 
-kmeans_kwargs = {"init": "random",
-                 "n_init": 10,
-                 "max_iter": 300,
-                 "random_state": seed}
+kmeans_kwargs = {"init": "random", "n_init": 10, "max_iter": 300, "random_state": seed}
 
 kmeans, list_sse, list_silhouette = find_kmeans(X, kmeans_kwargs)
 n_clusters = len(np.unique(kmeans.labels_))
@@ -231,15 +253,12 @@ cmap = plt.get_cmap("Set1", n_clusters)
 # PCA
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
-pca = PCA(n_components=2) # Specify the number of components
+pca = PCA(n_components=2)  # Specify the number of components
 principal_components = pca.fit_transform(X_scaled)
 
 # t-SNE
 tsne = TSNE(
-    n_components=2, 
-    learning_rate='auto',
-    init='random', 
-    perplexity=3
+    n_components=2, learning_rate="auto", init="random", perplexity=3
 ).fit_transform(X)
 
 # umap = UMAP(n_components=2)
@@ -268,9 +287,14 @@ plot_dim_red_scatter(
 # )
 
 col = "group"
-df_annot.loc[~df_annot[col].isnull(), col] = df_annot.loc[~df_annot[col].isnull(), col].apply(literal_eval)
+df_annot.loc[~df_annot[col].isnull(), col] = df_annot.loc[
+    ~df_annot[col].isnull(), col
+].apply(literal_eval)
 set_annot = set(chain(*df_annot.loc[~df_annot[col].isnull(), col].tolist()))
-dict_annot = {entry: sum([entry in i for i in df_annot.loc[~df_annot[col].isnull(), col]]) for entry in set_annot}
+dict_annot = {
+    entry: sum([entry in i for i in df_annot.loc[~df_annot[col].isnull(), col]])
+    for entry in set_annot
+}
 dict_annot = dict(sorted(dict_annot.items(), key=lambda item: item[1], reverse=True))
 
 # Call the function with your dictionary of families and kmeans object
