@@ -47,9 +47,3 @@ def read_xlsx_file(
 ) -> pd.DataFrame:
     df = pd.read_excel(str_path, sheet_name=str_sheet)
     return df
-
-
-# def main():
-# df_pkis2_km_atp = pd.read_csv("data/pkis2_km_atp.csv")
-
-# plot stacked barchart of PKIS2 ATP Km values where X-axis is the

@@ -1,10 +1,11 @@
+import logging
 import os
 
 import git
 import pandas as pd
+from mkt.databases.config import OUTPUT_DIR_VAR
 
-OUTPUT_DIR_VAR = "OUTPUT_DIR"
-"""str: Environment variable for output directory"""
+logger = logging.getLogger(__name__)
 
 
 def check_outdir_exists() -> str:
@@ -20,7 +21,7 @@ def check_outdir_exists() -> str:
         if not os.path.exists(path_data):
             os.makedirs(path_data)
     except KeyError:
-        print("OUTPUT_DIR not found in environment variables...")
+        logger.error(f"{OUTPUT_DIR_VAR} not found in environment variables...")
 
     return path_data
 

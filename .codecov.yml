@@ -24,6 +24,6 @@ comment:
   paths: null
   show_carryforward_flags: true
 
-ignore:
-      # NCBI currently down
-      - missense_kinase_toolkit/schema/mkt/database/ncbi.py
+# ignore:
+#       # NCBI currently down
+#       - missense_kinase_toolkit/schema/mkt/database/ncbi.py

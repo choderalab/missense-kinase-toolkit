@@ -67,11 +67,12 @@ class TestDatabases:
         assert io_utils.convert_str2list("a,b,c") == ["a", "b", "c"]
         assert io_utils.convert_str2list("a, b, c") == ["a", "b", "c"]
 
-    def test_requests_wrapper(self, capsys):
+    def test_utils_requests(self, capsys):
         import requests
         from mkt.databases import uniprot, utils_requests
 
-        uniprot.UniProtFASTA("TEST")
+        # conform with SwissProt ID pattern
+        uniprot.UniProtFASTA("L91119")
         out, _ = capsys.readouterr()
         assert out == "Error code: 400 (Bad request)\n"
 
@@ -197,7 +198,8 @@ class TestDatabases:
 
         # test KLIFS
         temp_obj = klifs.KinaseInfo("EGFR")
-        dict_egfr = temp_obj._kinase_info
+        assert len(temp_obj._kinase_info) == 1
+        dict_egfr = temp_obj.get_kinase_info()[0]
         if temp_obj.status_code == 200:
             assert dict_egfr["family"] == "EGFR"
             assert dict_egfr["full_name"] == "epidermal growth factor receptor"

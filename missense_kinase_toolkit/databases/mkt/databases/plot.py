@@ -153,6 +153,6 @@ class SequenceAlignment:
         show(self.plot)
 
         # notebook alternative
-        # import panel as pn
+        # import panel as pn # not dependency - install separately
         # pn.extension()
         # pn.pane.Bokeh(alignment_klifs_min.plot)
