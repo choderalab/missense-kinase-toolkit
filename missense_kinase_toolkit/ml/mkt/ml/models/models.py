@@ -146,10 +146,10 @@ def scatter_plot_binary_grid(
     n_clusters = len(np.unique(kmeans.labels_))
     cmap = plt.get_cmap("Set1", n_clusters)
     axes[0].scatter(
-        df_input[col1], 
-        df_input[col2], 
-        c=kmeans.labels_ + 1, 
-        cmap=cmap, 
+        df_input[col1],
+        df_input[col2],
+        c=kmeans.labels_ + 1,
+        cmap=cmap,
         alpha=0.5,
     )
     axes[0].set_xlabel(col1)
@@ -166,11 +166,7 @@ def scatter_plot_binary_grid(
             vx_fam = df_annot[col].apply(lambda x: try_except_entry_in_list(fam, x))
 
             ax.scatter(
-                df_input[col1], 
-                df_input[col2],
-                c=vx_fam, 
-                cmap=cmap_bin, 
-                alpha=0.5
+                df_input[col1], df_input[col2], c=vx_fam, cmap=cmap_bin, alpha=0.5
             )
             ax.set_xlabel(col1)
             ax.set_ylabel(col2)
@@ -185,7 +181,7 @@ def scatter_plot_binary_grid(
     # Add overall title with additional top padding
     fig.suptitle(f"{method} of Kinase Embeddings by {col.upper()}", fontsize=16, y=0.98)
 
-    method_print = ''.join(ch.lower() for ch in method if ch.isalnum())
+    method_print = "".join(ch.lower() for ch in method if ch.isalnum())
     plt.savefig(f"./plots/{method_print}_{col}_grid.png", dpi=300, bbox_inches="tight")
     plt.close()
 
