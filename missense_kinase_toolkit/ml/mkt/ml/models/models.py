@@ -1,19 +1,19 @@
 from ast import literal_eval
-from itertools import chain
 
 import numpy as np
 import pandas as pd
 import torch
+
 from mkt.ml.utils import (
     return_device, 
     try_except_string_in_list,
 )
 from mkt.ml.plot import (
-    find_kmeans,
+    plot_knee,
     plot_dim_red_scatter,
-    plot_dim_red_scatter,
+    plot_scatter_grid,
 )
-from sklearn.preprocessing import StandardScaler
+from mkt.ml.cluster import find_kmeans, generate_clustering
 from transformers import AutoModel, AutoTokenizer
 
 
@@ -48,6 +48,11 @@ df_annot = df_annot.loc[df_annot["sequence_partial"].notnull(), :].reset_index(
     drop=True
 )
 
+col = "group"
+df_annot.loc[~df_annot[col].isnull(), col] = df_annot.loc[
+    ~df_annot[col].isnull(), col
+].apply(literal_eval)
+
 # all NA (e.g., no start/end)
 # list_dup = df_annot.loc[df_annot["sequence_partial"].duplicated(), "sequence_partial"].to_list()
 # df_annot.loc[df_annot["sequence_partial"].isin(list_dup), "accession"]
@@ -75,10 +80,10 @@ with torch.no_grad():
 for layer in outputs_kinase.hidden_states:
     print(layer.shape)
 
-# mx_kinase_sim = generate_similarity_matrix(outputs_kinase.pooler_output.cpu())
 X = outputs_kinase.pooler_output.cpu().numpy()
 # save X locally
 np.save("./kinase_pooler_layer.npy", X)
+# mx_kinase_sim = generate_similarity_matrix(outputs_kinase.pooler_output.cpu())
 # mx_kinase_euclidan = np.sqrt(np.sum((X[:, np.newaxis, :] - X[np.newaxis, :, :]) ** 2, axis=2))
 
 # CLUSTERING
@@ -87,64 +92,24 @@ np.save("./kinase_pooler_layer.npy", X)
 # labels = model_DB.labels_
 # unique, counts = np.unique(labels, return_counts=True)
 
+X = np.load("./kinase_pooler_layer.npy")
 
-
-kmeans, list_sse, list_silhouette = find_kmeans(X, kmeans_kwargs)
+scale_bool = False
+kmeans, list_sse, list_silhouette = find_kmeans(mx_input=X, bool_scale=scale_bool)
 n_clusters = len(np.unique(kmeans.labels_))
-cmap = plt.get_cmap("Set1", n_clusters)
+plot_knee(list_sse, n_clusters, filename="elbow.png")
 
 # PCA
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
-pca = PCA(n_components=2)  # Specify the number of components
-principal_components = pca.fit_transform(X_scaled)
+pca = generate_clustering("PCA", X.T, bool_scale=scale_bool)
+df_pca = pd.DataFrame(pca.components_.T, columns=["PC1", "PC2"])
+plot_dim_red_scatter(df_pca, kmeans, method="PCA")
+plot_scatter_grid(df_annot, df_pca, kmeans, "PCA")
 
 # t-SNE
-tsne = TSNE(
-    n_components=2, learning_rate="auto", init="random", perplexity=3
-).fit_transform(X)
-
-# umap = UMAP(n_components=2)
-# umap_components = umap.fit_transform(X_scaled)
-
-# PLOT
-
-# PCA
-plot_dim_red_scatter(
-    pd.DataFrame(principal_components, columns=["PC1", "PC2"]),
-    kmeans,
-    method="PCA",
-)
-# centers = pca.transform(kmeans.cluster_centers_)
-# plt.scatter(centers[:, 0], centers[:, 1], c="red", s=100, alpha=0.5)
-
-# t-SNE
-plot_dim_red_scatter(
-    pd.DataFrame(tsne, columns=["tSNE1", "tSNE2"]),
-    kmeans,
-    method="tSNE",
-)
-
-# UMAP
-# plot_dim_red_scatter(
-#     pd.DataFrame(umap_components, columns=["UMAP1", "UMAP2"]),
-#     kmeans,
-#     method="UMAP",
-# )
-
-col = "group"
-df_annot.loc[~df_annot[col].isnull(), col] = df_annot.loc[
-    ~df_annot[col].isnull(), col
-].apply(literal_eval)
-set_annot = set(chain(*df_annot.loc[~df_annot[col].isnull(), col].tolist()))
-dict_annot = {
-    entry: sum([entry in i for i in df_annot.loc[~df_annot[col].isnull(), col]])
-    for entry in set_annot
-}
-
-# Call the function with your dictionary of families and kmeans object
-df_plot = pd.DataFrame(tsne, columns=["tSNE1", "tSNE2"])
-scatter_plot_binary_grid(dict_annot, df_plot, kmeans)
+tsne = generate_clustering("t-SNE", X, bool_scale=scale_bool)
+df_tsne = pd.DataFrame(tsne.embedding_, columns=["tSNE1", "tSNE2"])
+plot_dim_red_scatter(df_tsne, kmeans, method="tSNE")
+plot_scatter_grid(df_annot, df_tsne, kmeans, "t-SNE")
 
 # NOT IN USE
 # config_automodel = AutoConfig.from_pretrained(model_name)
