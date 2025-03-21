@@ -1,10 +1,11 @@
 from os import path
-import numpy as np
-import pandas as pd
-from sklearn.cluster import KMeans
+
 import matplotlib.colors as colors
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.cluster import KMeans
 
 
 def plot_dim_red_scatter(
@@ -94,7 +95,9 @@ def scatter_plot_binary_grid(
     dict_property = {
         prop: count for prop, count in dfs_dict.items() if count >= n_cutoff
     }
-    dict_property = dict(sorted(dict_property.items(), key=lambda item: item[1], reverse=True))
+    dict_property = dict(
+        sorted(dict_property.items(), key=lambda item: item[1], reverse=True)
+    )
 
     # Calculate grid dimensions
     n_plots = len(dict_property) + 1  # +1 for the kmeans plot
@@ -155,5 +158,9 @@ def scatter_plot_binary_grid(
     fig.suptitle(f"{method} of Kinase Embeddings by {col.upper()}", fontsize=16, y=0.98)
 
     method_print = "".join(ch.lower() for ch in method if ch.isalnum())
-    plt.savefig(path.join(path_out, f"{method_print}_{col}_grid.png"), dpi=300, bbox_inches="tight")
+    plt.savefig(
+        path.join(path_out, f"{method_print}_{col}_grid.png"),
+        dpi=300,
+        bbox_inches="tight",
+    )
     plt.close()

@@ -4,18 +4,10 @@ from itertools import chain
 import numpy as np
 import pandas as pd
 import torch
-from mkt.ml.utils import (
-    return_device, 
-    try_except_string_in_list,
-)
-from mkt.ml.plot import (
-    find_kmeans,
-    plot_dim_red_scatter,
-    plot_dim_red_scatter,
-)
+from mkt.ml.plot import find_kmeans, plot_dim_red_scatter
+from mkt.ml.utils import return_device, try_except_string_in_list
 from sklearn.preprocessing import StandardScaler
 from transformers import AutoModel, AutoTokenizer
-
 
 # TODO:
 # 1. MLP
@@ -86,7 +78,6 @@ np.save("./kinase_pooler_layer.npy", X)
 # model_DB = DBSCAN(eps=0.0001, metric="cosine").fit(mx_kinase_sim.cpu().numpy())
 # labels = model_DB.labels_
 # unique, counts = np.unique(labels, return_counts=True)
-
 
 
 kmeans, list_sse, list_silhouette = find_kmeans(X, kmeans_kwargs)

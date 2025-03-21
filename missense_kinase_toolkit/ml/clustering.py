@@ -1,8 +1,10 @@
 import logging
+
 import numpy as np
 from sklearn.cluster import DBSCAN, KMeans, SpectralClustering
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
+
 # from umap import UMAP # need to install umap-learn if want to use
 
 logger = logging.getLogger(__name__)
@@ -12,9 +14,9 @@ DICT_METHODS = {
     "model": KMeans,
     "k-Means": {
         "dict_kwarg": {
-            "init": "random", 
-            "n_init": 10, 
-            "max_iter": 300, 
+            "init": "random",
+            "n_init": 10,
+            "max_iter": 300,
             "random_state": 42
         }
     },
@@ -27,8 +29,8 @@ DICT_METHODS = {
     "tSNE": {
         "model": TSNE,
         "dict_kwarg": {
-            "n_components": 2, 
-            "learning_rate": "auto", 
+            "n_components": 2,
+            "learning_rate": "auto",
             "init": "random"
             "perplexity": 3,
         }
@@ -70,7 +72,7 @@ def generate_clustering(
         except KeyError:
             raise logger.error(f"Method {method} not found in DICT_METHODS")
 
-    
+
 
 def find_kmeans(
     mx_input: np.array,
@@ -97,18 +99,18 @@ def find_kmeans(
     list_silhouette : list
         List of silhouette scores
     """
-    from sklearn.metrics import silhouette_score
     from kneed import KneeLocator
+    from sklearn.metrics import silhouette_score
 
     if dict_kwarg is None:
         dict_kwarg = DICT_METHODS["k-Means"]["dict_kwarg"]
-    
+
     np.random.seed(dict_kwarg["random_state"])
 
     list_sse = [], list_silhouette = []
     for k in range(1, n_clust + 1):
         kmeans = DICT_METHODS["k-Means"]["model"](
-            n_clusters=k, 
+            n_clusters=k,
             **dict_kwarg
         )
         kmeans.fit(mx_input)
