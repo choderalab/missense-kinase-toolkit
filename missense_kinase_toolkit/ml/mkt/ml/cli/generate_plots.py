@@ -1,44 +1,45 @@
 #!/usr/bin/env python
 
-from os import path
 import argparse
-from ast import literal_eval
 import logging
+from ast import literal_eval
+from os import path
+
 import numpy as np
 import pandas as pd
 from mkt.ml.cluster import find_kmeans, generate_clustering
-from mkt.ml.plot import plot_knee, plot_dim_red_scatter, plot_scatter_grid
-
+from mkt.ml.plot import plot_dim_red_scatter, plot_knee, plot_scatter_grid
 
 logger = logging.getLogger(__name__)
+
 
 def parse_args():
     parse_args = argparse.ArgumentParser()
 
     parse_args.add_argument(
         "--path_mx_npy",
-        type=str, 
-        default="/data1/tanseyw/projects/whitej/missense-kinase-toolkit/kinase_pooler_layer.npy", 
+        type=str,
+        default="/data1/tanseyw/projects/whitej/missense-kinase-toolkit/kinase_pooler_layer.npy",
         help="Path to embedding matrix",
     )
-    
+
     parse_args.add_argument(
-        "--path_annot_csv", 
-        type=str, 
-        default="/data1/tanseyw/projects/whitej/missense-kinase-toolkit/data/pkis2_annotated_group.csv", 
+        "--path_annot_csv",
+        type=str,
+        default="/data1/tanseyw/projects/whitej/missense-kinase-toolkit/data/pkis2_annotated_group.csv",
         help="Path to annotated CSV",
     )
 
     parse_args.add_argument(
-        "--path_out", 
-        type=str, 
-        default="/data1/tanseyw/projects/whitej/missense-kinase-toolkit/plots", 
-        help="Path to output directory"
+        "--path_out",
+        type=str,
+        default="/data1/tanseyw/projects/whitej/missense-kinase-toolkit/plots",
+        help="Path to output directory",
     )
 
     parse_args.add_argument(
-        "--bool_scale", 
-        action="store_true", 
+        "--bool_scale",
+        action="store_true",
         help="Scale input matrix",
     )
 
@@ -78,7 +79,7 @@ def main():
         scale_bool = True
     else:
         scale_bool = False
-    
+
     kmeans, list_sse, list_silhouette = find_kmeans(mx_input=X, bool_scale=scale_bool)
     n_clusters = len(np.unique(kmeans.labels_))
     plot_knee(list_sse, n_clusters, filename="elbow.png", path_out=args.path_out)

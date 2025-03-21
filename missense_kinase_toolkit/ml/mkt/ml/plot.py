@@ -1,17 +1,18 @@
-from os import path
 from itertools import chain
-import numpy as np
-import pandas as pd
-from sklearn.cluster import KMeans
+from os import path
+
 import matplotlib.colors as colors
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from mkt.ml.utils import try_except_string_in_list
+from sklearn.cluster import KMeans
 
 
 def plot_knee(
     list_in: list[int | float],
-    vline = int,
+    vline=int,
     xlabel: str = "Number of clusters",
     ylabel: str = "Sum of squared errors",
     title: str = "Elbow Method",
@@ -131,7 +132,9 @@ def generate_dict_count(
     dict_count = {
         prop: count for prop, count in dict_annot.items() if count >= n_cutoff
     }
-    dict_count = dict(sorted(dict_count.items(), key=lambda item: item[1], reverse=True))
+    dict_count = dict(
+        sorted(dict_count.items(), key=lambda item: item[1], reverse=True)
+    )
 
     return dict_count
 
@@ -194,17 +197,18 @@ def plot_scatter_grid(
         raise ValueError("Input DataFrame must have exactly two columns")
 
     col1, col2 = df_input.columns
-    
+
     # Get k-means clusters
     n_clusters = len(np.unique(kmeans.labels_))
     cluster_labels = kmeans.labels_
-    
+
     # Create kmeans plot in position (1,1)
     cmap = plt.get_cmap("Set1", n_clusters)
     axes[0].scatter(
         df_input[col1],
         df_input[col2],
-        c=cluster_labels + 1,  # +1 to avoid cluster 0 being treated differently in colormap
+        c=cluster_labels
+        + 1,  # +1 to avoid cluster 0 being treated differently in colormap
         cmap=cmap,
         alpha=0.5,
     )
@@ -216,33 +220,39 @@ def plot_scatter_grid(
     for i, (prop, count) in enumerate(dict_property.items()):
         if i + 1 < len(axes):  # +1 because we used the first position for kmeans
             ax = axes[i + 1]
-            
+
             # Get property membership vector (True/False)
-            prop_mask = df_annot[col].apply(lambda x: try_except_string_in_list(prop, x))
-            
+            prop_mask = df_annot[col].apply(
+                lambda x: try_except_string_in_list(prop, x)
+            )
+
             # Plot non-property points first (light grey)
             ax.scatter(
-                df_input.loc[~prop_mask, col1], 
-                df_input.loc[~prop_mask, col2], 
-                c='lightgrey', 
-                alpha=0.3
+                df_input.loc[~prop_mask, col1],
+                df_input.loc[~prop_mask, col2],
+                c="lightgrey",
+                alpha=0.3,
             )
-            
+
             # Plot property points colored by cluster
             for cluster_id in range(n_clusters):
                 # Get points that are both in this property and in this cluster
                 cluster_prop_mask = prop_mask & (cluster_labels == cluster_id)
-                
+
                 # Plot only if there are any points in this combination
                 if cluster_prop_mask.any():
                     ax.scatter(
                         df_input.loc[cluster_prop_mask, col1],
                         df_input.loc[cluster_prop_mask, col2],
-                        c=[cmap(cluster_id/n_clusters)],  # Use same color as in the cluster plot
+                        c=[
+                            cmap(cluster_id / n_clusters)
+                        ],  # Use same color as in the cluster plot
                         alpha=0.7,
-                        label=f"Cluster {cluster_id+1}" if i == 0 else None  # Only add label in first plot
+                        label=(
+                            f"Cluster {cluster_id+1}" if i == 0 else None
+                        ),  # Only add label in first plot
                     )
-            
+
             ax.set_xlabel(col1)
             ax.set_ylabel(col2)
             ax.set_title(f"{prop} (n={count})")
@@ -254,9 +264,10 @@ def plot_scatter_grid(
         axes[j].axis("off")
 
     # Add overall title with additional top padding
-    title_print = "".join(ch.upper() if idx == 0 else ch.lower() for idx, ch in enumerate(col))
+    title_print = "".join(
+        ch.upper() if idx == 0 else ch.lower() for idx, ch in enumerate(col)
+    )
     fig.suptitle(f"{method} of Kinase Embeddings by {title_print}", fontsize=16, y=0.98)
-
 
     method_print = "".join(ch.lower() for ch in method if ch.isalnum())
     filepathname = path.join(path_out, f"{method_print}_{col}_grid.png")

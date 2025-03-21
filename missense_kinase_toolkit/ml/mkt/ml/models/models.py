@@ -3,19 +3,10 @@ from ast import literal_eval
 import numpy as np
 import pandas as pd
 import torch
-
-from mkt.ml.utils import (
-    return_device, 
-    try_except_string_in_list,
-)
-from mkt.ml.plot import (
-    plot_knee,
-    plot_dim_red_scatter,
-    plot_scatter_grid,
-)
 from mkt.ml.cluster import find_kmeans, generate_clustering
+from mkt.ml.plot import plot_dim_red_scatter, plot_knee, plot_scatter_grid
+from mkt.ml.utils import return_device, try_except_string_in_list
 from transformers import AutoModel, AutoTokenizer
-
 
 # TODO:
 # 1. MLP
