@@ -12,51 +12,22 @@ def return_device():
     return "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def generate_similarity_matrix(
-    mx_input: torch.Tensor,
-    bool_row: bool = True,
-):
-    """Generate similarity matrix
+def try_except_string_in_list(str_in, list_in):
+    """Check if entry is in list.
 
     Params:
     -------
-    mx_input: torch.Tensor
-        Input matrix
-    bool_row: bool
-        Whether to calculate similarity by row; default is True
+    str_in: str
+        String to check
+    list_in: list
+        List to check against
 
     Returns:
     --------
-    mx_similarity: torch.Tensor
-        Square, symmetrix similarity matrix containing pairwise cosine similarities
+    bool
+        Whether string is in list
     """
-    if bool_row:
-        mx_norm = mx_input / mx_input.norm(dim=1, p=2, keepdim=True)
-        mx_similarity = mx_norm @ mx_norm.T
-    else:
-        mx_norm = mx_input / mx_input.norm(dim=0, p=2, keepdim=True)
-        mx_similarity = mx_norm.T @ mx_norm
-
-    return mx_similarity
-
-
-def create_laplacian(
-    mx_input: torch.Tensor,
-):
-    """Create graph Laplacian
-
-    Params:
-    -------
-    mx_input: torch.Tensor
-        Input matrix
-
-    Returns:
-    --------
-    mx_laplacian: torch.Tensor
-        Graph Laplacian
-    """
-    from scipy import sparse
-
-    mx_laplacian = sparse.csgraph.laplacian(csgraph=mx_input, normed=True)
-
-    return mx_laplacian
+    try:
+        return str_in in list_in
+    except:
+        return False
