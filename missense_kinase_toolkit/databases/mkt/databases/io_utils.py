@@ -164,8 +164,16 @@ def parse_iterabc2dataframe(
 
 
 def get_repo_root():
+    """Get the root of the git repository.
+
+    Returns
+    -------
+    str
+        Path to the root of the git repository; if not found, return current directory
+    """
     try:
         repo = git.Repo(".", search_parent_directories=True)
         return repo.working_tree_dir
     except git.InvalidGitRepositoryError:
-        return None
+        print("Not a git repository; using current directory as root...")
+        return "."
