@@ -71,6 +71,7 @@ class UniProtFASTA(UniProt, RESTAPIClient):
                 header, seq = self._convert_fasta2seq(str_fasta)
         else:
             utils_requests.print_status_code_if_res_not_ok(res)
+            print(f"UniProt ID: {self.uniprot_id}\n")
             header, seq = None, None
         return header, seq
 
