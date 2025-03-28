@@ -3,10 +3,13 @@ import os
 from itertools import chain
 
 import pandas as pd
-from mkt.databases import klifs
+from mkt.databases import klifs, pfam, scrapers
 from mkt.databases.aligners import ClustalOmegaAligner
+from mkt.databases.config import set_request_cache
 from mkt.databases.io_utils import get_repo_root
-from mkt.databases.kincore import align_kincore2uniprot, extract_pk_fasta_info_as_dict
+from mkt.databases.kincore import align_kincore2uniprot, harmonize_kincore_fasta_cif
+from mkt.databases.uniprot import UniProtFASTA
+from mkt.databases.utils import aggregate_df_by_col_set
 from mkt.schema.constants import LIST_PFAM_KD
 from mkt.schema.kinase_schema import (
     KLIFS,
@@ -19,6 +22,7 @@ from mkt.schema.kinase_schema import (
     UniProt,
 )
 from pydantic import BaseModel, ValidationError, model_validator
+from tqdm import tqdm
 from typing_extensions import Self
 
 logger = logging.getLogger(__name__)
@@ -28,6 +32,9 @@ class KinaseInfoGenerator(KinaseInfo):
     """Pydantic model for kinase information."""
 
     bool_offset: bool = True
+
+    # TODO: "A0A0B4J2F2" is no longer in the SwissProt database
+    # https://rest.uniprot.org/unisave/A0A0B4J2F2?format=fasta&versions=67
 
     # https://docs.pydantic.dev/latest/examples/custom_validators/#validating-nested-model-fields
     @model_validator(mode="after")
@@ -57,6 +64,33 @@ class KinaseInfoGenerator(KinaseInfo):
         return self
 
     @model_validator(mode="after")
+    def generate_kincore2uniprot_alignment(self) -> Self:
+        """Generate dictionary mapping KinCore to UniProt indices."""
+
+        if self.kincore is not None:
+            # this is a list of KinCore objects
+            for idx, entry in enumerate(self.kincore):
+                dict_temp = align_kincore2uniprot(
+                    entry.fasta.seq,
+                    self.uniprot.canonical_seq,
+                )
+                self.kincore[idx].start = dict_temp["start"]
+                self.kincore[idx].end = dict_temp["end"]
+                self.kincore[idx].mismatch = dict_temp["mismatch"]
+                if entry.cif is not None:
+                    dict_temp = align_kincore2uniprot(
+                        entry.cif["_entity_poly.pdbx_seq_one_letter_code"][0].replace(
+                            "\n", ""
+                        ),
+                        self.uniprot.canonical_seq,
+                    )
+                    self.kincore[idx].start = dict_temp["start"]
+                    self.kincore[idx].end = dict_temp["end"]
+                    self.kincore[idx].mismatch = dict_temp["mismatch"]
+
+        return self
+
+    @model_validator(mode="after")
     def generate_klifs2uniprot_dict(self) -> Self:
         """Generate dictionary mapping KLIFS to UniProt indices."""
 
@@ -80,6 +114,68 @@ class KinaseInfoGenerator(KinaseInfo):
         return self
 
 
+def generate_dateframes_from_api_or_scraper(
+    bool_save: bool = True,
+) -> None | pd.DataFrame:
+    """Generate dataframes for KinHub, KLIFS, and Pfam databases.
+
+    Parameters
+    ----------
+    bool_save : bool, optional
+        Whether to save dataframes to "data" sub-directory, by default True.
+
+    Returns
+    -------
+    None | pd.DataFrame
+        Dataframe if bool_save = False, otherwise None.
+    """
+    # set up request cache
+    set_request_cache(os.path.join(get_repo_root(), "requests_cache.sqlite"))
+
+    # kinhub
+    df_kinhub = scrapers.kinhub()
+
+    # klifs
+    temp = klifs.KinaseInfo()
+    df_klifs = pd.DataFrame(temp.get_kinase_info())
+    df_klifs_agg = aggregate_df_by_col_set(df_klifs, "uniprot")
+
+    # kincore
+    dict_kincore = harmonize_kincore_fasta_cif()
+
+    # get all unique Uniprot IDs from KinHub, KLIFS, and KinCore
+    set_union = set(
+        df_kinhub["UniprotID"].tolist()
+        + df_klifs_agg["uniprot"].tolist()
+        + list(dict_kincore.keys())
+    )
+
+    # uniprot
+    dict_union = {}
+    for uniprot in tqdm(set_union, desc="Querying UniProt..."):
+        temp = UniProtFASTA(uniprot)
+        # TODO UniProtJSON to get phosphorylation sites
+        dict_union[uniprot] = temp
+    # df_uniprot = pd.DataFrame(
+    #     {
+    #         "uniprot_id": dict_union.keys(),
+    #         "header": [i._header for i in dict_union.values()],
+    #         "canonical_sequence": [i._header for i in dict_union.values()],
+    #     }
+    # )
+
+    # pfam
+    df_pfam = pd.DataFrame()
+    for uniprot in tqdm(set_union, desc="Querying Pfam..."):
+        df_temp = pfam.Pfam(uniprot)._pfam
+        df_pfam = pd.concat([df_pfam, df_temp]).reset_index(drop=True)
+    df_pfam["uniprot"] = df_pfam["uniprot"].str.upper()
+
+    # if bool_save:
+    #     path_data = os.path.join(get_repo_root(), "data")
+    #     df_output.to_csv(os.path.join(path_data, f"{database}.csv"), index=False)
+
+
 def check_if_file_exists_then_load_dataframe(str_file: str) -> pd.DataFrame | None:
     """Check if file exists and load dataframe.
 
@@ -99,17 +195,50 @@ def check_if_file_exists_then_load_dataframe(str_file: str) -> pd.DataFrame | No
         logger.error(f"File {str_file} does not exist.")
 
 
+PATH_DATA_DIR = os.path.join(get_repo_root(), "data")
+
+DICT_INPUT_FILES = {
+    "kinhub": {
+        "filename": os.path.join(PATH_DATA_DIR, "kinhub.csv"),
+        "col_merge": "UniprotID",
+        "df": None,
+    },
+    "uniprot": {
+        "filename": os.path.join(PATH_DATA_DIR, "kinhub_uniprot.csv"),
+        "col_merge": "uniprot_id",
+        "df": None,
+    },
+    "klifs": {
+        "filename": os.path.join(PATH_DATA_DIR, "kinhub_klifs.csv"),
+        "col_merge": "uniprot",
+        "df": None,
+    },
+    "pfam": {
+        "filename": os.path.join(PATH_DATA_DIR, "kinhub_pfam.csv"),
+        "col_merge": "uniprot",
+        "df": None,
+    },
+    "kincore": {
+        "filename": os.path.join(PATH_DATA_DIR, "kinhub_kincore.csv"),
+        "col_merge": "uniprot",
+        "df": None,
+    },
+}
+
+
 def concatenate_source_dataframe(
     kinhub_df: pd.DataFrame | None = None,
     uniprot_df: pd.DataFrame | None = None,
     klifs_df: pd.DataFrame | None = None,
     pfam_df: pd.DataFrame | None = None,
+    kincore_df: pd.DataFrame | None = None,
     col_kinhub_merge: str | None = None,
     col_uniprot_merge: str | None = None,
     col_klifs_merge: str | None = None,
     col_pfam_merge: str | None = None,
     col_pfam_include: list[str] | None = None,
     list_domains_include: list[str] | None = None,
+    col_kincore_merge: str | None = None,
 ) -> pd.DataFrame:
     """Concatenate database dataframes on UniProt ID.
 
@@ -123,6 +252,8 @@ def concatenate_source_dataframe(
         KLIFS dataframe, by default None and will be loaded from "data" dir.
     pfam_df : pd.DataFrame | None, optional
         Pfam dataframe, by default None and will be loaded from "data" dir.
+    kincore_df : pd.DataFrame | None, optional
+        KinCore dataframe, by default None and will be loaded from "data" dir.
     col_kinhub_merge : str | None, optional
         Column to merge KinHub dataframe, by default None.
     col_uniprot_merge : str | None, optional
@@ -135,48 +266,28 @@ def concatenate_source_dataframe(
         Columns to include in Pfam dataframe, by default None.
     list_domains_include : list[str] | None, optional
         List of Pfam domains to include, by default None.
+    col_kincore_merge : str | None, optional
+        Column to merge KinCore dataframe, by default None.
 
     Returns
     -------
     pd.DataFrame
         Concatenated dataframe.
     """
+    from copy import deepcopy
 
-    # load dataframes if not provided from "data" sub-directory
-    path_data = os.path.join(get_repo_root(), "data")
-    if kinhub_df is None:
-        kinhub_df = check_if_file_exists_then_load_dataframe(
-            os.path.join(path_data, "kinhub.csv")
-        )
-    if uniprot_df is None:
-        uniprot_df = check_if_file_exists_then_load_dataframe(
-            os.path.join(path_data, "kinhub_uniprot.csv")
-        )
-    if klifs_df is None:
-        klifs_df = check_if_file_exists_then_load_dataframe(
-            os.path.join(path_data, "kinhub_klifs.csv")
-        )
-    if pfam_df is None:
-        pfam_df = check_if_file_exists_then_load_dataframe(
-            os.path.join(path_data, "kinhub_pfam.csv")
-        )
-    list_df = [kinhub_df, uniprot_df, klifs_df, pfam_df]
-    if any([True if i is None else False for i in list_df]):
-        list_df_shape = [i.shape if i is not None else None for i in list_df]
-        logger.error(f"One or more dataframes are None\n{list_df_shape}")
-        return None
+    DICT_INPUT_FILES_REV = deepcopy(DICT_INPUT_FILES)
 
-    # columns on which to merge dataframes
-    if col_kinhub_merge is None:
-        col_kinhub_merge = "UniprotID"
-    if col_uniprot_merge is None:
-        col_uniprot_merge = "uniprot_id"
-    if col_klifs_merge is None:
-        col_klifs_merge = "uniprot"
-    if col_pfam_merge is None:
-        col_pfam_merge = "uniprot"
+    # order needs to match DICT_INPUT_FILES_REV keys
+    list_df = [
+        kinhub_df,
+        uniprot_df,
+        klifs_df,
+        pfam_df,
+        kincore_df,
+    ]
 
-    # columns to include in the final dataframe
+    # Pfam columns to include in the final dataframe
     if col_pfam_include is None:
         col_pfam_include = [
             "name",
@@ -191,29 +302,52 @@ def concatenate_source_dataframe(
     if list_domains_include is None:
         list_domains_include = LIST_PFAM_KD
 
-    # set indices to merge columns
-    kinhub_df_merge = kinhub_df.set_index(col_kinhub_merge)
-    uniprot_df_merge = uniprot_df.set_index(col_uniprot_merge)
-    klifs_df_merge = klifs_df.set_index(col_klifs_merge)
-    pfam_df_merge = pfam_df.set_index(col_pfam_merge)
+    # load dataframes if not provided from "data" sub-directory
+    for key, df in zip(DICT_INPUT_FILES_REV.keys(), list_df):
+        if df is None:
+            df_temp = check_if_file_exists_then_load_dataframe(
+                DICT_INPUT_FILES_REV[key]["filename"]
+            )
+        else:
+            df_temp = df.copy()
+        if key == "pfam":
+            # filter Pfam dataframe for KD domains and columns to include
+            df_temp = df_temp.loc[
+                df_temp["name"].isin(list_domains_include),
+                col_pfam_include,
+            ].reset_index(drop=True)
+            # rename "name" column in Pfam so doesn't conflict with KLIFS name
+            try:
+                df_temp.rename(columns={"name": "domain_name"}, inplace=True)
+            except KeyError:
+                pass
+        DICT_INPUT_FILES_REV[key]["df"] = df_temp
+    list_df = [i["df"] for i in DICT_INPUT_FILES_REV.values()]
 
-    # filter Pfam dataframe for KD domains and columns to include
-    df_pfam_kd = pfam_df_merge.loc[
-        pfam_df_merge["name"].isin(LIST_PFAM_KD), col_pfam_include
+    if any([True if i is None else False for i in list_df]):
+        list_df_shape = [i.shape if i is not None else None for i in list_df]
+        logger.error(f"One or more dataframes are None\n{list_df_shape}")
+        return None
+
+    # order needs to match DICT_INPUT_FILES_REV keys
+    list_col = [
+        col_kinhub_merge,
+        col_uniprot_merge,
+        col_klifs_merge,
+        col_pfam_merge,
+        col_kincore_merge,
     ]
+    for key, col in zip(DICT_INPUT_FILES_REV.keys(), list_col):
+        if col is not None:
+            DICT_INPUT_FILES_REV[key]["col_merge"] = col
+    list_col = [i["col_merge"] for i in DICT_INPUT_FILES_REV.values()]
 
-    # rename "name" column in Pfam so doesn't conflict with KLIFS name
-    try:
-        df_pfam_kd = df_pfam_kd.rename(columns={"name": "domain_name"})
-    except KeyError:
-        pass
+    # set indices to merge columns
+    for df, col in zip(list_df, list_col):
+        df.set_index(col, inplace=True)
 
     # concat dataframes
-    df_merge = pd.concat(
-        [kinhub_df_merge, uniprot_df_merge, klifs_df_merge, df_pfam_kd],
-        join="outer",
-        axis=1,
-    ).reset_index()
+    df_merge = pd.concat(list_df, join="outer", axis=1).reset_index()
 
     return df_merge
 
@@ -319,7 +453,7 @@ def create_kinase_models_from_df(
     dict_kinase_models = {}
 
     # create KinCore dictionary from fasta file
-    DICT_KINCORE = extract_pk_fasta_info_as_dict()
+    DICT_KINCORE = extract_pk_fasta_info_as_dict()  # noqa F821
 
     for _, row in df.iterrows():
 
