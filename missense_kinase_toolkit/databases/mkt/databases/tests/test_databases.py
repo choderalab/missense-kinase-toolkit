@@ -199,16 +199,16 @@ class TestDatabases:
         assert len(dict_kincore[uniprot_id]) == 1
 
         egfr_align = align_kincore2uniprot(
-            str_kincore=dict_kincore[uniprot_id][0].fasta,
+            str_kincore=dict_kincore[uniprot_id][0].fasta.seq,
             str_uniprot=egfr_uniprot._sequence,
         )
 
         assert (
             egfr_align["seq"]
-            == "FKKIKVLGSGAFGTVYKGLWIPEGEKVKIPVAIKELREATSPKANKEILDEAYVMASVDNPHVCRLLGICLTSTVQLITQLMPFGCLLDYVREHKDNIGSQYLLNWCVQIAKGMNYLEDRRLVHRDLAARNVLVKTPQHVKITDFGLAKLLGAEEKEYHAEGGKVPIKWMALESILHRIYTHQSDVWSYGVTVWELMTFGSKPYDGIPASEISSILEKGERLPQPPICTIDVYMIMVKCWMIDADSRPKFRELIIEFSK"
+            == "LRILKETEFKKIKVLGSGAFGTVYKGLWIPEGEKVKIPVAIKELREATSPKANKEILDEAYVMASVDNPHVCRLLGICLTSTVQLITQLMPFGCLLDYVREHKDNIGSQYLLNWCVQIAKGMNYLEDRRLVHRDLAARNVLVKTPQHVKITDFGLAKLLGAEEKEYHAEGGKVPIKWMALESILHRIYTHQSDVWSYGVTVWELMTFGSKPYDGIPASEISSILEKGERLPQPPICTIDVYMIMVKCWMIDADSRPKFRELIIEFSKMARDPQRY"
         )
-        assert egfr_align["start"] == 712
-        assert egfr_align["end"] == 970
+        assert egfr_align["start"] == 704
+        assert egfr_align["end"] == 978
         assert egfr_align["mismatch"] is None
 
         # test KLIFS
