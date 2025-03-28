@@ -17,10 +17,10 @@ def try_except_split_concat_str(
     ----------
     str_in : str
         Input string
-    idx2 : int
-        Ending index
     idx1 : int
         Starting index
+    idx2 : int
+        Ending index
     delim : str
         Delimiter to split on
 
@@ -200,3 +200,20 @@ def aggregate_df_by_col_set(
     )
 
     return df_in_agg
+
+
+def split_on_first_only(str_in, delim):
+    list_split = str_in.split(delim)
+    str1 = list_split[0]
+    str2 = "".join(list_split[1:])
+    return str1, str2
+
+
+def flatten_iterables_in_iterable(data):
+    flattened_list = []
+    for item in data:
+        if isinstance(item, (list, tuple)):
+            flattened_list.extend(list(item))
+        else:
+            flattened_list.append(item)
+    return flattened_list
