@@ -46,6 +46,11 @@ dependencies = [
 dev = ["black==24.3.0", "flake8==7.0.0", "sphinx==7.3.7", "sphinx-rtd-theme==2.0.0"]
 test = ["pytest==8.0.1", "pytest-runner==6.0.1"]
 
+[tool.setuptools.package-data]
+databases = [
+    "KinCore/*",
+]
+
 [project.urls]
 "Homepage" = "https://github.com/choderalab/missense-kinase-toolkit"
 "Bug Tracker" = "https://github.com/choderalab/missense-kinase-toolkit/issues"
