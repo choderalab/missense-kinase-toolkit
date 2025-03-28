@@ -75,7 +75,7 @@ class TestDatabases:
         uniprot_id = "L91119"
         uniprot.UniProtFASTA(uniprot_id)
         out, _ = capsys.readouterr()
-        assert out == f"Error code: 400 (Bad request)\nUniProt ID: {uniprot_id}\n"
+        assert out == f"Error code: 400 (Bad request)\nUniProt ID: {uniprot_id}\n\n"
 
         utils_requests.print_status_code_if_res_not_ok(
             requests.get("https://rest.uniprot.org/uniprotkb/TEST"),
