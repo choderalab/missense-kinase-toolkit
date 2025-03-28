@@ -2,7 +2,7 @@ import logging
 from enum import Enum
 
 from mkt.schema.constants import LIST_FULL_KLIFS_REGION, LIST_KLIFS_REGION, LIST_PFAM_KD
-from pydantic import BaseModel, ConfigDict, constr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, constr, field_validator
 from strenum import StrEnum
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,7 @@ class Group(StrEnum):
     CAMK = "CAMK"  # Calcium/calmodulin-dependent protein kinase family
     CK1 = "CK1"  # Casein kinase 1 family
     CMGC = "CMGC"  # Cyclin-dependent kinase, Mitogen-activated protein kinase, Glycogen synthase kinase, and CDK-like kinase families
+    NEK = "NEK"  # NIMA (Never in Mitosis Gene A)-related kinase family - KinCore treats as group
     RGC = "RGC"  # Receptor guanylate cyclase family
     STE = "STE"  # Homologs of yeast Sterile 7, Sterile 11, Sterile 20 kinases
     TK = "TK"  # Tyrosine kinase family
@@ -89,6 +90,23 @@ TrEMBLID = constr(pattern=TrEMBLPattern)
 # """Pydantic model for UniProt ID constraints."""
 
 
+class TemplateSource(StrEnum):
+    """Enum class for template source."""
+
+    PDB70 = "PDB70"
+    activeAF2 = "activeAF2"
+    activePDB = "activePDB"
+    none = "notemp"
+
+
+class MSASource(StrEnum):
+    """Enum class for MSA source."""
+
+    family = "family"
+    ortholog = "ortholog"
+    uniref90 = "uniref90"
+
+
 class KinHub(BaseModel):
     """Pydantic model for KinHub information."""
 
@@ -135,12 +153,48 @@ class Pfam(BaseModel):
     in_alphafold: bool
 
 
+class KinCoreFASTA(BaseModel):
+    """Pydantic model for KinCore FASTA information."""
+
+    model_config = ConfigDict(use_enum_values=True)
+
+    seq: SeqUniProt
+    group: Group
+    hgnc: set[str]
+    swissprot: str
+    uniprot: SwissProtID | TrEMBLID
+    start_md: int  # Modi-Dunbrack, 2019
+    end_md: int
+    length_md: int | None = None
+    start_af2: int | None = None  # AF2 active state
+    end_af2: int | None = None
+    length_af2: int | None = None
+    length_uniprot: int | None = None
+    source_file: str
+
+
+class KinCoreCIF(BaseModel):
+    """Pydantic model for KinCore CIF information."""
+
+    model_config = ConfigDict(use_enum_values=True)
+
+    cif: dict[str, str | list[str]]
+    group: Group
+    hgnc: str
+    min_aloop_pLDDT: float
+    template_source: TemplateSource
+    msa_size: int
+    msa_source: MSASource
+    model_no: int = Field(..., ge=1, lt=6)
+
+
 class KinCore(BaseModel):
     """Pydantic model for KinCore information."""
 
-    seq: SeqUniProt
-    start: int
-    end: int
+    fasta: KinCoreFASTA
+    cif: KinCoreCIF | None = None
+    start: int | None = None
+    end: int | None = None
     mismatch: list[int] | None = None
 
 
@@ -153,7 +207,7 @@ class KinaseInfo(BaseModel):
     uniprot: UniProt
     klifs: KLIFS | None = None
     pfam: Pfam | None = None
-    kincore: KinCore | None = None
+    kincore: list[KinCore] | None = None
     KLIFS2UniProtIdx: dict[str, int | None] | None = None
     KLIFS2UniProtSeq: dict[str, str | None] | None = None
 
