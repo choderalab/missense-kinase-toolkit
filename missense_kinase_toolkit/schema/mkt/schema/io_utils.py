@@ -52,27 +52,40 @@ def return_filenotfound_error_if_empty_or_missing(
         return None
 
 
-def return_str_path(str_path: str | None = None) -> str:
-    """Return the path to the KinaseInfo directory.
+def return_str_path_from_pkg_data(
+    str_path: str | None = None,
+    pkg_name: str | None = None,
+    pkg_resource: str | None = None,
+) -> str:
+    """Return the path to the package data directory or of a user-provided directory.
 
     Parameters
     ----------
     str_path : str | None, optional
         Path to the KinaseInfo directory, by default None.
+    pkg_name : str | None, optional
+        Package name, by default None and will use mkt.schema.
+    pkg_resource : str | None, optional
+        Package resource, by default None and will use KinaseInfo.
 
     Returns
     -------
     str
-        Path to the KinaseInfo directory.
+        Path to the package data or user-provided directory.
     """
+    if pkg_name is None:
+        pkg_name = "mkt.schema"
+    if pkg_resource is None:
+        pkg_resource = "KinaseInfo"
+
     if str_path is None:
         try:
-            str_path = pkg_resources.resource_filename("mkt.schema", "KinaseInfo")
+            str_path = pkg_resources.resource_filename(pkg_name, pkg_resource)
             return_filenotfound_error_if_empty_or_missing(str_path)
         except Exception as e:
             logger.error(
-                f"Could not find KinaseInfo directory within package: {e}"
-                f"\nPlease provide a path to the KinaseInfo directory."
+                f"Could not find {pkg_resource} directory within {pkg_name}: {e}"
+                f"\nPlease provide a path to the {pkg_resource} directory."
             )
     else:
         if not os.path.exists(str_path):
@@ -117,7 +130,7 @@ def serialize_kinase_dict(
         else:
             serialization_kwargs = {}
 
-    str_path = return_str_path(str_path)
+    str_path = return_str_path_from_pkg_data(str_path)
 
     for key, val in tqdm(kinase_dict.items()):
         with open(f"{str_path}/{key}.{suffix}", "w") as outfile:
@@ -162,7 +175,7 @@ def deserialize_kinase_dict(
     if deserialization_kwargs is None:
         deserialization_kwargs = {}
 
-    str_path = return_str_path(str_path)
+    str_path = return_str_path_from_pkg_data(str_path)
     list_file = glob.glob(os.path.join(str_path, f"*.{suffix}"))
 
     dict_import = {}
