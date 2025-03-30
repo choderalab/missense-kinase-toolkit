@@ -81,16 +81,23 @@ SeqUniProt = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWXY]+$")
 SeqKLIFS = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWY\-]{85}$")
 """Pydantic model for KLIFS pocket sequence constraints."""
 
-SwissProtPattern = r"^[A-Z][0-9][A-Z0-9]{3}[0-9]$"
+SwissProtPattern = r"^[A-Z][0-9][A-Z0-9]{3}[0-9](_[12])?$"
 """Regex pattern for SwissProt ID."""
 SwissProtID = constr(pattern=SwissProtPattern)
 """Pydantic model for SwissProt ID constraints."""
-TrEMBLPattern = r"^[A-Z][0-9][A-Z][A-Z0-9]{2}[0-9][A-Z][A-Z0-9]{2}[0-9]$"
+TrEMBLPattern = r"^[A-Z][0-9][A-Z][A-Z0-9]{2}[0-9][A-Z][A-Z0-9]{2}[0-9](_[12])?$"
 """Regex pattern for TrEBML ID."""
 TrEMBLID = constr(pattern=TrEMBLPattern)
 """Pydantic model for TrEMBL ID constraints."""
-# UniProtID = constr(pattern=r"^[A-Z][0-9][A-Z0-9]{3}[0-9]$")
-# """Pydantic model for UniProt ID constraints."""
+
+SwissProtPatternSuffix = SwissProtPattern.replace("$", "") + r"(_[12])?$"
+"""Regex pattern for SwissProt ID with optional '_1' or '_2' for multi-KD."""
+SwissProtIDSuffix = constr(pattern=SwissProtPatternSuffix)
+"""Pydantic model for SwissProt ID constraints with suffix."""
+TrEMBLPatternSuffix = TrEMBLPattern.replace("$", "") + r"(_[12])?$"
+"""Regex pattern for TrEBML ID with optional '_1' or '_2' for multi-KD."""
+TrEMBLIDSuffix = constr(pattern=TrEMBLPatternSuffix)
+"""Pydantic model for TrEMBL ID constraints with suffix."""
 
 
 class TemplateSource(StrEnum):
@@ -211,14 +218,23 @@ class KinCore(BaseModel):
     mismatch: list[int] | None = None
 
 
-class KinaseInfo(BaseModel):
-    """Pydantic model for kinase information."""
+class KinaseInfoUniProt(BaseModel):
+    """Pydantic model for kinase information at the level of the UniProt ID."""
 
     hgnc_name: str
-    uniprot_id: SwissProtID | TrEMBLID  # UniProtID
-    kinhub: KinHub | None = None
+    uniprot_id: SwissProtID | TrEMBLID
     uniprot: UniProt
-    klifs: list[KLIFS] | None = None
+    pfam: Pfam | None = None
+
+
+class KinaseInfo(BaseModel):
+    """Pydantic model for kinase information at the level of the kinase domain."""
+
+    hgnc_name: str
+    uniprot_id: SwissProtIDSuffix | TrEMBLIDSuffix
+    uniprot: UniProt
+    kinhub: KinHub | None = None
+    klifs: KLIFS | None = None
     pfam: Pfam | None = None
     kincore: list[KinCore] | None = None
     KLIFS2UniProtIdx: dict[str, int | None] | None = None
