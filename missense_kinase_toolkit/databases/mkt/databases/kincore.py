@@ -39,6 +39,7 @@ LIST_FASTA_KEYS1 = [
     "length_uniprot",
     "source_file",
 ]
+"""list[str]: List of FASTA keys for KinCore FASTA file."""
 
 
 LIST_FASTA_KEYS2 = [
@@ -52,6 +53,7 @@ LIST_FASTA_KEYS2 = [
     "uniprot",
     "source_file",
 ]
+"""list[str]: List of FASTA keys for KinCore FASTA file."""
 
 
 DICT_KINCORE_PARAMS = {
@@ -68,6 +70,7 @@ DICT_KINCORE_PARAMS = {
         "study": "Modi-Dunbrack_2019",
     },
 }
+"""dict[str, dict[str, str | list[str]]]: Dictionary of KinCore parameters for FASTA files."""
 
 
 DICT_GROUP_KINCORE = {
@@ -82,6 +85,7 @@ DICT_GROUP_KINCORE = {
     "TKL": "TKL",
     "TYR": "TK",
 }
+"""dict[str, str]: Dictionary of KinCore groups to map to mkt.schema.kinase_schema.Group."""
 
 
 def parse_fasta_description(
@@ -187,6 +191,7 @@ LIST_CIF_KEYS = [
     "msa_source",
     "model_no",
 ]
+"""list[str]: List of CIF keys for KinCore CIF file."""
 
 
 def extract_pk_cif_files_as_list() -> list[KinCoreCIF]:
