@@ -2,6 +2,7 @@ import ast
 import logging
 from dataclasses import dataclass
 
+import pandas as pd
 from mkt.databases import requests_wrapper, utils_requests
 from mkt.databases.api_schema import RESTAPIClient
 from mkt.schema.kinase_schema import SwissProtPattern, TrEMBLPattern
@@ -95,6 +96,16 @@ class UniProtFASTA(UniProt, RESTAPIClient):
         return header, seq
 
 
+DICT_UNIPROT_EVIDENCE = {
+    "ECO:0000250": "Computational, ISS",
+    "ECO:0000255": "Computational, ISM",
+    "ECO:0000269": "Manual, experimental",
+    "ECO:0000305": "Inferred by curator",
+    "ECO:0007744": "Manual, combo",
+}
+"""dict[str, str]: UniProt evidence codes mapped to descriptions."""
+
+
 @dataclass
 class UniProtJSON(UniProt, RESTAPIClient):
     """Class to interact UniProt API for JSON download."""
@@ -127,3 +138,32 @@ class UniProtJSON(UniProt, RESTAPIClient):
             json = None
             utils_requests.print_status_code_if_res_not_ok(res)
         return json
+
+    def extract_modified_residues(self):
+        """Extract modified residues from JSON.
+
+        Returns
+        -------
+        list[str]
+            List of modified residues
+
+        """
+        if self._json is not None:
+            try:
+                df_mod_res = pd.DataFrame(
+                    [
+                        entry
+                        for entry in self.json["features"]
+                        if entry["type"] == "Modified residue"
+                    ]
+                )
+                df_mod_res["location"] = pd.json_normalize(df_mod_res["location"])
+                df_mod_res["evidenceCode"] = df_mod_res["evidences"].apply(
+                    lambda x: {entry["evidenceCode"] for entry in x}
+                )
+                return df_mod_res
+            except KeyError as e:
+                logger.error(f"Key error: {e}")
+                return None
+        else:
+            None
