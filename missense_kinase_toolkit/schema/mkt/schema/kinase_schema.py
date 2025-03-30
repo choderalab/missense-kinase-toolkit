@@ -31,6 +31,7 @@ class Family(Enum):
     CAMKL = "CAMKL"
     CDK = "CDK"
     Eph = "Eph"
+    PIK = "PIK"
     MAPK = "MAPK"
     STKR = "STKR"
     NEK = "NEK"
@@ -63,8 +64,10 @@ class Family(Enum):
     TSSK = "TSSK"
     ABC1 = "ABC1"
     PDHK = "PDHK"
-    Jak = "Jak"
-    Jakb = "Jakb"
+    JakA = ("Jak", "JakA")
+    JakB = ("Jakb", "JakB")
+    PIPK = "PIPK"
+    PLK = "PLK"
     Other = "Other"
     Null = None
 
@@ -112,17 +115,21 @@ class KinHub(BaseModel):
 
     model_config = ConfigDict(use_enum_values=True)
 
-    kinase_name: str
-    manning_name: list[str]
-    xname: list[str]
-    group: list[Group]
-    family: list[Family]
+    hgnc_name: str | None
+    kinase_name: str | None
+    manning_name: str
+    xname: str
+    group: Group
+    family: Family
 
 
 class UniProt(BaseModel):
     """Pydantic model for UniProt information."""
 
     canonical_seq: SeqUniProt
+    phospho_sites: list[int]
+    phospho_evidence: list[set[str]]
+    phospho_description: list[set[str]]
 
 
 class KLIFS(BaseModel):
@@ -171,6 +178,9 @@ class KinCoreFASTA(BaseModel):
     length_af2: int | None = None
     length_uniprot: int | None = None
     source_file: str
+    start: int | None = None
+    end: int | None = None
+    mismatch: list[int] | None = None
 
 
 class KinCoreCIF(BaseModel):
@@ -186,6 +196,9 @@ class KinCoreCIF(BaseModel):
     msa_size: int
     msa_source: MSASource
     model_no: int = Field(..., ge=1, lt=6)
+    start: int | None = None
+    end: int | None = None
+    mismatch: list[int] | None = None
 
 
 class KinCore(BaseModel):
@@ -205,7 +218,7 @@ class KinaseInfo(BaseModel):
     uniprot_id: SwissProtID | TrEMBLID  # UniProtID
     kinhub: KinHub | None = None
     uniprot: UniProt
-    klifs: KLIFS | None = None
+    klifs: list[KLIFS] | None = None
     pfam: Pfam | None = None
     kincore: list[KinCore] | None = None
     KLIFS2UniProtIdx: dict[str, int | None] | None = None
