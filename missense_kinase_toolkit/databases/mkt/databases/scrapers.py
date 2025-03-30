@@ -1,6 +1,5 @@
 import pandas as pd
 from mkt.databases import requests_wrapper
-from mkt.databases.utils import aggregate_df_by_col_set
 
 
 def kinhub(
@@ -46,6 +45,4 @@ def kinhub(
 
     df_kinhub = pd.DataFrame.from_dict(dict_kinhub)
 
-    df_kinhub_agg = aggregate_df_by_col_set(df_kinhub, "HGNC Name")
-
-    return df_kinhub_agg
+    return df_kinhub
