@@ -187,6 +187,7 @@ def try_except_substraction(a, b):
 def aggregate_df_by_col_set(
     df_in: pd.DataFrame,
     col_group: str,
+    bool_str: bool = True,
 ) -> pd.DataFrame:
     list_cols = df_in.columns.to_list()
     list_cols.remove(col_group)
@@ -194,10 +195,11 @@ def aggregate_df_by_col_set(
     # aggregate rows with the same HGNC Name (e.g., multiple kinase domains like JAK)
     df_in_agg = df_in.groupby([col_group], as_index=False, sort=False).agg(set)
 
-    # join set elements into a single string
-    df_in_agg[list_cols] = df_in_agg[list_cols].map(
-        lambda x: ", ".join(str(s) for s in x)
-    )
+    if bool_str:
+        # join set elements into a single string
+        df_in_agg[list_cols] = df_in_agg[list_cols].map(
+            lambda x: ", ".join(str(s) for s in x)
+        )
 
     return df_in_agg
 
