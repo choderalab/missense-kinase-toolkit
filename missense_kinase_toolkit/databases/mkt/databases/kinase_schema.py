@@ -1,6 +1,7 @@
 import logging
 import os
 from itertools import chain
+from typing import Any, Callable
 
 import pandas as pd
 from mkt.databases import klifs, pfam, scrapers
@@ -33,8 +34,24 @@ class KinaseInfoGenerator(KinaseInfo):
 
     bool_offset: bool = True
 
-    # TODO: "A0A0B4J2F2" is no longer in the SwissProt database
-    # https://rest.uniprot.org/unisave/A0A0B4J2F2?format=fasta&versions=67
+    @classmethod
+    def standardize_offset(cls, idx_in: int) -> int:
+        """Standardize offset where necessary.
+
+        Parameters
+        ----------
+        idx_in : int
+            Index to standardize.
+
+        Returns
+        -------
+        int
+            Standardized index.
+        """
+        if not cls.bool_offset:
+            return idx_in - 1
+        else:
+            return idx_in
 
     # https://docs.pydantic.dev/latest/examples/custom_validators/#validating-nested-model-fields
     @model_validator(mode="after")
@@ -68,24 +85,45 @@ class KinaseInfoGenerator(KinaseInfo):
         """Generate dictionary mapping KinCore to UniProt indices."""
 
         if self.kincore is not None:
+
             # this is a list of KinCore objects
             for idx, entry in enumerate(self.kincore):
-                dict_temp = align_kincore2uniprot(
-                    entry.fasta.seq,
-                    self.uniprot.canonical_seq,
+
+                # all non-None entries will have fastas
+                fasta = entry.fasta.seq
+
+                # KinCoreFASTA2UniProt
+                dict_temp = align_kincore2uniprot(fasta, self.uniprot.canonical_seq)
+                self.kincore[idx].fasta.start = self.standardize_offset(
+                    dict_temp["start"]
                 )
-                self.kincore[idx].start = dict_temp["start"]
-                self.kincore[idx].end = dict_temp["end"]
-                self.kincore[idx].mismatch = dict_temp["mismatch"]
+                self.kincore[idx].fasta.end = self.standardize_offset(dict_temp["end"])
+                self.kincore[idx].fasta.mismatch = dict_temp["mismatch"]
+
                 if entry.cif is not None:
-                    dict_temp = align_kincore2uniprot(
-                        entry.cif["_entity_poly.pdbx_seq_one_letter_code"][0].replace(
-                            "\n", ""
-                        ),
-                        self.uniprot.canonical_seq,
+
+                    cif = entry.cif["_entity_poly.pdbx_seq_one_letter_code"][0].replace(
+                        "\n", ""
                     )
-                    self.kincore[idx].start = dict_temp["start"]
-                    self.kincore[idx].end = dict_temp["end"]
+
+                    # KinCoreCIF2UniProt
+                    dict_temp = align_kincore2uniprot(cif, self.uniprot.canonical_seq)
+                    self.kincore[idx].cif.start = self.standardize_offset(
+                        dict_temp["start"]
+                    )
+                    self.kincore[idx].cif.end = self.standardize_offset(
+                        dict_temp["end"]
+                    )
+                    self.kincore[idx].cif.mismatch = dict_temp["mismatch"]
+
+                    # KinCoreFASTA2KinCoreCIF
+                    dict_temp = align_kincore2uniprot(fasta, cif)
+                    self.kincore[idx].fasta.start = self.standardize_offset(
+                        dict_temp["start"]
+                    )
+                    self.kincore[idx].fasta.end = self.standardize_offset(
+                        dict_temp["end"]
+                    )
                     self.kincore[idx].mismatch = dict_temp["mismatch"]
 
         return self
@@ -94,22 +132,24 @@ class KinaseInfoGenerator(KinaseInfo):
     def generate_klifs2uniprot_dict(self) -> Self:
         """Generate dictionary mapping KLIFS to UniProt indices."""
 
-        if self.kincore is not None:
-            kd_idx = (self.kincore.start - 1, self.kincore.end - 1)
+        if self.kincore is not None and len(self.kincore) == 1:
+            kd_idx = (self.kincore[0].fasta.start - 1, self.kincore[0].fasta.end - 1)
         else:
             kd_idx = (None, None)
 
-        if self.klifs is not None and self.klifs.pocket_seq is not None:
-            temp_obj = klifs.KLIFSPocket(
-                uniprotSeq=self.uniprot.canonical_seq,
-                klifsSeq=self.klifs.pocket_seq,
-                idx_kd=kd_idx,
-                offset_bool=self.bool_offset,
-            )
+        if self.klifs is not None:
+            for idx, entry in enumerate(self.klifs):
+                if entry.pocket_seq is not None:
+                    temp_obj = klifs.KLIFSPocket(
+                        uniprotSeq=self.uniprot.canonical_seq,
+                        klifsSeq=self.klifs[idx].pocket_seq,
+                        idx_kd=kd_idx,
+                        offset_bool=self.bool_offset,
+                    )
 
-            if temp_obj.list_align is not None:
-                self.KLIFS2UniProtIdx = temp_obj.KLIFS2UniProtIdx
-                self.KLIFS2UniProtSeq = temp_obj.KLIFS2UniProtSeq
+                    if temp_obj.list_align is not None:
+                        self.KLIFS2UniProtIdx = temp_obj.KLIFS2UniProtIdx
+                        self.KLIFS2UniProtSeq = temp_obj.KLIFS2UniProtSeq
 
         return self
 
@@ -195,7 +235,288 @@ def check_if_file_exists_then_load_dataframe(str_file: str) -> pd.DataFrame | No
         logger.error(f"File {str_file} does not exist.")
 
 
+def convert_to_group(str_input: str, bool_list: bool = True) -> list[Group]:
+    """Convert KinHub group to Group enum.
+
+    Parameters
+    ----------
+    str_input : str
+        KinHub group to convert.
+    bool_list : bool, optional
+        Whether to return list of Group enums (e.g., converting KinHub), by default True.
+
+    Returns
+    -------
+    list[Group]
+        List of Group enums.
+    """
+    if bool_list:
+        return [Group(group) for group in str_input.split(", ")]
+    else:
+        return Group(str_input)
+
+
+def convert_str2family(str_input: str) -> Family:
+    """Convert string to Family enum.
+
+    Parameters
+    ----------
+    str_input : str
+        String to convert to Family enum.
+
+    Returns
+    -------
+    Family
+        Family enum.
+    """
+    try:
+        return Family(str_input)
+    except ValueError:
+        if is_not_valid_string(str_input):
+            return Family.Null
+        else:
+            return Family.Other
+
+
+def convert_to_family(
+    str_input: str,
+    bool_list: bool = True,
+) -> Family:
+    """Convert KinHub family to Family enum.
+
+    Parameters
+    ----------
+    str_input : str
+        String to convert to Family enum.
+
+    Returns
+    -------
+    Family
+        Family enum.
+    """
+    if bool_list:
+        return [convert_str2family(family) for family in str_input.split(", ")]
+    else:
+        return convert_str2family(str_input)
+
+
+def return_none_if_not_valid_string(str_input: str) -> str | None:
+    """Return None if string is not valid.
+
+    Parameters
+    ----------
+    str_input : str
+        String to check.
+
+    Returns
+    -------
+    str | None
+        String if valid, otherwise None.
+    """
+    if is_not_valid_string(str_input):
+        return None
+    else:
+        return str_input
+
+
+DICT_COL2OBJ_ORIG = {
+    "kinhub": {
+        "object": KinHub,
+        "uniprot_id": "UniprotID",
+        "keys": {
+            "list_obj": [
+                "hgnc_name",
+                "kinase_name",
+                "manning_name",
+                "xname",
+                "group",
+                "family",
+            ],
+            "list_col": [
+                "HGNC Name",
+                "Kinase Name",
+                "Manning Name",
+                "xName",
+                "Group",
+                "Family",
+            ],
+            "list_fnc": [
+                return_none_if_not_valid_string,
+                return_none_if_not_valid_string,
+                lambda x: x,
+                lambda x: x,
+                lambda x: convert_to_group(x, bool_list=False),
+                lambda x: convert_to_family(x, bool_list=False),
+            ],
+        },
+    },
+    "uniprot": {
+        "object": UniProt,
+        "uniprot_id": "uniprot",
+        "keys": {
+            "list_obj": [
+                "canonical_seq",
+                "phospho_sites",
+                "phospho_evidence",
+            ],
+            "list_col": [
+                "canonical_sequence",
+                "phospho_sites",
+                "phospho_evidence",
+            ],
+            "list_fnc": [
+                lambda x: x,
+                lambda x: x,
+                lambda x: x,
+            ],
+        },
+    },
+    "klifs": {
+        "object": KLIFS,
+        "uniprot_id": "uniprot",
+        "keys": {
+            "list_obj": [
+                "gene_name",
+                "name",
+                "full_name",
+                "group",
+                "family",
+                "iuphar",
+                "kinase_id",
+                "pocket_seq",
+            ],
+            "list_col": [
+                "gene_name",
+                "name",
+                "full_name",
+                "group",
+                "family",
+                "iuphar",
+                "kinase_ID",
+                "pocket",
+            ],
+            "list_fnc": [
+                lambda x: x,
+                lambda x: x,
+                lambda x: x,
+                lambda x: convert_to_group(x, bool_list=False),
+                lambda x: convert_to_family(x, bool_list=False),
+                lambda x: x,
+                lambda x: x,
+                return_none_if_not_valid_string,
+            ],
+        },
+    },
+    "pfam": {
+        "object": Pfam,
+        "uniprot_id": "uniprot",
+        "keys": {
+            "list_obj": [
+                "domain_name",
+                "start",
+                "end",
+                "protein_length",
+                "pfam_accession",
+                "in_alphafold",
+            ],
+            "list_col": [
+                "name",
+                "start",
+                "end",
+                "protein_length",
+                "pfam_accession",
+                "in_alphafold",
+            ],
+            "list_fnc": [
+                lambda x: x,
+                lambda x: x,
+                lambda x: x,
+                lambda x: x,
+                lambda x: x,
+                lambda x: x,
+            ],
+        },
+    },
+}
+"""dict[str, dict[str, Callable | str | dict[str, list[str, Callable]]]]: Dictionary of columns to object mapping."""
+
+
+def process_keys_dict(
+    dict_in: dict[str, list[str, Callable]]
+) -> dict[str, dict[str, str | Callable]]:
+    """Process keys dictionary to convert to list of functions.
+
+    Parameters
+    ----------
+    dict_in : dict[str, list[str, function]]
+        Dictionary of keys to process.
+
+    Returns
+    -------
+    dict[str, dict[str, str | function]]
+        Dictionary of keys with list of functions.
+    """
+    list_val = [
+        {"column": col, "function": fnc}
+        for col, fnc in zip(dict_in["list_col"], dict_in["list_fnc"])
+    ]
+
+    dict_out = dict(zip(dict_in["list_obj"], list_val))
+
+    return dict_out
+
+
+DICT_COL2OBJ_REV = {
+    k1: {k2: (process_keys_dict(v2) if k2 == "keys" else v2) for k2, v2 in v1.items()}
+    for k1, v1 in DICT_COL2OBJ_ORIG.items()
+}
+"""dict[str, dict[str, Callable | str | dict[str, dict[str, str | Callable]]]: Dictionary of columns to object mapping."""
+
+
+def convert_df2dictobj(
+    df: pd.DataFrame,
+    str_obj: str,
+) -> dict[str, Any] | None:
+    """Convert dataframe to dictionary of objects.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Dataframe to convert.
+    str_obj : str
+        Object to convert to - needs to match key in DICT_COL2OBJ_REV.
+
+    Returns
+    -------
+    dict[str, Any]
+        Dictionary of objects where key is UniProt ID and value is object.
+
+    """
+    dict_obj = DICT_COL2OBJ_REV[str_obj]
+
+    obj = dict_obj["object"]
+    dict_key = dict_obj["keys"]
+    list_key = df[dict_obj["uniprot_id"]].to_list()
+
+    list_cols = [
+        df[v["column"]].apply(v["function"]).tolist() for v in dict_key.values()
+    ]
+    set_count = {len(i) for i in list_cols}
+
+    if len(set_count) != 1:
+        logger.error("One or more columns have no values.")
+        return None
+
+    dict_out = {i: [] for i in list_key}
+    for key, entry in zip(list_key, zip(*list_cols)):
+        obj_temp = obj.model_validate(dict(zip(dict_key.keys(), entry)))
+        dict_out[key].append(obj_temp)
+
+    return dict_out
+
+
 PATH_DATA_DIR = os.path.join(get_repo_root(), "data")
+
 
 DICT_INPUT_FILES = {
     "kinhub": {
@@ -353,75 +674,10 @@ def concatenate_source_dataframe(
 
 
 def is_not_valid_string(str_input: str) -> bool:
-    if pd.isna(str_input) or str_input == "":
+    if pd.isna(str_input) or str_input == "" or isinstance(str_input, float | int):
         return True
     else:
         return False
-
-
-def convert_to_group(str_input: str, bool_list: bool = True) -> list[Group]:
-    """Convert KinHub group to Group enum.
-
-    Parameters
-    ----------
-    str_input : str
-        KinHub group to convert.
-    bool_list : bool, optional
-        Whether to return list of Group enums (e.g., converting KinHub), by default True.
-
-    Returns
-    -------
-    list[Group]
-        List of Group enums.
-    """
-    if bool_list:
-        return [Group(group) for group in str_input.split(", ")]
-    else:
-        return Group(str_input)
-
-
-def convert_str2family(str_input: str) -> Family:
-    """Convert string to Family enum.
-
-    Parameters
-    ----------
-    str_input : str
-        String to convert to Family enum.
-
-    Returns
-    -------
-    Family
-        Family enum.
-    """
-    try:
-        return Family(str_input)
-    except ValueError:
-        if is_not_valid_string(str_input):
-            return Family.Null
-        else:
-            return Family.Other
-
-
-def convert_to_family(
-    str_input: str,
-    bool_list: bool = True,
-) -> Family:
-    """Convert KinHub family to Family enum.
-
-    Parameters
-    ----------
-    str_input : str
-        String to convert to Family enum.
-
-    Returns
-    -------
-    Family
-        Family enum.
-    """
-    if bool_list:
-        return [convert_str2family(family) for family in str_input.split(", ")]
-    else:
-        return convert_str2family(str_input)
 
 
 def create_kinase_models_from_df(
