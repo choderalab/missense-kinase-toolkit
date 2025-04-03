@@ -106,6 +106,14 @@ DICT_UNIPROT_EVIDENCE = {
 """dict[str, str]: UniProt evidence codes mapped to descriptions."""
 
 
+DICT_PHOSPHO_EMPTY = {
+    "phospho_sites": None,
+    "phospho_evidence": None,
+    "phospho_description": None,
+}
+"""dict[str, None]: Dictionary for empty phospho sites, evidence, and description."""
+
+
 @dataclass
 class UniProtJSON(UniProt, RESTAPIClient):
     """Class to interact UniProt API for JSON download."""
@@ -113,9 +121,13 @@ class UniProtJSON(UniProt, RESTAPIClient):
     headers: str = "{'Accept': 'application/json'}"
     """Header for the API request."""
     _json: dict | None = None
+    """JSON response from the API."""
+    dict_mod_res: dict | None = None
+    """Dictionary of modified residues."""
 
     def __post_init__(self):
         self._json = self.query_api()
+        self.dict_mod_res = self.extract_modified_residues()
 
     def query_api(self) -> dict | None:
         """Get JSON for UniProt ID.
@@ -149,21 +161,71 @@ class UniProtJSON(UniProt, RESTAPIClient):
 
         """
         if self._json is not None:
-            try:
-                df_mod_res = pd.DataFrame(
-                    [
-                        entry
-                        for entry in self.json["features"]
-                        if entry["type"] == "Modified residue"
-                    ]
+            if "features" not in self._json:
+                logger.warning(f"No features found for {self.uniprot_id}")
+                return DICT_PHOSPHO_EMPTY
+            # filter for modified residues and convert to DataFrame
+            df_mod_res = pd.DataFrame(
+                [
+                    entry
+                    for entry in self._json["features"]
+                    if entry["type"] == "Modified residue"
+                ]
+            )
+            if df_mod_res.shape[0] == 0:
+                logger.warning(f"No modified residues found for {self.uniprot_id}...")
+                return DICT_PHOSPHO_EMPTY
+            df_temp = pd.json_normalize(df_mod_res["location"]).reset_index(drop=True)
+            df_mod_res = pd.concat([df_mod_res, df_temp], axis=1)
+            # return human-readable evidence codes as a set
+            df_mod_res["evidenceCode"] = df_mod_res["evidences"].apply(
+                lambda x: {
+                    (
+                        DICT_UNIPROT_EVIDENCE[entry["evidenceCode"]]
+                        if entry["evidenceCode"] in DICT_UNIPROT_EVIDENCE
+                        else entry["evidenceCode"]
+                    )
+                    for entry in x
+                }
+            )
+            # canonical sequence is NaN all others provide isoform mapping
+            if "sequence" in df_mod_res.columns:
+                df_mod_res = df_mod_res.loc[
+                    df_mod_res["sequence"].isna(), :
+                ].reset_index(drop=True)
+                if df_mod_res.shape[0] == 0:
+                    logger.warning(
+                        f"No modified residues found in canonical sequence for {self.uniprot_id}..."
+                    )
+                    return DICT_PHOSPHO_EMPTY
+            # filter for phospho sites
+            df_mod_res = df_mod_res.loc[
+                df_mod_res["description"].apply(lambda x: x.startswith("Phospho")), :
+            ].reset_index(drop=True)
+            if df_mod_res.shape[0] == 0:
+                logger.warning(
+                    f"No phospho sites found in cannonical sequence for {self.uniprot_id}"
                 )
-                df_mod_res["location"] = pd.json_normalize(df_mod_res["location"])
-                df_mod_res["evidenceCode"] = df_mod_res["evidences"].apply(
-                    lambda x: {entry["evidenceCode"] for entry in x}
+                return DICT_PHOSPHO_EMPTY
+            list_site, list_desc, list_evidence = [], [], []
+            for _, row in df_mod_res.iterrows():
+                if (
+                    row["start.value"] == row["end.value"]
+                    and row["start.modifier"] == row["end.modifier"] == "EXACT"
+                ):
+                    list_site.append(row["start.value"])
+                    list_desc.append(row["description"])
+                    list_evidence.append(row["evidenceCode"])
+            if len(list_site) == 0:
+                logger.warning(f"No phospho sites found for {self.uniprot_id}...")
+                dict_out = DICT_PHOSPHO_EMPTY
+            else:
+                dict_out = dict(
+                    zip(
+                        DICT_PHOSPHO_EMPTY.keys(),
+                        [list_site, list_evidence, list_desc],
+                    )
                 )
-                return df_mod_res
-            except KeyError as e:
-                logger.error(f"Key error: {e}")
-                return None
+            return dict_out
         else:
-            None
+            DICT_PHOSPHO_EMPTY
