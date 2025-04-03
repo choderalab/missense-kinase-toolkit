@@ -133,10 +133,11 @@ class KinHub(BaseModel):
 class UniProt(BaseModel):
     """Pydantic model for UniProt information."""
 
+    header: str
     canonical_seq: SeqUniProt
-    phospho_sites: list[int]
-    phospho_evidence: list[set[str]]
-    phospho_description: list[set[str]]
+    phospho_sites: list[int] | None = None
+    phospho_evidence: list[set[str]] | None = None
+    phospho_description: list[str] | None = None
 
 
 class KLIFS(BaseModel):
@@ -178,16 +179,16 @@ class KinCoreFASTA(BaseModel):
     swissprot: str
     uniprot: SwissProtID | TrEMBLID
     start_md: int  # Modi-Dunbrack, 2019
-    end_md: int
-    length_md: int | None = None
+    end_md: int  # Modi-Dunbrack, 2019
+    length_md: int | None = None  # Modi-Dunbrack, 2019
     start_af2: int | None = None  # AF2 active state
-    end_af2: int | None = None
-    length_af2: int | None = None
-    length_uniprot: int | None = None
+    end_af2: int | None = None  # AF2 active state
+    length_af2: int | None = None  # AF2 active state
+    length_uniprot: int | None = None  # AF2 active state
     source_file: str
-    start: int | None = None
-    end: int | None = None
-    mismatch: list[int] | None = None
+    start: int | None = None  # fasta2uniprot
+    end: int | None = None  # fasta2uniprot
+    mismatch: list[int] | None = None  # fasta2uniprot
 
 
 class KinCoreCIF(BaseModel):
@@ -203,9 +204,9 @@ class KinCoreCIF(BaseModel):
     msa_size: int
     msa_source: MSASource
     model_no: int = Field(..., ge=1, lt=6)
-    start: int | None = None
-    end: int | None = None
-    mismatch: list[int] | None = None
+    start: int | None = None  # cif2uniprot
+    end: int | None = None  # cif2uniprot
+    mismatch: list[int] | None = None  # cif2uniprot
 
 
 class KinCore(BaseModel):
@@ -213,9 +214,9 @@ class KinCore(BaseModel):
 
     fasta: KinCoreFASTA
     cif: KinCoreCIF | None = None
-    start: int | None = None
-    end: int | None = None
-    mismatch: list[int] | None = None
+    start: int | None = None  # fasta2cif
+    end: int | None = None  # fasta2cif
+    mismatch: list[int] | None = None  # fasta2cif
 
 
 class KinaseInfoUniProt(BaseModel):
@@ -227,6 +228,15 @@ class KinaseInfoUniProt(BaseModel):
     pfam: Pfam | None = None
 
 
+class KinaseInfoKinaseDomain(BaseModel):
+    """Pydantic model for kinase information at the level of the kinase domain."""
+
+    uniprot_id: SwissProtIDSuffix | TrEMBLIDSuffix
+    kinhub: KinHub | None = None
+    klifs: KLIFS | None = None
+    kincore: KinCore | None = None
+
+
 class KinaseInfo(BaseModel):
     """Pydantic model for kinase information at the level of the kinase domain."""
 
@@ -236,7 +246,7 @@ class KinaseInfo(BaseModel):
     kinhub: KinHub | None = None
     klifs: KLIFS | None = None
     pfam: Pfam | None = None
-    kincore: list[KinCore] | None = None
+    kincore: KinCore | None = None
     KLIFS2UniProtIdx: dict[str, int | None] | None = None
     KLIFS2UniProtSeq: dict[str, str | None] | None = None
 
