@@ -266,16 +266,16 @@ def align_kincore2uniprot(
 
     # if multiple alignments, return None
     if len(alignments) != 1:
-        print(f"Multiple alignments found for {str_kincore} and {str_uniprot}")
+        logger.warning(f"Multiple alignments found for {str_kincore} and {str_uniprot}")
         return dict_out
 
     alignment = alignments[0]
 
     # if alignment does not include full sequence, None
     if alignment.sequences[0] != alignment[0, :]:
-        print(
-            f"Alignment does not include full sequence \
-              for {str_kincore} and {str_uniprot}"
+        logger.warning(
+            "Alignment does not include full sequence "
+            f"for {str_kincore} and {str_uniprot}"
         )
         pass
 
