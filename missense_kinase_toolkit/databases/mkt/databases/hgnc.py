@@ -81,18 +81,18 @@ class HGNC:
             )
             if len(list_hgnc_gene_name) == 1:
                 if self.hgnc is not None:
-                    print(
+                    logger.warning(
                         f"Gene name found for {self.hgnc}: {list_hgnc_gene_name[0]}. Overwriting HGNC gene name..."
                     )
                 else:
-                    print(
+                    logger.warning(
                         f"Gene name found for {self.ensembl}: {list_hgnc_gene_name[0]}. Adding HGNC gene name..."
                     )
                 self.hgnc = list_hgnc_gene_name[0]
             elif len(list_hgnc_gene_name) == 0:
-                print(f"No gene names found for {self.hgnc}")
+                logger.warning(f"No gene names found for {self.hgnc}")
             else:
-                print(f"Multiple gene names found: {list_hgnc_gene_name}.")
+                logger.warning(f"Multiple gene names found: {list_hgnc_gene_name}.")
         else:
             list_hgnc_gene_name = None
             utils_requests.print_status_code_if_res_not_ok(res)
