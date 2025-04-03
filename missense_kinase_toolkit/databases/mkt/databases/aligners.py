@@ -5,9 +5,6 @@ from dataclasses import dataclass
 class CustomAligner(ABC):
     """Custom aligner class for aligning sequences."""
 
-    substitution_matrix: str = "BLOSUM62"
-    """str: Substitution matrix used. Default is BLOSUM62."""
-
     @abstractmethod
     def align(self, *args, **kwargs):
         """Abstract method for aligning sequences."""
@@ -20,6 +17,8 @@ class ClustalOmegaAligner(CustomAligner):
 
     list_sequences: list[str]
     """list[str]: List of sequences to align."""
+    substitution_matrix: str = "BLOSUM62"
+    """str: Substitution matrix used. Default is BLOSUM62."""
     path_bin: str = "/usr/local/bin/clustalo"
     """str: Path to clustalo binary. Default is "/usr/local/bin/clustalo"."""
 
@@ -52,6 +51,8 @@ class BioAligner(CustomAligner):
 
     from Bio import Align
 
+    substitution_matrix: str = "BLOSUM90"
+    """str: Substitution matrix used. Default is BLOSUM90 to maximize mismatch penalty."""
     mode: str = "local"
     """str: Alignment mode. Default is "local"."""
     gap_score: int = -5
