@@ -6,10 +6,11 @@ from typing import Any, Callable
 import pandas as pd
 from mkt.databases import hgnc, klifs, pfam, scrapers, uniprot
 from mkt.databases.aligners import ClustalOmegaAligner
+from mkt.databases.colors import map_aa_to_single_letter_code
 from mkt.databases.config import set_request_cache
 from mkt.databases.io_utils import get_repo_root
 from mkt.databases.kincore import align_kincore2uniprot, harmonize_kincore_fasta_cif
-from mkt.databases.utils import rgetattr, rsetattr
+from mkt.databases.utils import return_bool_at_index, rgetattr, rsetattr
 from mkt.schema.constants import LIST_PFAM_KD
 from mkt.schema.kinase_schema import (
     KLIFS,
@@ -18,12 +19,11 @@ from mkt.schema.kinase_schema import (
     KinaseInfo,
     KinaseInfoKinaseDomain,
     KinaseInfoUniProt,
-    KinCore,
     KinHub,
     Pfam,
     UniProt,
 )
-from pydantic import BaseModel, ValidationError, model_validator
+from pydantic import ValidationError, model_validator
 from tqdm import tqdm
 from typing_extensions import Self
 
@@ -48,8 +48,6 @@ class KinaseInfoUniProtGenerator(KinaseInfoUniProt):
     @model_validator(mode="after")
     def validate_phosphosites2canonicalseq(self) -> Self:
         """Validate phosphosites match canonical sequence."""
-        from mkt.databases.colors import map_aa_to_single_letter_code
-        from mkt.databases.utils import return_bool_at_index
 
         if self.uniprot.phospho_sites is not None:
             list_str_inter = [
@@ -88,16 +86,6 @@ class KinaseInfoUniProtGenerator(KinaseInfoUniProt):
                         rgetattr(self, attr), list_bool, False
                     )
 
-                # phospho_sites, evidence, and description lists that match cannonical sequence
-                # list_site_replace = return_bool_at_index(self.uniprot.phospho_sites, list_bool)
-                # list_evid_replace = return_bool_at_index(self.uniprot.phospho_evidence, list_bool)
-                # list_desc_replace = return_bool_at_index(self.uniprot.phospho_description, list_bool)
-
-                # phospho_sites, evidence, and description lists that do not match cannonical sequence
-                # list_site_wrong = return_bool_at_index(self.uniprot.phospho_sites, list_bool, False)
-                # list_evid_wrong = return_bool_at_index(self.uniprot.phospho_evidence, list_bool, False)
-                # list_desc_wrong = return_bool_at_index(self.uniprot.phospho_description, list_bool, False)
-
                 list_actual = [
                     self.uniprot.canonical_seq[k - 1] for k in dict_phospho_map.keys()
                 ]
@@ -111,16 +99,12 @@ class KinaseInfoUniProtGenerator(KinaseInfoUniProt):
                     f"{dict_phosphosite['wrong']['uniprot.phospho_description']}"
                     f"{dict_phosphosite['wrong']['uniprot.phospho_sites']}\n"
                     f"{dict_phosphosite['wrong']['uniprot.phospho_evidence']}\n"
-                    f"Mismatched residues will be removed from phosphosite list.\n"
+                    "Mismatched residues will be removed from phosphosite list.\n"
                 )
 
                 for attr in LIST_ATTR:
                     # replace phospho_sites, evidence, and description lists that do not match cannonical sequence
                     rsetattr(self, attr, dict_phosphosite["replace"][attr])
-
-                # self.uniprot.phospho_sites = list_site_replace
-                # self.uniprot.phospho_evidence = list_evid_replace
-                # self.uniprot.phospho_description = list_desc_replace
 
         return self
 
@@ -146,6 +130,18 @@ class KinaseInfoKinaseDomainGenerator(KinaseInfoKinaseDomain):
         # https://klifs.net/details.php?structure_id=9709 just a misalignment vs. UniProt[130:196] aligns matches structure seq
         if uniprot_id == "Q8N5S9":
             self.klifs.pocket_seq = "QSEIGKGAYGVVRHYAMKVERVYQEIAILKKLHVNVVKLIENLYLVFDLRKGPVMEVPCEYLHCQKIVHRDIKPSNLLKIADFGV"
+
+        # there are no matches when looking manually to canonical UniProt sequence
+        if uniprot_id == "P35557":
+            self.klifs.pocket_seq = None
+
+        # there are no matches when looking manually to canonical UniProt sequence
+        if uniprot_id == "Q9H6X2":
+            self.klifs.pocket_seq = None
+
+        # VKMEN > VKVEN
+        if uniprot_id == "Q96LW2":
+            self.klifs.pocket_seq = "GLVAKGSFGTVLKFAVKVVQCKEEVSIQRQINPFVHSLGDSFIMCSYC-STDLYSLWSAYLHDLGIMHRDVKVENILLLTDFGLS"
 
         return self
 
@@ -176,8 +172,7 @@ class KinaseInfoGenerator(KinaseInfo):
 
     bool_offset: bool = True
 
-    @classmethod
-    def standardize_offset(cls, idx_in: int) -> int:
+    def standardize_offset(self, idx_in: int) -> int:
         """Standardize offset where necessary.
 
         Parameters
@@ -190,7 +185,7 @@ class KinaseInfoGenerator(KinaseInfo):
         int
             Standardized index.
         """
-        if not cls.bool_offset:
+        if not self.bool_offset:
             return idx_in - 1
         else:
             return idx_in
@@ -201,13 +196,13 @@ class KinaseInfoGenerator(KinaseInfo):
         if self.kincore is not None:
 
             # all non-None entries will have fastas
-            fasta = self.fasta.seq
+            fasta = self.kincore.fasta.seq
 
             # KinCoreFASTA2UniProt
-            dict_temp = align_kincore2uniprot(fasta, self.uniprot.canonical_seq)
-            self.kincore.fasta.start = self.standardize_offset(dict_temp["start"])
-            self.kincore.fasta.end = self.standardize_offset(dict_temp["end"])
-            self.kincore.fasta.mismatch = dict_temp["mismatch"]
+            dict_fasta = align_kincore2uniprot(fasta, self.uniprot.canonical_seq)
+            self.kincore.fasta.start = self.standardize_offset(dict_fasta["start"])
+            self.kincore.fasta.end = self.standardize_offset(dict_fasta["end"])
+            self.kincore.fasta.mismatch = dict_fasta["mismatch"]
 
             if self.kincore.cif is not None:
 
@@ -215,10 +210,10 @@ class KinaseInfoGenerator(KinaseInfo):
                 cif = self.kincore.cif.cif[key_seq][0].replace("\n", "")
 
                 # KinCoreCIF2UniProt
-                dict_temp = align_kincore2uniprot(cif, self.uniprot.canonical_seq)
-                self.kincore.cif.start = self.standardize_offset(dict_temp["start"])
-                self.kincore.cif.end = self.standardize_offset(dict_temp["end"])
-                self.kincore.cif.mismatch = dict_temp["mismatch"]
+                dict_cif = align_kincore2uniprot(cif, self.uniprot.canonical_seq)
+                self.kincore.cif.start = self.standardize_offset(dict_cif["start"])
+                self.kincore.cif.end = self.standardize_offset(dict_cif["end"])
+                self.kincore.cif.mismatch = dict_cif["mismatch"]
 
         return self
 
@@ -227,24 +222,13 @@ class KinaseInfoGenerator(KinaseInfo):
         """Generate dictionary mapping KLIFS to UniProt indices."""
 
         if self.kincore is not None:
-            kd_idx = (
-                min(
-                    [
-                        i
-                        for i in [self.kincore.fasta.start, self.kincore.cif.start]
-                        if i is not None
-                    ]
-                )
-                - 1,
-                max(
-                    [
-                        i
-                        for i in [self.kincore.fasta.end, self.kincore.cif.end]
-                        if i is not None
-                    ]
-                )
-                - 1,
-            )
+            if self.kincore.cif is not None:
+                list_start = [self.kincore.fasta.start, self.kincore.cif.start]
+                list_end = [self.kincore.fasta.end, self.kincore.cif.end]
+            else:
+                list_start = [self.kincore.fasta.start]
+                list_end = [self.kincore.fasta.end]
+            kd_idx = (min(list_start) - 1, max(list_end) - 1)
         else:
             kd_idx = (None, None)
 
@@ -945,281 +929,50 @@ def combine_kinaseinfo_kd(
     return dict_kinaseinfo_kd
 
 
-PATH_DATA_DIR = os.path.join(get_repo_root(), "data")
-
-
-DICT_INPUT_FILES = {
-    "kinhub": {
-        "filename": os.path.join(PATH_DATA_DIR, "kinhub.csv"),
-        "col_merge": "UniprotID",
-        "df": None,
-    },
-    "uniprot": {
-        "filename": os.path.join(PATH_DATA_DIR, "kinhub_uniprot.csv"),
-        "col_merge": "uniprot_id",
-        "df": None,
-    },
-    "klifs": {
-        "filename": os.path.join(PATH_DATA_DIR, "kinhub_klifs.csv"),
-        "col_merge": "uniprot",
-        "df": None,
-    },
-    "pfam": {
-        "filename": os.path.join(PATH_DATA_DIR, "kinhub_pfam.csv"),
-        "col_merge": "uniprot",
-        "df": None,
-    },
-    "kincore": {
-        "filename": os.path.join(PATH_DATA_DIR, "kinhub_kincore.csv"),
-        "col_merge": "uniprot",
-        "df": None,
-    },
-}
-
-
-LIST_COL_PFAM_INCLUDE = [
-    "name",
-    "start",
-    "end",
-    "protein_length",
-    "pfam_accession",
-    "in_alphafold",
-]
-
-
-def concatenate_source_dataframe(
-    kinhub_df: pd.DataFrame | None = None,
-    uniprot_df: pd.DataFrame | None = None,
-    klifs_df: pd.DataFrame | None = None,
-    pfam_df: pd.DataFrame | None = None,
-    kincore_df: pd.DataFrame | None = None,
-    col_kinhub_merge: str | None = None,
-    col_uniprot_merge: str | None = None,
-    col_klifs_merge: str | None = None,
-    col_pfam_merge: str | None = None,
-    col_pfam_include: list[str] | None = None,
-    list_domains_include: list[str] | None = None,
-    col_kincore_merge: str | None = None,
-) -> pd.DataFrame:
-    """Concatenate database dataframes on UniProt ID.
+def combine_kinaseinfo(
+    dict_uniprot: dict[str, KinaseInfoUniProtGenerator],
+    dict_kd: dict[str, KinaseInfoKinaseDomainGenerator],
+) -> dict[str, KinaseInfoGenerator]:
+    """Generate KinaseInfoGenerator from dictionary generated by combine_kinaseinfo_kd and combine_kinaseinfo_uniprot.
 
     Parameters
     ----------
-    kinhub_df : pd.DataFrame | None, optional
-        KinHub dataframe, by default None and will be loaded from "data" dir.
-    uniprot_df : pd.DataFrame | None, optional
-        UniProt dataframe, by default None and will be loaded from "data" dir.
-    klifs_df : pd.DataFrame | None, optional
-        KLIFS dataframe, by default None and will be loaded from "data" dir.
-    pfam_df : pd.DataFrame | None, optional
-        Pfam dataframe, by default None and will be loaded from "data" dir.
-    kincore_df : pd.DataFrame | None, optional
-        KinCore dataframe, by default None and will be loaded from "data" dir.
-    col_kinhub_merge : str | None, optional
-        Column to merge KinHub dataframe, by default None.
-    col_uniprot_merge : str | None, optional
-        Column to merge UniProt dataframe, by default None.
-    col_klifs_merge : str | None, optional
-        Column to merge KLIFS dataframe, by default None.
-    col_pfam_merge : str | None, optional
-        Column to merge Pfam dataframe, by default None.
-    col_pfam_include : list[str] | None, optional
-        Columns to include in Pfam dataframe, by default None.
-    list_domains_include : list[str] | None, optional
-        List of Pfam domains to include, by default None.
-    col_kincore_merge : str | None, optional
-        Column to merge KinCore dataframe, by default None.
+    dict_uniprot : dict[str, KinaseInfoUniProtGenerator]
+        Dictionary of KinaseInfoUniProtGenerator objects.
+    dict_kd : dict[str, KinaseInfoKinaseDomainGenerator]
+        Dictionary of KinaseInfoKinaseDomainGenerator objects.
 
     Returns
     -------
-    pd.DataFrame
-        Concatenated dataframe.
+    dict[str, KinaseInfoGenerator]
+        Dictionary of KinaseInfoGenerator objects.
+
     """
-    from copy import deepcopy
+    dict_kinaseinfo = {}
 
-    DICT_INPUT_FILES_REV = deepcopy(DICT_INPUT_FILES)
+    for uniprot_id, kd_temp in dict_kd.items():
 
-    # order needs to match DICT_INPUT_FILES_REV keys
-    list_df = [
-        kinhub_df,
-        uniprot_df,
-        klifs_df,
-        pfam_df,
-        kincore_df,
-    ]
+        uniprot_temp = dict_uniprot[uniprot_id.split("_")[0]]
 
-    # Pfam columns to include in the final dataframe
-    if col_pfam_include is None:
-        col_pfam_include = [
-            "name",
-            "start",
-            "end",
-            "protein_length",
-            "pfam_accession",
-            "in_alphafold",
-        ]
+        list_uniprot_attr = ["hgnc_name", "uniprot", "pfam"]
+        list_kd_attr = ["uniprot_id", "kinhub", "klifs", "kincore"]
 
-    # list of Pfam domains to include
-    if list_domains_include is None:
-        list_domains_include = LIST_PFAM_KD
+        list_uniprot_obj = [getattr(uniprot_temp, i) for i in list_uniprot_attr]
+        list_kd_obj = [getattr(kd_temp, i) for i in list_kd_attr]
 
-    # load dataframes if not provided from "data" sub-directory
-    for key, df in zip(DICT_INPUT_FILES_REV.keys(), list_df):
-        if df is None:
-            df_temp = check_if_file_exists_then_load_dataframe(
-                DICT_INPUT_FILES_REV[key]["filename"]
-            )
-        else:
-            df_temp = df.copy()
-        if key == "pfam":
-            # filter Pfam dataframe for KD domains and columns to include
-            df_temp = df_temp.loc[
-                df_temp["name"].isin(list_domains_include),
-                col_pfam_include,
-            ].reset_index(drop=True)
-            # rename "name" column in Pfam so doesn't conflict with KLIFS name
-            try:
-                df_temp.rename(columns={"name": "domain_name"}, inplace=True)
-            except KeyError:
-                pass
-        DICT_INPUT_FILES_REV[key]["df"] = df_temp
-    list_df = [i["df"] for i in DICT_INPUT_FILES_REV.values()]
-
-    if any([True if i is None else False for i in list_df]):
-        list_df_shape = [i.shape if i is not None else None for i in list_df]
-        logger.error(f"One or more dataframes are None\n{list_df_shape}")
-        return None
-
-    # order needs to match DICT_INPUT_FILES_REV keys
-    list_col = [
-        col_kinhub_merge,
-        col_uniprot_merge,
-        col_klifs_merge,
-        col_pfam_merge,
-        col_kincore_merge,
-    ]
-    for key, col in zip(DICT_INPUT_FILES_REV.keys(), list_col):
-        if col is not None:
-            DICT_INPUT_FILES_REV[key]["col_merge"] = col
-    list_col = [i["col_merge"] for i in DICT_INPUT_FILES_REV.values()]
-
-    # set indices to merge columns
-    for df, col in zip(list_df, list_col):
-        df.set_index(col, inplace=True)
-
-    # concat dataframes
-    df_merge = pd.concat(list_df, join="outer", axis=1).reset_index()
-
-    return df_merge
-
-
-def create_kinase_models_from_df(
-    df: pd.DataFrame | None = None,
-) -> dict[str, BaseModel]:
-    """Create Pydantic models for kinases from dataframes.
-
-    Parameters
-    ----------
-    df : pd.DataFrame | None, optional
-        Dataframe with merged kinase information, by default will be None.
-
-    Returns
-    -------
-    dict[str, BaseModel]
-        Dictionary of HGNC name key and kinase model key.
-    """
-
-    # load dataframe if not provided
-    if df is None:
-        df = concatenate_source_dataframe()
-
-    # concatenate_source_dataframe could return None
-    if df is None:
-        logger.error("Dataframe is None. Cannot create kinase models.")
-        return None
-
-    # create KinHub model
-    dict_kinase_models = {}
-
-    # create KinCore dictionary from fasta file
-    DICT_KINCORE = extract_pk_fasta_info_as_dict()  # noqa F821
-
-    for _, row in df.iterrows():
-
-        id_uniprot = row["index"]
-        name_hgnc = row["HGNC Name"]
-
-        # create KinHub model
-        kinhub_model = KinHub(
-            kinase_name=row["Kinase Name"],
-            manning_name=row["Manning Name"].split(", "),
-            xname=row["xName"].split(", "),
-            group=convert_to_group(row["Group"]),
-            family=convert_to_family(row["Family"]),
+        dict_temp = dict(
+            zip(list_uniprot_attr + list_kd_attr, list_uniprot_obj + list_kd_obj)
         )
 
-        # create UniProt model
-        uniprot_model = UniProt(canonical_seq=row["canonical_sequence"])
-
-        # TODO: include all KLIFS entries rather than just those in KinHub
-        # create KLIFS model
-        if is_not_valid_string(row["family"]):
-            klifs_model = None
-        else:
-            if is_not_valid_string(row["pocket"]):
-                pocket = None
-            else:
-                pocket = row["pocket"]
-            klifs_model = KLIFS(
-                gene_name=row["gene_name"],
-                name=row["name"],
-                full_name=row["full_name"],
-                group=convert_to_group(row["group"], bool_list=False),
-                family=convert_to_family(row["family"], bool_list=False),
-                iuphar=row["iuphar"],
-                kinase_id=row["kinase_ID"],
-                pocket_seq=pocket,
+        try:
+            kinase_info_temp = KinaseInfoGenerator.model_validate(dict_temp)
+            dict_kinaseinfo[uniprot_id] = kinase_info_temp
+        except Exception as e:
+            logger.warning(
+                f"Exception {e} generating KinaseInfoGenerator for {uniprot_id}..."
             )
 
-        # create Pfam model
-        if row["domain_name"] not in LIST_PFAM_KD:
-            pfam_model = None
-        else:
-            pfam_model = Pfam(
-                domain_name=row["domain_name"],
-                start=row["start"],
-                end=row["end"],
-                protein_length=row["protein_length"],
-                pfam_accession=row["pfam_accession"],
-                in_alphafold=row["in_alphafold"],
-            )
-
-        # create KinCore model
-        if id_uniprot in DICT_KINCORE.keys():
-            dict_temp = align_kincore2uniprot(
-                DICT_KINCORE[id_uniprot]["seq"],
-                uniprot_model.canonical_seq,
-            )
-            kincore_model = KinCore(**dict_temp)
-        else:
-            kincore_model = None
-
-        # create KinaseInfo model
-        kinase_info = KinaseInfoGenerator(
-            hgnc_name=name_hgnc,
-            uniprot_id=id_uniprot,
-            kinhub=kinhub_model,
-            uniprot=uniprot_model,
-            klifs=klifs_model,
-            pfam=pfam_model,
-            kincore=kincore_model,
-        )
-
-        dict_kinase_models[name_hgnc] = kinase_info
-
-    # TODO: For entries in DICT_KINCORE that are not in df, add to dict_kinase_models
-
-    return dict_kinase_models
+    return dict_kinaseinfo
 
 
 def get_sequence_max_with_exception(list_in: list[int | None]) -> int:
