@@ -219,3 +219,80 @@ def flatten_iterables_in_iterable(data):
         else:
             flattened_list.append(item)
     return flattened_list
+
+
+def rgetattr(obj, attr, *args):
+    """Get attribute from object recursively.
+
+    Parameters
+    ----------
+    obj : Any
+        Object to get attribute from.
+    attr : str
+        Attribute to get.
+    *args : Any
+        Any additional arguments to pass to getattr.
+
+    Returns
+    -------
+    Any
+        Value of attribute if found, otherwise default value.
+    """
+    import functools
+
+    def _getattr(obj, attr):
+        return getattr(obj, attr, *args)
+
+    return functools.reduce(_getattr, [obj] + attr.split("."))
+
+
+def rsetattr(obj, attr, val, *args):
+    """Set attribute from object recursively.
+
+    Parameters
+    ----------
+    obj : Any
+        Object to get attribute from.
+    attr : str
+        Attribute to get.
+    val : Any
+        Value to set attribute to.
+    *args : Any
+        Any additional arguments to pass to getattr.
+
+    Returns
+    -------
+    Any
+        Value of attribute if found, otherwise default value.
+    """
+    import functools
+
+    def _setattr(obj, attr, val):
+        return setattr(obj, attr, val, *args)
+
+    return functools.reduce(_setattr, [obj] + attr.split("."))
+
+
+def return_bool_at_index(
+    list_in: list,
+    list_bool: list,
+    bool_return: bool = True,
+):
+    """Return list of elements from list_in where corresponding element in list_bool is bool_return.
+
+    Parameters
+    ----------
+    list_in : list
+        List of elements to filter.
+    list_bool : list
+        List of boolean values to filter by.
+    bool_return : bool, optional
+        Boolean value to filter by, by default True
+
+    Returns
+    -------
+    list
+        List of elements from list_in where corresponding element in list_bool is bool_return.
+
+    """
+    return [i for i, j in zip(list_in, list_bool) if j == bool_return]
