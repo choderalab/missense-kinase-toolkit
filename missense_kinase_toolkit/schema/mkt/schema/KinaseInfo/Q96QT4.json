@@ -1,0 +1,308 @@
+{
+    "hgnc_name": "TRPM7",
+    "uniprot_id": "Q96QT4",
+    "uniprot": {
+        "header": ">sp|Q96QT4|TRPM7_HUMAN Transient receptor potential cation channel subfamily M member 7 OS=Homo sapiens OX=9606 GN=TRPM7 PE=1 SV=1",
+        "canonical_seq": "MSQKSWIESTLTKRECVYIIPSSKDPHRCLPGCQICQQLVRCFCGRLVKQHACFTASLAMKYSDVKLGDHFNQAIEEWSVEKHTEQSPTDAYGVINFQGGSHSYRAKYVRLSYDTKPEVILQLLLKEWQMELPKLVISVHGGMQKFELHPRIKQLLGKGLIKAAVTTGAWILTGGVNTGVAKHVGDALKEHASRSSRKICTIGIAPWGVIENRNDLVGRDVVAPYQTLLNPLSKLNVLNNLHSHFILVDDGTVGKYGAEVRLRRELEKTINQQRIHARIGQGVPVVALIFEGGPNVILTVLEYLQESPPVPVVVCEGTGRAADLLAYIHKQTEEGGNLPDAAEPDIISTIKKTFNFGQNEALHLFQTLMECMKRKELITVFHIGSDEHQDIDVAILTALLKGTNASAFDQLILTLAWDRVDIAKNHVFVYGQQWLVGSLEQAMLDALVMDRVAFVKLLIENGVSMHKFLTIPRLEELYNTKQGPTNPMLFHLVRDVKQGNLPPGYKITLIDIGLVIEYLMGGTYRCTYTRKRFRLIYNSLGGNNRRSGRNTSSSTPQLRKSHESFGNRADKKEKMRHNHFIKTAQPYRPKIDTVMEEGKKKRTKDEIVDIDDPETKRFPYPLNELLIWACLMKRQVMARFLWQHGEESMAKALVACKIYRSMAYEAKQSDLVDDTSEELKQYSNDFGQLAVELLEQSFRQDETMAMKLLTYELKNWSNSTCLKLAVSSRLRPFVAHTCTQMLLSDMWMGRLNMRKNSWYKVILSILVPPAILLLEYKTKAEMSHIPQSQDAHQMTMDDSENNFQNITEEIPMEVFKEVRILDSNEGKNEMEIQMKSKKLPITRKFYAFYHAPIVKFWFNTLAYLGFLMLYTFVVLVQMEQLPSVQEWIVIAYIFTYAIEKVREIFMSEAGKVNQKIKVWFSDYFNISDTIAIISFFIGFGLRFGAKWNFANAYDNHVFVAGRLIYCLNIIFWYVRLLDFLAVNQQAGPYVMMIGKMVANMFYIVVIMALVLLSFGVPRKAILYPHEAPSWTLAKDIVFHPYWMIFGEVYAYEIDVCANDSVIPQICGPGTWLTPFLQAVYLFVQYIIMVNLLIAFFNNVYLQVKAISNIVWKYQRYHFIMAYHEKPVLPPPLIILSHIVSLFCCICKRRKKDKTSDGPKLFLTEEDQKKLHDFEEQCVEMYFNEKDDKFHSGSEERIRVTFERVEQMCIQIKEVGDRVNYIKRSLQSLDSQIGHLQDLSALTVDTLKTLTAQKASEASKVHNEITRELSISKHLAQNLIDDGPVRPSVWKKHGVVNTLSSSLPQGDLESNNPFHCNILMKDDKDPQCNIFGQDLPAVPQRKEFNFPEAGSSSGALFPSAVSPPELRQRLHGVELLKIFNKNQKLGSSSTSIPHLSSPPTKFFVSTPSQPSCKSHLETGTKDQETVCSKATEGDNTEFGAFVGHRDSMDLQRFKETSNKIKILSNNNTSENTLKRVSSLAGFTDCHRTSIPVHSKQAEKISRRPSTEDTHEVDSKAALIPDWLQDRPSNREMPSEEGTLNGLTSPFKPAMDTNYYYSAVERNNLMRLSQSIPFTPVPPRGEPVTVYRLEESSPNILNNSMSSWSQLGLCAKIEFLSKEEMGGGLRRAVKVQCTWSEHDILKSGHLYIIKSFLPEVVNTWSSIYKEDTVLHLCLREIQQQRAAQKLTFAFNQMKPKSIPYSPRFLEVFLLYCHSAGQWFAVEECMTGEFRKYNNNNGDEIIPTNTLEEIMLAFSHWTYEYTRGELLVLDLQGVGENLTDPSVIKAEEKRSCDMVFGPANLGEDAIKNFRAKHHCNSCCRKLKLPDLKRNDYTPDKIIFPQDEPSDLNLQPGNSTKESESTNSVRLML",
+        "phospho_sites": [
+            101,
+            1163,
+            1191,
+            1193,
+            1224,
+            1255,
+            1258,
+            1265,
+            1287,
+            1301,
+            1358,
+            1361,
+            1386,
+            1387,
+            1390,
+            1395,
+            1396,
+            1404,
+            1405,
+            1407,
+            1435,
+            1446,
+            1455,
+            1456,
+            1463,
+            1467,
+            1468,
+            1471,
+            1476,
+            1477,
+            1482,
+            1493,
+            1500,
+            1504,
+            1508,
+            1513,
+            1527,
+            1533,
+            1537,
+            1542,
+            1543,
+            1551,
+            1567,
+            1569,
+            1583,
+            1598,
+            1615,
+            1660,
+            1685,
+            1779,
+            1830,
+            1851,
+            1860
+        ],
+        "phospho_evidence": [
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, combo",
+                "Manual, experimental"
+            ],
+            [
+                "Manual, combo",
+                "Manual, experimental"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, combo",
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, combo",
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, combo",
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, combo",
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, experimental"
+            ]
+        ],
+        "phospho_description": [
+            "Phosphoserine",
+            "Phosphothreonine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphothreonine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine; by autocatalysis",
+            "Phosphothreonine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphothreonine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphothreonine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphothreonine",
+            "Phosphoserine; by autocatalysis",
+            "Phosphothreonine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphothreonine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine",
+            "Phosphoserine; by autocatalysis",
+            "Phosphothreonine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphothreonine; by autocatalysis",
+            "Phosphothreonine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphothreonine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphothreonine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphothreonine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphothreonine; by autocatalysis",
+            "Phosphoserine",
+            "Phosphoserine; by autocatalysis"
+        ]
+    },
+    "kinhub": {
+        "hgnc_name": "TRPM7",
+        "kinase_name": "Transient receptor potential cation channel subfamily M member 7",
+        "manning_name": "ChaK1",
+        "xname": "ChaK1",
+        "group": "Atypical",
+        "family": "Alpha"
+    },
+    "klifs": {
+        "gene_name": "TRPM7",
+        "name": "ChaK1",
+        "full_name": "Transient receptor potential cation channel subfamily M member 7",
+        "group": "Atypical",
+        "family": "Alpha",
+        "iuphar": 499,
+        "kinase_id": 78,
+        "pocket_seq": null
+    },
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null,
+    "bool_offset": true
+}

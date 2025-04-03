@@ -1,0 +1,211 @@
+{
+    "hgnc_name": "PI4KB",
+    "uniprot_id": "Q9UBF8",
+    "uniprot": {
+        "header": ">sp|Q9UBF8|PI4KB_HUMAN Phosphatidylinositol 4-kinase beta OS=Homo sapiens OX=9606 GN=PI4KB PE=1 SV=1",
+        "canonical_seq": "MGDTVVEPAPLKPTSEPTSGPPGNNGGSLLSVITEGVGELSVIDPEVAQKACQEVLEKVKLLHGGVAVSSRGTPLELVNGDGVDSEIRCLDDPPAQIREEEDEMGAAVASGTAKGARRRRQNNSAKQSWLLRLFESKLFDISMAISYLYNSKEPGVQAYIGNRLFCFRNEDVDFYLPQLLNMYIHMDEDVGDAIKPYIVHRCRQSINFSLQCALLLGAYSSDMHISTQRHSRGTKLRKLILSDELKPAHRKRELPSLSPAPDTGLSPSKRTHQRSKSDATASISLSSNLKRTASNPKVENEDEELSSSTESIDNSFSSPVRLAPEREFIKSLMAIGKRLATLPTKEQKTQRLISELSLLNHKLPARVWLPTAGFDHHVVRVPHTQAVVLNSKDKAPYLIYVEVLECENFDTTSVPARIPENRIRSTRSVENLPECGITHEQRAGSFSTVPNYDNDDEAWSVDDIGELQVELPEVHTNSCDNISQFSVDSITSQESKEPVFIAAGDIRRRLSEQLAHTPTAFKRDPEDPSAVALKEPWQEKVRRIREGSPYGHLPNWRLLSVIVKCGDDLRQELLAFQVLKQLQSIWEQERVPLWIKPYKILVISADSGMIEPVVNAVSIHQVKKQSQLSLLDYFLQEHGSYTTEAFLSAQRNFVQSCAGYCLVCYLLQVKDRHNGNILLDAEGHIIHIDFGFILSSSPRNLGFETSAFKLTTEFVDVMGGLDGDMFNYYKMLMLQGLIAARKHMDKVVQIVEIMQQGSQLPCFHGSSTIRNLKERFHMSMTEEQLQLLVEQMVDGSMRSITTKLYDGFQYLTNGIM",
+        "phospho_sites": [
+            258,
+            263,
+            266,
+            275,
+            277,
+            284,
+            294,
+            428,
+            438,
+            511,
+            517,
+            519
+        ],
+        "phospho_evidence": [
+            [
+                "Manual, combo",
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, combo",
+                "Manual, experimental"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, combo",
+                "Manual, experimental"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, combo",
+                "Manual, experimental"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental"
+            ]
+        ],
+        "phospho_description": [
+            "Phosphoserine",
+            "Phosphothreonine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphothreonine",
+            "Phosphoserine",
+            "Phosphothreonine",
+            "Phosphothreonine"
+        ]
+    },
+    "kinhub": null,
+    "klifs": {
+        "gene_name": "PI4KB",
+        "name": "PI4KB",
+        "full_name": "phosphatidylinositol 4-kinase beta",
+        "group": "Atypical",
+        "family": "PIK",
+        "iuphar": 2149,
+        "kinase_id": 1090,
+        "pocket_seq": "VVLNSKDKAPYLIVIVKCGDLRQELLAFQVLKLWIKPYKILSGMIEPVVAVSIHQVKKQVCYL--LQVKDRHNGNILLHIDFGFI"
+    },
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": {
+        "I:1": 387,
+        "I:2": 388,
+        "I:3": 389,
+        "g.l:4": 390,
+        "g.l:5": 391,
+        "g.l:6": 392,
+        "g.l:7": 393,
+        "g.l:8": 394,
+        "g.l:9": 395,
+        "II:10": 396,
+        "II:11": 397,
+        "II:12": 398,
+        "II:13": 399,
+        "III:14": 561,
+        "III:15": 562,
+        "III:16": 563,
+        "III:17": 564,
+        "III:18": 565,
+        "III:19": 566,
+        "\u03b1C:20": 568,
+        "\u03b1C:21": 569,
+        "\u03b1C:22": 570,
+        "\u03b1C:23": 571,
+        "\u03b1C:24": 572,
+        "\u03b1C:25": 573,
+        "\u03b1C:26": 574,
+        "\u03b1C:27": 575,
+        "\u03b1C:28": 576,
+        "\u03b1C:29": 577,
+        "\u03b1C:30": 578,
+        "b.l:31": 579,
+        "b.l:32": 580,
+        "b.l:33": 593,
+        "b.l:34": 594,
+        "b.l:35": 595,
+        "b.l:36": 596,
+        "b.l:37": 597,
+        "IV:38": 598,
+        "IV:39": 599,
+        "IV:40": 600,
+        "IV:41": 601,
+        "V:42": 607,
+        "V:43": 608,
+        "V:44": 609,
+        "GK:45": 610,
+        "hinge:46": 611,
+        "hinge:47": 612,
+        "hinge:48": 613,
+        "linker:49": 614,
+        "linker:50": 616,
+        "linker:51": 617,
+        "linker:52": 618,
+        "\u03b1D:53": 619,
+        "\u03b1D:54": 620,
+        "\u03b1D:55": 621,
+        "\u03b1D:56": 622,
+        "\u03b1D:57": 623,
+        "\u03b1D:58": 624,
+        "\u03b1D:59": 625,
+        "\u03b1E:60": 663,
+        "\u03b1E:61": 664,
+        "\u03b1E:62": 665,
+        "\u03b1E:63": 666,
+        "\u03b1E:64": null,
+        "VI:65": null,
+        "VI:66": 667,
+        "VI:67": 668,
+        "c.l:68": 669,
+        "c.l:69": 670,
+        "c.l:70": 671,
+        "c.l:71": 672,
+        "c.l:72": 673,
+        "c.l:73": 674,
+        "c.l:74": 675,
+        "c.l:75": 676,
+        "VII:76": 677,
+        "VII:77": 678,
+        "VII:78": 679,
+        "VIII:79": 687,
+        "xDFG:80": 688,
+        "xDFG:81": 689,
+        "xDFG:82": 690,
+        "xDFG:83": 691,
+        "a.l:84": 692,
+        "a.l:85": 693
+    },
+    "KLIFS2UniProtSeq": {
+        "I": "VVL",
+        "g.l": "NSKDKA",
+        "II": "PYLI",
+        "II:III": "YVEVLECENFDTTSVPARIPENRIRSTRSVENLPECGITHEQRAGSFSTVPNYDNDDEAWSVDDIGELQVELPEVHTNSCDNISQFSVDSITSQESKEPVFIAAGDIRRRLSEQLAHTPTAFKRDPEDPSAVALKEPWQEKVRRIREGSPYGHLPNWRLLS",
+        "III": "VIVKCG",
+        "III:\u03b1C": "D",
+        "\u03b1C": "DLRQELLAFQV",
+        "b.l_1": "LK",
+        "b.l_intra": "QLQSIWEQERVP",
+        "b.l_2": "LWIKP",
+        "IV": "YKIL",
+        "IV:V": "VISAD",
+        "V": "SGM",
+        "GK": "I",
+        "hinge": "EPV",
+        "hinge:linker": null,
+        "linker_1": "V",
+        "linker_intra": "N",
+        "linker_2": "AVS",
+        "\u03b1D": "IHQVKKQ",
+        "\u03b1D:\u03b1E": "SQLSLLDYFLQEHGSYTTEAFLSAQRNFVQSCAGYCL",
+        "\u03b1E": "VCYL-",
+        "\u03b1E:VI": null,
+        "VI": "-LQ",
+        "c.l": "VKDRHNGN",
+        "VII": "ILL",
+        "VII:VIII": "DAEGHII",
+        "VIII": "H",
+        "xDFG": "IDFG",
+        "a.l": "FI"
+    },
+    "bool_offset": true
+}

@@ -1,0 +1,68 @@
+{
+    "hgnc_name": "CERT1",
+    "uniprot_id": "Q9Y5P4",
+    "uniprot": {
+        "header": ">sp|Q9Y5P4|CERT_HUMAN Ceramide transfer protein OS=Homo sapiens OX=9606 GN=CERT1 PE=1 SV=1",
+        "canonical_seq": "MSDNQSWNSSGSEEDPETESGPPVERCGVLSKWTNYIHGWQDRWVVLKNNALSYYKSEDETEYGCRGSICLSKAVITPHDFDECRFDISVNDSVWYLRAQDPDHRQQWIDAIEQHKTESGYGSESSLRRHGSMVSLVSGASGYSATSTSSFKKGHSLREKLAEMETFRDILCRQVDTLQKYFDACADAVSKDELQRDKVVEDDEDDFPTTRSDGDFLHSTNGNKEKLFPHVTPKGINGIDFKGEAITFKATTAGILATLSHCIELMVKREDSWQKRLDKETEKKRRTEEAYKNAMTELKKKSHFGGPDYEEGPNSLINEEEFFDAVEAALDRQDKIEEQSQSEKVRLHWPTSLPSGDAFSSVGTHRFVQKPYSRSSSMSSIDLVSASDDVHRFSSQVEEMVQNHMTYSLQDVGGDANWQLVVEEGEMKVYRREVEENGIVLDPLKATHAVKGVTGHEVCNYFWNVDVRNDWETTIENFHVVETLADNAIIIYQTHKRVWPASQRDVLYLSVIRKIPALTENDPETWIVCNFSVDHDSAPLNNRCVRAKINVAMICQTLVSPPEGNQEISRDNILCKITYVANVNPGGWAPASVLRAVAKREYPKFLKRFTSYVQEKTAGKPILF",
+        "phospho_sites": [
+            126,
+            132,
+            135,
+            315,
+            372,
+            373,
+            377,
+            380
+        ],
+        "phospho_evidence": [
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ]
+        ],
+        "phospho_description": [
+            "Phosphoserine",
+            "Phosphoserine; by PKD",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphotyrosine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine"
+        ]
+    },
+    "kinhub": {
+        "hgnc_name": "COL4A3BP",
+        "kinase_name": "Collagen type IV alpha-3-binding protein",
+        "manning_name": "Col4A3BP",
+        "xname": "Col4A3BP",
+        "group": "Atypical",
+        "family": "Other"
+    },
+    "klifs": null,
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null,
+    "bool_offset": true
+}
