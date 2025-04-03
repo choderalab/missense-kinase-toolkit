@@ -126,7 +126,7 @@ def serialize_kinase_dict(
 
     if serialization_kwargs is None:
         if str_path is None and suffix == "json":
-            serialization_kwargs = {"indent": 4}
+            serialization_kwargs = {"default": list, "indent": 4}
         else:
             serialization_kwargs = {}
 
@@ -191,7 +191,7 @@ def deserialize_kinase_dict(
             )
 
             kinase_obj = kinase_schema.KinaseInfo.model_validate(val_deserialized)
-            dict_import[kinase_obj.hgnc_name] = kinase_obj
+            dict_import[kinase_obj.uniprot_id] = kinase_obj
 
     dict_import = {key: dict_import[key] for key in sorted(dict_import.keys())}
 
