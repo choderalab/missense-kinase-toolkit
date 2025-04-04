@@ -17,15 +17,21 @@ logger = logging.getLogger(__name__)
 DICT_FUNCS = {
     "json": {
         "serialize": json.dumps,
+        "kwargs_serialize": {"default": list, "indent": 4},
         "deserialize": json.load,
+        "kwargs_deserialize": {},
     },
     "yaml": {
         "serialize": yaml.safe_dump,
+        "kwargs_serialize": {"sort_keys": False},
         "deserialize": yaml.safe_load,
+        "kwargs_deserialize": {},
     },
     "toml": {
         "serialize": toml.dumps,
+        "kwargs_serialize": {},
         "deserialize": toml.loads,
+        "kwargs_deserialize": {},
     },
 }
 """dict[str, dict[str, Callable]]: Dictionary of serialization and deserialization functions supported."""
@@ -125,14 +131,11 @@ def serialize_kinase_dict(
         return None
 
     if serialization_kwargs is None:
-        if str_path is None and suffix == "json":
-            serialization_kwargs = {"default": list, "indent": 4}
-        else:
-            serialization_kwargs = {}
+        serialization_kwargs = DICT_FUNCS[suffix]["kwargs_serialize"]
 
     str_path = return_str_path_from_pkg_data(str_path)
 
-    for key, val in tqdm(kinase_dict.items()):
+    for key, val in tqdm(kinase_dict.items(), desc="Serializing KinaseInfo objects..."):
         with open(f"{str_path}/{key}.{suffix}", "w") as outfile:
             val_serialized = DICT_FUNCS[suffix]["serialize"](
                 val.model_dump(),
@@ -173,13 +176,13 @@ def deserialize_kinase_dict(
         return None
 
     if deserialization_kwargs is None:
-        deserialization_kwargs = {}
+        deserialization_kwargs = DICT_FUNCS[suffix]["kwargs_serialize"]
 
     str_path = return_str_path_from_pkg_data(str_path)
     list_file = glob.glob(os.path.join(str_path, f"*.{suffix}"))
 
     dict_import = {}
-    for file in tqdm(list_file):
+    for file in tqdm(list_file, desc="Deserializing KinaseInfo objects..."):
         with open(file) as openfile:
             # toml files are read as strings
             if suffix == "toml":
