@@ -15,15 +15,15 @@
                 "Manual, experimental"
             ],
             [
-                "Manual, combo",
-                "Manual, experimental"
+                "Manual, experimental",
+                "Manual, combo"
             ],
             [
                 "Manual, combo"
             ],
             [
-                "Inferred by curator",
-                "Manual, experimental"
+                "Manual, experimental",
+                "Inferred by curator"
             ]
         ],
         "phospho_description": [

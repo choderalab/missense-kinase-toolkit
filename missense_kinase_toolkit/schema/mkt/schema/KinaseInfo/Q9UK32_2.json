@@ -18,8 +18,8 @@
                 "Manual, experimental"
             ],
             [
-                "Manual, combo",
-                "Manual, experimental"
+                "Manual, experimental",
+                "Manual, combo"
             ],
             [
                 "Manual, experimental"
@@ -63,8 +63,8 @@
             "seq": "NAAQFGEVYELKEDIGVGSYSVCKRCIHATTNMEFAVKIIDKSKRDPSEEIEILMRYGQHPNIITLKDVFDDGRYVYLVTDLMKGGELLDRILKQKCFSEREASDILYVISKTVDYLHCQGVVHRDLKPSNILYMDESASADSIRICDFGFAKQLRGENGLLLTPCYTANFVAPEVLMQQGYDAACDIWSLGVLFYTMLAGYTPFANGPNDTPEEILLRIGNGKFSLSGGNWDNISDGAKDLLSHMLHMDPHQRYTAEQILKHSWITHRDQLPN",
             "group": "CAMK",
             "hgnc": [
-                "RPS6KA6",
-                "RPS6KA62"
+                "RPS6KA62",
+                "RPS6KA6"
             ],
             "swissprot": "KS6A6_HUMAN",
             "uniprot": "Q9UK32",

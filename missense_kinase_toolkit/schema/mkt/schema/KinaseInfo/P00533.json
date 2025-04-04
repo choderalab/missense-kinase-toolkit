@@ -37,38 +37,32 @@
                 "Manual, experimental"
             ],
             [
-                "Manual, combo",
+                "Manual, experimental",
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental",
+                "Manual, combo"
+            ],
+            [
                 "Manual, experimental"
             ],
             [
-                "Manual, combo",
-                "Manual, experimental"
-            ],
-            [
-                "Manual, experimental"
-            ],
-            [
-                "Manual, combo",
-                "Manual, experimental"
+                "Manual, experimental",
+                "Manual, combo"
             ],
             [
                 "Manual, combo"
             ],
             [
-                "Manual, combo",
-                "Manual, experimental"
-            ],
-            [
-                "Manual, experimental"
-            ],
-            [
-                "Manual, combo",
-                "Manual, experimental"
-            ],
-            [
+                "Manual, experimental",
                 "Manual, combo"
             ],
             [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental",
                 "Manual, combo"
             ],
             [
@@ -78,17 +72,14 @@
                 "Manual, combo"
             ],
             [
-                "Inferred by curator",
-                "Manual, experimental"
-            ],
-            [
-                "Manual, experimental"
-            ],
-            [
-                "Manual, experimental"
+                "Manual, combo"
             ],
             [
                 "Manual, combo"
+            ],
+            [
+                "Manual, experimental",
+                "Inferred by curator"
             ],
             [
                 "Manual, experimental"
@@ -100,12 +91,21 @@
                 "Manual, combo"
             ],
             [
-                "Manual, combo",
                 "Manual, experimental"
             ],
             [
-                "Manual, combo",
                 "Manual, experimental"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental",
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental",
+                "Manual, combo"
             ]
         ],
         "phospho_description": [

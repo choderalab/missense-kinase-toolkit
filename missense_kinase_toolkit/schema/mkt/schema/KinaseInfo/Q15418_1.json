@@ -26,19 +26,19 @@
                 "Manual, combo"
             ],
             [
-                "Manual, combo",
-                "Manual, experimental"
+                "Manual, experimental",
+                "Manual, combo"
             ],
             [
-                "Manual, combo",
-                "Manual, experimental"
+                "Manual, experimental",
+                "Manual, combo"
             ],
             [
                 "Manual, combo"
             ],
             [
-                "Manual, combo",
-                "Manual, experimental"
+                "Manual, experimental",
+                "Manual, combo"
             ],
             [
                 "Manual, experimental"
@@ -90,8 +90,8 @@
             "seq": "SEKADPSHFELLKVLGQGSFGKVFLVRKVTRPDSGHLYAMKVLKKATLKVRDRVRTKMERDILADVNHPFVVKLHYAFQTEGKLYLILDFLRGGDLFTRLSKEVMFTEEDVKFYLAELALGLDHLHSLGIIYRDLKPENILLDEEGHIKLTDFGLSKEAIDHEKKAYSFCGTVEYMAPEVVNRQGHSHSADWWSYGVLMFEMLTGSLPFQGKDRKETMTLILKAKLGMPQFLSTEAQSLLRALFKRNPANRLGSGPDGAEEIKRHVFYSTIDWNKL",
             "group": "AGC",
             "hgnc": [
-                "RPS6KA1",
-                "RPS6KA11"
+                "RPS6KA11",
+                "RPS6KA1"
             ],
             "swissprot": "KS6A1_HUMAN",
             "uniprot": "Q15418",

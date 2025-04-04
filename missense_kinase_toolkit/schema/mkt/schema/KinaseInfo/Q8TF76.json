@@ -16,8 +16,8 @@
                 "Manual, combo"
             ],
             [
-                "Manual, combo",
-                "Manual, experimental"
+                "Manual, experimental",
+                "Manual, combo"
             ],
             [
                 "Manual, combo"
@@ -61,8 +61,8 @@
             "seq": "SHCLPTEKLQRCEKIGEGVFGEVFQTIADHTPVAIKIIAIEGPDLVNGSHQKTFEEILPEIIISKELSLLSGEVCNRTEGFIGLNSVHCVQGSYPPLLLKAWDHYNSTKGSANDRPDFFKDDQLFIVLEFEFGGIDLEQMRTKLSSLATAKSILHQLTASLAVAEASLRFEHRDLHWGNVLLKKTSLKKLHYTLNGKSSTIPSCGLQVSIIDYTLSRLERDGIVVFCDVSMDEDLFTGDGDYQFDIYRLMKKENNNRWGEYHPYSNVLWLHYLTDKMLKQMTFKTKCNTPAMKQIKRKIQEFHRTMLNFSSATDLLCQHSLFK",
             "group": "Other",
             "hgnc": [
-                "GSG2",
-                "HASPIN"
+                "HASPIN",
+                "GSG2"
             ],
             "swissprot": "HASP_HUMAN",
             "uniprot": "Q8TF76",

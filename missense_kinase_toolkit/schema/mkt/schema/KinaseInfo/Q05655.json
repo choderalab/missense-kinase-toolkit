@@ -43,8 +43,8 @@
                 "Manual, combo"
             ],
             [
-                "Manual, combo",
-                "Manual, experimental"
+                "Manual, experimental",
+                "Manual, combo"
             ],
             [
                 "Manual, experimental"
@@ -53,23 +53,23 @@
                 "Manual, combo"
             ],
             [
-                "Manual, combo",
-                "Manual, experimental"
+                "Manual, experimental",
+                "Manual, combo"
             ],
             [
-                "Manual, combo",
-                "Manual, experimental"
+                "Manual, experimental",
+                "Manual, combo"
             ],
             [
-                "Manual, combo",
-                "Manual, experimental"
+                "Manual, experimental",
+                "Manual, combo"
             ],
             [
                 "Manual, combo"
             ],
             [
-                "Manual, combo",
-                "Manual, experimental"
+                "Manual, experimental",
+                "Manual, combo"
             ],
             [
                 "Computational, ISS"
@@ -87,25 +87,25 @@
                 "Manual, experimental"
             ],
             [
-                "Inferred by curator",
-                "Manual, experimental"
+                "Manual, experimental",
+                "Inferred by curator"
             ],
             [
                 "Manual, experimental"
             ],
             [
-                "Manual, combo",
-                "Manual, experimental"
-            ],
-            [
+                "Manual, experimental",
                 "Manual, combo"
             ],
             [
                 "Manual, combo"
             ],
             [
-                "Manual, combo",
-                "Manual, experimental"
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental",
+                "Manual, combo"
             ]
         ],
         "phospho_description": [
