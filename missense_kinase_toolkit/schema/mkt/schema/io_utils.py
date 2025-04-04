@@ -176,7 +176,7 @@ def deserialize_kinase_dict(
         return None
 
     if deserialization_kwargs is None:
-        deserialization_kwargs = DICT_FUNCS[suffix]["kwargs_serialize"]
+        deserialization_kwargs = DICT_FUNCS[suffix]["kwargs_deserialize"]
 
     str_path = return_str_path_from_pkg_data(str_path)
     list_file = glob.glob(os.path.join(str_path, f"*.{suffix}"))
