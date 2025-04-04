@@ -2,17 +2,18 @@ import glob
 import logging
 import os
 import re
+import shutil
 from collections import Counter
 from itertools import chain
 
 from Bio import SeqIO
 from mkt.databases.aligners import Kincore2UniProtAligner
+from mkt.databases.io_utils import extract_tarfiles, get_repo_root
 from mkt.databases.utils import (
     flatten_iterables_in_iterable,
     split_on_first_only,
     try_except_split_concat_str,
 )
-from mkt.schema.io_utils import return_str_path_from_pkg_data
 from mkt.schema.kinase_schema import KinCore, KinCoreCIF, KinCoreFASTA
 from tqdm import tqdm
 
@@ -146,9 +147,7 @@ def extract_pk_fasta_info_as_list(
         logger.error(f"Study {study} not recognized; must be 'af2' or 'md'")
         return None
 
-    str_path = return_str_path_from_pkg_data(
-        pkg_name="mkt.databases", pkg_resource="KinCore"
-    )
+    str_path = os.path.join(get_repo_root(), "data")
 
     str_path_filename = os.path.join(str_path, str_filename)
     if not os.path.exists(str_path_filename):
@@ -205,10 +204,24 @@ def extract_pk_cif_files_as_list() -> list[KinCoreCIF]:
     # from biotite.structure.io.pdbx import CIFFile
     from Bio.PDB.MMCIF2Dict import MMCIF2Dict
 
-    str_path = return_str_path_from_pkg_data(
-        pkg_name="mkt.databases", pkg_resource="KinCore"
+    # http://dunbrack.fccc.edu/kincore/static/downloads/af2activemodels/Kincore_AlphaFold2_ActiveHumanCatalyticKinases_v2.tar.gz
+    path_data = os.path.join(get_repo_root(), "data")
+    path_targzip = os.path.join(
+        get_repo_root(),
+        "data",
+        "Kincore_AlphaFold2_ActiveHumanCatalyticKinases_v2.tar.gz",
     )
-    list_file = glob.glob(os.path.join(str_path, "*.cif"))
+
+    if not os.path.exists(path_data):
+        os.makedirs(path_data)
+    if not os.path.exists(path_targzip):
+        logger.error(
+            f"KinCore tar.gz file not found in {path_targzip}..."
+            "File can be downloaded from: http://dunbrack.fccc.edu/kincore/static/downloads/af2activemodels/Kincore_AlphaFold2_ActiveHumanCatalyticKinases_v2.tar.gz"
+        )
+    extract_tarfiles(path_targzip, path_data)
+
+    list_file = glob.glob(os.path.join(path_data, "*", "*.cif"))
 
     list_out = []
     for file in tqdm(list_file, desc="Extracting and processing CIF files..."):
@@ -235,6 +248,10 @@ def extract_pk_cif_files_as_list() -> list[KinCoreCIF]:
         v["model_no"] = int(v["model_no"].replace("model", ""))
 
     list_out = [KinCoreCIF.model_validate(v) for v in list_out]
+
+    # remove unzipped directory and all contents
+    paths_remove = {os.path.dirname(i) for i in list_file}
+    [shutil.rmtree(i) for i in paths_remove if os.path.isdir(i)]
 
     return list_out
 
