@@ -1,11 +1,48 @@
+from os import path
+from typing import Any
+
+import matplotlib.pyplot as plt
 import numpy as np
 from bokeh.layouts import gridplot
-
-# from bokeh.models import ColumnDataSource, Plot, Grid, Range1d
 from bokeh.models import ColumnDataSource, Range1d
 from bokeh.models.glyphs import Rect, Text
 from bokeh.plotting import figure
 from pydantic.dataclasses import dataclass
+from upsetplot import from_contents, plot
+
+
+def generate_kinase_info_plot(
+    dict_in: dict[str, Any],
+    path_save: str,
+) -> None:
+    """Plot KinaseInfo upset plots from final harmonzied objects.
+
+    Parameters
+    ----------
+    dict_in : dict[str, Any]
+        Dictionary of KinaseInfo objects.
+    path_save : str
+        Path to save the plot.
+
+    Returns
+    -------
+    None
+        None
+    """
+    # generate data
+    list_attr = ["uniprot", "pfam", "kinhub", "klifs", "kincore"]
+    list_proper = ["UniProt", "Pfam", "KinHub", "KLIFS", "KinCore"]
+    list_contents = [
+        [k for k, v in dict_in.items() if getattr(v, attr) is not None]
+        for attr in list_attr
+    ]
+    dict_contents = dict(zip(list_proper, list_contents))
+
+    # generate figure
+    contents = from_contents(dict_contents)
+    fig = plt.figure(figsize=(12, 6))
+    plot(contents, fig=fig, element_size=None)
+    plt.savefig(path.join(path_save, "upset_plot.pdf"), bbox_inches="tight")
 
 
 @dataclass
