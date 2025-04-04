@@ -410,7 +410,7 @@ class TestDatabases:
 
         # test that the function to scrape the KinHub database works
         df_kinhub = scrapers.kinhub()
-        assert df_kinhub.shape[0] == 517
+        assert df_kinhub.shape[0] == 536
         assert df_kinhub.shape[1] == 8
         assert "HGNC Name" in df_kinhub.columns
         assert "UniprotID" in df_kinhub.columns
