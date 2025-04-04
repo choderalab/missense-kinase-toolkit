@@ -122,8 +122,8 @@ class KinHub(BaseModel):
 
     model_config = ConfigDict(use_enum_values=True)
 
-    hgnc_name: str | None
-    kinase_name: str | None
+    hgnc_name: str | None = None
+    kinase_name: str | None = None
     manning_name: str
     xname: str
     group: Group

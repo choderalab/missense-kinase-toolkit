@@ -14,13 +14,16 @@ class TestSchema:
         from mkt.schema import io_utils
 
         dict_kinase = io_utils.deserialize_kinase_dict()
-        assert len(dict_kinase) == 517
+        assert len(dict_kinase) == 566
+        assert (
+            sum(["_" in i for i in dict_kinase.keys()]) == 28
+        )  # 14 proteins with multiple KDs
 
         # missing data
         n_klifs = len(
             [i.hgnc_name for i in dict_kinase.values() if i.klifs is not None]
         )
-        assert n_klifs == 510
+        assert n_klifs == 555
 
         n_pocket = len(
             [
@@ -29,15 +32,15 @@ class TestSchema:
                 if i.klifs is not None and i.klifs.pocket_seq is not None
             ]
         )
-        assert n_pocket == 487
+        assert n_pocket == 519
 
         n_kincore = len(
             [i.hgnc_name for i in dict_kinase.values() if i.kincore is not None]
         )
-        assert n_kincore == 474
+        assert n_kincore == 492
 
         n_pfam = len([i.hgnc_name for i in dict_kinase.values() if i.pfam is not None])
-        assert n_pfam == 468
+        assert n_pfam == 490
 
         n_klif2uniprot = len(
             [
@@ -46,25 +49,66 @@ class TestSchema:
                 if i.KLIFS2UniProtIdx is not None
             ]
         )
-        assert n_klif2uniprot == 487
+        assert n_klif2uniprot == 519
 
         # check ABL1 entries
-        obj_abl1 = dict_kinase["ABL1"]
+        obj_abl1 = dict_kinase["P00519"]
 
         assert obj_abl1.hgnc_name == "ABL1"
 
         assert obj_abl1.uniprot_id == "P00519"
 
+        assert obj_abl1.kinhub.hgnc_name == "ABL1"
         assert obj_abl1.kinhub.kinase_name == "Tyrosine-protein kinase ABL1"
-        assert obj_abl1.kinhub.manning_name == ["ABL"]
-        assert obj_abl1.kinhub.xname == ["ABL1"]
-        assert obj_abl1.kinhub.group == ["TK"]
-        assert obj_abl1.kinhub.family == ["Other"]
+        assert obj_abl1.kinhub.manning_name == "ABL"
+        assert obj_abl1.kinhub.xname == "ABL1"
+        assert obj_abl1.kinhub.group == "TK"
+        assert obj_abl1.kinhub.family == "Other"
 
         assert (
             obj_abl1.uniprot.canonical_seq
             == "MLEICLKLVGCKSKKGLSSSSSCYLEEALQRPVASDFEPQGLSEAARWNSKENLLAGPSENDPNLFVALYDFVASGDNTLSITKGEKLRVLGYNHNGEWCEAQTKNGQGWVPSNYITPVNSLEKHSWYHGPVSRNAAEYLLSSGINGSFLVRESESSPGQRSISLRYEGRVYHYRINTASDGKLYVSSESRFNTLAELVHHHSTVADGLITTLHYPAPKRNKPTVYGVSPNYDKWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVNAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQESSISDEVEKELGKQGVRGAVSTLLQAPELPTKTRTSRRAAEHRDTTDVPEMPHSKGQGESDPLDHEPAVSPLLPRKERGPPEGGLNEDERLLPKDKKTNLFSALIKKKKKTAPTPPKRSSSFREMDGQPERRGAGEEEGRDISNGALAFTPLDTADPAKSPKPSNGAGVPNGALRESGGSGFRSPHLWKKSSTLTSSRLATGEEEGGGSSSKRFLRSCSASCVPHGAKDTEWRSVTLPRDLQSTGRQFDSSTFGGHKSEKPALPRKRAGENRSDQVTRGTVTPPPRLVKKNEEAADEVFKDIMESSPGSSPPNLTPKPLRRQVTVAPASGLPHKEEAGKGSALGTPAAAEPVTPTSKAGSGAPGGTSKGPAEESRVRRHKHSSESPGRDKGKLSRLKPAPPPPPAASAGKAGGKPSQSPSQEAAGEAVLGAKTKATSLVDAVNSDAAKPSQPGEGLKKPVLPATPKPQSAKPSGTPISPAPVPSTLPSASSALAGDQPSSTAFIPLISTRVSLRKTRQPPERIASGAITKGVVLDSTEALCLAISRNSEQMASHSAVLEAGKNLYTFCVSYVDSIQQMRNKFAFREAINKLENNLRELQICPATAGSGPAATQDFSKLLSSVKEISDIVQR"
         )
+        assert obj_abl1.uniprot.phospho_sites == [
+            50,
+            70,
+            115,
+            128,
+            139,
+            172,
+            185,
+            215,
+            226,
+            229,
+            253,
+            257,
+            393,
+            413,
+            446,
+            559,
+            569,
+            618,
+            619,
+            620,
+            659,
+            683,
+            718,
+            735,
+            751,
+            781,
+            814,
+            823,
+            844,
+            852,
+            855,
+            917,
+            977,
+        ]
+        assert (
+            sum([i.startswith("Phospho") for i in obj_abl1.uniprot.phospho_description])
+            == 33
+        )
+        assert len(obj_abl1.uniprot.phospho_evidence) == 33
 
         assert obj_abl1.klifs.gene_name == "ABL1"
         assert obj_abl1.klifs.name == "ABL1"
@@ -90,12 +134,14 @@ class TestSchema:
         assert obj_abl1.pfam.in_alphafold is True
 
         assert (
-            obj_abl1.kincore.seq
-            == "ITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVNAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFET"
+            obj_abl1.kincore.fasta.seq
+            == "KWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVNAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQESSIS"
         )
-        assert obj_abl1.kincore.start == 242
-        assert obj_abl1.kincore.end == 495
+        assert obj_abl1.kincore.fasta.start == 234
+        assert obj_abl1.kincore.fasta.end == 503
         assert obj_abl1.kincore.mismatch is None
+        assert obj_abl1.kincore.start == 1
+        assert obj_abl1.kincore.end == 270
 
         str_dict = "".join(
             [
@@ -114,20 +160,36 @@ class TestSchema:
 
         from mkt.schema import io_utils
 
+        yaml_test = "P24941"
+
         dict_kinase = io_utils.deserialize_kinase_dict()
 
         for suffix in io_utils.DICT_FUNCS.keys():
             print(f"Format: {suffix}")
-            io_utils.serialize_kinase_dict(
-                dict_kinase, suffix=suffix, str_path=f"./{suffix}"
-            )
+            if suffix == "yaml":
+                # only check a single entry given time
+                # ~4 hours to check all (done on 4/4/25)
+                io_utils.serialize_kinase_dict(
+                    {yaml_test: dict_kinase[yaml_test]},
+                    suffix=suffix,
+                    str_path=f"./{suffix}",
+                )
+            else:
+                io_utils.serialize_kinase_dict(
+                    dict_kinase,
+                    suffix=suffix,
+                    str_path=f"./{suffix}",
+                )
             if os.name == "nt" and suffix == "toml":
                 pass
             else:
                 dict_temp = io_utils.deserialize_kinase_dict(
                     suffix=suffix, str_path=f"./{suffix}"
                 )
-                assert dict_kinase == dict_temp
+                if suffix == "yaml":
+                    assert dict_kinase["P24941"] == dict_temp["P24941"]
+                else:
+                    assert dict_kinase == dict_temp
                 print()
                 shutil.rmtree(f"./{suffix}")
 
