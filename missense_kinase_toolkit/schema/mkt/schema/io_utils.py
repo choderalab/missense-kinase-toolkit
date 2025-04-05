@@ -17,15 +17,21 @@ logger = logging.getLogger(__name__)
 DICT_FUNCS = {
     "json": {
         "serialize": json.dumps,
+        "kwargs_serialize": {"default": list, "indent": 4},
         "deserialize": json.load,
+        "kwargs_deserialize": {},
     },
     "yaml": {
         "serialize": yaml.safe_dump,
+        "kwargs_serialize": {"sort_keys": False},
         "deserialize": yaml.safe_load,
+        "kwargs_deserialize": {},
     },
     "toml": {
         "serialize": toml.dumps,
+        "kwargs_serialize": {},
         "deserialize": toml.loads,
+        "kwargs_deserialize": {},
     },
 }
 """dict[str, dict[str, Callable]]: Dictionary of serialization and deserialization functions supported."""
@@ -52,27 +58,40 @@ def return_filenotfound_error_if_empty_or_missing(
         return None
 
 
-def return_str_path(str_path: str | None = None) -> str:
-    """Return the path to the KinaseInfo directory.
+def return_str_path_from_pkg_data(
+    str_path: str | None = None,
+    pkg_name: str | None = None,
+    pkg_resource: str | None = None,
+) -> str:
+    """Return the path to the package data directory or of a user-provided directory.
 
     Parameters
     ----------
     str_path : str | None, optional
         Path to the KinaseInfo directory, by default None.
+    pkg_name : str | None, optional
+        Package name, by default None and will use mkt.schema.
+    pkg_resource : str | None, optional
+        Package resource, by default None and will use KinaseInfo.
 
     Returns
     -------
     str
-        Path to the KinaseInfo directory.
+        Path to the package data or user-provided directory.
     """
+    if pkg_name is None:
+        pkg_name = "mkt.schema"
+    if pkg_resource is None:
+        pkg_resource = "KinaseInfo"
+
     if str_path is None:
         try:
-            str_path = pkg_resources.resource_filename("mkt.schema", "KinaseInfo")
+            str_path = pkg_resources.resource_filename(pkg_name, pkg_resource)
             return_filenotfound_error_if_empty_or_missing(str_path)
         except Exception as e:
             logger.error(
-                f"Could not find KinaseInfo directory within package: {e}"
-                f"\nPlease provide a path to the KinaseInfo directory."
+                f"Could not find {pkg_resource} directory within {pkg_name}: {e}"
+                f"\nPlease provide a path to the {pkg_resource} directory."
             )
     else:
         if not os.path.exists(str_path):
@@ -112,14 +131,11 @@ def serialize_kinase_dict(
         return None
 
     if serialization_kwargs is None:
-        if str_path is None and suffix == "json":
-            serialization_kwargs = {"indent": 4}
-        else:
-            serialization_kwargs = {}
+        serialization_kwargs = DICT_FUNCS[suffix]["kwargs_serialize"]
 
-    str_path = return_str_path(str_path)
+    str_path = return_str_path_from_pkg_data(str_path)
 
-    for key, val in tqdm(kinase_dict.items()):
+    for key, val in tqdm(kinase_dict.items(), desc="Serializing KinaseInfo objects..."):
         with open(f"{str_path}/{key}.{suffix}", "w") as outfile:
             val_serialized = DICT_FUNCS[suffix]["serialize"](
                 val.model_dump(),
@@ -160,13 +176,13 @@ def deserialize_kinase_dict(
         return None
 
     if deserialization_kwargs is None:
-        deserialization_kwargs = {}
+        deserialization_kwargs = DICT_FUNCS[suffix]["kwargs_deserialize"]
 
-    str_path = return_str_path(str_path)
+    str_path = return_str_path_from_pkg_data(str_path)
     list_file = glob.glob(os.path.join(str_path, f"*.{suffix}"))
 
     dict_import = {}
-    for file in tqdm(list_file):
+    for file in tqdm(list_file, desc="Deserializing KinaseInfo objects..."):
         with open(file) as openfile:
             # toml files are read as strings
             if suffix == "toml":
@@ -178,7 +194,7 @@ def deserialize_kinase_dict(
             )
 
             kinase_obj = kinase_schema.KinaseInfo.model_validate(val_deserialized)
-            dict_import[kinase_obj.hgnc_name] = kinase_obj
+            dict_import[kinase_obj.uniprot_id] = kinase_obj
 
     dict_import = {key: dict_import[key] for key in sorted(dict_import.keys())}
 

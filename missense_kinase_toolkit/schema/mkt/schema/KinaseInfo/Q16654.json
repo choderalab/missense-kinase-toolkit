@@ -1,0 +1,34 @@
+{
+    "hgnc_name": "PDK4",
+    "uniprot_id": "Q16654",
+    "uniprot": {
+        "header": ">sp|Q16654|PDK4_HUMAN [Pyruvate dehydrogenase (acetyl-transferring)] kinase isozyme 4, mitochondrial OS=Homo sapiens OX=9606 GN=PDK4 PE=1 SV=1",
+        "canonical_seq": "MKAARFVLRSAGSLNGAGLVPREVEHFSRYSPSPLSMKQLLDFGSENACERTSFAFLRQELPVRLANILKEIDILPTQLVNTSSVQLVKSWYIQSLMDLVEFHEKSPDDQKALSDFVDTLIKVRNRHHNVVPTMAQGIIEYKDACTVDPVTNQNLQYFLDRFYMNRISTRMLMNQHILIFSDSQTGNPSHIGSIDPNCDVVAVVQDAFECSRMLCDQYYLSSPELKLTQVNGKFPDQPIHIVYVPSHLHHMLFELFKNAMRATVEHQENQPSLTPIEVIVVLGKEDLTIKISDRGGGVPLRIIDRLFSYTYSTAPTPVMDNSRNAPLAGFGYGLPISRLYAKYFQGDLNLYSLSGYGTDAIIYLKALSSESIEKLPVFNKSAFKHYQMSSEADDWCIPSREPKNLAKEVAM",
+        "phospho_sites": null,
+        "phospho_evidence": null,
+        "phospho_description": null
+    },
+    "kinhub": {
+        "hgnc_name": "PDK4",
+        "kinase_name": "[Pyruvate dehydrogenase [lipoamide]] kinase isozyme 4",
+        "manning_name": "PDHK4",
+        "xname": "PDHK4",
+        "group": "Atypical",
+        "family": "PDHK"
+    },
+    "klifs": {
+        "gene_name": "PDK4",
+        "name": "PDHK4",
+        "full_name": "[Pyruvate dehydrogenase (acetyl-transferring)] kinase isozyme 4, mitochondrial",
+        "group": "Atypical",
+        "family": "PDHK",
+        "iuphar": 2144,
+        "kinase_id": 93,
+        "pocket_seq": null
+    },
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null,
+    "bool_offset": true
+}

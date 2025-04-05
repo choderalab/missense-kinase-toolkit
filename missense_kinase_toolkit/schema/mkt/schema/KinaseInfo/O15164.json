@@ -1,0 +1,108 @@
+{
+    "hgnc_name": "TRIM24",
+    "uniprot_id": "O15164",
+    "uniprot": {
+        "header": ">sp|O15164|TIF1A_HUMAN Transcription intermediary factor 1-alpha OS=Homo sapiens OX=9606 GN=TRIM24 PE=1 SV=3",
+        "canonical_seq": "MEVAVEKAVAAAAAASAAASGGPSAAPSGENEAESRQGPDSERGGEAARLNLLDTCAVCHQNIQSRAPKLLPCLHSFCQRCLPAPQRYLMLPAPMLGSAETPPPVPAPGSPVSGSSPFATQVGVIRCPVCSQECAERHIIDNFFVKDTTEVPSSTVEKSNQVCTSCEDNAEANGFCVECVEWLCKTCIRAHQRVKFTKDHTVRQKEEVSPEAVGVTSQRPVFCPFHKKEQLKLYCETCDKLTCRDCQLLEHKEHRYQFIEEAFQNQKVIIDTLITKLMEKTKYIKFTGNQIQNRIIEVNQNQKQVEQDIKVAIFTLMVEINKKGKALLHQLESLAKDHRMKLMQQQQEVAGLSKQLEHVMHFSKWAVSSGSSTALLYSKRLITYRLRHLLRARCDASPVTNNTIQFHCDPSFWAQNIINLGSLVIEDKESQPQMPKQNPVVEQNSQPPSGLSSNQLSKFPTQISLAQLRLQHMQQQVMAQRQQVQRRPAPVGLPNPRMQGPIQQPSISHQQPPPRLINFQNHSPKPNGPVLPPHPQQLRYPPNQNIPRQAIKPNPLQMAFLAQQAIKQWQISSGQGTPSTTNSTSSTPSSPTITSAAGYDGKAFGSPMIDLSSPVGGSYNLPSLPDIDCSSTIMLDNIVRKDTNIDHGQPRPPSNRTVQSPNSSVPSPGLAGPVTMTSVHPPIRSPSASSVGSRGSSGSSSKPAGADSTHKVPVVMLEPIRIKQENSGPPENYDFPVVIVKQESDEESRPQNANYPRSILTSLLLNSSQSSTSEETVLRSDAPDSTGDQPGLHQDNSSNGKSEWLDPSQKSPLHVGETRKEDDPNEDWCAVCQNGGELLCCEKCPKVFHLSCHVPTLTNFPSGEWICTFCRDLSKPEVEYDCDAPSHNSEKKKTEGLVKLTPIDKRKCERLLLFLYCHEMSLAFQDPVPLTVPDYYKIIKNPMDLSTIKKRLQEDYSMYSKPEDFVADFRLIFQNCAEFNEPDSEVANAGIKLENYFEELLKNLYPEKRFPKPEFRNESEDNKFSDDSDDDFVQPRKKRLKSIEERQLLK",
+        "phospho_sites": [
+            101,
+            110,
+            654,
+            660,
+            667,
+            744,
+            768,
+            808,
+            811,
+            818,
+            1019,
+            1025,
+            1028,
+            1042
+        ],
+        "phospho_evidence": [
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental",
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ]
+        ],
+        "phospho_description": [
+            "Phosphothreonine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine; by ATM",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphothreonine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine"
+        ]
+    },
+    "kinhub": {
+        "hgnc_name": "TRIM24",
+        "kinase_name": "Transcription intermediary factor 1-alpha",
+        "manning_name": "TIF1a",
+        "xname": "TIF1a",
+        "group": "Atypical",
+        "family": "Other"
+    },
+    "klifs": {
+        "gene_name": "TRIM24",
+        "name": "TIF1a",
+        "full_name": "Transcription intermediary factor 1-alpha",
+        "group": "Atypical",
+        "family": "Other",
+        "iuphar": 2252,
+        "kinase_id": 105,
+        "pocket_seq": null
+    },
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null,
+    "bool_offset": true
+}

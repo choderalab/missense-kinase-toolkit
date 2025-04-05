@@ -1,0 +1,47 @@
+{
+    "hgnc_name": "PDK2",
+    "uniprot_id": "Q15119",
+    "uniprot": {
+        "header": ">sp|Q15119|PDK2_HUMAN [Pyruvate dehydrogenase (acetyl-transferring)] kinase isozyme 2, mitochondrial OS=Homo sapiens OX=9606 GN=PDK2 PE=1 SV=2",
+        "canonical_seq": "MRWVWALLKNASLAGAPKYIEHFSKFSPSPLSMKQFLDFGSSNACEKTSFTFLRQELPVRLANIMKEINLLPDRVLSTPSVQLVQSWYVQSLLDIMEFLDKDPEDHRTLSQFTDALVTIRNRHNDVVPTMAQGVLEYKDTYGDDPVSNQNIQYFLDRFYLSRISIRMLINQHTLIFDGSTNPAHPKHIGSIDPNCNVSEVVKDAYDMAKLLCDKYYMASPDLEIQEINAANSKQPIHMVYVPSHLYHMLFELFKNAMRATVESHESSLILPPIKVMVALGEEDLSIKMSDRGGGVPLRKIERLFSYMYSTAPTPQPGTGGTPLAGFGYGLPISRLYAKYFQGDLQLFSMEGFGTDAVIYLKALSTDSVERLPVYNKSAWRHYQTIQEAGDWCVPSTEPKNTSTYRVS",
+        "phospho_sites": [
+            215,
+            216
+        ],
+        "phospho_evidence": [
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Computational, ISS"
+            ]
+        ],
+        "phospho_description": [
+            "Phosphotyrosine",
+            "Phosphotyrosine"
+        ]
+    },
+    "kinhub": {
+        "hgnc_name": "PDK2",
+        "kinase_name": "[Pyruvate dehydrogenase [lipoamide]] kinase isozyme 2",
+        "manning_name": "PDHK2",
+        "xname": "PDHK2",
+        "group": "Atypical",
+        "family": "PDHK"
+    },
+    "klifs": {
+        "gene_name": "PDK2",
+        "name": "PDHK2",
+        "full_name": "[Pyruvate dehydrogenase (acetyl-transferring)] kinase isozyme 2, mitochondrial",
+        "group": "Atypical",
+        "family": "PDHK",
+        "iuphar": 2142,
+        "kinase_id": 91,
+        "pocket_seq": null
+    },
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null,
+    "bool_offset": true
+}

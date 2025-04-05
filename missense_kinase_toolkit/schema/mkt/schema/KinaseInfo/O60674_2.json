@@ -1,0 +1,216 @@
+{
+    "hgnc_name": "JAK2",
+    "uniprot_id": "O60674_2",
+    "uniprot": {
+        "header": ">sp|O60674|JAK2_HUMAN Tyrosine-protein kinase JAK2 OS=Homo sapiens OX=9606 GN=JAK2 PE=1 SV=2",
+        "canonical_seq": "MGMACLTMTEMEGTSTSSIYQNGDISGNANSMKQIDPVLQVYLYHSLGKSEADYLTFPSGEYVAEEICIAASKACGITPVYHNMFALMSETERIWYPPNHVFHIDESTRHNVLYRIRFYFPRWYCSGSNRAYRHGISRGAEAPLLDDFVMSYLFAQWRHDFVHGWIKVPVTHETQEECLGMAVLDMMRIAKENDQTPLAIYNSISYKTFLPKCIRAKIQDYHILTRKRIRYRFRRFIQQFSQCKATARNLKLKYLINLETLQSAFYTEKFEVKEPGSGPSGEEIFATIIITGNGGIQWSRGKHKESETLTEQDLQLYCDFPNIIDVSIKQANQEGSNESRVVTIHKQDGKNLEIELSSLREALSFVSLIDGYYRLTADAHHYLCKEVAPPAVLENIQSNCHGPISMDFAISKLKKAGNQTGLYVLRCSPKDFNKYFLTFAVERENVIEYKHCLITKNENEEYNLSGTKKNFSSLKDLLNCYQMETVRSDNIIFQFTKCCPPKPKDKSNLLVFRTNGVSDVPTSPTLQRPTHMNQMVFHKIRNEDLIFNESLGQGTFTKIFKGVRREVGDYGQLHETEVLLKVLDKAHRNYSESFFEAASMMSKLSHKHLVLNYGVCVCGDENILVQEFVKFGSLDTYLKKNKNCINILWKLEVAKQLAWAMHFLEENTLIHGNVCAKNILLIREEDRKTGNPPFIKLSDPGISITVLPKDILQERIPWVPPECIENPKNLNLATDKWSFGTTLWEICSGGDKPLSALDSQRKLQFYEDRHQLPAPKWAELANLINNCMDYEPDFRPSFRAIIRDLNSLFTPDYELLTENDMLPNMRIGALGFSGAFEDRDPTQFEERHLKFLQQLGKGNFGSVEMCRYDPLQDNTGEVVAVKKLQHSTEEHLRDFEREIEILKSLQHDNIVKYKGVCYSAGRRNLKLIMEYLPYGSLRDYLQKHKERIDHIKLLQYTSQICKGMEYLGTKRYIHRDLATRNILVENENRVKIGDFGLTKVLPQDKEYYKVKEPGESPIFWYAPESLTESKFSVASDVWSFGVVLYELFTYIEKSKSPPAEFMRMIGNDKQGQMIVFHLIELLKNNGRLPRPDGCPDEIYMIMTECWNNNVNQRPSFRDLALRVDQIRDNMAG",
+        "phospho_sites": [
+            119,
+            372,
+            373,
+            523,
+            570,
+            813,
+            868,
+            966,
+            972,
+            1007,
+            1008
+        ],
+        "phospho_evidence": [
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Inferred by curator"
+            ]
+        ],
+        "phospho_description": [
+            "Phosphotyrosine; by autocatalysis",
+            "Phosphotyrosine",
+            "Phosphotyrosine",
+            "Phosphoserine",
+            "Phosphotyrosine",
+            "Phosphotyrosine",
+            "Phosphotyrosine; by autocatalysis",
+            "Phosphotyrosine; by autocatalysis",
+            "Phosphotyrosine; by autocatalysis",
+            "Phosphotyrosine; by autocatalysis",
+            "Phosphotyrosine; by autocatalysis"
+        ]
+    },
+    "kinhub": {
+        "hgnc_name": "JAK2",
+        "kinase_name": "Tyrosine-protein kinase JAK2",
+        "manning_name": "Domain2_JAK2",
+        "xname": "JAK2_b",
+        "group": "TK",
+        "family": "Other"
+    },
+    "klifs": {
+        "gene_name": "JAK2-b",
+        "name": "JAK2-b",
+        "full_name": "Janus kinase 2 (2nd domain)",
+        "group": "TK",
+        "family": "Other",
+        "iuphar": 2048,
+        "kinase_id": 439,
+        "pocket_seq": "ESLGQGTFTKIFKVLLKVLESFFEAASMMSKLKHLVLNYGVILVQEFVKFGSLDTYLKKFLEENTLIHGNVCAKNILLTGNPPFI"
+    },
+    "pfam": {
+        "domain_name": "Protein tyrosine and serine/threonine kinase",
+        "start": 546,
+        "end": 805,
+        "protein_length": 1132,
+        "pfam_accession": "PF07714",
+        "in_alphafold": true
+    },
+    "kincore": null,
+    "KLIFS2UniProtIdx": {
+        "I:1": 549,
+        "I:2": 550,
+        "I:3": 551,
+        "g.l:4": 552,
+        "g.l:5": 553,
+        "g.l:6": 554,
+        "g.l:7": 555,
+        "g.l:8": 556,
+        "g.l:9": 557,
+        "II:10": 558,
+        "II:11": 559,
+        "II:12": 560,
+        "II:13": 561,
+        "III:14": 578,
+        "III:15": 579,
+        "III:16": 580,
+        "III:17": 581,
+        "III:18": 582,
+        "III:19": 583,
+        "\u03b1C:20": 592,
+        "\u03b1C:21": 593,
+        "\u03b1C:22": 594,
+        "\u03b1C:23": 595,
+        "\u03b1C:24": 596,
+        "\u03b1C:25": 597,
+        "\u03b1C:26": 598,
+        "\u03b1C:27": 599,
+        "\u03b1C:28": 600,
+        "\u03b1C:29": 601,
+        "\u03b1C:30": 602,
+        "b.l:31": 603,
+        "b.l:32": 604,
+        "b.l:33": 607,
+        "b.l:34": 608,
+        "b.l:35": 609,
+        "b.l:36": 610,
+        "b.l:37": 611,
+        "IV:38": 612,
+        "IV:39": 613,
+        "IV:40": 614,
+        "IV:41": 615,
+        "V:42": 623,
+        "V:43": 624,
+        "V:44": 625,
+        "GK:45": 626,
+        "hinge:46": 627,
+        "hinge:47": 628,
+        "hinge:48": 629,
+        "linker:49": 630,
+        "linker:50": 631,
+        "linker:51": 632,
+        "linker:52": 633,
+        "\u03b1D:53": 634,
+        "\u03b1D:54": 635,
+        "\u03b1D:55": 636,
+        "\u03b1D:56": 637,
+        "\u03b1D:57": 638,
+        "\u03b1D:58": 639,
+        "\u03b1D:59": 640,
+        "\u03b1E:60": 663,
+        "\u03b1E:61": 664,
+        "\u03b1E:62": 665,
+        "\u03b1E:63": 666,
+        "\u03b1E:64": 667,
+        "VI:65": 668,
+        "VI:66": 669,
+        "VI:67": 670,
+        "c.l:68": 671,
+        "c.l:69": 672,
+        "c.l:70": 673,
+        "c.l:71": 674,
+        "c.l:72": 675,
+        "c.l:73": 676,
+        "c.l:74": 677,
+        "c.l:75": 678,
+        "VII:76": 679,
+        "VII:77": 680,
+        "VII:78": 681,
+        "VIII:79": 689,
+        "xDFG:80": 690,
+        "xDFG:81": 691,
+        "xDFG:82": 692,
+        "xDFG:83": 693,
+        "a.l:84": 694,
+        "a.l:85": 695
+    },
+    "KLIFS2UniProtSeq": {
+        "I": "ESL",
+        "g.l": "GQGTFT",
+        "II": "KIFK",
+        "II:III": "GVRREVGDYGQLHETE",
+        "III": "VLLKVL",
+        "III:\u03b1C": "DKAHRNYS",
+        "\u03b1C": "ESFFEAASMMS",
+        "b.l_1": "KL",
+        "b.l_intra": "SH",
+        "b.l_2": "KHLVL",
+        "IV": "NYGV",
+        "IV:V": "CVCGDEN",
+        "V": "ILV",
+        "GK": "Q",
+        "hinge": "EFV",
+        "hinge:linker": null,
+        "linker_1": "K",
+        "linker_intra": null,
+        "linker_2": "FGS",
+        "\u03b1D": "LDTYLKK",
+        "\u03b1D:\u03b1E": "NKNCINILWKLEVAKQLAWAMH",
+        "\u03b1E": "FLEEN",
+        "\u03b1E:VI": null,
+        "VI": "TLI",
+        "c.l": "HGNVCAKN",
+        "VII": "ILL",
+        "VII:VIII": "IREEDRK",
+        "VIII": "T",
+        "xDFG": "GNPP",
+        "a.l": "FI"
+    },
+    "bool_offset": true
+}

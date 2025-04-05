@@ -1,0 +1,45 @@
+{
+    "hgnc_name": "PIP5K1B",
+    "uniprot_id": "O14986",
+    "uniprot": {
+        "header": ">sp|O14986|PI51B_HUMAN Phosphatidylinositol 4-phosphate 5-kinase type-1 beta OS=Homo sapiens OX=9606 GN=PIP5K1B PE=1 SV=2",
+        "canonical_seq": "MSSAAENGEAAPGKQNEEKTYKKTASSAIKGAIQLGIGYTVGNLTSKPERDVLMQDFYVVESVFLPSEGSNLTPAHHYPDFRFKTYAPLAFRYFRELFGIKPDDYLYSICSEPLIELSNPGASGSLFFVTSDDEFIIKTVQHKEAEFLQKLLPGYYMNLNQNPRTLLPKFYGLYCMQSGGINIRIVVMNNVLPRSMRMHFTYDLKGSTYKRRASRKEREKSNPTFKDLDFLQDMHEGLYFDTETYNALMKTLQRDCRVLESFKIMDYSLLLGIHFLDHSLKEKEEETPQNVPDAKRTGMQKVLYSTAMESIQGPGKSGDGIITENPDTMGGIPAKSHRGEKLLLFMGIIDILQSYRLMKKLEHSWKALVYDGDTVSVHRPSFYADRFLKFMNSRVFKKIQALKASPSKKRCNSIAALKATSQEIVSSISQEWKDEKRDLLTEGQSFSSLDEEALGSRHRPDLVPSTPSLFEAASLATTISSSSLYVNEHYPHDRPTLYSNSKGLPSSSTFTLEEGTIYLTAEPNTLEVQDDNASVLDVYL",
+        "phospho_sites": [
+            445,
+            447,
+            448
+        ],
+        "phospho_evidence": [
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Computational, ISS"
+            ]
+        ],
+        "phospho_description": [
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine"
+        ]
+    },
+    "kinhub": null,
+    "klifs": {
+        "gene_name": "PIP5K1B",
+        "name": "PIP5K1B",
+        "full_name": "phosphatidylinositol-4-phosphate 5-kinase type 1 beta",
+        "group": "Atypical",
+        "family": "PIPK",
+        "iuphar": 2500,
+        "kinase_id": 1102,
+        "pocket_seq": null
+    },
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null,
+    "bool_offset": true
+}

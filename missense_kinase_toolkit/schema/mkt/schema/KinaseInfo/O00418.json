@@ -1,0 +1,158 @@
+{
+    "hgnc_name": "EEF2K",
+    "uniprot_id": "O00418",
+    "uniprot": {
+        "header": ">sp|O00418|EF2K_HUMAN Eukaryotic elongation factor 2 kinase OS=Homo sapiens OX=9606 GN=EEF2K PE=1 SV=2",
+        "canonical_seq": "MADEDLIFRLEGVDGGQSPRAGHDGDSDGDSDDEEGYFICPITDDPSSNQNVNSKVNKYYSNLTKSERYSSSGSPANSFHFKEAWKHAIQKAKHMPDPWAEFHLEDIATERATRHRYNAVTGEWLDDEVLIKMASQPFGRGAMRECFRTKKLSNFLHAQQWKGASNYVAKRYIEPVDRDVYFEDVRLQMEAKLWGEEYNRHKPPKQVDIMQMCIIELKDRPGKPLFHLEHYIEGKYIKYNSNSGFVRDDNIRLTPQAFSHFTFERSGHQLIVVDIQGVGDLYTDPQIHTETGTDFGDGNLGVRGMALFFYSHACNRICESMGLAPFDLSPRERDAVNQNTKLLQSAKTILRGTEEKCGSPQVRTLSGSRPPLLRPLSENSGDENMSDVTFDSLPSSPSSATPHSQKLDHLHWPVFSDLDNMASRDHDHLDNHRESENSGDSGYPSEKRGELDDPEPREHGHSYSNRKYESDEDSLGSSGRVCVEKWNLLNSSRLHLPRASAVALEVQRLNALDLEKKIGKSILGKVHLAMVRYHEGGRFCEKGEEWDQESAVFHLEHAANLGELEAIVGLGLMYSQLPHHILADVSLKETEENKTKGFDYLLKAAEAGDRQSMILVARAFDSGQNLSPDRCQDWLEALHWYNTALEMTDCDEGGEYDGMQDEPRYMMLAREAEMLFTGGYGLEKDPQRSGDLYTQAAEAAMEAMKGRLANQYYQKAEEAWAQMEE",
+        "phospho_sites": [
+            18,
+            27,
+            61,
+            66,
+            70,
+            71,
+            72,
+            74,
+            78,
+            243,
+            348,
+            353,
+            359,
+            366,
+            392,
+            398,
+            435,
+            445,
+            470,
+            474,
+            477,
+            491,
+            500
+        ],
+        "phospho_evidence": [
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental",
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental",
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental",
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental",
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental",
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental",
+                "Manual, combo"
+            ],
+            [
+                "Computational, ISS"
+            ]
+        ],
+        "phospho_description": [
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine; by autocatalysis and TRPM7",
+            "Phosphoserine",
+            "Phosphothreonine; by autocatalysis",
+            "Phosphothreonine; by autocatalysis",
+            "Phosphoserine; by MAPK13 and CDK1",
+            "Phosphoserine; by autocatalysis, RPS6KA1 and RPS6KB1",
+            "Phosphoserine",
+            "Phosphoserine; by AMPK",
+            "Phosphoserine",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine",
+            "Phosphoserine; by autocatalysis",
+            "Phosphoserine; by PKA"
+        ]
+    },
+    "kinhub": {
+        "hgnc_name": "EEF2K",
+        "kinase_name": "Eukaryotic elongation factor 2 kinase",
+        "manning_name": "eEF2K",
+        "xname": "eEF2K",
+        "group": "Atypical",
+        "family": "Alpha"
+    },
+    "klifs": {
+        "gene_name": "EEF2K",
+        "name": "eEF2K",
+        "full_name": "Eukaryotic elongation factor 2 kinase",
+        "group": "Atypical",
+        "family": "Alpha",
+        "iuphar": 2014,
+        "kinase_id": 80,
+        "pocket_seq": null
+    },
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null,
+    "bool_offset": true
+}

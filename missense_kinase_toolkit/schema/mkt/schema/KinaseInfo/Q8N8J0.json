@@ -1,0 +1,27 @@
+{
+    "hgnc_name": "PI4KAP1",
+    "uniprot_id": "Q8N8J0",
+    "uniprot": {
+        "header": ">sp|Q8N8J0|PI4P1_HUMAN Putative inactive phosphatidylinositol 4-kinase alpha-like protein P1 OS=Homo sapiens OX=9606 GN=PI4KAP1 PE=5 SV=1",
+        "canonical_seq": "MTVEQKFGLFSAEIKEADPLAASEASQPKPCPPEVTPHYIWIDFLVQRFEIAKYCSSDQVEIFSSLLQRSMSLNIGGAKGSMNRHVAAIGPRFKLLTLGLSLLHADVVPNATIRNVLREKIYSTAFDYFSCPPKFPTQGEKRLREDISIMIKFWTAMFSDKKYLTASQLVPPADIGDLREQLVEENTGSLSGPAKDFYQREFDFFNKITNVSAVIKPYPKGDQRKKACLSALSEVTVQPGCSLPSNPEAIVLDVDYKSGTPM",
+        "phospho_sites": null,
+        "phospho_evidence": null,
+        "phospho_description": null
+    },
+    "kinhub": null,
+    "klifs": {
+        "gene_name": "PI4KAP1",
+        "name": "PI4KAP1",
+        "full_name": "phosphatidylinositol 4-kinase alpha pseudogene 1",
+        "group": "Atypical",
+        "family": "PIK",
+        "iuphar": 0,
+        "kinase_id": 1109,
+        "pocket_seq": null
+    },
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null,
+    "bool_offset": true
+}

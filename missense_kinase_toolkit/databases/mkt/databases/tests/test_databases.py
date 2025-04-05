@@ -72,9 +72,10 @@ class TestDatabases:
         from mkt.databases import uniprot, utils_requests
 
         # conform with SwissProt ID pattern
-        uniprot.UniProtFASTA("L91119")
+        uniprot_id = "L91119"
+        uniprot.UniProtFASTA(uniprot_id)
         out, _ = capsys.readouterr()
-        assert out == "Error code: 400 (Bad request)\n"
+        assert out == f"Error code: 400 (Bad request)\nUniProt ID: {uniprot_id}\n\n"
 
         utils_requests.print_status_code_if_res_not_ok(
             requests.get("https://rest.uniprot.org/uniprotkb/TEST"),
@@ -172,28 +173,42 @@ class TestDatabases:
         assert test.hgnc == "ABL1"
 
     def test_kincore_klifs(self):
+        from itertools import chain
+
         from mkt.databases import klifs, uniprot
         from mkt.databases.kincore import (
             align_kincore2uniprot,
-            extract_pk_fasta_info_as_dict,
+            extract_pk_cif_files_as_list,
+            harmonize_kincore_fasta_cif,
         )
 
         # test KinCore
         uniprot_id = "P00533"
         egfr_uniprot = uniprot.UniProtFASTA(uniprot_id)
-        dict_kincore = extract_pk_fasta_info_as_dict()
+        dict_kincore = harmonize_kincore_fasta_cif()
+
+        # make sure the number of non-None cif files is correct
+        list_dict_cif_hgnc = [
+            [entry.cif.hgnc for entry in v if entry.cif is not None]
+            for v in dict_kincore.values()
+        ]
+        list_dict_cif_hgnc = list(chain(*list_dict_cif_hgnc))
+        list_kincore_cif = extract_pk_cif_files_as_list()
+        assert len(list_dict_cif_hgnc) == len(list_kincore_cif)
+
+        assert len(dict_kincore[uniprot_id]) == 1
 
         egfr_align = align_kincore2uniprot(
-            str_kincore=dict_kincore[uniprot_id]["seq"],
+            str_kincore=dict_kincore[uniprot_id][0].fasta.seq,
             str_uniprot=egfr_uniprot._sequence,
         )
 
         assert (
             egfr_align["seq"]
-            == "FKKIKVLGSGAFGTVYKGLWIPEGEKVKIPVAIKELREATSPKANKEILDEAYVMASVDNPHVCRLLGICLTSTVQLITQLMPFGCLLDYVREHKDNIGSQYLLNWCVQIAKGMNYLEDRRLVHRDLAARNVLVKTPQHVKITDFGLAKLLGAEEKEYHAEGGKVPIKWMALESILHRIYTHQSDVWSYGVTVWELMTFGSKPYDGIPASEISSILEKGERLPQPPICTIDVYMIMVKCWMIDADSRPKFRELIIEFSK"
+            == "LRILKETEFKKIKVLGSGAFGTVYKGLWIPEGEKVKIPVAIKELREATSPKANKEILDEAYVMASVDNPHVCRLLGICLTSTVQLITQLMPFGCLLDYVREHKDNIGSQYLLNWCVQIAKGMNYLEDRRLVHRDLAARNVLVKTPQHVKITDFGLAKLLGAEEKEYHAEGGKVPIKWMALESILHRIYTHQSDVWSYGVTVWELMTFGSKPYDGIPASEISSILEKGERLPQPPICTIDVYMIMVKCWMIDADSRPKFRELIIEFSKMARDPQRY"
         )
-        assert egfr_align["start"] == 712
-        assert egfr_align["end"] == 970
+        assert egfr_align["start"] == 704
+        assert egfr_align["end"] == 978
         assert egfr_align["mismatch"] is None
 
         # test KLIFS
@@ -395,7 +410,7 @@ class TestDatabases:
 
         # test that the function to scrape the KinHub database works
         df_kinhub = scrapers.kinhub()
-        assert df_kinhub.shape[0] == 517
+        assert df_kinhub.shape[0] == 536
         assert df_kinhub.shape[1] == 8
         assert "HGNC Name" in df_kinhub.columns
         assert "UniprotID" in df_kinhub.columns

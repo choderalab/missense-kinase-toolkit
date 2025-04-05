@@ -405,7 +405,7 @@ class KinaseInfo(KLIFS):
             if hasattr(e, "status_code"):
                 # 404 error: kinase not found in KLIFS
                 if e.status_code == 404:
-                    print(
+                    logger.warning(
                         f"Kinase {self.search_term} "
                         f"(field: {self.search_field} not found in KLIFS"
                     )
@@ -413,19 +413,19 @@ class KinaseInfo(KLIFS):
                     self.status_code = 404
                 # 500 error: server error
                 elif 500 <= e.status_code < 600:
-                    print(f"Server error: {e.status_code}")
+                    logger.warning(f"Server error: {e.status_code}")
                     self.status_code = e.status_code
                     list_kinase_info = None
                 # all other Exceptions
                 else:
-                    print(
+                    logger.warning(
                         f"Error {e} in query_kinase_info for "
                         f"{self.search_term} (field: {self.search_field})"
                     )
                     self.status_code = e.status_code
                     list_kinase_info = None
             else:
-                print(f"Error {e} in query_kinase_info for {self.search_term}")
+                logger.warning(f"Error {e} in query_kinase_info for {self.search_term}")
                 self.status_code = None
         if self.status_code == 200:
             list_kinase_info = [
@@ -624,7 +624,7 @@ class KLIFSPocket:
             region = "linker"
 
         if len(list_idx) > 1:
-            logging.error(
+            logger.error(
                 f"{len(list_idx)} correct alignments found for {region} region\n{list_alignments}"
             )
             return None
@@ -633,8 +633,9 @@ class KLIFSPocket:
             if len(alignments) == 1:
                 alignment = alignments[0]
             else:
-                logging.error(
+                logger.error(
                     f"{len(alignments)} non-heuristic alignments found for {region} region\n"
+                    f""
                     f"{[print(i) for i in alignments]}"
                 )
                 return None
@@ -814,6 +815,20 @@ class KLIFSPocket:
                     len_offset = len(self.remove_gaps_from_klifs(str_klifs)) - len_klifs
                     list_substring_idx = [i + len_offset for i in list_substring_idx]
 
+            # Q9UBF8 linker region maps exactly to earlier in seq; match not exact (linker)
+            # don't allow exact matches in locations < max idx previously found
+            try:
+                idx_max = max(self.list_substring_idxs)[0]
+                if max(list_substring_idx) < idx_max:
+                    logger.warning(
+                        f"Match at found at {list_substring_idx[0]} "
+                        f"occurs before prior match at {idx_max}..."
+                    )
+                    list_substring_idx = []
+            except Exception as e:
+                logger.info(f"Error {e} in iterate_klifs_alignment. Continuing...")
+                pass
+
             self.list_klifs_region.append(klifs_region_start + ":" + klifs_region_end)
             self.list_klifs_substr_match.append(str_klifs)
             self.list_substring_idxs.append(list_substring_idx)
@@ -857,9 +872,22 @@ class KLIFSPocket:
                         idx=idx,
                         align_fn=Kincore2UniProtAligner(),
                     )
-                    if len(align_local) == 1 and align_local[
+                    # do not allow mismatches in local alignment
+                    criteria1 = (
+                        "-" not in align_local[0][0]
+                        and align_local.sequences[0] != align_local.sequences[1]
+                    )
+                    # single local alignment where target == KLIFS pocket
+                    criteria2 = len(align_local) == 1 and align_local[
                         0
-                    ].target == self.remove_gaps_from_klifs(align_local[0][0, :]):
+                    ].target == self.remove_gaps_from_klifs(align_local[0][0, :])
+                    if criteria1:
+                        logger.warning(
+                            "Alignment mismatch in local alignment for "
+                            f"{self.list_klifs_region[idx]} region\n"
+                            f"{align_local.sequences[0]} vs.{align_local.sequences[1]}"
+                        )
+                    if not criteria1 and criteria2:
                         list_local = self.return_idx_of_alignment_match(align_local[0])
                         self.list_substring_idxs[idx] = [
                             i + start_local for i in list_local
@@ -925,7 +953,7 @@ class KLIFSPocket:
                 if bool_offset:
                     i = i - 1
                 if self.uniprotSeq[i] != self.klifsSeq[idx]:
-                    logging.error(
+                    logger.error(
                         f"Alignment mismatch at {idx} position in KLIFS pocket and {i} of UniProt\n"
                         f"UniProt: {self.uniprotSeq[i]}\n"
                         f"KLIFS: {self.klifsSeq[idx]}\n"
@@ -933,7 +961,7 @@ class KLIFSPocket:
                     return None
             else:
                 if self.klifsSeq[idx] != "-":
-                    logging.error(
+                    logger.error(
                         f"Alignment mismatch at {idx + 1} position in KLIFS pocket and {i} of UniProt\n"
                         f"UniProt: -\n"
                         f"KLIFS: {self.klifsSeq[idx]}\n"
@@ -1045,7 +1073,6 @@ class KLIFSPocket:
 
         """
         if bool_bl:
-            region, idx_in, idx_out = "b.l", 1, 2
             region, idx_in, idx_out = "b.l", 1, 2
         else:
             region, idx_in, idx_out = "linker", 0, 1
