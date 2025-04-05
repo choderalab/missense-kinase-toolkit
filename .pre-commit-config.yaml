@@ -16,16 +16,19 @@ repos:
   hooks:
   - id: black
     files: ^missense_kinase_toolkit
+    exclude: ^missense_kinase_toolkit/schema/mkt/schema/KinaseInfo/
 - repo: https://github.com/PyCQA/isort
   rev: 5.13.2
   hooks:
   - id: isort
     files: ^missense_kinase_toolkit
+    exclude: ^missense_kinase_toolkit/schema/mkt/schema/KinaseInfo/
 - repo: https://github.com/PyCQA/flake8
   rev: 7.1.1
   hooks:
   - id: flake8
     files: ^missense_kinase_toolkit
+    exclude: ^missense_kinase_toolkit/schema/mkt/schema/KinaseInfo/
     additional_dependencies: [Flake8-pyproject]
 - repo: https://github.com/asottile/pyupgrade
   rev: 'v3.19.1'
