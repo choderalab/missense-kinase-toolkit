@@ -1,0 +1,35 @@
+{
+    "hgnc_name": "ANTXR1",
+    "uniprot_id": "Q9H6X2",
+    "uniprot": {
+        "header": ">sp|Q9H6X2|ANTR1_HUMAN Anthrax toxin receptor 1 OS=Homo sapiens OX=9606 GN=ANTXR1 PE=1 SV=2",
+        "canonical_seq": "MATAERRALGIGFQWLSLATLVLICAGQGGRREDGGPACYGGFDLYFILDKSGSVLHHWNEIYYFVEQLAHKFISPQLRMSFIVFSTRGTTLMKLTEDREQIRQGLEELQKVLPGGDTYMHEGFERASEQIYYENRQGYRTASVIIALTDGELHEDLFFYSEREANRSRDLGAIVYCVGVKDFNETQLARIADSKDHVFPVNDGFQALQGIIHSILKKSCIEILAAEPSTICAGESFQVVVRGNGFRHARNVDRVLCSFKINDSVTLNEKPFSVEDTYLLCPAPILKEVGMKAALQVSMNDGLSFISSSVIITTTHCSDGSILAIALLILFLLLALALLWWFWPLCCTVIIKEVPPPPAEESEEEDDDGLPKKKWPTVDASYYGGRGVGGIKRMEVRWGEKGSTEEGAKLEKAKNARVKMPEQEYEFPEPRNLNNNMRRPSSPRKWYSPIKGKLDALWVLLRKGYDRVSVMRPQPGDTGRCINFTRVKNNQPAKYPLNNAYHTSSPPPAPIYTPPPPAPHCPPPPPSAPTPPIPSPPSTLPPPPQAPPPNRAPPPSRPPPRPSV",
+        "phospho_sites": [
+            362
+        ],
+        "phospho_evidence": [
+            [
+                "Manual, combo"
+            ]
+        ],
+        "phospho_description": [
+            "Phosphoserine"
+        ]
+    },
+    "kinhub": null,
+    "klifs": {
+        "gene_name": "ANTXR1",
+        "name": "DNAPK",
+        "full_name": "Anthrax toxin receptor 1",
+        "group": "Atypical",
+        "family": "PIKK",
+        "iuphar": 0,
+        "kinase_id": 96,
+        "pocket_seq": null
+    },
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null,
+    "bool_offset": true
+}

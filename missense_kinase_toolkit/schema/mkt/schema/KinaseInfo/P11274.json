@@ -1,0 +1,148 @@
+{
+    "hgnc_name": "BCR",
+    "uniprot_id": "P11274",
+    "uniprot": {
+        "header": ">sp|P11274|BCR_HUMAN Breakpoint cluster region protein OS=Homo sapiens OX=9606 GN=BCR PE=1 SV=2",
+        "canonical_seq": "MVDPVGFAEAWKAQFPDSEPPRMELRSVGDIEQELERCKASIRRLEQEVNQERFRMIYLQTLLAKEKKSYDRQRWGFRRAAQAPDGASEPRASASRPQPAPADGADPPPAEEPEARPDGEGSPGKARPGTARRPGAAASGERDDRGPPASVAALRSNFERIRKGHGQPGADAEKPFYVNVEFHHERGLVKVNDKEVSDRISSLGSQAMQMERKKSQHGAGSSVGDASRPPYRGRSSESSCGVDGDYEDAELNPRFLKDNLIDANGGSRPPWPPLEYQPYQSIYVGGMMEGEGKGPLLRSQSTSEQEKRLTWPRRSYSPRSFEDCGGGYTPDCSSNENLTSSEEDFSSGQSSRVSPSPTTYRMFRDKSRSPSQNSQQSFDSSSPPTPQCHKRHRHCPVVVSEATIVGVRKTGQIWPNDGEGAFHGDADGSFGTPPGYGCAADRAEEQRRHQDGLPYIDDSPSSSPHLSSKGRGSRDALVSGALESTKASELDLEKGLEMRKWVLSGILASEETYLSHLEALLLPMKPLKAAATTSQPVLTSQQIETIFFKVPELYEIHKEFYDGLFPRVQQWSHQQRVGDLFQKLASQLGVYRAFVDNYGVAMEMAEKCCQANAQFAEISENLRARSNKDAKDPTTKNSLETLLYKPVDRVTRSTLVLHDLLKHTPASHPDHPLLQDALRISQNFLSSINEEITPRRQSMTVKKGEHRQLLKDSFMVELVEGARKLRHVFLFTDLLLCTKLKKQSGGKTQQYDCKWYIPLTDLSFQMVDELEAVPNIPLVPDEELDALKIKISQIKNDIQREKRANKGSKATERLKKKLSEQESLLLLMSPSMAFRVHSRNGKSYTFLISSDYERAEWRENIREQQKKCFRSFSLTSVELQMLTNSCVKLQTVHSIPLTINKEDDESPGLYGFLNVIVHSATGFKQSSNLYCTLEVDSFGYFVNKAKTRVYRDTAEPNWNEEFEIELEGSQTLRILCYEKCYNKTKIPKEDGESTDRLMGKGQVQLDPQALQDRDWQRTVIAMNGIEVKLSVKFNSREFSLKRMPSRKQTGVFGVKIAVVTKRERSKVPYIVRQCVEEIERRGMEEVGIYRVSGVATDIQALKAAFDVNNKDVSVMMSEMDVNAIAGTLKLYFRELPEPLFTDEFYPNFAEGIALSDPVAKESCMLNLLLSLPEANLLTFLFLLDHLKRVAEKEAVNKMSLHNLATVFGPTLLRPSEKESKLPANPSQPITMTDSWSLEVMSQVQVLLYFLQLEAIPAPDSKRQSILFSTEV",
+        "phospho_sites": [
+            122,
+            139,
+            177,
+            202,
+            215,
+            222,
+            236,
+            246,
+            356,
+            377,
+            382,
+            385,
+            459,
+            463,
+            473,
+            488,
+            554,
+            641,
+            644,
+            693,
+            894,
+            1264
+        ],
+        "phospho_evidence": [
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental",
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ]
+        ],
+        "phospho_description": [
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphotyrosine; by HCK",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphotyrosine; by FES",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphothreonine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphotyrosine",
+            "Phosphothreonine",
+            "Phosphotyrosine",
+            "Phosphothreonine",
+            "Phosphoserine",
+            "Phosphoserine"
+        ]
+    },
+    "kinhub": {
+        "hgnc_name": "BCR",
+        "kinase_name": "Breakpoint cluster region protein",
+        "manning_name": "BCR",
+        "xname": "BCR",
+        "group": "Atypical",
+        "family": "Other"
+    },
+    "klifs": {
+        "gene_name": "BCR",
+        "name": "BCR",
+        "full_name": "Breakpoint cluster region protein",
+        "group": "Atypical",
+        "family": "Other",
+        "iuphar": 2755,
+        "kinase_id": 81,
+        "pocket_seq": null
+    },
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null,
+    "bool_offset": true
+}

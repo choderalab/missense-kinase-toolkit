@@ -2,7 +2,7 @@ import logging
 from enum import Enum
 
 from mkt.schema.constants import LIST_FULL_KLIFS_REGION, LIST_KLIFS_REGION, LIST_PFAM_KD
-from pydantic import BaseModel, ConfigDict, constr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, constr, field_validator
 from strenum import StrEnum
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,7 @@ class Group(StrEnum):
     CAMK = "CAMK"  # Calcium/calmodulin-dependent protein kinase family
     CK1 = "CK1"  # Casein kinase 1 family
     CMGC = "CMGC"  # Cyclin-dependent kinase, Mitogen-activated protein kinase, Glycogen synthase kinase, and CDK-like kinase families
+    NEK = "NEK"  # NIMA (Never in Mitosis Gene A)-related kinase family - KinCore treats as group
     RGC = "RGC"  # Receptor guanylate cyclase family
     STE = "STE"  # Homologs of yeast Sterile 7, Sterile 11, Sterile 20 kinases
     TK = "TK"  # Tyrosine kinase family
@@ -30,6 +31,7 @@ class Family(Enum):
     CAMKL = "CAMKL"
     CDK = "CDK"
     Eph = "Eph"
+    PIK = "PIK"
     MAPK = "MAPK"
     STKR = "STKR"
     NEK = "NEK"
@@ -62,8 +64,10 @@ class Family(Enum):
     TSSK = "TSSK"
     ABC1 = "ABC1"
     PDHK = "PDHK"
-    Jak = "Jak"
-    Jakb = "Jakb"
+    JakA = ("Jak", "JakA")
+    JakB = ("Jakb", "JakB")
+    PIPK = "PIPK"
+    PLK = "PLK"
     Other = "Other"
     Null = None
 
@@ -77,16 +81,40 @@ SeqUniProt = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWXY]+$")
 SeqKLIFS = constr(pattern=r"^[ACDEFGHIKLMNPQRSTVWY\-]{85}$")
 """Pydantic model for KLIFS pocket sequence constraints."""
 
-SwissProtPattern = r"^[A-Z][0-9][A-Z0-9]{3}[0-9]$"
+SwissProtPattern = r"^[A-Z][0-9][A-Z0-9]{3}[0-9](_[12])?$"
 """Regex pattern for SwissProt ID."""
 SwissProtID = constr(pattern=SwissProtPattern)
 """Pydantic model for SwissProt ID constraints."""
-TrEMBLPattern = r"^[A-Z][0-9][A-Z][A-Z0-9]{2}[0-9][A-Z][A-Z0-9]{2}[0-9]$"
+TrEMBLPattern = r"^[A-Z][0-9][A-Z][A-Z0-9]{2}[0-9][A-Z][A-Z0-9]{2}[0-9](_[12])?$"
 """Regex pattern for TrEBML ID."""
 TrEMBLID = constr(pattern=TrEMBLPattern)
 """Pydantic model for TrEMBL ID constraints."""
-# UniProtID = constr(pattern=r"^[A-Z][0-9][A-Z0-9]{3}[0-9]$")
-# """Pydantic model for UniProt ID constraints."""
+
+SwissProtPatternSuffix = SwissProtPattern.replace("$", "") + r"(_[12])?$"
+"""Regex pattern for SwissProt ID with optional '_1' or '_2' for multi-KD."""
+SwissProtIDSuffix = constr(pattern=SwissProtPatternSuffix)
+"""Pydantic model for SwissProt ID constraints with suffix."""
+TrEMBLPatternSuffix = TrEMBLPattern.replace("$", "") + r"(_[12])?$"
+"""Regex pattern for TrEBML ID with optional '_1' or '_2' for multi-KD."""
+TrEMBLIDSuffix = constr(pattern=TrEMBLPatternSuffix)
+"""Pydantic model for TrEMBL ID constraints with suffix."""
+
+
+class TemplateSource(StrEnum):
+    """Enum class for template source."""
+
+    PDB70 = "PDB70"
+    activeAF2 = "activeAF2"
+    activePDB = "activePDB"
+    none = "notemp"
+
+
+class MSASource(StrEnum):
+    """Enum class for MSA source."""
+
+    family = "family"
+    ortholog = "ortholog"
+    uniref90 = "uniref90"
 
 
 class KinHub(BaseModel):
@@ -94,17 +122,22 @@ class KinHub(BaseModel):
 
     model_config = ConfigDict(use_enum_values=True)
 
-    kinase_name: str
-    manning_name: list[str]
-    xname: list[str]
-    group: list[Group]
-    family: list[Family]
+    hgnc_name: str | None = None
+    kinase_name: str | None = None
+    manning_name: str
+    xname: str
+    group: Group
+    family: Family
 
 
 class UniProt(BaseModel):
     """Pydantic model for UniProt information."""
 
+    header: str
     canonical_seq: SeqUniProt
+    phospho_sites: list[int] | None = None
+    phospho_evidence: list[set[str]] | None = None
+    phospho_description: list[str] | None = None
 
 
 class KLIFS(BaseModel):
@@ -135,22 +168,82 @@ class Pfam(BaseModel):
     in_alphafold: bool
 
 
+class KinCoreFASTA(BaseModel):
+    """Pydantic model for KinCore FASTA information."""
+
+    model_config = ConfigDict(use_enum_values=True)
+
+    seq: SeqUniProt
+    group: Group
+    hgnc: set[str]
+    swissprot: str
+    uniprot: SwissProtID | TrEMBLID
+    start_md: int  # Modi-Dunbrack, 2019
+    end_md: int  # Modi-Dunbrack, 2019
+    length_md: int | None = None  # Modi-Dunbrack, 2019
+    start_af2: int | None = None  # AF2 active state
+    end_af2: int | None = None  # AF2 active state
+    length_af2: int | None = None  # AF2 active state
+    length_uniprot: int | None = None  # AF2 active state
+    source_file: str
+    start: int | None = None  # fasta2uniprot
+    end: int | None = None  # fasta2uniprot
+    mismatch: list[int] | None = None  # fasta2uniprot
+
+
+class KinCoreCIF(BaseModel):
+    """Pydantic model for KinCore CIF information."""
+
+    model_config = ConfigDict(use_enum_values=True)
+
+    cif: dict[str, str | list[str]]
+    group: Group
+    hgnc: str
+    min_aloop_pLDDT: float
+    template_source: TemplateSource
+    msa_size: int
+    msa_source: MSASource
+    model_no: int = Field(..., ge=1, lt=6)
+    start: int | None = None  # cif2uniprot
+    end: int | None = None  # cif2uniprot
+    mismatch: list[int] | None = None  # cif2uniprot
+
+
 class KinCore(BaseModel):
     """Pydantic model for KinCore information."""
 
-    seq: SeqUniProt
-    start: int
-    end: int
-    mismatch: list[int] | None = None
+    fasta: KinCoreFASTA
+    cif: KinCoreCIF | None = None
+    start: int | None = None  # fasta2cif
+    end: int | None = None  # fasta2cif
+    mismatch: list[int] | None = None  # fasta2cif
+
+
+class KinaseInfoUniProt(BaseModel):
+    """Pydantic model for kinase information at the level of the UniProt ID."""
+
+    hgnc_name: str
+    uniprot_id: SwissProtID | TrEMBLID
+    uniprot: UniProt
+    pfam: Pfam | None = None
+
+
+class KinaseInfoKinaseDomain(BaseModel):
+    """Pydantic model for kinase information at the level of the kinase domain."""
+
+    uniprot_id: SwissProtIDSuffix | TrEMBLIDSuffix
+    kinhub: KinHub | None = None
+    klifs: KLIFS | None = None
+    kincore: KinCore | None = None
 
 
 class KinaseInfo(BaseModel):
-    """Pydantic model for kinase information."""
+    """Pydantic model for kinase information at the level of the kinase domain."""
 
     hgnc_name: str
-    uniprot_id: SwissProtID | TrEMBLID  # UniProtID
-    kinhub: KinHub | None = None
+    uniprot_id: SwissProtIDSuffix | TrEMBLIDSuffix
     uniprot: UniProt
+    kinhub: KinHub | None = None
     klifs: KLIFS | None = None
     pfam: Pfam | None = None
     kincore: KinCore | None = None

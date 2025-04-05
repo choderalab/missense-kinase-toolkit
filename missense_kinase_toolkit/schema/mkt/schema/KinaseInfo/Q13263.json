@@ -1,0 +1,157 @@
+{
+    "hgnc_name": "TRIM28",
+    "uniprot_id": "Q13263",
+    "uniprot": {
+        "header": ">sp|Q13263|TIF1B_HUMAN Transcription intermediary factor 1-beta OS=Homo sapiens OX=9606 GN=TRIM28 PE=1 SV=5",
+        "canonical_seq": "MAASAAAASAAAASAASGSPGPGEGSAGGEKRSTAPSAAASASASAAASSPAGGGAEALELLEHCGVCRERLRPEREPRLLPCLHSACSACLGPAAPAAANSSGDGGAAGDGTVVDCPVCKQQCFSKDIVENYFMRDSGSKAATDAQDANQCCTSCEDNAPATSYCVECSEPLCETCVEAHQRVKYTKDHTVRSTGPAKSRDGERTVYCNVHKHEPLVLFCESCDTLTCRDCQLNAHKDHQYQFLEDAVRNQRKLLASLVKRLGDKHATLQKSTKEVRSSIRQVSDVQKRVQVDVKMAILQIMKELNKRGRVLVNDAQKVTEGQQERLERQHWTMTKIQKHQEHILRFASWALESDNNTALLLSKKLIYFQLHRALKMIVDPVEPHGEMKFQWDLNAWTKSAEAFGKIVAERPGTNSTGPAPMAPPRAPGPLSKQGSGSSQPMEVQEGYGFGSGDDPYSSAEPHVSGVKRSRSGEGEVSGLMRKVPRVSLERLDLDLTADSQPPVFKVFPGSTTEDYNLIVIERGAAAAATGQPGTAPAGTPGAPPLAGMAIVKEEETEAAIGAPPTATEGPETKPVLMALAEGPGAEGPRLASPSGSTSSGLEVVAPEGTSAPGGGPGTLDDSATICRVCQKPGDLVMCNQCEFCFHLDCHLPALQDVPGEEWSCSLCHVLPDLKEEDGSLSLDGADSTGVVAKLSPANQRKCERVLLALFCHEPCRPLHQLATDSTFSLDQPGGTLDLTLIRARLQEKLSPPYSSPQEFAQDVGRMFKQFNKLTEDKADVQSIIGLQRFFETRMNEAFGDTKFSAVLVEPPPMSLPGAGLSSQELSGGPGDGP",
+        "phospho_sites": [
+            19,
+            26,
+            50,
+            138,
+            417,
+            437,
+            439,
+            453,
+            471,
+            473,
+            479,
+            489,
+            498,
+            501,
+            541,
+            594,
+            683,
+            689,
+            697,
+            752,
+            755,
+            757,
+            784,
+            824
+        ],
+        "phospho_evidence": [
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental"
+            ]
+        ],
+        "phospho_description": [
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphothreonine",
+            "Phosphoserine",
+            "Phosphothreonine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphotyrosine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine; by ATM and ATR and dsDNA kinase"
+        ]
+    },
+    "kinhub": {
+        "hgnc_name": "TRIM28",
+        "kinase_name": "Transcription intermediary factor 1-beta",
+        "manning_name": "TIF1b",
+        "xname": "TIF1b",
+        "group": "Atypical",
+        "family": "Other"
+    },
+    "klifs": {
+        "gene_name": "TRIM28",
+        "name": "TIF1b",
+        "full_name": "Transcription intermediary factor 1-beta",
+        "group": "Atypical",
+        "family": "Other",
+        "iuphar": 2253,
+        "kinase_id": 106,
+        "pocket_seq": null
+    },
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null,
+    "bool_offset": true
+}

@@ -1,0 +1,65 @@
+{
+    "hgnc_name": "PIP5K1C",
+    "uniprot_id": "O60331",
+    "uniprot": {
+        "header": ">sp|O60331|PI51C_HUMAN Phosphatidylinositol 4-phosphate 5-kinase type-1 gamma OS=Homo sapiens OX=9606 GN=PIP5K1C PE=1 SV=2",
+        "canonical_seq": "MELEVPDEAESAEAGAVPSEAAWAAESGAAAGLAQKKAAPTEVLSMTAQPGPGHGKKLGHRGVDASGETTYKKTTSSTLKGAIQLGIGYTVGHLSSKPERDVLMQDFYVVESIFFPSEGSNLTPAHHFQDFRFKTYAPVAFRYFRELFGIRPDDYLYSLCNEPLIELSNPGASGSLFYVTSDDEFIIKTVMHKEAEFLQKLLPGYYMNLNQNPRTLLPKFYGLYCVQSGGKNIRVVVMNNILPRVVKMHLKFDLKGSTYKRRASKKEKEKSFPTYKDLDFMQDMPEGLLLDADTFSALVKTLQRDCLVLESFKIMDYSLLLGVHNIDQHERERQAQGAQSTSDEKRPVGQKALYSTAMESIQGGAARGEAIESDDTMGGIPAVNGRGERLLLHIGIIDILQSYRFIKKLEHTWKALVHDGDTVSVHRPSFYAERFFKFMSNTVFRKNSSLKSSPSKKGRGGALLAVKPLGPTAAFSASQIPSEREEAQYDLRGARSYPTLEDEGRPDLLPCTPPSFEEATTASIATTLSSTSLSIPERSPSETSEQPRYRRRTQSSGQDGRPQEEPPAEEDLQQITVQVEPACSVEIVVPKEEDAGVEASPAGASAAVEVETASQASDEEGAPASQASDEEDAPATDIYFPTDERSWVYSPLHYSAQAPPASDGESDT",
+        "phospho_sites": [
+            555,
+            639,
+            649,
+            650,
+            662,
+            666,
+            668
+        ],
+        "phospho_evidence": [
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Computational, ISS"
+            ],
+            [
+                "Computational, ISS"
+            ]
+        ],
+        "phospho_description": [
+            "Phosphoserine",
+            "Phosphotyrosine; by EGFR",
+            "Phosphotyrosine; by CSK",
+            "Phosphoserine; by CDK5, MAPK1 and CDK1",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphothreonine"
+        ]
+    },
+    "kinhub": null,
+    "klifs": {
+        "gene_name": "PIP5K1C",
+        "name": "PIP5K1C",
+        "full_name": "phosphatidylinositol-4-phosphate 5-kinase type 1 gamma",
+        "group": "Atypical",
+        "family": "PIPK",
+        "iuphar": 2165,
+        "kinase_id": 1098,
+        "pocket_seq": null
+    },
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null,
+    "bool_offset": true
+}

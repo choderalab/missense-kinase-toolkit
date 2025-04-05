@@ -1,0 +1,43 @@
+{
+    "hgnc_name": "PEAK3",
+    "uniprot_id": "Q6ZS72",
+    "uniprot": {
+        "header": ">sp|Q6ZS72|PEAK3_HUMAN Protein PEAK3 OS=Homo sapiens OX=9606 GN=PEAK3 PE=1 SV=1",
+        "canonical_seq": "MSSPEPPTEPPEPDNPTWSTQPTYSNLGQIRAHLLPSKACRLRTPGSLSTNPEPLPPPLPKKILTRTQSLPTRRTLHPSSIQVQPPRRPFLGSHSVDKSQAAVGPACLPAELTFGPADAPLGLSLRDLHSPEAVHTALAARQLQGLRTIYARLRARLMGGHPGPCHPGHSFRLLDSSPCAESGDALYYRVVRAHEDAWHILVAKVPKPGADVPHPWGLELQASLSPHFNLQGLCGLVPEGTLPGAPWRGAVALAAEVPERTVAQWLAEACTQPPEEFVWAVALLLLQLSAALKFLEAWGAALVELRPENLLLVAPRGCATTGPPRLLLTDFGRVCLQPPGPPGSPGPHAPQLGSLLRALLSLAAPSTTPLAAGLELLAAQLTRLRPSASRTRGALQALLWGPGPELRGRGAPLGPWLRALGPWLRVRRGLLVLRLAERAAGGEAPSLEDWLCCEYLAEATESSMGQALALLWD",
+        "phospho_sites": null,
+        "phospho_evidence": null,
+        "phospho_description": null
+    },
+    "kinhub": null,
+    "klifs": null,
+    "pfam": null,
+    "kincore": {
+        "fasta": {
+            "seq": "FRLLDSSPCAESGDALYYRVVRAHEDAWHILVAKVPKPGADVPHPWGLELQASLSPHFNLQGLCGLVPEGTLPGAPWRGAVALAAEVPERTVAQWLAEACTQPPEEFVWAVALLLLQLSAALKFLEAWGAALVELRPENLLLVAPRGCATTGPPRLLLTDFGRVCLQPPGPPGSPGPHAPQLGSLLRALLSLAAPSTTPLAAGLELLAAQLTRLRPSASRTRGALQA",
+            "group": "Other",
+            "hgnc": [
+                "PEAK3"
+            ],
+            "swissprot": "PEAK3_HUMAN",
+            "uniprot": "Q6ZS72",
+            "start_md": 171,
+            "end_md": 397,
+            "length_md": null,
+            "start_af2": null,
+            "end_af2": null,
+            "length_af2": null,
+            "length_uniprot": null,
+            "source_file": "Modi-Dunbrack_2019",
+            "start": 171,
+            "end": 397,
+            "mismatch": null
+        },
+        "cif": null,
+        "start": null,
+        "end": null,
+        "mismatch": null
+    },
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null,
+    "bool_offset": true
+}

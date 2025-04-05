@@ -17,10 +17,10 @@ def try_except_split_concat_str(
     ----------
     str_in : str
         Input string
-    idx2 : int
-        Ending index
     idx1 : int
         Starting index
+    idx2 : int
+        Ending index
     delim : str
         Delimiter to split on
 
@@ -187,6 +187,7 @@ def try_except_substraction(a, b):
 def aggregate_df_by_col_set(
     df_in: pd.DataFrame,
     col_group: str,
+    bool_str: bool = True,
 ) -> pd.DataFrame:
     list_cols = df_in.columns.to_list()
     list_cols.remove(col_group)
@@ -194,9 +195,104 @@ def aggregate_df_by_col_set(
     # aggregate rows with the same HGNC Name (e.g., multiple kinase domains like JAK)
     df_in_agg = df_in.groupby([col_group], as_index=False, sort=False).agg(set)
 
-    # join set elements into a single string
-    df_in_agg[list_cols] = df_in_agg[list_cols].map(
-        lambda x: ", ".join(str(s) for s in x)
-    )
+    if bool_str:
+        # join set elements into a single string
+        df_in_agg[list_cols] = df_in_agg[list_cols].map(
+            lambda x: ", ".join(str(s) for s in x)
+        )
 
     return df_in_agg
+
+
+def split_on_first_only(str_in, delim):
+    list_split = str_in.split(delim)
+    str1 = list_split[0]
+    str2 = "".join(list_split[1:])
+    return str1, str2
+
+
+def flatten_iterables_in_iterable(data):
+    flattened_list = []
+    for item in data:
+        if isinstance(item, (list, tuple)):
+            flattened_list.extend(list(item))
+        else:
+            flattened_list.append(item)
+    return flattened_list
+
+
+def rgetattr(obj, attr, *args):
+    """Get attribute from object recursively.
+
+    Parameters
+    ----------
+    obj : Any
+        Object to get attribute from.
+    attr : str
+        Attribute to get.
+    *args : Any
+        Any additional arguments to pass to getattr.
+
+    Returns
+    -------
+    Any
+        Value of attribute if found, otherwise default value.
+    """
+    import functools
+
+    def _getattr(obj, attr):
+        return getattr(obj, attr, *args)
+
+    return functools.reduce(_getattr, [obj] + attr.split("."))
+
+
+def rsetattr(obj, attr, val, *args):
+    """Set attribute from object recursively.
+
+    Parameters
+    ----------
+    obj : Any
+        Object to get attribute from.
+    attr : str
+        Attribute to get.
+    val : Any
+        Value to set attribute to.
+    *args : Any
+        Any additional arguments to pass to getattr.
+
+    Returns
+    -------
+    Any
+        Value of attribute if found, otherwise default value.
+    """
+    import functools
+
+    def _setattr(obj, attr, val):
+        return setattr(obj, attr, val, *args)
+
+    return functools.reduce(_setattr, [obj] + attr.split("."))
+
+
+def return_bool_at_index(
+    list_in: list,
+    list_bool: list,
+    bool_return: bool = True,
+):
+    """Return list of elements from list_in where corresponding element in list_bool is bool_return.
+
+    Parameters
+    ----------
+    list_in : list
+        List of elements to filter.
+    list_bool : list
+        List of boolean values to filter by.
+    bool_return : bool, optional
+        Boolean value to filter by, by default True
+
+    Returns
+    -------
+    list
+        List of elements from list_in where corresponding element in list_bool is bool_return.
+
+    """
+    return [i for i, j in zip(list_in, list_bool) if j == bool_return]

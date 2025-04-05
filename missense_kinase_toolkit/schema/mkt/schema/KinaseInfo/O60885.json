@@ -1,0 +1,102 @@
+{
+    "hgnc_name": "BRD4",
+    "uniprot_id": "O60885",
+    "uniprot": {
+        "header": ">sp|O60885|BRD4_HUMAN Bromodomain-containing protein 4 OS=Homo sapiens OX=9606 GN=BRD4 PE=1 SV=2",
+        "canonical_seq": "MSAESGPGTRLRNLPVMGDGLETSQMSTTQAQAQPQPANAASTNPPPPETSNPNKPKRQTNQLQYLLRVVLKTLWKHQFAWPFQQPVDAVKLNLPDYYKIIKTPMDMGTIKKRLENNYYWNAQECIQDFNTMFTNCYIYNKPGDDIVLMAEALEKLFLQKINELPTEETEIMIVQAKGRGRGRKETGTAKPGVSTVPNTTQASTPPQTQTPQPNPPPVQATPHPFPAVTPDLIVQTPVMTVVPPQPLQTPPPVPPQPQPPPAPAPQPVQSHPPIIAATPQPVKTKKGVKRKADTTTPTTIDPIHEPPSLPPEPKTTKLGQRRESSRPVKPPKKDVPDSQQHPAPEKSSKVSEQLKCCSGILKEMFAKKHAAYAWPFYKPVDVEALGLHDYCDIIKHPMDMSTIKSKLEAREYRDAQEFGADVRLMFSNCYKYNPPDHEVVAMARKLQDVFEMRFAKMPDEPEEPVVAVSSPAVPPPTKVVAPPSSSDSSSDSSSDSDSSTDDSEEERAQRLAELQEQLKAVHEQLAALSQPQQNKPKKKEKDKKEKKKEKHKRKEEVEENKKSKAKEPPPKKTKKNNSSNSNVSKKEPAPMKSKPPPTYESEEEDKCKPMSYEEKRQLSLDINKLPGEKLGRVVHIIQSREPSLKNSNPDEIEIDFETLKPSTLRELERYVTSCLRKKRKPQAEKVDVIAGSSKMKGFSSSESESSSESSSSDSEDSETEMAPKSKKKGHPGREQKKHHHHHHQQMQQAPAPVPQQPPPPPQQPPPPPPPQQQQQPPPPPPPPSMPQQAAPAMKSSPPPFIATQVPVLEPQLPGSVFDPIGHFTQPILHLPQPELPPHLPQPPEHSTPPHLNQHAVVSPPALHNALPQQPSRPSNRAAALPPKPARPPAVSPALTQTPLLPQPPMAQPPQVLLEDEEPPAPPLTSMQMQLYLQQLQKVQPPTPLLPSVKVQSQPPPPLPPPPHPSVQQQLQQQPPPPPPPQPQPPPQQQHQPPPRPVHLQPMQFSTHIQQPPPPQGQQPPHPPPGQQPPPPQPAKPQQVIQHHHSPRHHKSDPYSTGHLREAPSPLMIHSPQMSQFQSLTHQSPPQQNVQPKKQELRAASVVQPQPLVVVKEEKIHSPIIRSEPFSPSLRPEPPKHPESIKAPVHLPQRPEMKPVDVGRPVIRPPEQNAPPPGAPDKDKQKQEPKTPVAPKKDLKIKNMGSWASLVQKHPTTPSSTAKSSSDSFEQFRRAAREKEEREKALKAQAEHAEKEKERLRQERMRSREDEDALEQARRAHEEARRRQEQQQQQRQEQQQQQQQQAAAVAAAATPQAQSSQPQSMLDQQRELARKREQERRRREAMAATIDMNFQSDLLSIFEENLF",
+        "phospho_sites": [
+            470,
+            484,
+            488,
+            492,
+            494,
+            498,
+            499,
+            503,
+            601,
+            1117,
+            1126,
+            1201,
+            1204
+        ],
+        "phospho_evidence": [
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, experimental"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ]
+        ],
+        "phospho_description": [
+            "Phosphoserine",
+            "Phosphoserine; by CK2",
+            "Phosphoserine; by CK2",
+            "Phosphoserine; by CK2",
+            "Phosphoserine; by CK2",
+            "Phosphoserine; by CK2",
+            "Phosphoserine; by CK2",
+            "Phosphoserine; by CK2",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine",
+            "Phosphoserine"
+        ]
+    },
+    "kinhub": {
+        "hgnc_name": "BRD4",
+        "kinase_name": "BRD4 protein",
+        "manning_name": "BRD4",
+        "xname": "BRD4",
+        "group": "Atypical",
+        "family": "Other"
+    },
+    "klifs": {
+        "gene_name": "BRD4",
+        "name": "BRD4",
+        "full_name": "Bromodomain-containing protein 4",
+        "group": "Atypical",
+        "family": "Other",
+        "iuphar": 1945,
+        "kinase_id": 85,
+        "pocket_seq": null
+    },
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null,
+    "bool_offset": true
+}

@@ -1,0 +1,40 @@
+{
+    "hgnc_name": "PIP4K2A",
+    "uniprot_id": "P48426",
+    "uniprot": {
+        "header": ">sp|P48426|PI42A_HUMAN Phosphatidylinositol 5-phosphate 4-kinase type-2 alpha OS=Homo sapiens OX=9606 GN=PIP4K2A PE=1 SV=2",
+        "canonical_seq": "MATPGNLGSSVLASKTKTKKKHFVAQKVKLFRASDPLLSVLMWGVNHSINELSHVQIPVMLMPDDFKAYSKIKVDNHLFNKENMPSHFKFKEYCPMVFRNLRERFGIDDQDFQNSLTRSAPLPNDSQARSGARFHTSYDKRYIIKTITSEDVAEMHNILKKYHQYIVECHGITLLPQFLGMYRLNVDGVEIYVIVTRNVFSHRLSVYRKYDLKGSTVAREASDKEKAKELPTLKDNDFINEGQKIYIDDNNKKVFLEKLKKDVEFLAQLKLMDYSLLVGIHDVERAEQEEVECEENDGEEEGESDGTHPVGTPPDSPGNTLNSSPPLAPGEFDPNIDVYGIKCHENSPRKEVYFMAIIDILTHYDAKKKAAHAAKTVKHGAGAEISTVNPEQYSKRFLDFIGHILT",
+        "phospho_sites": [
+            3,
+            14
+        ],
+        "phospho_evidence": [
+            [
+                "Manual, combo"
+            ],
+            [
+                "Manual, combo"
+            ]
+        ],
+        "phospho_description": [
+            "Phosphothreonine",
+            "Phosphoserine"
+        ]
+    },
+    "kinhub": null,
+    "klifs": {
+        "gene_name": "PIP4K2A",
+        "name": "PIP4K2A",
+        "full_name": "phosphatidylinositol-5-phosphate 4-kinase type 2 alpha",
+        "group": "Atypical",
+        "family": "PIPK",
+        "iuphar": 2858,
+        "kinase_id": 1097,
+        "pocket_seq": null
+    },
+    "pfam": null,
+    "kincore": null,
+    "KLIFS2UniProtIdx": null,
+    "KLIFS2UniProtSeq": null,
+    "bool_offset": true
+}
