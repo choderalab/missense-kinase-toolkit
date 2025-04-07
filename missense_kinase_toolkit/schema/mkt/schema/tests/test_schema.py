@@ -156,7 +156,7 @@ class TestSchema:
         assert max(obj_abl1.KLIFS2UniProtIdx.values()) == 385
 
     def test_serialization(self, caplog):
-        import shutil
+        # import shutil
 
         from mkt.schema import io_utils
 
@@ -191,7 +191,7 @@ class TestSchema:
                 else:
                     assert dict_kinase == dict_temp
                 print()
-                shutil.rmtree(f"./{suffix}")
+                # shutil.rmtree(f"./{suffix}")
 
         # TODO: Fix this test
         # # move to data subdir in Github repo
