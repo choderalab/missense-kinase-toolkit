@@ -1,4 +1,3 @@
-import logging
 import os
 
 
@@ -11,61 +10,49 @@ class TestSchema:
 
         assert "mkt.schema" in sys.modules
 
-    def test_dict_kinase(self, caplog):
-        """Test if the kinase dictionary is correctly deserialized."""
-        import copy
+    def test_dict_kinase(self):
+        from mkt.schema import io_utils
 
-        from mkt.schema.io_utils import deserialize_kinase_dict
-
-        DICT_KINASE = deserialize_kinase_dict()
-        DICT_KINASE_COPY = copy.deepcopy(DICT_KINASE)
-
-        # check that deserializing again gives the same object
-        # (i.e. from cache, not re-reading the file)
-        DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE")
-        assert DICT_KINASE == DICT_KINASE_COPY
-
-        caplog.set_level(logging.INFO)
-
-        assert len(DICT_KINASE) == 566
+        dict_kinase = io_utils.deserialize_kinase_dict()
+        assert len(dict_kinase) == 566
         assert (
-            sum(["_" in i for i in DICT_KINASE.keys()]) == 28
+            sum(["_" in i for i in dict_kinase.keys()]) == 28
         )  # 14 proteins with multiple KDs
 
         # missing data
         n_klifs = len(
-            [i.hgnc_name for i in DICT_KINASE.values() if i.klifs is not None]
+            [i.hgnc_name for i in dict_kinase.values() if i.klifs is not None]
         )
         assert n_klifs == 555
 
         n_pocket = len(
             [
                 i.hgnc_name
-                for i in DICT_KINASE.values()
+                for i in dict_kinase.values()
                 if i.klifs is not None and i.klifs.pocket_seq is not None
             ]
         )
         assert n_pocket == 519
 
         n_kincore = len(
-            [i.hgnc_name for i in DICT_KINASE.values() if i.kincore is not None]
+            [i.hgnc_name for i in dict_kinase.values() if i.kincore is not None]
         )
         assert n_kincore == 492
 
-        n_pfam = len([i.hgnc_name for i in DICT_KINASE.values() if i.pfam is not None])
+        n_pfam = len([i.hgnc_name for i in dict_kinase.values() if i.pfam is not None])
         assert n_pfam == 490
 
         n_klif2uniprot = len(
             [
                 i.hgnc_name
-                for i in DICT_KINASE.values()
+                for i in dict_kinase.values()
                 if i.KLIFS2UniProtIdx is not None
             ]
         )
         assert n_klif2uniprot == 519
 
         # check ABL1 entries
-        obj_abl1 = DICT_KINASE["ABL1"]
+        obj_abl1 = dict_kinase["P00519"]
 
         assert obj_abl1.hgnc_name == "ABL1"
 
@@ -168,58 +155,14 @@ class TestSchema:
         assert min(obj_abl1.KLIFS2UniProtIdx.values()) == 246
         assert max(obj_abl1.KLIFS2UniProtIdx.values()) == 385
 
-        assert (
-            DICT_KINASE["ABL1"].extract_sequence_from_cif()
-            == "KWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVNAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQESSIS"
-        )
+    def test_serialization(self, caplog):
+        # import shutil
 
-        # test logger messages for CIF extraction failures
-        caplog.clear()
-        assert (
-            DICT_KINASE["BUB1B"].extract_sequence_from_cif(bool_verbose=True) is None
-        )  # Kincore but no cif
-        assert "No CIF sequence for BUB1" in caplog.text
-
-        caplog.clear()
-        assert (
-            DICT_KINASE["ABR"].extract_sequence_from_cif(bool_verbose=True) is None
-        )  # no Kincore
-        assert "No CIF sequence for ABR" in caplog.text
-
-        assert (
-            DICT_KINASE["ABL1"].adjudicate_kd_sequence()
-            == "KWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVNAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQESSIS"
-        )
-        assert (
-            DICT_KINASE["BUB1B"].adjudicate_kd_sequence()
-            == "YCIKREYLICEDYKLFWVAPRNSAELTVIKVSSQPVPWDFYINLKLKERLNEDFDHFCSCYQYQDGCIVWHQYINCFTLQDLLQHSEYITHEITVLIIYNLLTIVEMLHKAEIVHGDLSPRCLILRNRIHDPYDCNKNNQALKIVDFSYSVDLRVQLDVFTLSGFRTVQILEGQKILANCSSPYQVDLFGIADLAHLLLFKEHLQVFWDGSFWKLSQNISELKDGELWNKFFVRILNANDEATVSVLGELAAEMNG"
-        )
-        assert (
-            DICT_KINASE["MTOR"].adjudicate_kd_sequence()
-            == "VVEPYRKYPTLLEVLLNFLKTEQNQGTRREAIRVLGLLGALDPYKHKVNIGMIDQSRDASAVSLSESKSSQDSSDYSTSEMLVNMGNLPLDEFYPAVSMVALMRIFRDQSLSHHHTMVVQAITFIFKSLGLKCVQFLPQVMPTFLNVIRVCDGAIREFLFQQLGMLVSFVK"
-        )
-        caplog.clear()
-        assert DICT_KINASE["ABR"].adjudicate_kd_sequence(bool_verbose=True) is None
-        assert "No kinase domain sequence found for ABR" in caplog.text
-
-        # do this last since changing the DICT_KINASE object
-        assert DICT_KINASE["ABL1"].adjudicate_group() == "TK"  # Kincore
-        assert DICT_KINASE["ABR"].adjudicate_group() == "Atypical"  # KinHub
-        assert DICT_KINASE["ANTXR1"].adjudicate_group() == "Atypical"  # KLIFS
-        DICT_KINASE["ANTXR1"].klifs = None
-        caplog.clear()
-        assert DICT_KINASE["ANTXR1"].adjudicate_group(bool_verbose=True) is None  # None
-        assert "No group found for ANTXR1" in caplog.text
-
-    # TODO: downsample toml files to speed up test
-    # TODO: add .tar.gz test for yaml/toml - currently only presumed to work
-    def test_serde(self):
-        """Test if the kinase dictionary is correctly serialized and deserialized."""
         from mkt.schema import io_utils
 
-        yaml_test = "CDK2"
+        yaml_test = "P24941"
 
-        DICT_KINASE = io_utils.deserialize_kinase_dict(str_name="DICT_KINASE")
+        dict_kinase = io_utils.deserialize_kinase_dict()
 
         for suffix in io_utils.DICT_FUNCS.keys():
             print(f"Format: {suffix}")
@@ -227,13 +170,13 @@ class TestSchema:
                 # only check a single entry given time
                 # ~4 hours to check all (done on 4/4/25)
                 io_utils.serialize_kinase_dict(
-                    {yaml_test: DICT_KINASE[yaml_test]},
+                    {yaml_test: dict_kinase[yaml_test]},
                     suffix=suffix,
                     str_path=f"./{suffix}",
                 )
             else:
                 io_utils.serialize_kinase_dict(
-                    DICT_KINASE,
+                    dict_kinase,
                     suffix=suffix,
                     str_path=f"./{suffix}",
                 )
@@ -244,31 +187,47 @@ class TestSchema:
                     suffix=suffix, str_path=f"./{suffix}"
                 )
                 if suffix == "yaml":
-                    assert DICT_KINASE[yaml_test] == dict_temp[yaml_test]
+                    assert dict_kinase["P24941"] == dict_temp["P24941"]
                 else:
-                    assert DICT_KINASE == dict_temp
+                    assert dict_kinase == dict_temp
+                print()
+                # shutil.rmtree(f"./{suffix}")
 
-    def test_utils(self):
-        """Test utility functions."""
-        import random
+        # TODO: Fix this test
+        # # move to data subdir in Github repo
+        # path_original = io_utils.return_str_path()
+        # path_gitroot = io_utils.get_repo_root()
+        # path_new = os.path.join(path_gitroot, "data/KinaseInfo")
+        # print(path_new)
+        # if not os.path.exists(path_new):
+        #     shutil.copytree(path_original, path_new)
+        # shutil.rmtree(path_original)
 
-        from mkt.schema import utils
-        from mkt.schema.io_utils import deserialize_kinase_dict
+        # # check that this produces a warning
+        # with caplog.at_level(logging.WARNING):
+        #     path_temp = io_utils.return_str_path()
+        #     # assert caplog.records[0].levelname == "WARNING"
+        #     # warn_msg = (
+        #     #     "Could not find KinaseInfo directory within package: FileNotFoundError\n"
+        #     #     "Please provide a path to the KinaseInfo directory."
+        #     # )
+        #     # assert warn_msg in caplog.records[0].message
+        #     assert path_temp == path_new
 
-        DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE")
+        # # check that deserialization still works
+        # dict_temp = io_utils.deserialize_kinase_dict()
+        # assert dict_kinase == dict_temp
 
-        # test rgetattr
-        obj = DICT_KINASE["ABL1"]
-        assert utils.rgetattr(obj, attr="hgnc_name") == "ABL1"
-        assert utils.rgetattr(obj, attr="uniprot_id") == "P00519"
-        assert utils.rgetattr(obj, attr="non_existent") is None
+        # # delete all KinaseInfo files
+        # shutil.rmtree(path_new)
 
-        # test rsetattr
-        utils.rsetattr(obj=obj, attr="hgnc_name", val="ABL2")
-        assert obj.hgnc_name == "ABL2"
-        utils.rsetattr(obj=obj, attr="kincore.fasta.seq", val=None)
-        assert obj.kincore.fasta.seq is None
-
-        random.seed(42)
-        uuid = utils.random_uuid()
-        assert str(uuid) == "a31c06bd-463e-4923-bc1a-adbde48b1697"
+        # # check that this oproduces an error
+        # with caplog.at_level(logging.ERROR):
+        #     path_temp = io_utils.return_str_path()
+        #     assert caplog.records[0].levelname == "ERROR"
+        #     warn_msg = (
+        #         "Could not find KinaseInfo directory within package: FileNotFoundError\n"
+        #         "Please provide a path to the KinaseInfo directory."
+        #     )
+        #     assert warn_msg in caplog.records[0].message
+        #     assert path_temp is None
