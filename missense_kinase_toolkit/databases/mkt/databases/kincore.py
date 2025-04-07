@@ -8,12 +8,13 @@ from itertools import chain
 
 from Bio import SeqIO
 from mkt.databases.aligners import Kincore2UniProtAligner
-from mkt.databases.io_utils import extract_tarfiles, get_repo_root
+from mkt.databases.io_utils import get_repo_root
 from mkt.databases.utils import (
     flatten_iterables_in_iterable,
     split_on_first_only,
     try_except_split_concat_str,
 )
+from mkt.schema.io_utils import extract_tarfiles
 from mkt.schema.kinase_schema import KinCore, KinCoreCIF, KinCoreFASTA
 from tqdm import tqdm
 
