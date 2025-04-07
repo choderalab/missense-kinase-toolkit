@@ -147,7 +147,7 @@ def return_str_path_from_pkg_data(
     return str_path
 
 
-def clean_unzipped_files_and_delete_directory(list_files: list[str]) -> None:
+def clean_files_and_delete_directory(list_files: list[str]) -> None:
     """Remove unzipped files.
 
     Parameters
@@ -219,6 +219,7 @@ def deserialize_kinase_dict(
     suffix: str = "json",
     deserialization_kwargs: Optional[dict[str, Any]] = None,
     str_path: str | None = None,
+    bool_remove: bool = True,
 ) -> dict[str, BaseModel]:
     """Deserialize KinaseInfo object from files.
 
@@ -269,6 +270,7 @@ def deserialize_kinase_dict(
 
     dict_import = {key: dict_import[key] for key in sorted(dict_import.keys())}
 
-    clean_unzipped_files_and_delete_directory(list_file)
+    if bool_remove:
+        clean_files_and_delete_directory(list_file)
 
     return dict_import
