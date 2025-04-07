@@ -2,6 +2,7 @@ import glob
 import json
 import logging
 import os
+import shutil
 from typing import Any, Optional
 
 import pkg_resources
@@ -37,6 +38,31 @@ DICT_FUNCS = {
 """dict[str, dict[str, Callable]]: Dictionary of serialization and deserialization functions supported."""
 
 
+def extract_tarfiles(path_from, path_to):
+    """Extract tar.gz files.
+
+    Parameters
+    ----------
+    path_from : str
+        Path to the tar.gz file
+    path_to : str
+        Pth to extract the files to
+
+    Returns
+    -------
+    None
+        None
+
+    """
+    import tarfile
+
+    try:
+        with tarfile.open(path_from, "r:gz") as tar:
+            tar.extractall(path_to)
+    except Exception as e:
+        logger.error(f"Exception {e}")
+
+
 def return_filenotfound_error_if_empty_or_missing(
     str_path_in: str,
 ) -> FileNotFoundError | None:
@@ -56,6 +82,27 @@ def return_filenotfound_error_if_empty_or_missing(
         return FileNotFoundError
     else:
         return None
+
+
+def untar_if_neeeded(str_filename: str) -> str:
+    """Unzip the file if it is a zip file.
+
+    Parameters
+    ----------
+    str_filename : str
+        Path to the file.
+
+    Returns
+    -------
+    str
+        Path to the unzipped file or original file if not .tar.gz.
+    """
+    if str_filename.endswith(".tar.gz"):
+        str_path_extract = os.path.dirname(str_filename)
+        extract_tarfiles(str_filename, str_path_extract)
+        str_filename = str_filename.replace(".tar.gz", "")
+
+    return str_filename
 
 
 def return_str_path_from_pkg_data(
@@ -82,11 +129,12 @@ def return_str_path_from_pkg_data(
     if pkg_name is None:
         pkg_name = "mkt.schema"
     if pkg_resource is None:
-        pkg_resource = "KinaseInfo"
+        pkg_resource = "KinaseInfo.tar.gz"
 
     if str_path is None:
         try:
             str_path = pkg_resources.resource_filename(pkg_name, pkg_resource)
+            str_path = untar_if_neeeded(str_path)
             return_filenotfound_error_if_empty_or_missing(str_path)
         except Exception as e:
             logger.error(
@@ -97,6 +145,29 @@ def return_str_path_from_pkg_data(
         if not os.path.exists(str_path):
             os.makedirs(str_path)
     return str_path
+
+
+def clean_unzipped_files_and_delete_directory(list_files: list[str]) -> None:
+    """Remove unzipped files.
+
+    Parameters
+    ----------
+    list_files : list[str]
+        List of files to remove.
+
+    Returns
+    -------
+    None
+        None
+
+    """
+    try:
+        paths_remove = {os.path.dirname(i) for i in list_files}
+        [shutil.rmtree(i) for i in paths_remove if os.path.isdir(i)]
+        logger.info(f"Removed unzipped files: {[i for i in paths_remove]}.")
+    except Exception as e:
+        logger.error(f"Exception {e}")
+        logger.info(f"Could not remove unzipped files: {list_files}.")
 
 
 # adapted from https://axeldonath.com/scipy-2023-pydantic-tutorial/notebooks-rendered/4-serialisation-and-deserialisation.html
@@ -197,5 +268,7 @@ def deserialize_kinase_dict(
             dict_import[kinase_obj.uniprot_id] = kinase_obj
 
     dict_import = {key: dict_import[key] for key in sorted(dict_import.keys())}
+
+    clean_unzipped_files_and_delete_directory(list_file)
 
     return dict_import
