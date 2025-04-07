@@ -32,7 +32,7 @@ test = ["pytest==8.0.1", "pytest-runner==6.0.1"]
 
 [tool.setuptools.package-data]
 schema = [
-    "KinaseInfo/*.json",
+    "KinaseInfo.tar.gz",
 ]
 
 [project.urls]
