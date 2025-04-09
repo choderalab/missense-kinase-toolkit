@@ -170,7 +170,7 @@ def main():
     st.subheader(f"Selected Kinase: {state.kinase}")
 
     visualizer.display_dashboard(state)
-
+    
 
 if __name__ == "__main__":
     main()
