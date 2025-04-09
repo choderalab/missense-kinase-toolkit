@@ -1,5 +1,6 @@
 import logging
 import os
+import tarfile
 
 import git
 import pandas as pd
@@ -177,3 +178,39 @@ def get_repo_root():
     except git.InvalidGitRepositoryError:
         print("Not a git repository; using current directory as root...")
         return "."
+
+
+def create_tar_without_metadata(
+    path_source: str,
+    filename_tar: str,
+) -> None:
+    """Create a tar file without metadata.
+
+    Parameters
+    ----------
+    path_source : str
+        Path to the source directory to be tarred
+    filename_tar : str
+        Path and filename to the save the tar file
+
+    Returns
+    -------
+    None
+
+    """
+    # check if the source directory exists
+    if not os.path.exists(path_source):
+        logging.error(f"Source directory {path_source} does not exist.")
+    # check if the source directory is a directory
+    if not os.path.isdir(path_source):
+        logging.error(f"Source path {path_source} is not a directory.")
+    # check if the output tar file already exists
+    if os.path.exists(filename_tar):
+        logging.error(f"Output tar file {filename_tar} already exists.")
+
+    with tarfile.open(filename_tar, "w:gz") as tar:
+        for root, _, files in os.walk(path_source):
+            for file in files:
+                file_path = os.path.join(root, file)
+                if not file.startswith("._"):
+                    tar.add(file_path, arcname=os.path.relpath(file_path, path_source))
