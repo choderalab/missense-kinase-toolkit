@@ -3,6 +3,8 @@ import json
 import logging
 import os
 import shutil
+import tarfile
+from io import BytesIO
 from typing import Any, Optional
 
 import pkg_resources
@@ -19,19 +21,22 @@ DICT_FUNCS = {
     "json": {
         "serialize": json.dumps,
         "kwargs_serialize": {"default": list, "indent": 4},
-        "deserialize": json.load,
+        "deserialize_file": json.load,
+        "deserialize_str": json.loads,
         "kwargs_deserialize": {},
     },
     "yaml": {
         "serialize": yaml.safe_dump,
         "kwargs_serialize": {"sort_keys": False},
-        "deserialize": yaml.safe_load,
+        "deserialize_file": yaml.safe_load,
+        "deserialize_str": yaml.safe_load,
         "kwargs_deserialize": {},
     },
     "toml": {
         "serialize": toml.dumps,
         "kwargs_serialize": {},
-        "deserialize": toml.loads,
+        "deserialize_file": toml.load,
+        "deserialize_str": toml.loads,
         "kwargs_deserialize": {},
     },
 }
@@ -80,6 +85,11 @@ def return_filenotfound_error_if_empty_or_missing(
     """
     if not os.path.exists(str_path_in) or len(os.listdir(str_path_in)) == 0:
         return FileNotFoundError
+    elif os.path.exists(str_path_in) and str_path_in.endswith(".tar.gz"):
+        logger.info(
+            f"File {str_path_in} exists as a tar.gz directory. Will extract in memory..."
+        )
+        return None
     else:
         return None
 
@@ -98,11 +108,45 @@ def untar_if_neeeded(str_filename: str) -> str:
         Path to the unzipped file or original file if not .tar.gz.
     """
     if str_filename.endswith(".tar.gz"):
+
         str_path_extract = os.path.dirname(str_filename)
         extract_tarfiles(str_filename, str_path_extract)
         str_filename = str_filename.replace(".tar.gz", "")
 
     return str_filename
+
+
+def untar_files_in_memory(str_path: str) -> dict[str, str]:
+    """Untar files exclusively in memory.
+
+    Parameters
+    ----------
+    str_path : str
+        Path to the tar.gz file.
+
+    Returns
+    -------
+    dict[str, str]
+        Dictionary of file names and their contents as strings.
+
+    """
+    with open(str_path, "rb") as f:
+        tar_data = f.read()
+
+    dict_btyes = {}
+    with BytesIO(tar_data) as tar_buffer, tarfile.open(
+        fileobj=tar_buffer, mode="r"
+    ) as tar:
+        for member in tar.getmembers():
+            if member.isfile():
+                with tar.extractfile(member) as f:
+                    dict_btyes[member.name] = f.read()
+
+    dict_strings = {
+        k: v.decode("utf-8") for k, v in dict_btyes.items() if "._" not in k
+    }
+
+    return dict_strings
 
 
 def return_str_path_from_pkg_data(
@@ -134,7 +178,7 @@ def return_str_path_from_pkg_data(
     if str_path is None:
         try:
             str_path = pkg_resources.resource_filename(pkg_name, pkg_resource)
-            str_path = untar_if_neeeded(str_path)
+            # str_path = untar_if_neeeded(str_path)
             return_filenotfound_error_if_empty_or_missing(str_path)
         except Exception as e:
             logger.error(
@@ -251,26 +295,39 @@ def deserialize_kinase_dict(
         deserialization_kwargs = DICT_FUNCS[suffix]["kwargs_deserialize"]
 
     str_path = return_str_path_from_pkg_data(str_path)
-    list_file = glob.glob(os.path.join(str_path, f"*.{suffix}"))
 
     dict_import = {}
-    for file in tqdm(list_file, desc="Deserializing KinaseInfo objects..."):
-        with open(file) as openfile:
-            # toml files are read as strings
-            if suffix == "toml":
-                openfile = openfile.read()
+    if str_path.endswith(".tar.gz"):
+        dict_str = untar_files_in_memory(str_path)
+        for val in tqdm(
+            dict_str.values(), desc="Deserializing KinaseInfo objects in memory..."
+        ):
 
-            val_deserialized = DICT_FUNCS[suffix]["deserialize"](
-                openfile,
+            val_deserialized = DICT_FUNCS[suffix]["deserialize_str"](
+                val,
                 **deserialization_kwargs,
             )
 
             kinase_obj = kinase_schema.KinaseInfo.model_validate(val_deserialized)
             dict_import[kinase_obj.uniprot_id] = kinase_obj
+    else:
+        list_file = glob.glob(os.path.join(str_path, f"*.{suffix}"))
+        for file in tqdm(
+            list_file, desc="Deserializing KinaseInfo objects from files..."
+        ):
+            with open(file) as openfile:
+
+                val_deserialized = DICT_FUNCS[suffix]["deserialize_file"](
+                    openfile,
+                    **deserialization_kwargs,
+                )
+
+                kinase_obj = kinase_schema.KinaseInfo.model_validate(val_deserialized)
+                dict_import[kinase_obj.uniprot_id] = kinase_obj
+
+        if bool_remove:
+            clean_files_and_delete_directory(list_file)
 
     dict_import = {key: dict_import[key] for key in sorted(dict_import.keys())}
-
-    if bool_remove:
-        clean_files_and_delete_directory(list_file)
 
     return dict_import
