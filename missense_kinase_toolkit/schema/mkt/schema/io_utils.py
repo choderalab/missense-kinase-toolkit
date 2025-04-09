@@ -90,6 +90,11 @@ def return_filenotfound_error_if_empty_or_missing(
         return None
     elif not os.path.exists(str_path_in) or len(os.listdir(str_path_in)) == 0:
         return FileNotFoundError
+    elif os.path.exists(str_path_in) and str_path_in.endswith(".tar.gz"):
+        logger.info(
+            f"File {str_path_in} exists as a tar.gz directory. Will extract in memory..."
+        )
+        return None
     else:
         return None
 
