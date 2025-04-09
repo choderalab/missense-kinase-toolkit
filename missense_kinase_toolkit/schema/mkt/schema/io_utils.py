@@ -83,13 +83,13 @@ def return_filenotfound_error_if_empty_or_missing(
     FileNotFoundError | None
         FileNotFoundError for the given path. If the path is not empty, return None.
     """
-    if not os.path.exists(str_path_in) or len(os.listdir(str_path_in)) == 0:
-        return FileNotFoundError
-    elif os.path.exists(str_path_in) and str_path_in.endswith(".tar.gz"):
+    if os.path.exists(str_path_in) and str_path_in.endswith(".tar.gz"):
         logger.info(
             f"File {str_path_in} exists as a tar.gz directory. Will extract in memory..."
         )
         return None
+    elif not os.path.exists(str_path_in) or len(os.listdir(str_path_in)) == 0:
+        return FileNotFoundError
     else:
         return None
 
@@ -116,7 +116,11 @@ def untar_if_neeeded(str_filename: str) -> str:
     return str_filename
 
 
-def untar_files_in_memory(str_path: str) -> dict[str, str]:
+def untar_files_in_memory(
+    str_path: str,
+    bool_extract: bool = True,
+    list_ids: list[str] | None = None,
+) -> dict[str, str]:
     """Untar files exclusively in memory.
 
     Parameters
@@ -133,20 +137,26 @@ def untar_files_in_memory(str_path: str) -> dict[str, str]:
     with open(str_path, "rb") as f:
         tar_data = f.read()
 
-    dict_btyes = {}
+    list_entries, dict_btyes = [], {}
     with BytesIO(tar_data) as tar_buffer, tarfile.open(
         fileobj=tar_buffer, mode="r"
     ) as tar:
         for member in tar.getmembers():
-            if member.isfile():
-                with tar.extractfile(member) as f:
-                    dict_btyes[member.name] = f.read()
+            filename = os.path.basename(member.name)
+            cond1 = member.isfile()
+            cond2 = "._" not in filename
+            cond3 = list_ids is None or filename.split(".")[0] in list_ids
+            if cond1 and cond2 and cond3:
+                list_entries.append(filename)
+                if bool_extract:
+                    with tar.extractfile(member) as f:
+                        dict_btyes[member.name] = f.read()
 
-    dict_strings = {
-        k: v.decode("utf-8") for k, v in dict_btyes.items() if "._" not in k
-    }
+    if bool_extract:
+        # decode bytes to string
+        dict_btyes = {k: v.decode("utf-8") for k, v in dict_btyes.items()}
 
-    return dict_strings
+    return list_entries, dict_btyes
 
 
 def return_str_path_from_pkg_data(
@@ -264,6 +274,7 @@ def deserialize_kinase_dict(
     deserialization_kwargs: Optional[dict[str, Any]] = None,
     str_path: str | None = None,
     bool_remove: bool = True,
+    list_ids: list[str] | None = None,
 ) -> dict[str, BaseModel]:
     """Deserialize KinaseInfo object from files.
 
@@ -275,6 +286,10 @@ def deserialize_kinase_dict(
         Additional keyword arguments for deserialization function, by default None.
     str_path : str | None, optional
         Path from which to load files, by default None.
+    bool_remove : bool, optional
+        If True, remove the files after deserialization, by default True.
+    list_ids : list[str] | None, optional
+        List of IDs to filter the files if reading from memory, by default None.
 
     Returns
     -------
@@ -298,7 +313,7 @@ def deserialize_kinase_dict(
 
     dict_import = {}
     if str_path.endswith(".tar.gz"):
-        dict_str = untar_files_in_memory(str_path)
+        dict_str = untar_files_in_memory(str_path, list_ids=list_ids)[1]
         for val in tqdm(
             dict_str.values(), desc="Deserializing KinaseInfo objects in memory..."
         ):
@@ -309,7 +324,7 @@ def deserialize_kinase_dict(
             )
 
             kinase_obj = kinase_schema.KinaseInfo.model_validate(val_deserialized)
-            dict_import[kinase_obj.uniprot_id] = kinase_obj
+            dict_import[kinase_obj.hgnc_name] = kinase_obj
     else:
         list_file = glob.glob(os.path.join(str_path, f"*.{suffix}"))
         for file in tqdm(
@@ -323,7 +338,7 @@ def deserialize_kinase_dict(
                 )
 
                 kinase_obj = kinase_schema.KinaseInfo.model_validate(val_deserialized)
-                dict_import[kinase_obj.uniprot_id] = kinase_obj
+                dict_import[kinase_obj.hgnc_name] = kinase_obj
 
         if bool_remove:
             clean_files_and_delete_directory(list_file)
