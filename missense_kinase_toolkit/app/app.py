@@ -40,6 +40,8 @@ class Dashboard(StructureVisualizer):
     @st.cache_resource
     def _load_data():
         """Load and cache the data."""
+        # str_path = io_utils.return_str_path_from_pkg_data()
+        # list_kinases = io_utils.untar_files_in_memory(str_path, bool_extract=False)
         dict_kinase = io_utils.deserialize_kinase_dict()
 
         dict_reverse = {
@@ -54,6 +56,7 @@ class Dashboard(StructureVisualizer):
         dict_reverse = dict(sorted(dict_reverse.items()))
 
         return dict_reverse
+        # return list_kinases
 
     def setup_sidebar(self) -> DashboardState:
         """Set up the inputs for the dashboard.
