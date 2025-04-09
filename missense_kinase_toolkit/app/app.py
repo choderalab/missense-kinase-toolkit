@@ -34,29 +34,17 @@ class Dashboard(StructureVisualizer):
     def __init__(self):
         """Initialize the Dashboard class."""
         super().__init__()
-        self.dict_kinase = self._load_data()
+        self.list_kinases = self._load_data()
 
     @staticmethod
     @st.cache_resource
     def _load_data():
-        """Load and cache the data."""
-        # str_path = io_utils.return_str_path_from_pkg_data()
-        # list_kinases = io_utils.untar_files_in_memory(str_path, bool_extract=False)
-        dict_kinase = io_utils.deserialize_kinase_dict()
+        """Load and cache the data - only load filenames and unload KinaseInfo objects separately."""
+        str_path = io_utils.return_str_path_from_pkg_data()
 
-        dict_reverse = {
-            (
-                v.hgnc_name + "_" + v.uniprot_id.split("_")[1]
-                if "_" in v.uniprot_id
-                else v.hgnc_name
-            ): v
-            for v in dict_kinase.values()
-        }
+        list_kinases, _ = io_utils.untar_files_in_memory(str_path, bool_extract=False)
 
-        dict_reverse = dict(sorted(dict_reverse.items()))
-
-        return dict_reverse
-        # return list_kinases
+        return list_kinases
 
     def setup_sidebar(self) -> DashboardState:
         """Set up the inputs for the dashboard.
@@ -80,7 +68,7 @@ class Dashboard(StructureVisualizer):
         )
         kinase_selection = st.sidebar.selectbox(
             "Kinase by HGNC name",
-            options=self.dict_kinase.keys(),
+            options=self.list_kinases,
             index=0,
             label_visibility="collapsed",
             help="Select a kinase to visualize its structure.",
@@ -133,8 +121,10 @@ class Dashboard(StructureVisualizer):
             The state of the dashboard containing the selected kinase and color palette.
 
         """
-        # load Pydantic model
-        obj_temp = self.dict_kinase[dashboard_state.kinase]
+        # load KinaseInfo model
+        obj_temp = io_utils.deserialize_kinase_dict(list_ids=[dashboard_state.kinase])[
+            dashboard_state.kinase
+        ]
 
         try:
             structure_html = self.visualize_structure(
@@ -145,9 +135,7 @@ class Dashboard(StructureVisualizer):
         except Exception as e:
             print(
                 # logger.exception(
-                "Error generating structure for %s: %s",
-                dashboard_state.kinase,
-                e,
+                f"Error generating structure for {dashboard_state.kinase}: {e}",
             )
             if obj_temp.kincore is None:
                 st.error("No KinCore objects available for this kinase.", icon="⚠️")
