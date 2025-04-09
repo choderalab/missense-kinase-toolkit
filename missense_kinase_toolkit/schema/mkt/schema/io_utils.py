@@ -143,11 +143,14 @@ def untar_files_in_memory(
     ) as tar:
         for member in tar.getmembers():
             filename = os.path.basename(member.name)
+            # make sure entry is file
             cond1 = member.isfile()
+            # ignore MacOS AppleDouble files
             cond2 = "._" not in filename
+            # use list_ids, if provided
             cond3 = list_ids is None or filename.split(".")[0] in list_ids
             if cond1 and cond2 and cond3:
-                list_entries.append(filename)
+                list_entries.append(filename.split(".")[0])
                 if bool_extract:
                     with tar.extractfile(member) as f:
                         dict_btyes[member.name] = f.read()
