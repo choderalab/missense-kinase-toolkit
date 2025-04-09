@@ -43,6 +43,7 @@ class Dashboard(StructureVisualizer):
         str_path = io_utils.return_str_path_from_pkg_data()
 
         list_kinases, _ = io_utils.untar_files_in_memory(str_path, bool_extract=False)
+        list_kinases.sort()
 
         return list_kinases
 
