@@ -15,7 +15,16 @@ from Bio.PDB.Structure import Structure
 class StructureVisualizer:
     """Class to visualize structures using py3Dmol."""
 
-    dict_color: dict[str, str] = field(default_factory=dict)
+    str_template: str = "1gag_template.pdb"
+    """Path to the template structure."""
+    dict_color: dict[str, str] = field(
+        default_factory=lambda: {
+            "normal": "spectrum",
+            "highlight": "red",
+            "lowlight": "gray",
+        }
+    )
+    field(default_factory=dict)
     """Color dictionary for the py3Dmol viewer."""
     dict_dims: dict[str, int] = field(
         default_factory=lambda: {"width": 500, "height": 600}
@@ -89,6 +98,7 @@ class StructureVisualizer:
         self,
         mmcif_dict: dict[str, Any],
         str_id: str,
+        # list_res: list[str] = None,
         bool_show: bool = False,
     ) -> str:
         """Visualize the structure using py3Dmol.
@@ -113,7 +123,10 @@ class StructureVisualizer:
         view = py3Dmol.view(
             width=self.dict_dims["width"], height=self.dict_dims["height"]
         )
+
         view.addModel(pdb_text, "pdb")
+
+        # TODO: Add color and opacity via list_res
         view.setStyle({self.style: {"color": "spectrum"}})
         view.zoomTo()
 
