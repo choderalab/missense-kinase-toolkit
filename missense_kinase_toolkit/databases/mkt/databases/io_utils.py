@@ -177,28 +177,3 @@ def get_repo_root():
     except git.InvalidGitRepositoryError:
         print("Not a git repository; using current directory as root...")
         return "."
-
-
-def extract_tarfiles(path_from, path_to):
-    """Extract tar.gz files.
-
-    Parameters
-    ----------
-    path_from : str
-        Path to the tar.gz file
-    path_to : str
-        Pth to extract the files to
-
-    Returns
-    -------
-    None
-        None
-
-    """
-    import tarfile
-
-    try:
-        with tarfile.open(path_from, "r:gz") as tar:
-            tar.extractall(path_to)
-    except Exception as e:
-        logger.error(f"Exception {e}")
