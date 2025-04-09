@@ -459,7 +459,7 @@ DICT_COL2OBJ_ORIG = {
 
 
 def process_keys_dict(
-    dict_in: dict[str, list[str, Callable]]
+    dict_in: dict[str, list[str, Callable]],
 ) -> dict[str, dict[str, str | Callable]]:
     """Process keys dictionary to convert to list of functions.
 
