@@ -1,16 +1,14 @@
 import logging
 from dataclasses import dataclass
-from io import StringIO
 
-import py3Dmol
 import streamlit as st
-from Bio.PDB.mmcifio import MMCIFIO
-from mkt.databases.colors import DICT_COLORS
-
-# from mkt.databases.klifs import DICT_POCKET_KLIFS_REGIONS
-from mkt.schema import io_utils
 
 # from mkt.schema.kinase_schema import KinaseInfo
+from generate_structures import StructureVisualizer
+
+# from mkt.databases.colors import DICT_COLORS
+# from mkt.databases.klifs import DICT_POCKET_KLIFS_REGIONS
+from mkt.schema import io_utils
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +19,8 @@ class DashboardState:
 
     kinase: str
     """Selected kinase."""
-    palette: str
-    """Selected color palette."""
+    # palette: str
+    # """Selected color palette."""
     # check_phospho: bool
     # """Check to highlight phosphorylation sites."""
     # list_seq: list[list[str]] | None = None
@@ -32,9 +30,10 @@ class DashboardState:
 
 
 # adapted from InterPLM (https://github.com/ElanaPearl/InterPLM/blob/main/interplm)
-class SequenceStructureVisualizer:
+class Dashboard(StructureVisualizer):
     def __init__(self):
-        """Initialize the SequenceStructureVisualizer class."""
+        """Initialize the Dashboard class."""
+        super().__init__()
         self.dict_kinase = self._load_data()
 
     @staticmethod
@@ -85,18 +84,18 @@ class SequenceStructureVisualizer:
         )
 
         # select color palette
-        st.sidebar.markdown(
-            "## Color palette\n"
-            "Select a color palette for the visualization. "
-            "The default palette is 'default'."
-        )
-        palette_selection = st.sidebar.selectbox(
-            "Select palette",
-            options=DICT_COLORS.keys(),
-            index=0,
-            label_visibility="collapsed",
-            help="Select a color palette for the visualization.",
-        )
+        # st.sidebar.markdown(
+        #     "## Color palette\n"
+        #     "Select a color palette for the visualization. "
+        #     "The default palette is 'default'."
+        # )
+        # palette_selection = st.sidebar.selectbox(
+        #     "Select palette",
+        #     options=DICT_COLORS.keys(),
+        #     index=0,
+        #     label_visibility="collapsed",
+        #     help="Select a color palette for the visualization.",
+        # )
 
         # # select highlight phosphorylation sites
         # st.sidebar.markdown(
@@ -116,64 +115,13 @@ class SequenceStructureVisualizer:
 
         state_dashboard = DashboardState(
             kinase=kinase_selection,
-            palette=palette_selection,
+            # palette=palette_selection,
             # check_phospho=add_highlight,
         )
 
         return state_dashboard
 
-    @staticmethod
-    def dict_to_mmcif_text(mmcif_dict: dict[str, str]) -> str:
-        """Convert MMCIF2Dict object back to mmCIF text format
-
-        Parameters
-        ----------
-        mmcif_dict : dict[str, str]
-            Dictionary containing mmCIF data.
-
-        Returns
-        -------
-        str
-            mmCIF text format as a string.
-
-        """
-        mmcif_io = MMCIFIO()
-        mmcif_io.set_dict(mmcif_dict)
-
-        # Write to a StringIO object instead of a file
-        mmcif_text = StringIO()
-        mmcif_io.save(mmcif_text)
-
-        return mmcif_text.getvalue()
-
-    def _generate_structure(
-        self,
-        hgnc_name: str,
-        dict_col: dict[str, str],
-        dict_params: dict[str, str] = {"width": 300, "height": 300},
-    ) -> str:
-        """Display the structure of the selected kinase.
-
-        Parameters
-        ----------
-        hgnc_name : str
-            HGNC gene name for which to generate structure.
-
-        """
-        # TODO: Use colors
-        obj_temp = self.dict_kinase[hgnc_name]
-
-        # get the selected kinase CIF, if exists
-        mmcif_text = self.dict_to_mmcif_text(obj_temp.kincore.cif.cif)
-
-        view = py3Dmol.view(width=500, height=500)
-        view.addModel(mmcif_text, "cif")
-        view.setStyle({"cartoon": {"color": "spectrum"}})
-        view.zoomTo()
-
-        return view._make_html()
-
-    def display_structure(self, dashboard_state: DashboardState) -> None:
+    def display_dashboard(self, dashboard_state: DashboardState) -> None:
         """Run the dashboard.
 
         Parameters
@@ -182,14 +130,23 @@ class SequenceStructureVisualizer:
             The state of the dashboard containing the selected kinase and color palette.
 
         """
+        # load Pydantic model
+        obj_temp = self.dict_kinase[dashboard_state.kinase]
+
         try:
-            structure_html = self._generate_structure(dashboard_state.kinase)
+            structure_html = self.visualize_structure(
+                mmcif_dict=obj_temp.kincore.cif.cif,
+                str_id=dashboard_state.kinase,
+            )
             st.components.v1.html(structure_html, height=500)
         except Exception as e:
-            logger.exception(
-                "Error generating structure for %s: %s", dashboard_state.kinase, e
+            print(
+                # logger.exception(
+                "Error generating structure for %s: %s",
+                dashboard_state.kinase,
+                e,
             )
-            if self.dict_kinase[dashboard_state.kinase].kincore is None:
+            if obj_temp.kincore is None:
                 st.error("No KinCore objects available for this kinase.", icon="⚠️")
             else:
                 st.error("No structure available for this kinase.", icon="⚠️")
@@ -202,17 +159,17 @@ def main():
         page_icon="🛍️",
     )
 
-    st.title("Kinase Structure/Sequence Visualizer")
+    st.title("KinaseInfo Dashboard")
     st.markdown(
         "This tool allows you to visualize the aligned functional sequences and structures of kinases and their phosphorylation sites. "
         "Select a kinase from the dropdown menu to get started."
     )
 
-    visualizer = SequenceStructureVisualizer()
+    visualizer = Dashboard()
     state = visualizer.setup_sidebar()
     st.subheader(f"Selected Kinase: {state.kinase}")
 
-    visualizer.display_structure(state)
+    visualizer.display_dashboard(state)
 
 
 if __name__ == "__main__":
