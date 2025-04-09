@@ -52,7 +52,7 @@ class TestSchema:
         assert n_klif2uniprot == 519
 
         # check ABL1 entries
-        obj_abl1 = dict_kinase["P00519"]
+        obj_abl1 = dict_kinase["ABL1"]
 
         assert obj_abl1.hgnc_name == "ABL1"
 
@@ -160,7 +160,7 @@ class TestSchema:
     def test_serialization(self, caplog):
         from mkt.schema import io_utils
 
-        yaml_test = "P24941"
+        yaml_test = "CDK2"
 
         dict_kinase = io_utils.deserialize_kinase_dict()
 
@@ -187,6 +187,6 @@ class TestSchema:
                     suffix=suffix, str_path=f"./{suffix}"
                 )
                 if suffix == "yaml":
-                    assert dict_kinase["P24941"] == dict_temp["P24941"]
+                    assert dict_kinase[yaml_test] == dict_temp[yaml_test]
                 else:
                     assert dict_kinase == dict_temp
