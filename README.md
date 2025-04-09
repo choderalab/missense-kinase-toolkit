@@ -16,10 +16,11 @@ Additional documentation can be found [here](https://missense-kinase-toolkit.rea
 
 ## Getting started
 
-`mkt` is structured as a monorepo with sub-packages described below for specific tasks.
+`mkt` is structured as a monorepo with sub-packages and directories described below for specific tasks.
 
 | Subpackages   | Description                                                                                                                         |
 | :-:           | :-                                                                                                                                  |
+| `app`         | [Streamlit app](https://mkt-app.streamlit.app/) to visualize data contained in harmonized `Pydantic` models                         |
 | `schema`      | Harmonized and pre-processed sequence and structure data along with `Pydantic` models to load, query, and validate this data        |
 | `databases`   | Package containing API clients and scrapers to collect and harmonize kinase data from various sources and generate `schema` objects |
 | `ml`          | **In-progress** package to build machine learning models to predict kinase properties                                               |
