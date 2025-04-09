@@ -828,9 +828,13 @@ def combine_kinaseinfo_uniprot(
 
     dict_kinaseinfo_uniprot = {}
     for uniprot_id in set_uniprot:
+        # hgnc
         str_hgnc = dict_hgnc[uniprot_id]
+
+        # uniprot
         obj_uniprot = dict_uniprot[uniprot_id]
 
+        # Pfam
         try:
             obj_pfam = dict_pfam[uniprot_id]
         except KeyError:
@@ -966,7 +970,12 @@ def combine_kinaseinfo(
 
         try:
             kinase_info_temp = KinaseInfoGenerator.model_validate(dict_temp)
-            dict_kinaseinfo[uniprot_id] = kinase_info_temp
+            # add uniprot_id suffix to hgnc_name, if necessary
+            if "_" in uniprot_id:
+                suffix = uniprot_id.split("_")[1]
+                str_hgnc = kinase_info_temp.hgnc_name + "_" + suffix
+                kinase_info_temp.hgnc_name = str_hgnc
+            dict_kinaseinfo[kinase_info_temp.hgnc_name] = kinase_info_temp
         except Exception as e:
             logger.warning(
                 f"Exception {e} generating KinaseInfoGenerator for {uniprot_id}..."
