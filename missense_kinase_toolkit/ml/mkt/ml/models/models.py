@@ -83,25 +83,6 @@ np.save("./kinase_pooler_layer.npy", X)
 # labels = model_DB.labels_
 # unique, counts = np.unique(labels, return_counts=True)
 
-X = np.load("./kinase_pooler_layer.npy")
-
-scale_bool = False
-kmeans, list_sse, list_silhouette = find_kmeans(mx_input=X, bool_scale=scale_bool)
-n_clusters = len(np.unique(kmeans.labels_))
-plot_knee(list_sse, n_clusters, filename="elbow.png")
-
-# PCA
-pca = generate_clustering("PCA", X.T, bool_scale=scale_bool)
-df_pca = pd.DataFrame(pca.components_.T, columns=["PC1", "PC2"])
-plot_dim_red_scatter(df_pca, kmeans, method="PCA")
-plot_scatter_grid(df_annot, df_pca, kmeans, "PCA")
-
-# t-SNE
-tsne = generate_clustering("t-SNE", X, bool_scale=scale_bool)
-df_tsne = pd.DataFrame(tsne.embedding_, columns=["tSNE1", "tSNE2"])
-plot_dim_red_scatter(df_tsne, kmeans, method="tSNE")
-plot_scatter_grid(df_annot, df_tsne, kmeans, "t-SNE")
-
 # NOT IN USE
 # config_automodel = AutoConfig.from_pretrained(model_name)
 # [i for i in model_kinase.state_dict().keys()]
