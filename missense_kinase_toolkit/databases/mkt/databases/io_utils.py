@@ -67,7 +67,7 @@ def load_csv_to_dataframe(
     try:
         df = pd.read_csv(os.path.join(path_data, filename))
     except FileNotFoundError:
-        print(f"File {filename} not found in {path_data}...")
+        logger.info(f"File {filename} not found in {path_data}...")
     return df
 
 
@@ -124,7 +124,7 @@ def concatenate_csv_files_with_glob(
             df = pd.read_csv(csv_file, low_memory=False)
             df_combo = pd.concat([df_combo, df])
     else:
-        print(f"No files matching {str_find} found in {path_data}...")
+        logger.info(f"No files matching {str_find} found in {path_data}...")
 
     # TODO: implement remove duplicates
 
@@ -176,7 +176,7 @@ def get_repo_root():
         repo = git.Repo(".", search_parent_directories=True)
         return repo.working_tree_dir
     except git.InvalidGitRepositoryError:
-        print("Not a git repository; using current directory as root...")
+        logger.info("Not a git repository; using current directory as root...")
         return "."
 
 
