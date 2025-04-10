@@ -60,13 +60,16 @@ def align_structures(
         os.makedirs(temp_dir)
 
     # Process each CIF file
-    for str_cif in tqdm(dict_cif.values(), desc="Aligning structures..."):
+    for str_filename, str_cif in tqdm(dict_cif.items(), desc="Aligning structures..."):
+        str_filename_update = str_filename.split("/")[1].replace(".cif", ".pdb")
+        str_filepath = os.path.join(temp_dir, str_filename_update)
+
         # Clear everything except reference
         cmd.delete("not reference")
 
         # Load target structure
         mobile_name = "mobile"
-        cmd.load(str_cif, format="cif", object=mobile_name)
+        cmd.load_raw(str_cif, format="cif", object=mobile_name)
 
         # Perform alignment
         if method == "align":
@@ -80,7 +83,7 @@ def align_structures(
             cmd.align(f"{mobile_name} and {selection}", f"reference and {selection}")
 
         # Save aligned structure
-        cmd.save(temp_dir, mobile_name)
+        cmd.save(str_filepath, mobile_name)
 
     cmd.quit()
 
