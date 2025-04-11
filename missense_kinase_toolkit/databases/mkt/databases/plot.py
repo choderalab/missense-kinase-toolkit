@@ -108,7 +108,6 @@ class SequenceAlignment:
     def generate_alignment(self) -> None:
         """Generate sequence alignment plot adapted from https://dmnfarrell.github.io/bioinformatics/bokeh-sequence-aligner."""
 
-        # reverse text and colors so A-Z is top-bottom not bottom-top
         list_text = [i for s in self.list_sequences for i in s]
         colors = self.get_colors(list_text, self.dict_colors)
 
