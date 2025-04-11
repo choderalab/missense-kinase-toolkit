@@ -47,19 +47,41 @@ def generate_kinase_info_plot(
 
 @dataclass
 class SequenceAlignment:
+    """Class for sequence alignment plot."""
+
+    # required parameters
     list_sequences: list[str]
     """List of sequences to show in aligner."""
     list_ids: list[str]
     """List of sequence IDs."""
     dict_colors: dict[str, str]
     """Dictionary of colors for each sequence."""
+
+    # optional formatting parameters
     font_size: int = 9
     """Font size for alignment."""
     plot_width: int = 800
     """Width of the plot."""
+    plot_height: int = None
+    """Height of the plot; default None and will full-page heuristic."""
+    bool_top: bool = True
+    """Show entire sequence view on top or not (no text, with zoom)."""
+    bool_reverse: bool = True
+    """Reverse the sequence or not."""
+
+    # bokeh objects
+    plot_top: Any = None
+    """Bokeh plot object."""
+    plot_bottom: Any = None
+    """Bokeh plot object."""
+    gridplot: Any = None
+    """Bokeh gridplot object."""
 
     def __post_init__(self):
         self.generate_alignment()
+        if self.bool_reverse:
+            self.list_sequences = self.list_sequences[::-1]
+            self.list_ids = self.list_ids[::-1]
 
     @staticmethod
     def get_colors(
@@ -87,7 +109,7 @@ class SequenceAlignment:
         """Generate sequence alignment plot adapted from https://dmnfarrell.github.io/bioinformatics/bokeh-sequence-aligner."""
 
         # reverse text and colors so A-Z is top-bottom not bottom-top
-        list_text = [i for s in self.list_sequences[::-1] for i in s]
+        list_text = [i for s in self.list_sequences for i in s]
         colors = self.get_colors(list_text, self.dict_colors)
 
         N = len(self.list_sequences[0])
@@ -119,42 +141,50 @@ class SequenceAlignment:
             viewlen = N
 
         # entire sequence view (no text, with zoom)
-        p = figure(
-            title=None,
-            frame_width=self.plot_width,
-            frame_height=50,
-            x_range=x_range,
-            y_range=(0, S),
-            tools="xpan, xwheel_zoom, reset, save",
-            min_border=0,
-            toolbar_location="below",
-        )
-        rects = Rect(
-            x="x",
-            y="recty",
-            width=1,
-            height=1,
-            fill_color="colors",
-            line_color=None,
-            fill_alpha=0.6,
-        )
-        p.add_glyph(source, rects)
-        p.yaxis.visible = False
-        p.grid.visible = False
+        if self.bool_top:
+            p_top = figure(
+                title=None,
+                frame_width=self.plot_width,
+                frame_height=50,
+                x_range=x_range,
+                y_range=(0, S),
+                tools="xpan, xwheel_zoom, reset, save",
+                min_border=0,
+                toolbar_location="below",
+            )
+            rects = Rect(
+                x="x",
+                y="recty",
+                width=1,
+                height=1,
+                fill_color="colors",
+                line_color=None,
+                fill_alpha=0.6,
+            )
+            p_top.add_glyph(source, rects)
+            p_top.yaxis.visible = False
+            p_top.grid.visible = False
+
+            pbottom_tools = "xpan,reset"
+        else:
+            pbottom_tools = "xpan, xwheel_zoom, reset, save"
 
         # sequence text view with ability to scroll along x axis
         # view_range is for the close up view
         view_range = (0, viewlen)
-        plot_height = S * 15 + 50
-        p1 = figure(
+        if self.plot_height is None:
+            self.plot_height = S * 15 + 50
+        p_bottom = figure(
             title=None,
             frame_width=self.plot_width,
-            frame_height=plot_height,
+            frame_height=self.plot_height,
             x_range=view_range,
-            y_range=self.list_ids[::-1],
-            tools="xpan,reset",
+            y_range=self.list_ids,
+            tools=pbottom_tools,
             min_border=0,
             toolbar_location="below",
+            background_fill_color="white",
+            border_fill_color="white",
         )
         glyph = Text(
             x="x",
@@ -173,23 +203,27 @@ class SequenceAlignment:
             line_color=None,
             fill_alpha=0.4,
         )
-        p1.add_glyph(source, glyph)
-        p1.add_glyph(source, rects)
-        p1.grid.visible = False
-        p1.xaxis.major_label_text_font_style = "bold"
-        p1.yaxis.minor_tick_line_width = 0
-        p1.yaxis.major_tick_line_width = 0
+        p_bottom.add_glyph(source, glyph)
+        p_bottom.add_glyph(source, rects)
+        p_bottom.grid.visible = False
+        p_bottom.xaxis.major_label_text_font_style = "bold"
+        p_bottom.yaxis.axis_label_text_color = "black"
+        p_bottom.yaxis.major_label_text_color = "black"
+        p_bottom.xaxis.axis_label_text_color = "black"
+        p_bottom.xaxis.major_label_text_color = "black"
+        p_bottom.yaxis.minor_tick_line_width = 0
+        p_bottom.yaxis.major_tick_line_width = 0
 
-        self.plot = gridplot([[p], [p1]], toolbar_location="below")
+        self.plot_top = p_top
+        self.plot_bottom = p_bottom
+
+        if self.bool_fullseq:
+            self.gridplot = gridplot([[p_top], [p_bottom]], toolbar_location="below")
+        else:
+            self.gridplot = gridplot([[p_bottom]], toolbar_location="below")
 
     def show_plot(self) -> None:
-        """Show sequence alignment plot via Bokeh."""
+        """Show sequence alignment plot via Bokeh in separate window."""
         from bokeh.plotting import show
 
-        # show in separate window
-        show(self.plot)
-
-        # notebook alternative
-        # import panel as pn # not dependency - install separately
-        # pn.extension()
-        # pn.pane.Bokeh(alignment_klifs_min.plot)
+        show(self.gridplot)
