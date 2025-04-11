@@ -1,14 +1,15 @@
 import logging
 from dataclasses import dataclass
 
+import pandas as pd
 import streamlit as st
-
-# from mkt.schema.kinase_schema import KinaseInfo
+from generate_alignments import SequenceAlignment
 from generate_structures import StructureVisualizer
+from mkt.databases.colors import DICT_COLORS
 
-# from mkt.databases.colors import DICT_COLORS
 # from mkt.databases.klifs import DICT_POCKET_KLIFS_REGIONS
 from mkt.schema import io_utils
+from streamlit_bokeh import streamlit_bokeh
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +20,8 @@ class DashboardState:
 
     kinase: str
     """Selected kinase."""
-    # palette: str
-    # """Selected color palette."""
+    palette: str
+    """Selected color palette."""
     # check_phospho: bool
     # """Check to highlight phosphorylation sites."""
     # list_seq: list[list[str]] | None = None
@@ -76,18 +77,18 @@ class Dashboard(StructureVisualizer):
         )
 
         # select color palette
-        # st.sidebar.markdown(
-        #     "## Color palette\n"
-        #     "Select a color palette for the visualization. "
-        #     "The default palette is 'default'."
-        # )
-        # palette_selection = st.sidebar.selectbox(
-        #     "Select palette",
-        #     options=DICT_COLORS.keys(),
-        #     index=0,
-        #     label_visibility="collapsed",
-        #     help="Select a color palette for the visualization.",
-        # )
+        st.sidebar.markdown(
+            "## Sequence color palette\n"
+            "Select a color palette for the visualization. "
+            "The default palette is 'default'."
+        )
+        palette_selection = st.sidebar.selectbox(
+            "Select palette",
+            options=DICT_COLORS.keys(),
+            index=0,
+            label_visibility="collapsed",
+            help="Select a color palette for the visualization.",
+        )
 
         # # select highlight phosphorylation sites
         # st.sidebar.markdown(
@@ -107,7 +108,7 @@ class Dashboard(StructureVisualizer):
 
         state_dashboard = DashboardState(
             kinase=kinase_selection,
-            # palette=palette_selection,
+            palette=palette_selection,
             # check_phospho=add_highlight,
         )
 
@@ -127,21 +128,73 @@ class Dashboard(StructureVisualizer):
             dashboard_state.kinase
         ]
 
-        try:
-            structure_html = self.visualize_structure(
-                mmcif_dict=obj_temp.kincore.cif.cif,
-                str_id=dashboard_state.kinase,
+        # plot_width = st.sidebar.slider("Plot Width", min_value=400, max_value=1200, value=800)
+
+        with st.expander("Sequences", expanded=True):
+            st.markdown(
+                "### Sequence alignment\n"
+                "This section shows the aligned sequences of the selected kinase. "
+                "The colors represent different regions of the kinase."
             )
-            st.components.v1.html(structure_html, height=500)
-        except Exception as e:
-            print(
-                # logger.exception(
-                f"Error generating structure for {dashboard_state.kinase}: {e}",
+
+            obj_alignment = SequenceAlignment(
+                list_sequences=[
+                    obj_temp.uniprot.canonical_seq,
+                    obj_temp.klifs.pocket_seq,
+                ],
+                list_ids=["UniProt", "KLIFS"],
+                dict_colors=DICT_COLORS[dashboard_state.palette]["DICT_COLORS"],
+                plot_width=1200,
             )
-            if obj_temp.kincore is None:
-                st.error("No KinCore objects available for this kinase.", icon="⚠️")
-            else:
-                st.error("No structure available for this kinase.", icon="⚠️")
+
+            # st.bokeh_chart(obj_alignment.plot, use_container_width=True)
+            streamlit_bokeh(obj_alignment.plot, use_container_width=True, key="plot1")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            with st.expander("Structure", expanded=True):
+                st.markdown("### KinCore active structure\n")
+                try:
+                    structure_html = self.visualize_structure(
+                        mmcif_dict=obj_temp.kincore.cif.cif,
+                        str_id=dashboard_state.kinase,
+                    )
+                    st.components.v1.html(structure_html, height=500)
+                    st.checkbox("Show phosphosites", value=False)
+                    st.checkbox("Show KLIFS pocket", value=False)
+                    st.checkbox("Show mutational density", value=False)
+                except Exception as e:
+                    logger.exception(
+                        f"Error generating structure for {dashboard_state.kinase}: {e}",
+                    )
+                    if obj_temp.kincore is None:
+                        st.error(
+                            "No KinCore objects available for this kinase.", icon="⚠️"
+                        )
+                    else:
+                        st.error("No structure available for this kinase.", icon="⚠️")
+
+        with col2:
+            with st.expander("Properties", expanded=True):
+                st.markdown("### Kinase properties\n")
+
+                st.markdown("#### KinHub\n")
+                try:
+                    df_kinhub = pd.DataFrame(
+                        {
+                            k.replace("_", " ").upper(): v
+                            for k, v in dict(obj_temp.kinhub).items()
+                        },
+                        index=[0],
+                    ).T
+                    df_kinhub.columns = ["Property"]
+                    st.table(df_kinhub)
+                except Exception as e:
+                    logger.exception(
+                        f"Error generating KinHub properties for {dashboard_state.kinase}: {e}",
+                    )
+                    st.error("No KinHub objects available for this kinase.", icon="⚠️")
 
 
 def main():
@@ -152,10 +205,6 @@ def main():
     )
 
     st.title("KinaseInfo Dashboard")
-    st.markdown(
-        "This tool allows you to visualize the aligned functional sequences and structures of kinases and their phosphorylation sites. "
-        "Select a kinase from the dropdown menu to get started."
-    )
 
     visualizer = Dashboard()
     state = visualizer.setup_sidebar()
