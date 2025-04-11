@@ -243,7 +243,7 @@ def serialize_kinase_dict(
     suffix: str = "json",
     serialization_kwargs: Optional[dict[str, Any]] = None,
     str_path: str | None = None,
-):
+) -> None:
     """Serialize KinaseInfo object to files.
 
     Parameters
