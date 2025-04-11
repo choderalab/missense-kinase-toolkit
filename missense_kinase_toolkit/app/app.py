@@ -1,11 +1,13 @@
 import logging
 from dataclasses import dataclass
 
-import pandas as pd
 import streamlit as st
-from generate_alignments import SequenceAlignment
+from generate_properties import PropertyTables
+
+# from generate_alignments import SequenceAlignment
 from generate_structures import StructureVisualizer
 from mkt.databases.colors import DICT_COLORS
+from mkt.databases.plot import SequenceAlignment
 
 # from mkt.databases.klifs import DICT_POCKET_KLIFS_REGIONS
 from mkt.schema import io_utils
@@ -31,7 +33,9 @@ class DashboardState:
 
 
 # adapted from InterPLM (https://github.com/ElanaPearl/InterPLM/blob/main/interplm)
-class Dashboard(StructureVisualizer):
+class Dashboard(PropertyTables, StructureVisualizer):
+    """Class to visualize the kinase dashboard."""
+
     def __init__(self):
         """Initialize the Dashboard class."""
         super().__init__()
@@ -128,8 +132,6 @@ class Dashboard(StructureVisualizer):
             dashboard_state.kinase
         ]
 
-        # plot_width = st.sidebar.slider("Plot Width", min_value=400, max_value=1200, value=800)
-
         with st.expander("Sequences", expanded=True):
             st.markdown(
                 "### Sequence alignment\n"
@@ -145,10 +147,14 @@ class Dashboard(StructureVisualizer):
                 list_ids=["UniProt", "KLIFS"],
                 dict_colors=DICT_COLORS[dashboard_state.palette]["DICT_COLORS"],
                 plot_width=1200,
+                plot_height=50,
+                bool_top=False,
+                bool_reverse=False,
             )
 
-            # st.bokeh_chart(obj_alignment.plot, use_container_width=True)
-            streamlit_bokeh(obj_alignment.plot, use_container_width=True, key="plot1")
+            streamlit_bokeh(
+                obj_alignment.plot_bottom, use_container_width=True, key="plot1"
+            )
 
         col1, col2 = st.columns(2)
 
@@ -179,22 +185,19 @@ class Dashboard(StructureVisualizer):
             with st.expander("Properties", expanded=True):
                 st.markdown("### Kinase properties\n")
 
+                self.extract_properties(obj_temp)
+
                 st.markdown("#### KinHub\n")
-                try:
-                    df_kinhub = pd.DataFrame(
-                        {
-                            k.replace("_", " ").upper(): v
-                            for k, v in dict(obj_temp.kinhub).items()
-                        },
-                        index=[0],
-                    ).T
-                    df_kinhub.columns = ["Property"]
-                    st.table(df_kinhub)
-                except Exception as e:
-                    logger.exception(
-                        f"Error generating KinHub properties for {dashboard_state.kinase}: {e}",
-                    )
+                if self.df_kinhub is not None:
+                    st.table(self.df_kinhub)
+                else:
                     st.error("No KinHub objects available for this kinase.", icon="⚠️")
+
+                st.markdown("#### KLIFS\n")
+                if self.df_klifs is not None:
+                    st.table(self.df_klifs)
+                else:
+                    st.error("No KLIFS objects available for this kinase.", icon="⚠️")
 
 
 def main():
