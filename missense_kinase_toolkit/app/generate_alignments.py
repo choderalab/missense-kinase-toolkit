@@ -1,134 +1,143 @@
-# import numpy as np
-
-# from bokeh.layouts import gridplot
-# from bokeh.models import ColumnDataSource
-# from bokeh.models.glyphs import Rect, Text
-# from bokeh.plotting import figure
-# from pydantic.dataclasses import dataclass
-
-
-# @dataclass
-# class SequenceAlignment:
-
-#     list_sequences: list[str]
-#     """List of sequences to show in aligner."""
-#     list_ids: list[str]
-#     """List of sequence IDs."""
-#     dict_colors: dict[str, str]
-#     """Dictionary of colors for each sequence."""
-#     font_size: int = 9
-#     """Font size for alignment."""
-#     plot_width: int = 800
-#     """Width of the plot."""
-
-#     def __post_init__(self):
-#         self.generate_alignment()
-
-#     @staticmethod
-#     def get_colors(
-#         list_str: str,
-#         dict_colors: dict[str, str],
-#     ) -> list[str]:
-#         """Get colors for residue in a given sequence.
-
-#         Parameters
-#         ----------
-#         list_str : str
-#             List of residues in a sequence.
-#         dict_colors : dict[str, str]
-#             Dictionary of colors for each residue.
-
-#         Returns
-#         -------
-#         list[str]
-#             List of colors for each residue.
-#         """
-#         list_colors = [dict_colors[i] for i in list_str]
-#         return list_colors
-
-#     def generate_alignment(self) -> None:
-#         """Generate sequence alignment plot adapted from https://dmnfarrell.github.io/bioinformatics/bokeh-sequence-aligner."""
-
-#         # reverse text and colors so A-Z is top-bottom not bottom-top
-#         list_text = [i for s in self.list_sequences for i in s]
-#         colors = self.get_colors(list_text, self.dict_colors)
-
-#         N = len(self.list_sequences[0])
-#         S = len(self.list_sequences)
-
-#         x = np.arange(1, N + 1)
-#         y = np.arange(0, S, 1)
-#         # creates a 2D grid of coords from the 1D arrays
-#         xx, yy = np.meshgrid(x, y)
-#         # flattens the arrays
-#         gx = xx.ravel()
-#         gy = yy.flatten()
-#         # use recty for rect coords with an offset
-#         recty = gy + 0.5
-#         # now we can create the ColumnDataSource with all the arrays
-#         source = ColumnDataSource(
-#             dict(
-#                 x=gx,
-#                 y=gy,
-#                 recty=recty,
-#                 text=list_text,
-#                 colors=colors,
-#             )
-#         )
-#         if N > 100:
-#             viewlen = 100
-#         else:
-#             viewlen = N
-
-#         # sequence text view with ability to scroll along x axis
-#         # view_range is for the close up view
-#         view_range = (0, viewlen)
-#         plot_height = 50
-#         p1 = figure(
-#             title=None,
-#             frame_width=self.plot_width,
-#             frame_height=plot_height,
-#             x_range=view_range,
-#             y_range=self.list_ids,
-#             tools="xpan, xwheel_zoom, reset, save",
-#             min_border=0,
-#             toolbar_location="below",
-#             background_fill_color="white",
-#             border_fill_color="white",
-#         )
-#         glyph = Text(
-#             x="x",
-#             y="y",
-#             text="text",
-#             text_align="center",
-#             text_baseline="bottom",
-#             text_color="black",
-#             text_font_size=f"{str(self.font_size)}pt",
-#         )
-#         rects = Rect(
-#             x="x",
-#             y="recty",
-#             width=1,
-#             height=1,
-#             fill_color="colors",
-#             line_color=None,
-#             fill_alpha=0.4,
-#         )
-#         p1.add_glyph(source, glyph)
-#         p1.add_glyph(source, rects)
-#         p1.grid.visible = False
-#         p1.xaxis.major_label_text_font_style = "bold"
-#         p1.yaxis.minor_tick_line_width = 0
-#         p1.yaxis.major_tick_line_width = 0
-#         p1.yaxis.axis_label_text_color = "black"
-#         p1.yaxis.major_label_text_color = "black"
-#         p1.xaxis.axis_label_text_color = "black"
-#         p1.xaxis.major_label_text_color = "black"
-
-#         self.plot = p1
-
+import numpy as np
+from bokeh.models import ColumnDataSource, CustomJSTickFormatter, FixedTicker
+from bokeh.models.glyphs import Rect, Text
+from bokeh.plotting import figure
 
 # from mkt.databases.utils import rgetattr
+# from mkt.schema.kinase_schema import KinaseInfo
+from pydantic.dataclasses import dataclass
+
+
+# from mkt.databases.plot import SequenceAlignment
+# cannot get the above to display toolbar below so re-implementing here
+@dataclass
+class SequenceAlignment:
+
+    list_sequences: list[str]
+    """List of sequences to show in aligner."""
+    list_ids: list[str]
+    """List of sequence IDs."""
+    dict_colors: dict[str, str]
+    """Dictionary of colors for each sequence."""
+    font_size: int = 9
+    """Font size for alignment."""
+    plot_width: int = 800
+    """Width of the plot."""
+
+    def __post_init__(self):
+        self.plot_bottom = self.generate_alignment()
+
+    @staticmethod
+    def get_colors(
+        list_str: str,
+        dict_colors: dict[str, str],
+    ) -> list[str]:
+        """Get colors for residue in a given sequence.
+
+        Parameters
+        ----------
+        list_str : str
+            List of residues in a sequence.
+        dict_colors : dict[str, str]
+            Dictionary of colors for each residue.
+
+        Returns
+        -------
+        list[str]
+            List of colors for each residue.
+        """
+        list_colors = [dict_colors[i] for i in list_str]
+        return list_colors
+
+    def generate_alignment(self) -> None:
+        """Generate sequence alignment plot adapted from https://dmnfarrell.github.io/bioinformatics/bokeh-sequence-aligner."""
+
+        # reverse text and colors so A-Z is top-bottom not bottom-top
+        list_text = [i for s in self.list_sequences for i in s]
+        colors = self.get_colors(list_text, self.dict_colors)
+
+        N = len(self.list_sequences[0])
+        S = len(self.list_sequences)
+
+        x = np.arange(1, N + 1)
+        y = np.arange(0, S, 1)
+        # creates a 2D grid of coords from the 1D arrays
+        xx, yy = np.meshgrid(x, y)
+        # flattens the arrays
+        gx = xx.ravel()
+        gy = yy.flatten()
+        # use recty for rect coords with an offset
+        recty = gy + 0.5
+        # now we can create the ColumnDataSource with all the arrays
+        source = ColumnDataSource(
+            dict(
+                x=gx,
+                y=gy,
+                recty=recty,
+                text=list_text,
+                colors=colors,
+            )
+        )
+        if N > 100:
+            viewlen = 100
+        else:
+            viewlen = N
+
+        # sequence text view with ability to scroll along x axis
+        # view_range is for the close up view
+        view_range = (0, viewlen)
+        plot_height = 50
+        p1 = figure(
+            title=None,
+            frame_width=self.plot_width,
+            frame_height=plot_height,
+            x_range=view_range,
+            y_range=self.list_ids,
+            tools="xpan, xwheel_zoom, reset, save",
+            min_border=0,
+            toolbar_location="below",
+            background_fill_color="white",
+            border_fill_color="white",
+        )
+        glyph = Text(
+            x="x",
+            y="y",
+            text="text",
+            text_align="center",
+            text_baseline="bottom",
+            text_color="black",
+            text_font_size=f"{str(self.font_size)}pt",
+        )
+        rects = Rect(
+            x="x",
+            y="recty",
+            width=1,
+            height=1,
+            fill_color="colors",
+            line_color=None,
+            fill_alpha=0.4,
+        )
+        p1.add_glyph(source, glyph)
+        p1.add_glyph(source, rects)
+        p1.grid.visible = False
+
+        p1.xaxis.ticker = FixedTicker(ticks=list(range(1, N + 1)))
+        p1.xaxis.formatter = CustomJSTickFormatter(code="return String(tick)")
+
+        # p1.xaxis.major_label_text_font_style = "bold"
+        p1.xaxis.major_label_orientation = np.pi / 2  # Rotate labels 90 degrees
+        p1.xaxis.major_label_standoff = 2  # Add some space between axis and labels
+        p1.xaxis.axis_label = "Residue Position"
+
+        p1.yaxis.minor_tick_line_width = 0
+        p1.yaxis.major_tick_line_width = 0
+        p1.yaxis.axis_label_text_color = "black"
+        p1.yaxis.major_label_text_color = "black"
+        p1.xaxis.axis_label_text_color = "black"
+        p1.xaxis.major_label_text_color = "black"
+
+        return p1
+
 
 DICT_ALIGNMENT = {
     "UniProt": {
