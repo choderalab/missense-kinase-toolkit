@@ -17,8 +17,6 @@ class StructureVisualizer:
 
     str_template: str = "1gag_template.pdb"
     """Path to the template structure."""
-    list_rotate: list[float] = field(lambda: [-40, 0, 240])
-    """List of rotation angles for the py3Dmol viewer."""
     dict_color: dict[str, str] = field(
         default_factory=lambda: {
             "normal": "spectrum",
@@ -29,7 +27,7 @@ class StructureVisualizer:
     field(default_factory=dict)
     """Color dictionary for the py3Dmol viewer."""
     dict_dims: dict[str, int] = field(
-        default_factory=lambda: {"width": 500, "height": 600}
+        default_factory=lambda: {"width": 600, "height": 600}
     )
     """Dimensions for the py3Dmol viewer."""
     style: str = "cartoon"
@@ -127,12 +125,6 @@ class StructureVisualizer:
         )
 
         view.addModel(pdb_text, "pdb")
-
-        # TODO: align to template
-        # rotate the view so N-term up and C-helix to the right
-        view.rotate(self.list_rotate[0], "x")
-        view.rotate(self.list_rotate[1], "y")
-        view.rotate(self.list_rotate[2], "z")
 
         # TODO: Add color and opacity via list_res
         view.setStyle({self.style: {"color": "spectrum"}})

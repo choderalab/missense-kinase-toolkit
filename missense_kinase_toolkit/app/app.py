@@ -160,7 +160,7 @@ class Dashboard(StructureVisualizer):
                         mmcif_dict=obj_temp.kincore.cif.cif,
                         str_id=dashboard_state.kinase,
                     )
-                    st.components.v1.html(structure_html, height=500)
+                    st.components.v1.html(structure_html, height=600)
                     st.checkbox("Show phosphosites", value=False)
                     st.checkbox("Show KLIFS pocket", value=False)
                     st.checkbox("Show mutational density", value=False)
