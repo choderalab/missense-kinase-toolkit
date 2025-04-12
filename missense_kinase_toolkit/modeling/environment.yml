@@ -1,0 +1,13 @@
+name: mkt_modeling
+channels:
+  - conda-forge
+  - schrodinger
+  - defaults
+dependencies:
+  - python=3.10
+  - pymol-open-source>=2.5.0
+  - tqdm>=4.62.0
+  - gitpython
+  - pip
+  - pip:
+    - biopython>=1.79

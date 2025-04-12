@@ -1,12 +1,13 @@
 missense-kinase-toolkit (mkt)
 ==============================
 [//]: # (Badges)
+[![DOI](https://zenodo.org/badge/758694808.svg)](https://zenodo.org/doi/10.5281/zenodo.11495030)
 [![codecov](https://codecov.io/gh/choderalab/missense-kinase-toolkit/branch/main/graph/badge.svg)](https://codecov.io/gh/choderalab/missense-kinase-toolkit/branch/main)
+[![Documentation Status](https://readthedocs.org/projects/missense-kinase-toolkit/badge/?version=latest)](https://missense-kinase-toolkit.readthedocs.io/en/latest/?badge=latest)<br />
 [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/choderalab/missense-kinase-toolkit/main.svg)](https://results.pre-commit.ci/latest/github/choderalab/missense-kinase-toolkit/main)
-[![Documentation Status](https://readthedocs.org/projects/missense-kinase-toolkit/badge/?version=latest)](https://missense-kinase-toolkit.readthedocs.io/en/latest/?badge=latest)
-[![DOI](https://zenodo.org/badge/758694808.svg)](https://zenodo.org/doi/10.5281/zenodo.11495030)<br />
 [![schema-ci](https://github.com/choderalab/missense-kinase-toolkit/actions/workflows/schema-ci.yaml/badge.svg)](https://github.com/choderalab/missense-kinase-toolkit/actions/workflows/schema-ci.yaml)
-[![databases-ci](https://github.com/choderalab/missense-kinase-toolkit/actions/workflows/databases-ci.yaml/badge.svg)](https://github.com/choderalab/missense-kinase-toolkit/actions/workflows/databases-ci.yaml)
+[![databases-ci](https://github.com/choderalab/missense-kinase-toolkit/actions/workflows/databases-ci.yaml/badge.svg)](https://github.com/choderalab/missense-kinase-toolkit/actions/workflows/databases-ci.yaml)<br />
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://mkt-app.streamlit.app)
 
 ## Intro
 
@@ -16,10 +17,11 @@ Additional documentation can be found [here](https://missense-kinase-toolkit.rea
 
 ## Getting started
 
-`mkt` is structured as a monorepo with sub-packages described below for specific tasks.
+`mkt` is structured as a monorepo with sub-packages and directories described below for specific tasks.
 
 | Subpackages   | Description                                                                                                                         |
 | :-:           | :-                                                                                                                                  |
+| `app`         | [Streamlit app](https://mkt-app.streamlit.app/) to visualize data contained in harmonized `Pydantic` models                         |
 | `schema`      | Harmonized and pre-processed sequence and structure data along with `Pydantic` models to load, query, and validate this data        |
 | `databases`   | Package containing API clients and scrapers to collect and harmonize kinase data from various sources and generate `schema` objects |
 | `ml`          | **In-progress** package to build machine learning models to predict kinase properties                                               |
