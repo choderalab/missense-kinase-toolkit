@@ -167,6 +167,39 @@ DICT_ALIGNMENT = {
     },
 }
 
+# def generate_alignments(obj_kinase: KinaseInfo) -> tuple(list[str], list[list[str]]):
+#     """Iterate through the KinaseInfo object and generate a list of sequences and a list of colors.
+
+#     Parameters
+#     ----------
+#     obj_kinase : KinaseInfo
+#         The KinaseInfo object to extract the sequences from.
+#     dict_colors : dict[str, str]
+#         The dictionary of colors for the sequences.
+
+#     Returns
+#     -------
+#     tuple(list[str], list[list[str]])
+#         A tuple containing the list of sequences and the list of colors.
+#     """
+#     for key, value in DICT_ALIGNMENT.items():
+#         # recursively split on "." and aggregate from left to right
+#         if not any([])
+#         value[seq] = rgetattr(obj_kinase, value["seq"])
+
+
+#         if value is not None:
+#             seq = rgetattr(value, "seq")
+#             start = rgetattr(value, "start")
+#             end = rgetattr(value, "end")
+#             if callable(start):
+#                 start = start(obj_kinase)
+#             if callable(end):
+#                 end = end(obj_kinase)
+#             list_sequences.append(seq)
+#             list_ids.append(key)
+
+
 # recursively check "seq" split on "."
 
 # class SequenceAlignment:
