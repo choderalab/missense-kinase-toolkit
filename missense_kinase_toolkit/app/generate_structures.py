@@ -27,7 +27,7 @@ class StructureVisualizer:
     field(default_factory=dict)
     """Color dictionary for the py3Dmol viewer."""
     dict_dims: dict[str, int] = field(
-        default_factory=lambda: {"width": 500, "height": 600}
+        default_factory=lambda: {"width": 600, "height": 600}
     )
     """Dimensions for the py3Dmol viewer."""
     style: str = "cartoon"

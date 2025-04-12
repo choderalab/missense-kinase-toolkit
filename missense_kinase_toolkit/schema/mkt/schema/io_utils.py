@@ -132,6 +132,11 @@ def untar_files_in_memory(
     ----------
     str_path : str
         Path to the tar.gz file.
+    bool_extract : bool, optional
+        If True, extract the files to memory, by default True.
+    list_ids : list[str] | None, optional
+        List of IDs to filter the files if reading from memory, by default None.
+        If None, all files will be extracted.
 
     Returns
     -------
@@ -142,7 +147,7 @@ def untar_files_in_memory(
     with open(str_path, "rb") as f:
         tar_data = f.read()
 
-    list_entries, dict_btyes = [], {}
+    list_entries, dict_bytes = [], {}
     with BytesIO(tar_data) as tar_buffer, tarfile.open(
         fileobj=tar_buffer, mode="r"
     ) as tar:
@@ -158,13 +163,13 @@ def untar_files_in_memory(
                 list_entries.append(filename.split(".")[0])
                 if bool_extract:
                     with tar.extractfile(member) as f:
-                        dict_btyes[member.name] = f.read()
+                        dict_bytes[member.name] = f.read()
 
     if bool_extract:
         # decode bytes to string
-        dict_btyes = {k: v.decode("utf-8") for k, v in dict_btyes.items()}
+        dict_bytes = {k: v.decode("utf-8") for k, v in dict_bytes.items()}
 
-    return list_entries, dict_btyes
+    return list_entries, dict_bytes
 
 
 def return_str_path_from_pkg_data(
@@ -238,7 +243,7 @@ def serialize_kinase_dict(
     suffix: str = "json",
     serialization_kwargs: Optional[dict[str, Any]] = None,
     str_path: str | None = None,
-):
+) -> None:
     """Serialize KinaseInfo object to files.
 
     Parameters
