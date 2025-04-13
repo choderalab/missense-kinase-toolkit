@@ -74,14 +74,13 @@ class PropertyTables:
             The properties are extracted and stored in the class.
         """
 
-        self.df_kinhub = self.convert_property2dataframe(self.obj_kinase, "kinhub")
+        self.df_kinhub = self.convert_property2dataframe("kinhub")
 
         self.df_klifs = self.convert_property2dataframe(
-            self.obj_kinase, "klifs", list_drop=["pocket_seq"]
+            "klifs", list_drop=["pocket_seq"]
         )
 
         self.df_kincore = self.convert_property2dataframe(
-            self.obj_kinase,
             "kincore.fasta",
             list_keep=["group", "hgnc", "swissprot", "uniprot", "source_file"],
         )
