@@ -32,12 +32,6 @@ class DashboardState:
     """Selected kinase."""
     palette: str
     """Selected color palette."""
-    # check_phospho: bool
-    # """Check to highlight phosphorylation sites."""
-    # list_seq: list[list[str]] | None = None
-    # """List of sequences to show in aligner."""
-    # list_colors: list[list[str]] | None = None
-    # """List of colors to show in aligner."""
 
 
 # adapted from InterPLM (https://github.com/ElanaPearl/InterPLM/blob/main/interplm)
@@ -109,26 +103,15 @@ class Dashboard:
             help="Select a color palette for the visualization.",
         )
 
-        # # select highlight phosphorylation sites
-        # st.sidebar.markdown(
-        #     "## Phosphositess\n"
-        #     "Check the box to highlight phosphorylation sites adjudicated by UniProt."
-        # )
-        # st.sidebar.markdown(
-        #     "## About\n"
-        #     "This tool is developed by the Kinase Research Group at the University of XYZ. "
-        #     "For more information, visit our [website](https://example.com)."
-        # )
-        # add_highlight = st.sidebar.checkbox(
-        #     "Highlight phosphosites?",
-        #     value=False,
-        #     help="Check to highlight sites adjudicated as phosphorylation sites by UniProt.",
-        # )
-
         state_dashboard = DashboardState(
             kinase=kinase_selection,
             palette=palette_selection,
-            # check_phospho=add_highlight,
+        )
+
+        st.sidebar.markdown(
+            "## About\n"
+            "This tool is developed by Jess White in the labs of John Chodera and Wesley Tansey at Memorial Sloan Kettering Cancer Center. "
+            "For more information, visit the corresponding [Github repo](https://github.com/choderalab/missense-kinase-toolkit)."
         )
 
         st.sidebar.markdown("## Database resource")
@@ -163,25 +146,22 @@ class Dashboard:
 
         with st.expander("Sequences", expanded=True):
             st.markdown("### Sequence alignment\n")
+            st.markdown(
+                f"All non-KLIFS sequence residues shaded using {dashboard_state.palette} palette. "
+                "KLIFS sequence residues shaded using KLIFS pocket color scheme. "
+                "Residues that mismatch with the canonical UniProt sequence are shown in crimson. "
+                "Crimson y-axis labels indicate the absense of a sequence for the chosen kinase in the database queried.\n"
+            )
 
             obj_alignment = SequenceAlignment(
-                list_sequences=[
-                    obj_temp.uniprot.canonical_seq,
-                    obj_temp.klifs.pocket_seq,
-                ],
-                list_ids=["UniProt", "KLIFS"],
-                dict_colors=DICT_COLORS[dashboard_state.palette]["DICT_COLORS"],
-                plot_width=1200,
-                plot_height=50,
-                bool_top=False,
-                bool_reverse=False,
+                obj_temp,
+                DICT_COLORS[dashboard_state.palette]["DICT_COLORS"],
             )
 
             streamlit_bokeh(
-                # obj_alignment.plot, use_container_width=True, key="plot1"
-                obj_alignment.plot_bottom,
+                obj_alignment.plot,
                 use_container_width=True,
-                key="plot1",
+                key="plot_alignment",
             )
 
         col1, col2 = st.columns(2)
