@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 class PropertyTables:
     """Class to hold the property tables."""
 
+    obj_kinase: KinaseInfo
+    """KinaseInfo object from which to extract properties."""
     df_kinhub: pd.DataFrame | None = None
     """Dataframe containing the KinHub information."""
     df_klifs: pd.DataFrame | None = None
@@ -19,9 +21,12 @@ class PropertyTables:
     df_kincore: pd.DataFrame | None = None
     """Dataframe containing the KinCore information."""
 
-    @staticmethod
+    def __post_init__(self):
+        """Post-initialization method to extract properties."""
+        self.extract_properties()
+
     def convert_property2dataframe(
-        obj_kinase: KinaseInfo,
+        self,
         str_attr: str,
         list_drop: list[str] | None = None,
         list_keep: list[str] | None = None,
@@ -30,8 +35,6 @@ class PropertyTables:
 
         Parameters
         ----------
-        obj_kinase : KinaseInfo
-            The KinaseInfo object to convert to dataframe.
         str_attr : str
             The attribute of the KinaseInfo object to convert to dataframe.
         list_drop : list[str], optional
@@ -47,7 +50,7 @@ class PropertyTables:
             The dataframe containing the properties of the KinaseInfo object.
         """
         try:
-            obj_temp = rgetattr(obj_kinase, str_attr)
+            obj_temp = rgetattr(self.obj_kinase, str_attr)
             dict_temp = obj_temp.__dict__
             if list_drop is not None:
                 for str_drop in list_drop:
@@ -62,13 +65,8 @@ class PropertyTables:
             logger.error(f"Error converting properties to dataframe: {e}")
             return None
 
-    def extract_properties(self, obj_kinase: KinaseInfo):
+    def extract_properties(self):
         """Extract the properties from the KinaseInfo object.
-
-        Parameters
-        ----------
-        KinaseInfo : KinaseInfo
-            The KinaseInfo object to extract the properties from.
 
         Returns
         -------
@@ -76,14 +74,14 @@ class PropertyTables:
             The properties are extracted and stored in the class.
         """
 
-        self.df_kinhub = self.convert_property2dataframe(obj_kinase, "kinhub")
+        self.df_kinhub = self.convert_property2dataframe(self.obj_kinase, "kinhub")
 
         self.df_klifs = self.convert_property2dataframe(
-            obj_kinase, "klifs", list_drop=["pocket_seq"]
+            self.obj_kinase, "klifs", list_drop=["pocket_seq"]
         )
 
         self.df_kincore = self.convert_property2dataframe(
-            obj_kinase,
+            self.obj_kinase,
             "kincore.fasta",
             list_keep=["group", "hgnc", "swissprot", "uniprot", "source_file"],
         )
