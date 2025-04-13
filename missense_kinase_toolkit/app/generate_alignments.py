@@ -68,7 +68,7 @@ class SequenceAlignment:
     """Whether or not to reverse order of inputs"""
     font_size: int = 9
     """Font size for alignment."""
-    plot_width: int = 800
+    plot_width: int = 1200
     """Width of the plot."""
 
     def __post_init__(self):
@@ -211,8 +211,8 @@ class SequenceAlignment:
             if self.obj_kinase.hgnc_name == "CDKL1" and key.startswith("KinCore"):
                 seq = seq[1:]
 
-            start = self._parse_start_end_values(value["start"], self.obj_kinase, seq)
-            end = self._parse_start_end_values(value["end"], self.obj_kinase, seq)
+            start = self._parse_start_end_values(value["start"], seq)
+            end = self._parse_start_end_values(value["end"], seq)
 
             seq_out = self._map_single_alignment(start, end, uniprot_seq, seq)
             # CDKL1 KinCore FASTA and CIF have an extra M at the start
@@ -287,8 +287,8 @@ class SequenceAlignment:
             )
         )
 
-        if N > 100:
-            viewlen = 100
+        if N > 80:
+            viewlen = 80
         else:
             viewlen = N
 

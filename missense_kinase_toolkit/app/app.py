@@ -208,8 +208,7 @@ class Dashboard:
             with st.expander("Properties", expanded=True):
                 st.markdown("### Kinase properties\n")
 
-                table = PropertyTables()
-                table.extract_properties(obj_temp)
+                table = PropertyTables(obj_temp)
 
                 st.markdown("#### KinHub\n")
                 # st.markdown(f"#### [KinHub]({DICT_RESOURCE_URLS['KinHub']})\n")
