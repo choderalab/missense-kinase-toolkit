@@ -1,7 +1,10 @@
+import logging
 from typing import Any
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def try_except_split_concat_str(
@@ -236,7 +239,7 @@ def rgetattr(obj, attr, *args):
     Returns
     -------
     Any
-        Value of attribute if found, otherwise default value.
+        Value of attribute if found.
     """
     import functools
 
@@ -271,6 +274,31 @@ def rsetattr(obj, attr, val, *args):
         return setattr(obj, attr, val, *args)
 
     return functools.reduce(_setattr, [obj] + attr.split("."))
+
+
+def try_except_return_none_rgetattr(obj, attr, *args):
+    """Get attribute from object recursively.
+
+    Parameters
+    ----------
+    obj : Any
+        Object to get attribute from.
+    attr : str
+        Attribute to get.
+    *args : Any
+        Any additional arguments to pass to getattr.
+
+    Returns
+    -------
+    Any
+        Value of attribute if found, otherwise None.
+    """
+
+    try:
+        return rgetattr(obj, attr, *args)
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        return None
 
 
 def return_bool_at_index(
