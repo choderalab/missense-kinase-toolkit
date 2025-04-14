@@ -11,9 +11,9 @@ flags:
     paths:
       - missense_kinase_toolkit/schema/mkt/schema
     # carryforward: true
-  database:
+  databases:
     paths:
-      - missense_kinase_toolkit/schema/mkt/database
+      - missense_kinase_toolkit/databases/mkt/databases
     # carryforward: true
 
 comment:
@@ -24,6 +24,6 @@ comment:
   paths: null
   show_carryforward_flags: true
 
-# ignore:
-#       # NCBI currently down
-#       - missense_kinase_toolkit/schema/mkt/database/ncbi.py
+ignore:
+      # NCBI currently down
+      - missense_kinase_toolkit/schema/mkt/database/ncbi.py

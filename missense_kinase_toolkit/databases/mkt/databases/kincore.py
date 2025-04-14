@@ -7,17 +7,30 @@ from collections import Counter
 from itertools import chain
 
 from Bio import SeqIO
+
+# from biotite.structure.io.pdbx import CIFFile
+from Bio.PDB.MMCIF2Dict import MMCIF2Dict
 from mkt.databases.aligners import Kincore2UniProtAligner
-from mkt.databases.io_utils import extract_tarfiles, get_repo_root
+from mkt.databases.io_utils import get_repo_root
 from mkt.databases.utils import (
     flatten_iterables_in_iterable,
     split_on_first_only,
     try_except_split_concat_str,
 )
+from mkt.schema.io_utils import extract_tarfiles, untar_files_in_memory
 from mkt.schema.kinase_schema import KinCore, KinCoreCIF, KinCoreFASTA
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
+
+
+PATH_DATA = os.path.join(get_repo_root(), "data")
+PATH_ORIG_CIF = os.path.join(
+    PATH_DATA, "Kincore_AlphaFold2_ActiveHumanCatalyticKinases_v2.tar.gz"
+)
+PATH_ALIGN_CIF = os.path.join(
+    PATH_DATA, "Kincore_AlphaFold2_ActiveHumanCatalyticKinases_v2_aligned.tar.gz"
+)
 
 
 def return_fasta_contents(path_filename=str) -> SeqIO.FastaIO.FastaIterator:
@@ -87,6 +100,36 @@ DICT_GROUP_KINCORE = {
     "TYR": "TK",
 }
 """dict[str, str]: Dictionary of KinCore groups to map to mkt.schema.kinase_schema.Group."""
+
+
+def update_original_cif_with_new_coords(
+    str_orig: str,
+    str_updated: str,
+    str_filepath: str,
+) -> None:
+    """Update original CIF file with new coordinates post-alignment.
+
+    Parameters
+    ----------
+    str_orig : str
+        Path to original tar.gz CIF file
+    str_updated : str
+        Path to updated tar.gz CIF file
+    str_filepath : str
+        Path to save updated CIF tar.gz file
+
+    Returns
+    -------
+    None
+        None
+
+    """
+    _, dict_previous = untar_files_in_memory(PATH_ORIG_CIF)
+    _, dict_current = untar_files_in_memory(PATH_ALIGN_CIF)
+
+    dict_previous = {
+        k.split("/")[1]: v for k, v in dict_previous.items() if k.endswith(".cif")
+    }
 
 
 def parse_fasta_description(
@@ -201,15 +244,10 @@ def extract_pk_cif_files_as_list() -> list[KinCoreCIF]:
     list[KinCoreCIF]
         List of KinCoreCIF objects
     """
-    # from biotite.structure.io.pdbx import CIFFile
-    from Bio.PDB.MMCIF2Dict import MMCIF2Dict
-
     # http://dunbrack.fccc.edu/kincore/static/downloads/af2activemodels/Kincore_AlphaFold2_ActiveHumanCatalyticKinases_v2.tar.gz
     path_data = os.path.join(get_repo_root(), "data")
     path_targzip = os.path.join(
-        get_repo_root(),
-        "data",
-        "Kincore_AlphaFold2_ActiveHumanCatalyticKinases_v2.tar.gz",
+        path_data, "Kincore_AlphaFold2_ActiveHumanCatalyticKinases_v2.tar.gz"
     )
 
     if not os.path.exists(path_data):

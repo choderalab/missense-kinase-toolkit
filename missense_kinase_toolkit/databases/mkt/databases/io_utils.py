@@ -1,5 +1,6 @@
 import logging
 import os
+import tarfile
 
 import git
 import pandas as pd
@@ -66,7 +67,7 @@ def load_csv_to_dataframe(
     try:
         df = pd.read_csv(os.path.join(path_data, filename))
     except FileNotFoundError:
-        print(f"File {filename} not found in {path_data}...")
+        logger.info(f"File {filename} not found in {path_data}...")
     return df
 
 
@@ -123,7 +124,7 @@ def concatenate_csv_files_with_glob(
             df = pd.read_csv(csv_file, low_memory=False)
             df_combo = pd.concat([df_combo, df])
     else:
-        print(f"No files matching {str_find} found in {path_data}...")
+        logger.info(f"No files matching {str_find} found in {path_data}...")
 
     # TODO: implement remove duplicates
 
@@ -175,30 +176,41 @@ def get_repo_root():
         repo = git.Repo(".", search_parent_directories=True)
         return repo.working_tree_dir
     except git.InvalidGitRepositoryError:
-        print("Not a git repository; using current directory as root...")
+        logger.info("Not a git repository; using current directory as root...")
         return "."
 
 
-def extract_tarfiles(path_from, path_to):
-    """Extract tar.gz files.
+def create_tar_without_metadata(
+    path_source: str,
+    filename_tar: str,
+) -> None:
+    """Create a tar file without metadata.
 
     Parameters
     ----------
-    path_from : str
-        Path to the tar.gz file
-    path_to : str
-        Pth to extract the files to
+    path_source : str
+        Path to the source directory to be tarred
+    filename_tar : str
+        Path and filename to the save the tar file
 
     Returns
     -------
     None
-        None
 
     """
-    import tarfile
+    # check if the source directory exists
+    if not os.path.exists(path_source):
+        logging.error(f"Source directory {path_source} does not exist.")
+    # check if the source directory is a directory
+    if not os.path.isdir(path_source):
+        logging.error(f"Source path {path_source} is not a directory.")
+    # check if the output tar file already exists
+    if os.path.exists(filename_tar):
+        logging.error(f"Output tar file {filename_tar} already exists.")
 
-    try:
-        with tarfile.open(path_from, "r:gz") as tar:
-            tar.extractall(path_to)
-    except Exception as e:
-        logger.error(f"Exception {e}")
+    with tarfile.open(filename_tar, "w:gz") as tar:
+        for root, _, files in os.walk(path_source):
+            for file in files:
+                file_path = os.path.join(root, file)
+                if not file.startswith("._"):
+                    tar.add(file_path, arcname=os.path.relpath(file_path, path_source))
