@@ -1,6 +1,6 @@
 # mkt.schema
 
-The `schema` sub-package provides harmonized and pre-processed sequence and structure data along with `Pydantic` models to load, query, and validate this data. A notebook
+The `schema` sub-package provides harmonized and pre-processed sequence and structure data along with `Pydantic` models to load, query, and validate this data. A notebook describing the sub-package's functionality is available [here](../../notebooks/schema_demo.ipynb) in the `notebooks` directory.
 
 This latest version of this package can be installed directly from Github via `pip` using the following:
 ```
