@@ -293,12 +293,6 @@ class StructureVisualizer:
                 )
                 # add highlights for the selected attribute
                 if res_no in list_highlight:
-                    # if str_attr != "KLIFS":
-                    #     view.addStyle(
-                    #         {"resi": str(res_no)},
-                    #         self._return_style_dict(str_attr),
-                    #     )
-                    # else:
                     # KLIFS uses KLIFS pocket colors
                     view.addStyle(
                         {"resi": str(res_no)},
