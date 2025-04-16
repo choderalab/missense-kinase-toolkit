@@ -40,7 +40,7 @@ DICT_ALIGNMENT = {
         "start": "kincore.cif.start",
         "end": "kincore.cif.end",
     },
-    "Phosphosite": {
+    "Phosphosites": {
         "seq": "uniprot.phospho_sites",
         "start": None,
         "end": None,
@@ -73,10 +73,10 @@ class SequenceAlignment:
 
     def __post_init__(self):
         # generate and save alignments
-        dict_align = self.generate_alignments()
-        self.list_sequences = [v["str_seq"] for v in dict_align.values()]
-        self.list_ids = list(dict_align.keys())
-        self.list_colors = [v["list_colors"] for v in dict_align.values()]
+        self.dict_align = self.generate_alignments()
+        self.list_sequences = [v["str_seq"] for v in self.dict_align.values()]
+        self.list_ids = list(self.dict_align.keys())
+        self.list_colors = [v["list_colors"] for v in self.dict_align.values()]
 
         # reverse alignment entries, if desired
         if self.bool_reverse:

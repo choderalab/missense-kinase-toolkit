@@ -10,7 +10,7 @@ flags:
   schema:
     paths:
       - missense_kinase_toolkit/schema/mkt/schema
-    # carryforward: true
+    carryforward: true
   databases:
     paths:
       - missense_kinase_toolkit/databases/mkt/databases
