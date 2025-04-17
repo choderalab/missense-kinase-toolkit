@@ -9,12 +9,12 @@ coverage:
 flags:
   schema:
     paths:
-      - missense_kinase_toolkit/schema/mkt/schema
+      - missense_kinase_toolkit/schema
     carryforward: true
   databases:
     paths:
-      - missense_kinase_toolkit/databases/mkt/databases
-    # carryforward: true
+      - missense_kinase_toolkit/databases
+    carryforward: true
 
 comment:
   layout: "header, flags"
