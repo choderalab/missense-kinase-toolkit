@@ -6,14 +6,14 @@ from generate_alignments import SequenceAlignment
 from generate_properties import PropertyTables
 from generate_structures import StructureVisualizer
 from mkt.databases.colors import DICT_COLORS
-
-# from mkt.databases.klifs import DICT_POCKET_KLIFS_REGIONS
+from mkt.databases.utils import try_except_return_none_rgetattr
 from mkt.schema import io_utils
 from mkt.schema.io_utils import DICT_FUNCS
 from mkt.schema.kinase_schema import KinaseInfo
 from streamlit_bokeh import streamlit_bokeh
 
 logger = logging.getLogger(__name__)
+
 
 DICT_RESOURCE_URLS = {
     "KinHub": "http://www.kinhub.org/",
@@ -22,6 +22,23 @@ DICT_RESOURCE_URLS = {
     "UniProt": "https://www.uniprot.org/",
     "Pfam": "https://www.ebi.ac.uk/interpro/entry/pfam",
 }
+"""dict[str, str]: Dictionary containing the resource URLs for the dashboard."""
+
+LIST_OPTIONS = [
+    "None",
+    "Phosphosites",
+    "KLIFS",
+    "Mutational density",
+]
+"""list[str]: List of structure options for the dashboard."""
+
+LIST_CAPTIONS = [
+    "No additional annotation",
+    "Phosphorylation sites as adjudicated by UniProt",
+    "Residues that belong to the KLIFS binding pocket (hinge, HRD, xDFG regions represented as sticks)",
+    "Missense mutational density within cBioPortal MSK-IMPACT cohort ([Zehir et al, 2017.](https://www.nature.com/articles/nm.4333))",
+]
+"""list[str]: List of captions for the structure options in the dashboard."""
 
 
 @dataclass
@@ -169,30 +186,36 @@ class Dashboard:
         with col1:
             with st.expander("Structure", expanded=True):
                 st.markdown("### KinCore active structure\n")
-                # st.markdown(f"### [KinCore]({DICT_RESOURCE_URLS['KinCore']}) active structure\n")
-                viz = StructureVisualizer()
                 try:
-                    structure_html = viz.visualize_structure(
-                        mmcif_dict=obj_temp.kincore.cif.cif,
-                        str_id=dashboard_state.kinase,
-                    )
-                    st.components.v1.html(structure_html, height=600)
+                    plot_spot = st.empty()
+
+                    # allow for annotations if present in the KinaseInfo object
+                    list_idx = [0] + [
+                        idx + 1
+                        for idx, i in enumerate(
+                            [
+                                "uniprot.phospho_sites",
+                                "KLIFS2UniProtIdx",
+                            ]
+                        )
+                        if try_except_return_none_rgetattr(obj_temp, i) is not None
+                    ]
+
                     annotation = st.radio(  # noqa: F841
                         "Select an annotation to render (select one):",
-                        options=[
-                            "None",
-                            "Phosphosites",
-                            "KLIFS pocket",
-                            "Mutational density",
-                        ],
-                        captions=[
-                            "No additional annotation",
-                            "Phosphorylation sites as adjudicated by UniProt",
-                            "Residues that belong to the KLIFS binding pocket",
-                            "Missense mutational density within cBioPortal MSK-IMPACT cohort ([Zehir et al, 2017.](https://www.nature.com/articles/nm.4333))",
-                        ],
+                        options=[LIST_OPTIONS[i] for i in list_idx],
+                        captions=[LIST_CAPTIONS[i] for i in list_idx],
                         index=0,
                     )
+
+                    with plot_spot:
+                        viz = StructureVisualizer(
+                            obj_kinase=obj_temp,
+                            dict_align=obj_alignment.dict_align,
+                            str_attr=annotation,
+                        )
+                        st.components.v1.html(viz.html, height=600)
+
                 except Exception as e:
                     logger.exception(
                         f"Error generating structure for {dashboard_state.kinase}: {e}",
@@ -211,21 +234,18 @@ class Dashboard:
                 table = PropertyTables(obj_temp)
 
                 st.markdown("#### KinHub\n")
-                # st.markdown(f"#### [KinHub]({DICT_RESOURCE_URLS['KinHub']})\n")
                 if table.df_kinhub is not None:
                     st.table(table.df_kinhub)
                 else:
                     st.error("No KinHub objects available for this kinase.", icon="⚠️")
 
                 st.markdown("#### KLIFS\n")
-                # st.markdown(f"#### [KLIFS]({DICT_RESOURCE_URLS['KLIFS']})\n")
                 if table.df_klifs is not None:
                     st.table(table.df_klifs)
                 else:
                     st.error("No KLIFS objects available for this kinase.", icon="⚠️")
 
                 st.markdown("#### KinCore\n")
-                # st.markdown(f"#### [KinCore]({DICT_RESOURCE_URLS['KinCore']})\n")
                 if table.df_kincore is not None:
                     st.table(table.df_kincore)
                 else:
