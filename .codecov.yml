@@ -26,4 +26,4 @@ comment:
 
 ignore:
       # NCBI currently down
-      - missense_kinase_toolkit/schema/mkt/database/ncbi.py
+      - missense_kinase_toolkit/databases/mkt/databases/ncbi.py
