@@ -149,6 +149,7 @@ mx_drug_sim = generate_similarity_matrix(outputs_drug.pooler_output)
 # torch.allclose(mx_dotprod, mx_dotprod.T)
 
 from tdc.multi_pred import DTI
-data = DTI(name = 'DAVIS')
+
+data = DTI(name="DAVIS")
 dir(data)
 data.get_data()
