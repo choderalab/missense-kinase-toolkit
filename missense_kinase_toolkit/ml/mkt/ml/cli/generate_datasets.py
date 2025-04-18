@@ -1,16 +1,17 @@
 #!/usr/bin/env python
 
 from os import path
-import pandas as pd
-from tqdm import tqdm
 from typing import Any
 
+import pandas as pd
 from mkt.databases import ncbi
-from mkt.schema import io_utils
 from mkt.databases.io_utils import get_repo_root
+from mkt.schema import io_utils
 from nf_rnaseq.variables import DICT_DATABASES
+from tqdm import tqdm
 
 # Functions #
+
 
 def split_if_not_null(str_in, delim="/", val_null="Null"):
     if str_in == val_null:
@@ -18,10 +19,11 @@ def split_if_not_null(str_in, delim="/", val_null="Null"):
     else:
         return str_in.split(delim)[0], str_in.split(delim)[1]
 
+
 def run_id_mapping(
-    database: str, 
-    input_ids: str, 
-    term_in: str, 
+    database: str,
+    input_ids: str,
+    term_in: str,
     term_out: str,
 ) -> Any:
     """
@@ -60,18 +62,28 @@ def run_id_mapping(
     )
     return api_obj
 
+
 # Main #
 
 # download data
-df_pkis2 = pd.read_csv("https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv")
-df_kinomescan = pd.read_csv("https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/DiscoverX_489_Kinase_Assay_Construct_Information.csv")
+df_pkis2 = pd.read_csv(
+    "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv"
+)
+df_kinomescan = pd.read_csv(
+    "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/DiscoverX_489_Kinase_Assay_Construct_Information.csv"
+)
 
 df_pkis_rev = df_pkis2.set_index("Smiles").iloc[:, 6:]
 list_pkis_constructs = df_pkis_rev.columns.tolist()
 
-list_acc = df_kinomescan.loc[
-    df_kinomescan["DiscoverX Gene Symbol"].isin(list_pkis_constructs), 
-    "Accession Number"].unique().tolist()
+list_acc = (
+    df_kinomescan.loc[
+        df_kinomescan["DiscoverX Gene Symbol"].isin(list_pkis_constructs),
+        "Accession Number",
+    ]
+    .unique()
+    .tolist()
+)
 
 dict_seq = {}
 for acc in tqdm(list_acc):
@@ -86,7 +98,9 @@ df_ncbi = pd.DataFrame(
     }
 )
 
-df_merge = df_kinomescan.loc[df_kinomescan["DiscoverX Gene Symbol"].isin(list_pkis_constructs), :].merge(
+df_merge = df_kinomescan.loc[
+    df_kinomescan["DiscoverX Gene Symbol"].isin(list_pkis_constructs), :
+].merge(
     df_ncbi,
     how="inner",
     left_on="Accession Number",
@@ -99,7 +113,7 @@ for _, row in df_merge.iterrows():
     start, stop = row["AA Start/Stop"][0], row["AA Start/Stop"][1]
     seq = row["sequence_full"]
     if start is not None:
-        seq_temp = seq[int(start[1:])-1:int(stop[1:])]
+        seq_temp = seq[int(start[1:]) - 1 : int(stop[1:])]
         assert seq_temp[0] == start[0], seq_temp[-1] == stop[0]
         list_seq_partial.append(seq_temp)
     else:
@@ -112,7 +126,10 @@ df_merge["sequence_partial"] = list_seq_partial
 
 df_merge = pd.read_csv(path.join(get_repo_root(), "data/pkis2_annotated.csv"))
 
-list_np = df_merge.loc[df_merge["Accession Number"].apply(lambda x: x.startswith("NP_")), "Accession Number"].tolist()
+list_np = df_merge.loc[
+    df_merge["Accession Number"].apply(lambda x: x.startswith("NP_")),
+    "Accession Number",
+].tolist()
 database = "UniProtBULK"
 term_out = "UniProtKB"
 
@@ -120,16 +137,23 @@ term_in = "RefSeq_Protein"
 input_ids = ",".join(list_np)
 api_obj_refseq = run_id_mapping(database, input_ids, term_in, term_out)
 dict_swissprot = {
-    i["from"]: i["to"]["primaryAccession"] for i in api_obj.json["results"] \
+    i["from"]: i["to"]["primaryAccession"]
+    for i in api_obj.json["results"]
     if i["to"]["entryType"] == "UniProtKB reviewed (Swiss-Prot)"
 }
 
-list_other = df_merge.loc[df_merge["Accession Number"].apply(lambda x: not x.startswith("NP_")), "Accession Number"].tolist()
+list_other = df_merge.loc[
+    df_merge["Accession Number"].apply(lambda x: not x.startswith("NP_")),
+    "Accession Number",
+].tolist()
 term_in = "EMBL-GenBank-DDBJ_CDS"
-input_ids = ",".join([i for i in list_other if len(i.split(".")[0]) == 8 and not i.startswith("EA")])
+input_ids = ",".join(
+    [i for i in list_other if len(i.split(".")[0]) == 8 and not i.startswith("EA")]
+)
 api_obj_embl = run_id_mapping(database, input_ids, term_in, term_out)
 dict_embl = {
-    i["from"]: i["to"]["primaryAccession"] for i in api_obj_embl.json["results"] \
+    i["from"]: i["to"]["primaryAccession"]
+    for i in api_obj_embl.json["results"]
     if i["to"]["entryType"] == "UniProtKB reviewed (Swiss-Prot)"
 }
 
@@ -144,31 +168,29 @@ df_merge_uniprot = df_merge.merge(
 )
 
 # 3 UniProt IDs
-bool_idx = (
-    (df_merge_uniprot["UniProt_ID"].isna()) & \
-    (df_merge_uniprot["Accession Number"].apply(lambda x: len(x.split(".")[0])==6))
+bool_idx = (df_merge_uniprot["UniProt_ID"].isna()) & (
+    df_merge_uniprot["Accession Number"].apply(lambda x: len(x.split(".")[0]) == 6)
 )
 df_merge_uniprot.loc[bool_idx, "UniProt_ID"] = df_merge_uniprot.loc[
-    bool_idx, 
-    "Accession Number"
-].apply(
-    lambda x: x.split(".")[0]
-)
+    bool_idx, "Accession Number"
+].apply(lambda x: x.split(".")[0])
 
-df_merge_uniprot.to_csv(path.join(get_repo_root(), "data/pkis2_annotated.csv"), index=False)
+df_merge_uniprot.to_csv(
+    path.join(get_repo_root(), "data/pkis2_annotated.csv"), index=False
+)
 
 # set_dup = set(
 #     df_merge_uniprot.loc[
 #         (
 #             (df_merge_uniprot["UniProt_ID"].duplicated()) & \
 #             (~df_merge_uniprot["UniProt_ID"].isna())
-#         ), 
+#         ),
 #         "UniProt_ID"
 #     ]
 # )
 
 # df_merge_uniprot.loc[
-#     df_merge_uniprot["UniProt_ID"].isin(set_dup), 
+#     df_merge_uniprot["UniProt_ID"].isin(set_dup),
 #     "DiscoverX Gene Symbol"
 # ].tolist()
 

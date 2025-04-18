@@ -4,10 +4,10 @@ import logging
 import os
 import shutil
 import tarfile
+from importlib import resources
 from io import BytesIO
 from typing import Any, Optional
 
-from importlib import resources
 import toml
 import yaml
 from mkt.schema import kinase_schema
