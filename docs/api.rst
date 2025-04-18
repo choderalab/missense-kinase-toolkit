@@ -1,9 +1,16 @@
 API Documentation
 =================
 
-.. autosummary::
-   :toctree: autosummary
-   :template: custom-module-template.rst
-   :recursive:
+.. automodule:: missense_kinase_toolkit
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
-   missense_kinase_toolkit
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 3
+
+   api/missense_kinase_toolkit/schema
+   api/missense_kinase_toolkit/databases
