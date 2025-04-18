@@ -1,9 +1,7 @@
 API Documentation
 =================
 
-.. autosummary::
-   :toctree: autosummary
-   :template: custom-module-template.rst
-   :recursive:
-
-   missense_kinase_toolkit
+.. automodule:: missense_kinase_toolkit
+   :members:
+   :undoc-members:
+   :show-inheritance:
