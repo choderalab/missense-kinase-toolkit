@@ -7,7 +7,7 @@ import tarfile
 from io import BytesIO
 from typing import Any, Optional
 
-import pkg_resources
+from importlib import resources
 import toml
 import yaml
 from mkt.schema import kinase_schema
@@ -200,7 +200,7 @@ def return_str_path_from_pkg_data(
 
     if str_path is None:
         try:
-            str_path = pkg_resources.resource_filename(pkg_name, pkg_resource)
+            str_path = os.path.join(resources.files(pkg_name), pkg_resource)
             # str_path = untar_if_neeeded(str_path)
             return_filenotfound_error_if_empty_or_missing(str_path)
         except Exception as e:
