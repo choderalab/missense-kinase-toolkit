@@ -17,8 +17,8 @@ import sys
 
 sys.path.insert(0, os.path.abspath("../missense_kinase_toolkit"))
 
-import missense_kinase_toolkit
 import mkt.schema
+import mkt.databases
 
 
 # -- Project information -----------------------------------------------------
