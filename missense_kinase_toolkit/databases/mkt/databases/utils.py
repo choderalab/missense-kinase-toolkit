@@ -55,6 +55,20 @@ def create_strsplit_list(
     """
     Split list or Series of strings on delim with exception handling.
 
+    Parameters
+    ----------
+    list_in : list[str]
+        List of strings to split
+    idx_start : int
+        Starting index
+    idx_end : int
+        Ending index
+
+    Returns
+    -------
+    list[str]
+        List of concatenated strings split on delim from idx_start:idx_end
+
     """
     return [
         [
@@ -165,6 +179,21 @@ def return_list_out(
     list_kinhub_uniprot: list[str | float],
     list_assay_name: list[str],
 ):
+    """Return list of indices where str_in matches entry or entries in list_in.
+
+    Parameters
+    ----------
+    list_kinhub_uniprot : list[str | float]
+        List of string or list of list of strings to check for str_in match
+    list_assay_name : list[str]
+        List of string to check for matches in list_in
+
+    Returns
+    -------
+    list_out : list[int] | None
+        Returns index of matching entries in list
+
+    """
     list_out = [
         return_list_match_indices(x, list_kinhub_uniprot) for x in list_assay_name
     ]
@@ -174,6 +203,19 @@ def return_list_out(
 
 
 def try_except_convert_str2int(str_in: str):
+    """Convert string to int with exception handling.
+
+    Parameters
+    ----------
+    str_in : str
+        Input string to convert to int
+
+    Returns
+    -------
+    int | str
+        Returns int if conversion successful, otherwise returns str_in
+
+    """
     try:
         return int(str_in)
     except ValueError:
@@ -181,6 +223,21 @@ def try_except_convert_str2int(str_in: str):
 
 
 def try_except_substraction(a, b):
+    """Subtract two values with exception handling.
+
+    Parameters
+    ----------
+    a : Any
+        First value to subtract from
+    b : Any
+        Second value to subtract
+
+    Returns
+    -------
+    Any
+        Returns difference if subtraction successful, otherwise returns None
+
+    """
     try:
         return b - a
     except TypeError:
@@ -192,6 +249,23 @@ def aggregate_df_by_col_set(
     col_group: str,
     bool_str: bool = True,
 ) -> pd.DataFrame:
+    """Aggregate DataFrame by column and convert to set.
+
+    Parameters
+    ----------
+    df_in : pd.DataFrame
+        Input DataFrame to aggregate
+    col_group : str
+        Column to group by
+    bool_str : bool, optional
+        If True, convert set to string, by default True
+
+    Returns
+    -------
+    pd.DataFrame
+        Aggregated DataFrame with set values
+
+    """
     list_cols = df_in.columns.to_list()
     list_cols.remove(col_group)
 
@@ -208,6 +282,21 @@ def aggregate_df_by_col_set(
 
 
 def split_on_first_only(str_in, delim):
+    """Split string on first occurrence of delim.
+
+    Parameters
+    ----------
+    str_in : str
+        Input string to split
+    delim : str
+        Delimiter to split on
+
+    Returns
+    -------
+    tuple
+        Tuple containing two strings: str1 and str2
+
+    """
     list_split = str_in.split(delim)
     str1 = list_split[0]
     str2 = "".join(list_split[1:])
@@ -215,6 +304,19 @@ def split_on_first_only(str_in, delim):
 
 
 def flatten_iterables_in_iterable(data):
+    """Flatten nested lists or tuples into a single list.
+
+    Parameters
+    ----------
+    data : list or tuple
+        Input data to flatten
+
+    Returns
+    -------
+    list
+        Flattened list containing all elements from the input data
+
+    """
     flattened_list = []
     for item in data:
         if isinstance(item, (list, tuple)):
