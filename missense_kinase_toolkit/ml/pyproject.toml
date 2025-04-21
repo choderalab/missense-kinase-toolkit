@@ -29,6 +29,9 @@ test = ["pytest==8.0.1", "pytest-runner==6.0.1"]
 [tool.setuptools.packages.find]
 where = ["."]
 
+[project.scripts]
+run_trainer = "mkt.ml.cli.run_trainer:main"
+
 [tool.versioningit]
 default-version = "1+unknown"
 
