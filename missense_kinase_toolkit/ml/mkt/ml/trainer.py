@@ -1,26 +1,26 @@
 import logging
+import os
 
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import wandb
 from datasets import Dataset
 from mkt.ml.datasets.pkis2 import PKIS2Datasets
 from mkt.ml.models.pooling import CombinedPoolingModel
 from mkt.ml.utils import return_device
 from mkt.ml.utils_wandb import (
-    setup_wandb,
-    save_checkpoint,
     log_metrics_to_wandb,
     log_model_to_wandb,
     log_plots_to_wandb,
+    save_checkpoint,
+    setup_wandb,
 )
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from torch.utils.data import DataLoader
 from transformers import get_linear_schedule_with_warmup
-import wandb
 
 logger = logging.getLogger(__name__)
 
