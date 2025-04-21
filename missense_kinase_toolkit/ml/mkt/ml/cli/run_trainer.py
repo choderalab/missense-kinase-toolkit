@@ -10,8 +10,6 @@ def main():
 
     configure_logging()
 
-    # run_pipeline_with_wandb()
-
     device = return_device()
 
     dataset_pkis2 = PKIS2Dataset()
@@ -26,6 +24,8 @@ def main():
         test_dataloader,
         device,
     )
+
+    run_pipeline_with_wandb()
 
 
 if __name__ == "__main__":
