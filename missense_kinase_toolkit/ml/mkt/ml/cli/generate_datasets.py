@@ -139,7 +139,7 @@ input_ids = ",".join(list_np)
 api_obj_refseq = run_id_mapping(database, input_ids, term_in, term_out)
 dict_swissprot = {
     i["from"]: i["to"]["primaryAccession"]
-    for i in api_obj.json["results"]
+    for i in api_obj_refseq.json["results"]
     if i["to"]["entryType"] == "UniProtKB reviewed (Swiss-Prot)"
 }
 
@@ -322,31 +322,4 @@ df_merge_narm_reconciled["kincore_group"] = list_kincore_group
 
 df_merge_narm_reconciled.to_csv(
     path.join(get_repo_root(), "data/pkis2_annotated.csv"), index=False
-)
-
-df_annot_rev = df_annot.loc[df_annot["klifs"].notnull(), :].reset_index(drop=True)
-df_pkis_rev.columns
-df_pkis_rev.columns.map(lambda x: x in df_annot_rev["DiscoverX Gene Symbol"].tolist())
-
-df_pkis_rev = df_pkis_rev.iloc[
-    :,
-    df_pkis_rev.columns.map(
-        lambda x: x in df_annot_rev["DiscoverX Gene Symbol"].tolist()
-    ),
-]
-df_pkis_rev = df_pkis_rev.melt(
-    var_name="DiscoverX Gene Symbol",
-    value_name="percent_displacement",
-    ignore_index=False,
-).reset_index()
-
-df_combo = df_pkis_rev.merge(
-    df_annot_rev[["DiscoverX Gene Symbol", "klifs", "kincore_group"]],
-    how="left",
-    on="DiscoverX Gene Symbol",
-)
-
-df_combo.to_csv(
-    "/data1/tanseyw/projects/whitej/missense-kinase-toolkit/data/pkis_data.csv",
-    index=False,
 )
