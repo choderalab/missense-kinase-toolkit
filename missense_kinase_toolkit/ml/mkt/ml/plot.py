@@ -1,7 +1,7 @@
 from itertools import chain
 from os import path
 
-import matplotlib.colors as colors
+# import matplotlib.colors as colors
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np

@@ -50,5 +50,8 @@ def try_except_string_in_list(str_in, list_in):
     """
     try:
         return str_in in list_in
-    except:
+    except Exception as e:
+        logging.info(
+            f"Error in try_except_string_in_list: {e}. str_in: {str_in}, list_in: {list_in}"
+        )
         return False
