@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 import wandb
 from datasets import Dataset
-from mkt.ml.datasets.pkis2 import PKIS2Datasets
+from mkt.ml.datasets.pkis2 import PKIS2Dataset
 from mkt.ml.models.pooling import CombinedPoolingModel
 from mkt.ml.utils import return_device
 from mkt.ml.utils_wandb import (
@@ -615,7 +615,9 @@ def run_pipeline_with_wandb(
 
         # Evaluate model with wandb logging
         eval_results = evaluate_model_with_wandb(
-            model=trained_model, test_dataloader=test_dataloader, scaler=scaler
+            model=trained_model, 
+            test_dataloader=test_dataloader, 
+            scaler=dataset_pkis2.scaler,
         )
 
         # Log a summary of the best results
@@ -643,20 +645,3 @@ def run_pipeline_with_wandb(
     finally:
         # Finish the wandb run
         run.finish()
-
-
-# # Example usage
-# if __name__ == "__main__":
-#     # Example file path and test groups
-#     csv_file_path = "your_dataset.csv"
-#     test_kincore_groups = ["group1", "group2"]  # Replace with actual groups
-
-#     model, stats, results = run_pipeline_with_wandb(
-#         csv_file_path=csv_file_path,
-#         test_kincore_groups=test_kincore_groups,
-#         batch_size=16,
-#         epochs=10,
-#         project_name="percent-displacement-prediction"
-#     )
-
-#     print("Pipeline execution complete!")
