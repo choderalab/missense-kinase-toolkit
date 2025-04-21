@@ -6,6 +6,7 @@ from typing import Any
 import pandas as pd
 from mkt.databases import ncbi
 from mkt.databases.io_utils import get_repo_root
+from mkt.databases.utils import try_except_return_none_rgetattr
 from mkt.schema import io_utils
 from nf_rnaseq.variables import DICT_DATABASES
 from tqdm import tqdm
@@ -124,7 +125,7 @@ df_merge["sequence_partial"] = list_seq_partial
 
 # Get UniProt IDs from current accession numbers #
 
-df_merge = pd.read_csv(path.join(get_repo_root(), "data/pkis2_annotated.csv"))
+# df_merge = pd.read_csv(path.join(get_repo_root(), "data/pkis2_annotated.csv"))
 
 list_np = df_merge.loc[
     df_merge["Accession Number"].apply(lambda x: x.startswith("NP_")),
@@ -196,7 +197,96 @@ df_merge_uniprot.to_csv(
 
 # Anotate with KinaseInfo #
 
-# dict_kinase = io_utils.deserialize_kinase_dict()
-# dict_kinase_rev = {v.uniprot_id: v for v in dict_kinase.values()}
-# set_ids = set(df_merge_uniprot["UniProt_ID"].tolist())
-# len([k for k in dict_kinase_rev.keys() if k.split("_")[0] in set_ids])
+df_merge = pd.read_csv(path.join(get_repo_root(), "data/pkis2_annotated.csv"))
+dict_kinase = io_utils.deserialize_kinase_dict()
+dict_kinase_rev = {v.uniprot_id: v for v in dict_kinase.values()}
+
+df_merge_narm = df_merge.loc[~df_merge["UniProt_ID"].isna(), :]
+list_to_drop = ["-phosphorylated", "-cyclin", "-autoinhibited"]
+
+df_merge_narm = df_merge_narm.loc[
+    ~df_merge_narm["DiscoverX Gene Symbol"].apply(lambda x: any([i in x for i in list_to_drop])),
+    :].reset_index(drop=True)
+
+df_merge_narm.iloc[0]
+set_uniprot_dup = set(df_merge_narm.loc[df_merge_narm["UniProt_ID"].duplicated(), "UniProt_ID"])
+
+df_merge_narm.loc[df_merge_narm["UniProt_ID"].isin(set_uniprot_dup), :].iloc[0]
+df_merge_narm.loc[df_merge_narm["UniProt_ID"].isin(set_uniprot_dup), ["DiscoverX Gene Symbol", "AA Start/Stop"]]
+df_merge_narm.loc[df_merge_narm["UniProt_ID"].isin(set_uniprot_dup), "DiscoverX Gene Symbol"].tolist()
+
+for i in set_uniprot_dup:
+    for j in df_merge_narm.loc[df_merge_narm["UniProt_ID"] == i, "DiscoverX Gene Symbol"].tolist():
+        if "Kin.Dom.1" in j:
+            df_merge_narm.loc[
+                df_merge_narm["DiscoverX Gene Symbol"] == j, "UniProt_ID"
+            ] = i + "_1"
+        elif "Kin.Dom.2" in j:
+            df_merge_narm.loc[
+                df_merge_narm["DiscoverX Gene Symbol"] == j, "UniProt_ID"
+            ] = i + "_2"
+        else:
+            print(f"UniProt: {i}\nDiscoverX: {j}\n")
+
+# for k, v in dict_kinase.items():
+#     if "_" in k:
+#         try:
+#             temp = dict_kinase[k].kincore.fasta
+#             print(k)
+#             print(f"{temp.start}, {temp.end}")
+#             print()
+#         except:
+#             pass
+
+df_merge_narm.loc[df_merge_narm["UniProt_ID"].apply(lambda x: "_" in x), "UniProt_ID"].apply(lambda x: x.split("_")[0]).value_counts()
+
+dict_kinase["RPS6KA4_1"].kincore.fasta
+dict_kinase["RPS6KA4_2"].kincore.fasta
+for i in set_uniprot_dup:
+    dict_kinase[i]
+    
+
+df_merge_narm.loc[df_merge_narm["UniProt_ID"].isin(set_uniprot_dup), "sequence_full"].apply(lambda x: dict_kinase["RPS6KA4_1"].kincore.fasta.seq in x)
+dict_kinase["RPS6KA4_1"].kincore.fasta.seq
+df_merge["UniProt_ID"] == "O75676"
+
+set_ids = set(df_merge["UniProt_ID"].tolist())
+len([k for k in dict_kinase_rev.keys() if k.split("_")[0] in set_ids])
+
+list_seq_partial = df_merge_narm.loc[df_merge_narm["UniProt_ID"].apply(lambda x: x not in dict_kinase_rev.keys()), "sequence_partial"].tolist()
+
+for i in list_seq_partial:
+    print([k for k, v in dict_kinase_rev.items() if v.kincore is not None and i in v.kincore.fasta.seq])
+
+df_merge_narm_reconciled = df_merge_narm.loc[
+    df_merge_narm["UniProt_ID"].apply(lambda x: x in dict_kinase_rev.keys()), :].reset_index(drop=True)
+
+list_kincore = df_merge_narm_reconciled["UniProt_ID"].apply(lambda x: try_except_return_none_rgetattr(dict_kinase_rev[x], "kincore.fasta.seq")).tolist()
+df_merge_narm_reconciled["kincore"] = list_kincore
+
+list_klifs = df_merge_narm_reconciled["UniProt_ID"].apply(lambda x: try_except_return_none_rgetattr(dict_kinase_rev[x], "klifs.pocket_seq")).tolist()
+df_merge_narm_reconciled["klifs"] = list_klifs
+
+list_kincore_group = df_merge_narm_reconciled["UniProt_ID"].apply(lambda x: try_except_return_none_rgetattr(dict_kinase_rev[x], "kincore.cif.group")).tolist()
+df_merge_narm_reconciled["kincore_group"] = list_kincore_group
+
+df_merge_narm_reconciled.to_csv(path.join(get_repo_root(), "data/pkis2_annotated.csv"), index=False)
+
+df_annot_rev = df_annot.loc[df_annot["klifs"].notnull(), :].reset_index(drop=True)
+df_pkis_rev.columns
+df_pkis_rev.columns.map(lambda x: x in df_annot_rev["DiscoverX Gene Symbol"].tolist())
+
+df_pkis_rev = df_pkis_rev.iloc[:, df_pkis_rev.columns.map(lambda x: x in df_annot_rev["DiscoverX Gene Symbol"].tolist())]
+df_pkis_rev = df_pkis_rev.melt(
+    var_name="DiscoverX Gene Symbol",
+    value_name="percent_displacement",
+    ignore_index=False,
+).reset_index()
+
+df_combo = df_pkis_rev.merge(
+    df_annot_rev[["DiscoverX Gene Symbol", "klifs", "kincore_group"]],
+    how="left",
+    on="DiscoverX Gene Symbol",
+)
+
+df_combo.to_csv("/data1/tanseyw/projects/whitej/missense-kinase-toolkit/data/pkis_data.csv", index=False)
