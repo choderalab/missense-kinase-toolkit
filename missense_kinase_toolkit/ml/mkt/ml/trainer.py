@@ -615,8 +615,8 @@ def run_pipeline_with_wandb(
 
         # Evaluate model with wandb logging
         eval_results = evaluate_model_with_wandb(
-            model=trained_model, 
-            test_dataloader=test_dataloader, 
+            model=trained_model,
+            test_dataloader=test_dataloader,
             scaler=dataset_pkis2.scaler,
         )
 
