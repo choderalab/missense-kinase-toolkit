@@ -1,10 +1,11 @@
 import logging
+
 import numpy as np
+import torch
 from sklearn.cluster import DBSCAN, KMeans, SpectralClustering
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
-import torch
 from umap import UMAP
 
 logger = logging.getLogger(__name__)
@@ -15,10 +16,10 @@ DICT_METHODS = {
         "model": KMeans,
         # need to manually add n_clusterss
         "dict_kwarg": {
-            "init": "random", 
-            "n_init": 10, 
-            "max_iter": 300, 
-            "random_state": 42
+            "init": "random",
+            "n_init": 10,
+            "max_iter": 300,
+            "random_state": 42,
         },
         "scaler": StandardScaler,
     },
@@ -32,8 +33,8 @@ DICT_METHODS = {
     "t-SNE": {
         "model": TSNE,
         "dict_kwarg": {
-            "n_components": 2, 
-            "learning_rate": "auto", 
+            "n_components": 2,
+            "learning_rate": "auto",
             "init": "random",
             "perplexity": 3,
         },
@@ -70,7 +71,7 @@ def generate_clustering(
     method: str,
     mx_input: torch.Tensor | np.ndarray,
     dict_kwarg: dict | None = None,
-    bool_scale = False,
+    bool_scale=False,
 ):
     if dict_kwarg is None:
         try:
@@ -93,7 +94,7 @@ def find_kmeans(
     dict_kwarg: str | None = None,
     bool_scale: bool = False,
     n_clust=30,
-) -> tuple[ object, list, list ]:
+) -> tuple[object, list, list]:
     """Find optimal number of clusters using elbow method
 
     Parameters:
@@ -114,8 +115,8 @@ def find_kmeans(
     list_silhouette : list
         List of silhouette scores
     """
-    from sklearn.metrics import silhouette_score
     from kneed import KneeLocator
+    from sklearn.metrics import silhouette_score
 
     if dict_kwarg is None:
         dict_kwarg = DICT_METHODS["k-Means"]["dict_kwarg"]
@@ -123,9 +124,9 @@ def find_kmeans(
     if bool_scale:
         scaler = DICT_METHODS["k-Means"]["scaler"]
         mx_input = scaler().fit_transform(mx_input)
-    
+
     model = DICT_METHODS["k-Means"]["model"]
-    
+
     np.random.seed(dict_kwarg["random_state"])
 
     # Generate k-means for 1:n_clust
@@ -142,9 +143,9 @@ def find_kmeans(
 
     # Find elbow
     kl = KneeLocator(
-        range(1, n_clust + 1), 
-        list_sse, 
-        curve="convex", 
+        range(1, n_clust + 1),
+        list_sse,
+        curve="convex",
         direction="decreasing",
     )
     n_clust = kl.elbow

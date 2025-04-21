@@ -1,17 +1,19 @@
-from transformers import AutoModel
 import torch.nn as nn
+from transformers import AutoModel
+
 
 class CombinedPoolingModel(nn.Module):
     """Combined pooling model for kinase and drug data."""
+
     def __init__(
-        self, 
-        model_name_kinase, 
-        model_name_drug, 
-        hidden_size=256, 
+        self,
+        model_name_kinase,
+        model_name_drug,
+        hidden_size=256,
         bool_freeze=False,
         dropout_rate=0.1,
     ):
-        super(CombinedPoolingModel, self).__init__()
+        super().__init__()
         self.model_name_kinase = model_name_kinase
         self.model_name_drug = model_name_drug
         self.hidden_size = hidden_size
@@ -52,7 +54,7 @@ class CombinedPoolingModel(nn.Module):
             input_ids=input_kinase,
             attention_mask=mask_kinase,
             output_hidden_states=True,
-        )        
+        )
         mx_drug = self.model_drug(
             input_ids=input_drug,
             attention_mask=mask_drug,
@@ -62,5 +64,5 @@ class CombinedPoolingModel(nn.Module):
         linear_kinase = self.linear_kinase(mx_kinase.pooler_output)
         linear_drug = self.linear_drug(mx_drug.pooler_output)
         output = linear_kinase @ linear_drug.T
-        
+
         return output

@@ -1,9 +1,8 @@
-from mkt.ml.utils import return_device
 from mkt.ml.datasets.pkis2 import PKIS2Dataset
-from mkt.ml.models.pooling import CombinedPoolingModel
-from mkt.ml.trainer import create_dataloaders, train_model
 from mkt.ml.log_config import configure_logging
-from mkt.ml.trainer import run_pipeline_with_wandb
+from mkt.ml.models.pooling import CombinedPoolingModel
+from mkt.ml.trainer import create_dataloaders, run_pipeline_with_wandb, train_model
+from mkt.ml.utils import return_device
 
 
 def main():
@@ -18,8 +17,7 @@ def main():
     dataset_pkis2 = PKIS2Dataset()
 
     train_dataloader, test_dataloader = create_dataloaders(
-        dataset_pkis2.dataset_train,
-        dataset_pkis2.dataset_test
+        dataset_pkis2.dataset_train, dataset_pkis2.dataset_test
     )
 
     train_model(
@@ -28,6 +26,7 @@ def main():
         test_dataloader,
         device,
     )
+
 
 if __name__ == "__main__":
     main()
