@@ -2,10 +2,12 @@ import logging
 from dataclasses import dataclass
 
 import streamlit as st
+from constants import DICT_RESOURCE_URLS, LIST_CAPTIONS, LIST_OPTIONS
 from generate_alignments import SequenceAlignment
 from generate_properties import PropertyTables
 from generate_structures import StructureVisualizer
 from mkt.databases.colors import DICT_COLORS
+from mkt.databases.log_config import configure_logging
 from mkt.databases.utils import try_except_return_none_rgetattr
 from mkt.schema import io_utils
 from mkt.schema.io_utils import DICT_FUNCS
@@ -13,32 +15,6 @@ from mkt.schema.kinase_schema import KinaseInfo
 from streamlit_bokeh import streamlit_bokeh
 
 logger = logging.getLogger(__name__)
-
-
-DICT_RESOURCE_URLS = {
-    "KinHub": "http://www.kinhub.org/",
-    "KLIFS": "https://klifs.net/",
-    "KinCore": "http://dunbrack.fccc.edu/kincore/home",
-    "UniProt": "https://www.uniprot.org/",
-    "Pfam": "https://www.ebi.ac.uk/interpro/entry/pfam",
-}
-"""dict[str, str]: Dictionary containing the resource URLs for the dashboard."""
-
-LIST_OPTIONS = [
-    "None",
-    "Phosphosites",
-    "KLIFS",
-    "Mutational density",
-]
-"""list[str]: List of structure options for the dashboard."""
-
-LIST_CAPTIONS = [
-    "No additional annotation",
-    "Phosphorylation sites as adjudicated by UniProt",
-    "Residues that belong to the KLIFS binding pocket (hinge, HRD, xDFG regions represented as sticks)",
-    "Missense mutational density within cBioPortal MSK-IMPACT cohort ([Zehir et al, 2017.](https://www.nature.com/articles/nm.4333))",
-]
-"""list[str]: List of captions for the structure options in the dashboard."""
 
 
 @dataclass
@@ -253,6 +229,8 @@ class Dashboard:
 
 
 def main():
+    configure_logging()
+
     st.set_page_config(
         layout="wide",
         page_title="mkt",
@@ -264,7 +242,6 @@ def main():
     visualizer = Dashboard()
     state = visualizer.setup_sidebar()
     st.subheader(f"Selected Kinase: {state.kinase}")
-
     visualizer.display_dashboard(state)
 
 
