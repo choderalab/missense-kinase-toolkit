@@ -159,24 +159,30 @@ class FineTuneDataset:
         int: Maximum length of sequences
         """
         # add 2 for special tokens like [CLS] and [SEP]
-        max_smiles_length = max(
-            [
-                len(self.tokenizer_drug.tokenize(x)) for \
-                x in self.df[self.col_drug].unique()
-            ]
-        ) + 2
+        max_smiles_length = (
+            max(
+                [
+                    len(self.tokenizer_drug.tokenize(x))
+                    for x in self.df[self.col_drug].unique()
+                ]
+            )
+            + 2
+        )
 
-        max_klifs_length = max(
-            [
-                len(self.tokenizer_kinase.tokenize(x)) for \
-                x in self.df[self.col_kinase].unique()
-            ]
-        ) + 2
+        max_klifs_length = (
+            max(
+                [
+                    len(self.tokenizer_kinase.tokenize(x))
+                    for x in self.df[self.col_kinase].unique()
+                ]
+            )
+            + 2
+        )
 
         return max_smiles_length, max_klifs_length
 
     def tokenize_and_combine(
-        self, 
+        self,
         batch_in: Dataset,
         max_drug: int,
         max_kinase: int,
@@ -205,7 +211,7 @@ class FineTuneDataset:
             max_length=max_drug,
             return_tensors="pt",
         )
-        
+
         klifs_tokenized = self.tokenizer_kinase(
             batch_in[self.col_kinase],
             padding="max_length",
@@ -213,7 +219,7 @@ class FineTuneDataset:
             max_length=max_kinase,
             return_tensors="pt",
         )
-        
+
         result = {
             "smiles_input_ids": smiles_tokenized.input_ids,
             "smiles_attention_mask": smiles_tokenized.attention_mask,
@@ -221,5 +227,5 @@ class FineTuneDataset:
             "klifs_attention_mask": klifs_tokenized.attention_mask,
             "labels": batch_in[self.col_yval + "_std"],
         }
-    
+
         return result

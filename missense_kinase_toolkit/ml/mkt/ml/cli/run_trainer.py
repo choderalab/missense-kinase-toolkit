@@ -17,15 +17,14 @@ def main():
     # list_test = [i for idx, i in enumerate(dataset_pkis2.dataset_train) if idx in range(0, 5)]
 
     dataloader_train, dataloader_test = create_dataloaders(
-        dataset_pkis2.dataset_train, 
-        dataset_pkis2.dataset_test
+        dataset_pkis2.dataset_train, dataset_pkis2.dataset_test
     )
 
     # for batch in dataloader_train:
     #     print(batch)
 
     model = CombinedPoolingModel(
-        model_name_drug=dataset_pkis2.model_drug, 
+        model_name_drug=dataset_pkis2.model_drug,
         model_name_kinase=dataset_pkis2.model_kinase,
     )
 

@@ -45,12 +45,19 @@ def create_dataloaders(
         Whether to shuffle the training dataset
 
     """
+
     def collate_fn(batch):
         smiles_input_ids = torch.tensor([item["smiles_input_ids"] for item in batch])
-        smiles_attention_mask = torch.tensor([item["smiles_attention_mask"] for item in batch])
+        smiles_attention_mask = torch.tensor(
+            [item["smiles_attention_mask"] for item in batch]
+        )
         klifs_input_ids = torch.tensor([item["klifs_input_ids"] for item in batch])
-        klifs_attention_mask = torch.tensor([item["klifs_attention_mask"] for item in batch])
-        labels = torch.tensor([item["labels"] for item in batch], dtype=torch.float).view(-1, 1)
+        klifs_attention_mask = torch.tensor(
+            [item["klifs_attention_mask"] for item in batch]
+        )
+        labels = torch.tensor(
+            [item["labels"] for item in batch], dtype=torch.float
+        ).view(-1, 1)
 
         return {
             "smiles_input_ids": smiles_input_ids,
@@ -68,9 +75,9 @@ def create_dataloaders(
     )
 
     test_dataloader = DataLoader(
-        test_dataset, 
-        batch_size=batch_size, 
-        shuffle=False, 
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
         collate_fn=collate_fn,
     )
 
@@ -91,8 +98,8 @@ def train_model(
 
     # Define optimizer and loss function
     optimizer = optim.AdamW(
-        model.parameters(), 
-        lr=learning_rate, 
+        model.parameters(),
+        lr=learning_rate,
         weight_decay=weight_decay,
     )
     criterion = nn.MSELoss()
@@ -101,8 +108,8 @@ def train_model(
     total_steps = len(train_dataloader) * epochs
     print(total_steps)
     scheduler = get_linear_schedule_with_warmup(
-        optimizer, 
-        num_warmup_steps=0.1 * total_steps, 
+        optimizer,
+        num_warmup_steps=0.1 * total_steps,
         num_training_steps=total_steps,
     )
 
@@ -235,8 +242,8 @@ def train_model_with_wandb(
 
     # Define optimizer and loss function
     optimizer = optim.AdamW(
-        model.parameters(), 
-        lr=learning_rate, 
+        model.parameters(),
+        lr=learning_rate,
         weight_decay=weight_decay,
     )
     criterion = nn.MSELoss()
@@ -244,8 +251,8 @@ def train_model_with_wandb(
     # Create a learning rate scheduler
     total_steps = len(train_dataloader) * epochs
     scheduler = get_linear_schedule_with_warmup(
-        optimizer, 
-        num_warmup_steps=0.1 * total_steps, 
+        optimizer,
+        num_warmup_steps=0.1 * total_steps,
         num_training_steps=total_steps,
     )
 
