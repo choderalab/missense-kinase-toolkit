@@ -714,7 +714,8 @@ def run_pipeline_with_wandb(
     epochs=100,
     learning_rate=2e-5,
     hidden_size=256,
-    project_name="tansey-lab/ki_llm_mxfactor",
+    project_name: str = "ki_llm_mxfactor",
+    entity_name: str | None = "tansey-lab",
     validation_step_interval=1000,
     best_models_to_keep=5,
 ):
@@ -735,7 +736,7 @@ def run_pipeline_with_wandb(
         "best_models_to_keep": best_models_to_keep,
     }
 
-    run = setup_wandb(project_name, config)
+    run = setup_wandb(project_name, entity_name, config)
 
     try:
         dataset_pkis2 = PKIS2Dataset()
