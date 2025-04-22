@@ -7,6 +7,7 @@ import wandb
 
 def setup_wandb(
     project_name: str,
+    entity_name: str | None,
     config: dict,
 ) -> wandb.run:
     """Set up Weights & Biases for experiment tracking.
@@ -23,12 +24,17 @@ def setup_wandb(
         Initialized wandb run object
 
     """
-    run = wandb.init(
-        project=project_name,
-        config=config,
-        name=f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
-        save_code=True,
-    )
+    dict_config = {
+        "project": project_name,
+        "config": config,
+        "name": f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+        "save_code": True,
+    }
+
+    if entity_name:
+        dict_config["entity"] = entity_name
+
+    run = wandb.init(**dict_config)
 
     return run
 

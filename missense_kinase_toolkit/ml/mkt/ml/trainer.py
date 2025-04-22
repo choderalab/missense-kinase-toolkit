@@ -1,3 +1,4 @@
+import heapq
 import logging
 import os
 
@@ -91,6 +92,129 @@ def create_dataloaders(
     return train_dataloader, test_dataloader
 
 
+def evaluate_model(model, dataloader, criterion, device):
+    """Evaluate the model on the given dataloader.
+
+    Parameters
+    ----------
+    model : nn.Module
+        The model to evaluate
+    dataloader : DataLoader
+        DataLoader for evaluation
+    criterion : nn.Module
+        Loss function
+    device : torch.device
+        Device to run evaluation on
+
+    Returns
+    -------
+    dict
+        Dictionary containing evaluation metrics
+    """
+    model.eval()
+    total_val_loss = 0
+    all_preds = []
+    all_labels = []
+
+    with torch.no_grad():
+        for batch in dataloader:
+            # Move batch to device
+            smiles_input_ids = batch["smiles_input_ids"].to(device)
+            smiles_attention_mask = batch["smiles_attention_mask"].to(device)
+            klifs_input_ids = batch["klifs_input_ids"].to(device)
+            klifs_attention_mask = batch["klifs_attention_mask"].to(device)
+            labels = batch["labels"].to(device)
+
+            # Forward pass
+            outputs = model(
+                input_drug=smiles_input_ids,
+                mask_drug=smiles_attention_mask,
+                input_kinase=klifs_input_ids,
+                mask_kinase=klifs_attention_mask,
+            )
+
+            # Calculate loss
+            loss = criterion(outputs, labels)
+
+            # Accumulate loss
+            total_val_loss += loss.item()
+
+            # Store predictions and labels for metrics
+            all_preds.extend(outputs.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
+    avg_val_loss = total_val_loss / len(dataloader)
+
+    # Calculate metrics
+    mse = mean_squared_error(all_labels, all_preds)
+    rmse = np.sqrt(mse)
+    mae = mean_absolute_error(all_labels, all_preds)
+    r2 = r2_score(all_labels, all_preds)
+
+    return {
+        "loss": avg_val_loss,
+        "mse": mse,
+        "rmse": rmse,
+        "mae": mae,
+        "r2": r2,
+        "predictions": all_preds,
+        "labels": all_labels,
+    }
+
+
+def create_prediction_plot(labels, preds, title, epoch=None, step=None):
+    """Create a scatter plot of predictions vs actual values.
+
+    Parameters
+    ----------
+    labels : list
+        True values
+    preds : list
+        Predicted values
+    title : str
+        Plot title
+    epoch : int, optional
+        Current epoch
+    step : int, optional
+        Current step
+
+    Returns
+    -------
+    str
+        Path to saved plot
+    """
+    subplot_title = title
+    if epoch is not None:
+        subplot_title += f" (Epoch {epoch+1}"
+        if step is not None:
+            subplot_title += f", Step {step}"
+        subplot_title += ")"
+
+    plt.figure(figsize=(10, 6))
+    plt.scatter(labels, preds, alpha=0.5)
+    plt.plot(
+        [min(labels), max(labels)],
+        [min(labels), max(labels)],
+        "r--",
+    )
+    plt.xlabel("True standardized percent_displacement")
+    plt.ylabel("Predicted standardized percent_displacement")
+    plt.title(subplot_title)
+
+    if epoch is not None:
+        if step is not None:
+            plot_path = f"val_predictions_epoch_{epoch+1}_step_{step}.png"
+        else:
+            plot_path = f"val_predictions_epoch_{epoch+1}.png"
+    else:
+        plot_path = "val_predictions.png"
+
+    plt.savefig(plot_path)
+    plt.close()
+
+    return plot_path
+
+
 def train_model(
     model: nn.Module,
     train_dataloader: DataLoader,
@@ -104,6 +228,8 @@ def train_model(
     save_every: int = 1,
     moving_avg_window: int = 20,
     log_interval: int = 10,
+    validation_step_interval: int = 1000,
+    best_models_to_keep: int = 5,
 ):
     """Train the combined model with optional wandb logging.
 
@@ -133,6 +259,10 @@ def train_model(
         Window size for moving average of loss
     log_interval : int
         Interval for logging metrics to wandb
+    validation_step_interval : int
+        Run validation every N steps
+    best_models_to_keep : int
+        Number of best models to keep based on validation loss
 
     Returns
     -------
@@ -174,6 +304,17 @@ def train_model(
     # moving average for loss
     recent_losses = []
     recent_lr = []
+
+    # For tracking best models
+    best_model_heap = []
+    saved_models = {}
+
+    # For tracking loss over time
+    epoch_list = []
+    train_loss_list = []
+    val_loss_list = []
+    step_list = []
+    step_val_loss_list = []
 
     # training loop
     for epoch in range(epochs):
@@ -238,48 +379,77 @@ def train_model(
                         prefix="train/",
                     )
 
-        avg_train_loss = total_train_loss / len(train_dataloader)
+            # Run validation at regular intervals during training
+            if (global_step % validation_step_interval == 0) and bool_wandb:
+                print(f"Running validation at step {global_step}...")
+                # Evaluate model
+                val_metrics = evaluate_model(model, test_dataloader, criterion, device)
 
-        # Validation
-        model.eval()
-        total_val_loss = 0
-        all_preds = []
-        all_labels = []
+                # Log metrics to wandb
+                log_metrics_to_wandb(val_metrics, step=global_step, prefix="val_step/")
 
-        with torch.no_grad():
-            for batch in test_dataloader:
-                # Move batch to device
-                smiles_input_ids = batch["smiles_input_ids"].to(device)
-                smiles_attention_mask = batch["smiles_attention_mask"].to(device)
-                klifs_input_ids = batch["klifs_input_ids"].to(device)
-                klifs_attention_mask = batch["klifs_attention_mask"].to(device)
-                labels = batch["labels"].to(device)
-
-                # Forward pass
-                outputs = model(
-                    input_drug=smiles_input_ids,
-                    mask_drug=smiles_attention_mask,
-                    input_kinase=klifs_input_ids,
-                    mask_kinase=klifs_attention_mask,
+                # Plot and log predictions
+                plot_path = create_prediction_plot(
+                    val_metrics["labels"],
+                    val_metrics["predictions"],
+                    "Predictions vs. Actual Values",
+                    epoch=epoch,
+                    step=global_step,
                 )
 
-                # Calculate loss
-                loss = criterion(outputs, labels)
+                # Log plot to wandb
+                log_plots_to_wandb(
+                    {"val_step_predictions": plot_path}, step=global_step
+                )
 
-                # Accumulate loss
-                total_val_loss += loss.item()
+                # Track for loss over time plot
+                step_list.append(global_step)
+                step_val_loss_list.append(val_metrics["loss"])
 
-                # Store predictions and labels for metrics
-                all_preds.extend(outputs.cpu().numpy())
-                all_labels.extend(labels.cpu().numpy())
+                # Plot loss over time
+                plt.figure(figsize=(12, 6))
+                plt.plot(
+                    step_list,
+                    step_val_loss_list,
+                    "b-",
+                    label="Validation Loss (by step)",
+                )
+                if epoch_list and val_loss_list:
+                    # Convert epoch numbers to equivalent step numbers for plotting on same axis
+                    epoch_steps = [(e + 1) * len(train_dataloader) for e in epoch_list]
+                    plt.plot(
+                        epoch_steps,
+                        val_loss_list,
+                        "r-",
+                        label="Validation Loss (by epoch)",
+                    )
+                plt.xlabel("Training Steps")
+                plt.ylabel("Loss")
+                plt.title("Validation Loss Over Time")
+                plt.legend()
+                plt.grid(True)
 
-        avg_val_loss = total_val_loss / len(test_dataloader)
+                loss_plot_path = "validation_loss_over_time.png"
+                plt.savefig(loss_plot_path)
+                plt.close()
 
-        # Calculate metrics
-        mse = mean_squared_error(all_labels, all_preds)
-        rmse = np.sqrt(mse)
-        mae = mean_absolute_error(all_labels, all_preds)
-        r2 = r2_score(all_labels, all_preds)
+                log_plots_to_wandb({"loss_over_time": loss_plot_path}, step=global_step)
+
+                # Return to training mode
+                model.train()
+
+        avg_train_loss = total_train_loss / len(train_dataloader)
+
+        # Full Validation at end of epoch
+        model.eval()
+        val_metrics = evaluate_model(model, test_dataloader, criterion, device)
+        avg_val_loss = val_metrics["loss"]
+        mse = val_metrics["mse"]
+        rmse = val_metrics["rmse"]
+        mae = val_metrics["mae"]
+        r2 = val_metrics["r2"]
+        all_preds = val_metrics["predictions"]
+        all_labels = val_metrics["labels"]
 
         # Save training stats
         epoch_stats = {
@@ -292,6 +462,11 @@ def train_model(
             "val_r2": r2,
         }
         training_stats.append(epoch_stats)
+
+        # Update loss tracking lists for plotting
+        epoch_list.append(epoch)
+        train_loss_list.append(avg_train_loss)
+        val_loss_list.append(avg_val_loss)
 
         print(f"Epoch: {epoch+1}/{epochs}")
         print(f"Train Loss: {avg_train_loss:.4f}")
@@ -311,39 +486,80 @@ def train_model(
             # Log metrics to wandb
             log_metrics_to_wandb(metrics, step=epoch, prefix="val/")
 
-            # Save checkpoint
-            if epoch % save_every == 0 or epoch == epochs - 1:
-                checkpoint_path = save_checkpoint(
-                    model=model,
-                    optimizer=optimizer,
-                    epoch=epoch + 1,
-                    train_loss=avg_train_loss,
-                    val_loss=avg_val_loss,
-                    metrics=metrics,
-                    checkpoint_dir=checkpoint_dir,
-                )
-                print(f"Checkpoint saved to {checkpoint_path}")
-
             # Create and log validation prediction plot
-            plt.figure(figsize=(10, 6))
-            plt.scatter(all_labels, all_preds, alpha=0.5)
-            plt.plot(
-                [min(all_labels), max(all_labels)],
-                [min(all_labels), max(all_labels)],
-                "r--",
+            plot_path = create_prediction_plot(
+                all_labels, all_preds, "Predictions vs. Actual Values", epoch=epoch
             )
-            plt.xlabel("True standardized percent_displacement")
-            plt.ylabel("Predicted standardized percent_displacement")
-            plt.title(f"Predictions vs. Actual Values (Epoch {epoch+1})")
-
-            plot_path = os.path.join(
-                checkpoint_dir, f"val_predictions_epoch_{epoch+1}.png"
-            )
-            plt.savefig(plot_path)
-            plt.close()
 
             # Log plot to wandb
             log_plots_to_wandb({"val_predictions": plot_path}, step=epoch + 1)
+
+            # Plot loss over time (epoch-based)
+            plt.figure(figsize=(12, 6))
+            plt.plot(epoch_list, train_loss_list, "g-", label="Training Loss")
+            plt.plot(epoch_list, val_loss_list, "r-", label="Validation Loss")
+            plt.xlabel("Epochs")
+            plt.ylabel("Loss")
+            plt.title("Training and Validation Loss Over Time")
+            plt.legend()
+            plt.grid(True)
+
+            loss_plot_path = "loss_curves.png"
+            plt.savefig(loss_plot_path)
+            plt.close()
+
+            log_plots_to_wandb({"loss_curves": loss_plot_path}, step=epoch + 1)
+
+        # Save model checkpoint and manage best models
+        if bool_wandb and (epoch % save_every == 0 or epoch == epochs - 1):
+            model_name = f"model_epoch_{epoch+1}.pt"
+            model_path = os.path.join(checkpoint_dir, model_name)
+
+            # Save the model
+            torch.save(model.state_dict(), model_path)
+
+            # Add to best models heap if needed
+            if len(best_model_heap) < best_models_to_keep:
+                heapq.heappush(best_model_heap, (-avg_val_loss, model_path, epoch + 1))
+                saved_models[model_path] = -avg_val_loss
+            elif -avg_val_loss > best_model_heap[0][0]:
+                # Remove worst model from saved models
+                _, worst_path, _ = heapq.heappop(best_model_heap)
+                if os.path.exists(worst_path):
+                    os.remove(worst_path)
+                del saved_models[worst_path]
+
+                # Add new model to best models
+                heapq.heappush(best_model_heap, (-avg_val_loss, model_path, epoch + 1))
+                saved_models[model_path] = -avg_val_loss
+            else:
+                # Not among best models, delete it
+                if os.path.exists(model_path):
+                    os.remove(model_path)
+
+            print(
+                f"Model saved at epoch {epoch+1}. Keeping best {len(saved_models)} models."
+            )
+
+            # Log best model metadata - doesn't seem to go anywhere...
+            # model_metadata = {
+            #     "epoch": epoch + 1,
+            #     "val_loss": avg_val_loss,
+            #     "val_rmse": rmse,
+            #     "val_r2": r2,
+            # }
+
+            # Save checkpoint with metadata
+            checkpoint_path = save_checkpoint(
+                model=model,
+                optimizer=optimizer,
+                epoch=epoch + 1,
+                train_loss=avg_train_loss,
+                val_loss=avg_val_loss,
+                metrics=metrics,
+                checkpoint_dir=checkpoint_dir,
+            )
+            print(f"Checkpoint saved to {checkpoint_path}")
 
         # Save best model
         if avg_val_loss < best_val_loss:
@@ -367,6 +583,16 @@ def train_model(
             torch.save(model.state_dict(), best_model_path)
             print("Best model saved!")
 
+    # Print summary of kept models
+    if bool_wandb:
+        print("\nBest models summary:")
+        sorted_models = sorted(
+            [(val, path, epoch) for path, val in saved_models.items()],
+            key=lambda x: x[0],
+        )
+        for i, (neg_loss, path, _) in enumerate(sorted_models):
+            print(f"{i+1}. Model at {path}: Val Loss = {-neg_loss:.6f}")
+
     return model, training_stats
 
 
@@ -387,8 +613,6 @@ def evaluate_model_with_wandb(model, test_dataloader, scaler):
             klifs_input_ids = batch["klifs_input_ids"].to(device)
             klifs_attention_mask = batch["klifs_attention_mask"].to(device)
             labels = batch["labels"].to(device)
-
-            print()
 
             # Forward pass
             outputs = model(
@@ -502,7 +726,10 @@ def run_pipeline_with_wandb(
     epochs=100,
     learning_rate=2e-5,
     hidden_size=256,
-    project_name="tansey-lab/ki_llm_mxfactor",
+    project_name: str = "ki_llm_mxfactor",
+    entity_name: str | None = "tansey-lab",
+    validation_step_interval=1000,
+    best_models_to_keep=5,
 ):
     """Run the complete training and evaluation pipeline with wandb integration."""
     # Set up wandb config
@@ -517,9 +744,11 @@ def run_pipeline_with_wandb(
         "optimizer": "AdamW",
         "weight_decay": 0.01,
         "scheduler": "linear_with_warmup",
+        "validation_step_interval": validation_step_interval,
+        "best_models_to_keep": best_models_to_keep,
     }
 
-    run = setup_wandb(project_name, config)
+    run = setup_wandb(project_name, entity_name, config)
 
     try:
         dataset_pkis2 = PKIS2Dataset()
@@ -558,6 +787,8 @@ def run_pipeline_with_wandb(
             save_every=1,
             moving_avg_window=20,
             log_interval=10,
+            validation_step_interval=validation_step_interval,
+            best_models_to_keep=best_models_to_keep,
         )
 
         # evaluate model with wandb logging
