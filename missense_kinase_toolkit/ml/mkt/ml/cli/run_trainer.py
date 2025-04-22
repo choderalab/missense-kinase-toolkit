@@ -10,7 +10,7 @@ def main():
 
     configure_logging()
 
-    device = return_device()
+    # device = return_device()
 
     dataset_pkis2 = PKIS2Dataset()
     # dataloader generates a batch of data that is a list of dictionaries - recreate here
