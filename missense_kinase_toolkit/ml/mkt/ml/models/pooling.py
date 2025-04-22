@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from transformers import AutoModel
 
@@ -63,8 +64,10 @@ class CombinedPoolingModel(nn.Module):
             output_hidden_states=True,
         )
 
-        linear_kinase = self.linear_kinase(mx_kinase.pooler_output)
         linear_drug = self.linear_drug(mx_drug.pooler_output)
-        output = linear_kinase @ linear_drug.T
+        linear_kinase = self.linear_kinase(mx_kinase.pooler_output)
+        
+        # take the dot product of the two vectors per batch
+        output = torch.einsum("bi,bi->b", linear_drug, linear_kinase).unsqueeze(1)
 
         return output
