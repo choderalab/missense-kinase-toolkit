@@ -5,18 +5,24 @@ import torch
 import wandb
 
 
-def setup_wandb(project_name, config):
-    """
-    Set up Weights & Biases for experiment tracking.
+def setup_wandb(
+    project_name: str,
+    config: dict,
+) -> wandb.run:
+    """Set up Weights & Biases for experiment tracking.
 
-    Args:
-        project_name: Name of the project in wandb
-        config: Dictionary containing configuration parameters
+    Parameters:
+    -----------
+    project_name: str
+        Name of the wandb project
+    config: dict
+        Configuration parameters for the experiment
 
     Returns:
-        wandb run object
+    wandb.run
+        Initialized wandb run object
+
     """
-    # Initialize wandb
     run = wandb.init(
         project=project_name,
         config=config,
@@ -28,22 +34,38 @@ def setup_wandb(project_name, config):
 
 
 def save_checkpoint(
-    model, optimizer, epoch, train_loss, val_loss, metrics, checkpoint_dir
-):
-    """
-    Save model checkpoint.
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    epoch: int,
+    train_loss: float,
+    val_loss: float,
+    metrics: dict,
+    checkpoint_dir: str,
+) -> str:
+    """Save model checkpoint.
 
-    Args:
-        model: PyTorch model
-        optimizer: PyTorch optimizer
-        epoch: Current epoch number
-        train_loss: Training loss
-        val_loss: Validation loss
-        metrics: Dictionary of validation metrics
-        checkpoint_dir: Directory to save checkpoints
+    Parameters:
+    -----------
+    model: torch.nn.Module
+        PyTorch model to save
+    optimizer: torch.optim.Optimizer
+        PyTorch optimizer to save
+    epoch: int
+        Current epoch number
+    train_loss: float
+        Training loss
+    val_loss: float
+        Validation loss
+    metrics: dict
+        Dictionary of validation metrics
+    checkpoint_dir: str
+        Directory to save checkpoints
 
     Returns:
+    --------
+    str
         Path to saved checkpoint
+
     """
     os.makedirs(checkpoint_dir, exist_ok=True)
 
@@ -64,17 +86,27 @@ def save_checkpoint(
     return checkpoint_path
 
 
-def load_checkpoint(checkpoint_path, model, optimizer=None):
-    """
-    Load model from checkpoint.
+def load_checkpoint(
+    checkpoint_path: str,
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer | None = None,
+) -> dict:
+    """Load model from checkpoint.
 
-    Args:
-        checkpoint_path: Path to the checkpoint file
-        model: PyTorch model to load the weights into
-        optimizer: Optional PyTorch optimizer to load the state
+    Parameters:
+    -----------
+    checkpoint_path: str
+        Path to the checkpoint file
+    model: torch.nn.Module
+        PyTorch model to load the weights into
+    optimizer: torch.optim.Optimizer, optional
+        PyTorch optimizer to load the state (if available)
 
     Returns:
+    --------
+    dict
         Dictionary containing checkpoint data
+
     """
     checkpoint = torch.load(checkpoint_path)
 
@@ -86,22 +118,34 @@ def load_checkpoint(checkpoint_path, model, optimizer=None):
     return checkpoint
 
 
-def log_metrics_to_wandb(metrics, step, prefix=""):
-    """
-    Log metrics to wandb.
+def log_metrics_to_wandb(
+    metrics: dict,
+    step: int,
+    prefix="",
+):
+    """Log metrics to wandb.
 
-    Args:
-        metrics: Dictionary of metrics to log
-        step: Current step (epoch or batch)
-        prefix: Optional prefix for metric names (e.g., "train/" or "val/")
+    Parameters:
+    -----------
+    metrics: dict
+        Dictionary of metrics to log
+    step: int
+        Current step (epoch or batch)
+    prefix: str, optional
+        Optional prefix for metric names (e.g., "train/" or "val/")
+
+    Returns:
+    --------
+    None
+        Logs metrics to wandb
+
     """
     log_dict = {f"{prefix}{k}": v for k, v in metrics.items()}
     wandb.log(log_dict, step=step)
 
 
 def log_model_to_wandb(model_path, metadata=None):
-    """
-    Log model artifact to wandb.
+    """Log model artifact to wandb.
 
     Args:
         model_path: Path to the model file
@@ -124,13 +168,24 @@ def log_model_to_wandb(model_path, metadata=None):
     return artifact
 
 
-def log_plots_to_wandb(plot_paths, step=None):
-    """
-    Log plots to wandb.
+def log_plots_to_wandb(
+    plot_paths: str,
+    step: int | None = None,
+) -> None:
+    """Log plots to wandb.
 
-    Args:
-        plot_paths: Dictionary mapping plot names to file paths
-        step: Optional step for logging
+    Parameters:
+    -----------
+    plot_paths: str
+        Dictionary mapping plot names to file paths
+    step: int, optional
+        Optional step for logging (e.g., epoch or batch number)
+
+    Returns:
+    --------
+    None
+        Logs plots to wandb
+
     """
     for name, path in plot_paths.items():
         wandb.log({name: wandb.Image(path)}, step=step)
