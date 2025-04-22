@@ -563,7 +563,6 @@ def evaluate_model_with_wandb(model, test_dataloader, scaler):
     }
 
 
-# Full pipeline execution function with wandb integration
 def run_pipeline_with_wandb(
     # csv_file_path,
     # test_kincore_groups,
@@ -606,8 +605,8 @@ def run_pipeline_with_wandb(
         )
 
         model = CombinedPoolingModel(
-            model_name_kinase=dataset_pkis2.model_kinase,
             model_name_drug=dataset_pkis2.model_drug,
+            model_name_kinase=dataset_pkis2.model_kinase,
             hidden_size=hidden_size,
         )
 
