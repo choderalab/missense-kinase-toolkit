@@ -1,6 +1,6 @@
+import heapq
 import logging
 import os
-import heapq
 from collections import defaultdict
 
 import matplotlib.pyplot as plt
@@ -95,7 +95,7 @@ def create_dataloaders(
 
 def evaluate_model(model, dataloader, criterion, device):
     """Evaluate the model on the given dataloader.
-    
+
     Parameters
     ----------
     model : nn.Module
@@ -106,7 +106,7 @@ def evaluate_model(model, dataloader, criterion, device):
         Loss function
     device : torch.device
         Device to run evaluation on
-        
+
     Returns
     -------
     dict
@@ -165,7 +165,7 @@ def evaluate_model(model, dataloader, criterion, device):
 
 def create_prediction_plot(labels, preds, title, epoch=None, step=None):
     """Create a scatter plot of predictions vs actual values.
-    
+
     Parameters
     ----------
     labels : list
@@ -178,7 +178,7 @@ def create_prediction_plot(labels, preds, title, epoch=None, step=None):
         Current epoch
     step : int, optional
         Current step
-        
+
     Returns
     -------
     str
@@ -209,10 +209,10 @@ def create_prediction_plot(labels, preds, title, epoch=None, step=None):
             plot_path = f"val_predictions_epoch_{epoch+1}.png"
     else:
         plot_path = "val_predictions.png"
-    
+
     plt.savefig(plot_path)
     plt.close()
-    
+
     return plot_path
 
 
@@ -305,7 +305,7 @@ def train_model(
     # moving average for loss
     recent_losses = []
     recent_lr = []
-    
+
     # For tracking best models
     best_model_heap = []
     saved_models = {}
@@ -379,51 +379,63 @@ def train_model(
                         step=global_step,
                         prefix="train/",
                     )
-            
+
             # Run validation at regular intervals during training
             if (global_step % validation_step_interval == 0) and bool_wandb:
                 print(f"Running validation at step {global_step}...")
                 # Evaluate model
                 val_metrics = evaluate_model(model, test_dataloader, criterion, device)
-                
+
                 # Log metrics to wandb
                 log_metrics_to_wandb(val_metrics, step=global_step, prefix="val_step/")
-                
+
                 # Plot and log predictions
                 plot_path = create_prediction_plot(
-                    val_metrics["labels"], 
-                    val_metrics["predictions"], 
-                    "Predictions vs. Actual Values", 
+                    val_metrics["labels"],
+                    val_metrics["predictions"],
+                    "Predictions vs. Actual Values",
                     epoch=epoch,
-                    step=global_step
+                    step=global_step,
                 )
-                
+
                 # Log plot to wandb
-                log_plots_to_wandb({"val_step_predictions": plot_path}, step=global_step)
-                
+                log_plots_to_wandb(
+                    {"val_step_predictions": plot_path}, step=global_step
+                )
+
                 # Track for loss over time plot
                 step_list.append(global_step)
                 step_val_loss_list.append(val_metrics["loss"])
-                
+
                 # Plot loss over time
                 plt.figure(figsize=(12, 6))
-                plt.plot(step_list, step_val_loss_list, 'b-', label='Validation Loss (by step)')
+                plt.plot(
+                    step_list,
+                    step_val_loss_list,
+                    "b-",
+                    label="Validation Loss (by step)",
+                )
                 if epoch_list and val_loss_list:
                     # Convert epoch numbers to equivalent step numbers for plotting on same axis
-                    epoch_steps = [(e+1) * len(train_dataloader) for e in epoch_list]
-                    plt.plot(epoch_steps, val_loss_list, 'r-', label='Validation Loss (by epoch)')
-                plt.xlabel('Training Steps')
-                plt.ylabel('Loss')
-                plt.title('Validation Loss Over Time')
+                    epoch_steps = [(e + 1) * len(train_dataloader) for e in epoch_list]
+                    plt.plot(
+                        epoch_steps,
+                        val_loss_list,
+                        "r-",
+                        label="Validation Loss (by epoch)",
+                    )
+                plt.xlabel("Training Steps")
+                plt.ylabel("Loss")
+                plt.title("Validation Loss Over Time")
                 plt.legend()
                 plt.grid(True)
-                
+
                 loss_plot_path = "validation_loss_over_time.png"
                 plt.savefig(loss_plot_path)
                 plt.close()
-                
+
                 log_plots_to_wandb({"loss_over_time": loss_plot_path}, step=global_step)
-                
+
                 # Return to training mode
                 model.train()
 
@@ -451,7 +463,7 @@ def train_model(
             "val_r2": r2,
         }
         training_stats.append(epoch_stats)
-        
+
         # Update loss tracking lists for plotting
         epoch_list.append(epoch)
         train_loss_list.append(avg_train_loss)
@@ -477,42 +489,39 @@ def train_model(
 
             # Create and log validation prediction plot
             plot_path = create_prediction_plot(
-                all_labels, 
-                all_preds, 
-                "Predictions vs. Actual Values", 
-                epoch=epoch
+                all_labels, all_preds, "Predictions vs. Actual Values", epoch=epoch
             )
-            
+
             # Log plot to wandb
             log_plots_to_wandb({"val_predictions": plot_path}, step=epoch + 1)
-            
+
             # Plot loss over time (epoch-based)
             plt.figure(figsize=(12, 6))
-            plt.plot(epoch_list, train_loss_list, 'g-', label='Training Loss')
-            plt.plot(epoch_list, val_loss_list, 'r-', label='Validation Loss')
-            plt.xlabel('Epochs')
-            plt.ylabel('Loss')
-            plt.title('Training and Validation Loss Over Time')
+            plt.plot(epoch_list, train_loss_list, "g-", label="Training Loss")
+            plt.plot(epoch_list, val_loss_list, "r-", label="Validation Loss")
+            plt.xlabel("Epochs")
+            plt.ylabel("Loss")
+            plt.title("Training and Validation Loss Over Time")
             plt.legend()
             plt.grid(True)
-            
+
             loss_plot_path = "loss_curves.png"
             plt.savefig(loss_plot_path)
             plt.close()
-            
+
             log_plots_to_wandb({"loss_curves": loss_plot_path}, step=epoch + 1)
 
         # Save model checkpoint and manage best models
         if bool_wandb and (epoch % save_every == 0 or epoch == epochs - 1):
             model_name = f"model_epoch_{epoch+1}.pt"
             model_path = os.path.join(checkpoint_dir, model_name)
-            
+
             # Save the model
             torch.save(model.state_dict(), model_path)
-            
+
             # Add to best models heap if needed
             if len(best_model_heap) < best_models_to_keep:
-                heapq.heappush(best_model_heap, (-avg_val_loss, model_path, epoch+1))
+                heapq.heappush(best_model_heap, (-avg_val_loss, model_path, epoch + 1))
                 saved_models[model_path] = -avg_val_loss
             elif -avg_val_loss > best_model_heap[0][0]:
                 # Remove worst model from saved models
@@ -520,17 +529,19 @@ def train_model(
                 if os.path.exists(worst_path):
                     os.remove(worst_path)
                 del saved_models[worst_path]
-                
+
                 # Add new model to best models
-                heapq.heappush(best_model_heap, (-avg_val_loss, model_path, epoch+1))
+                heapq.heappush(best_model_heap, (-avg_val_loss, model_path, epoch + 1))
                 saved_models[model_path] = -avg_val_loss
             else:
                 # Not among best models, delete it
                 if os.path.exists(model_path):
                     os.remove(model_path)
-            
-            print(f"Model saved at epoch {epoch+1}. Keeping best {len(saved_models)} models.")
-            
+
+            print(
+                f"Model saved at epoch {epoch+1}. Keeping best {len(saved_models)} models."
+            )
+
             # Log best model metadata
             model_metadata = {
                 "epoch": epoch + 1,
@@ -538,7 +549,7 @@ def train_model(
                 "val_rmse": rmse,
                 "val_r2": r2,
             }
-            
+
             # Save checkpoint with metadata
             checkpoint_path = save_checkpoint(
                 model=model,
@@ -576,8 +587,10 @@ def train_model(
     # Print summary of kept models
     if bool_wandb:
         print("\nBest models summary:")
-        sorted_models = sorted([(val, path, epoch) for path, val in saved_models.items()], 
-                               key=lambda x: x[0])
+        sorted_models = sorted(
+            [(val, path, epoch) for path, val in saved_models.items()],
+            key=lambda x: x[0],
+        )
         for i, (neg_loss, path, _) in enumerate(sorted_models):
             print(f"{i+1}. Model at {path}: Val Loss = {-neg_loss:.6f}")
 
