@@ -547,13 +547,17 @@ def run_pipeline_with_wandb(
         os.makedirs(checkpoint_dir, exist_ok=True)
 
         # train model with wandb logging
-        trained_model, training_stats = train_model_with_wandb(
+        trained_model, training_stats = train_model(
             model=model,
             train_dataloader=train_dataloader,
             test_dataloader=test_dataloader,
             epochs=epochs,
             learning_rate=learning_rate,
             checkpoint_dir=checkpoint_dir,
+            bool_wandb=True,
+            save_every=1,
+            moving_avg_window=20,
+            log_interval=10,
         )
 
         # evaluate model with wandb logging
