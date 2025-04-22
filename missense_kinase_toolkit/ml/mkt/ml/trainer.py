@@ -45,30 +45,21 @@ def create_dataloaders(
         Whether to shuffle the training dataset
 
     """
-
-    # Define a custom collate function to handle the dataset format
     def collate_fn(batch):
-        smiles_input_ids = torch.stack([item["smiles_input_ids"] for item in batch])
-        smiles_attention_mask = torch.stack(
-            [item["smiles_attention_mask"] for item in batch]
-        )
-        klifs_input_ids = torch.stack([item["klifs_input_ids"] for item in batch])
-        klifs_attention_mask = torch.stack(
-            [item["klifs_attention_mask"] for item in batch]
-        )
-        labels = torch.tensor(
-            [item["labels"] for item in batch], dtype=torch.float
-        ).view(-1, 1)
+        smiles_input_ids = torch.tensor([item["smiles_input_ids"] for item in batch])
+        smiles_attention_mask = torch.tensor([item["smiles_attention_mask"] for item in batch])
+        klifs_input_ids = torch.tensor([item["klifs_input_ids"] for item in batch])
+        klifs_attention_mask = torch.tensor([item["klifs_attention_mask"] for item in batch])
+        labels = torch.tensor([item["labels"] for item in batch], dtype=torch.float).view(-1, 1)
 
         return {
-            "smiles_input_ids": smiles_input_ids.squeeze(1),
-            "smiles_attention_mask": smiles_attention_mask.squeeze(1),
-            "klifs_input_ids": klifs_input_ids.squeeze(1),
-            "klifs_attention_mask": klifs_attention_mask.squeeze(1),
+            "smiles_input_ids": smiles_input_ids,
+            "smiles_attention_mask": smiles_attention_mask,
+            "klifs_input_ids": klifs_input_ids,
+            "klifs_attention_mask": klifs_attention_mask,
             "labels": labels,
         }
 
-    # Create DataLoaders
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=batch_size,
@@ -77,7 +68,10 @@ def create_dataloaders(
     )
 
     test_dataloader = DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn
+        test_dataset, 
+        batch_size=batch_size, 
+        shuffle=False, 
+        collate_fn=collate_fn,
     )
 
     return train_dataloader, test_dataloader
@@ -97,14 +91,19 @@ def train_model(
 
     # Define optimizer and loss function
     optimizer = optim.AdamW(
-        model.parameters(), lr=learning_rate, weight_decay=weight_decay
+        model.parameters(), 
+        lr=learning_rate, 
+        weight_decay=weight_decay,
     )
     criterion = nn.MSELoss()
 
     # Create a learning rate scheduler
     total_steps = len(train_dataloader) * epochs
+    print(total_steps)
     scheduler = get_linear_schedule_with_warmup(
-        optimizer, num_warmup_steps=0.1 * total_steps, num_training_steps=total_steps
+        optimizer, 
+        num_warmup_steps=0.1 * total_steps, 
+        num_training_steps=total_steps,
     )
 
     # Training loop
@@ -129,10 +128,10 @@ def train_model(
 
             # Forward pass
             outputs = model(
-                smiles_input_ids=smiles_input_ids,
-                smiles_attention_mask=smiles_attention_mask,
-                klifs_input_ids=klifs_input_ids,
-                klifs_attention_mask=klifs_attention_mask,
+                input_drug=smiles_input_ids,
+                mask_drug=smiles_attention_mask,
+                input_kinase=klifs_input_ids,
+                mask_kinase=klifs_attention_mask,
             )
 
             # Calculate loss
@@ -170,10 +169,10 @@ def train_model(
 
                 # Forward pass
                 outputs = model(
-                    smiles_input_ids=smiles_input_ids,
-                    smiles_attention_mask=smiles_attention_mask,
-                    klifs_input_ids=klifs_input_ids,
-                    klifs_attention_mask=klifs_attention_mask,
+                    input_drug=smiles_input_ids,
+                    mask_drug=smiles_attention_mask,
+                    input_kinase=klifs_input_ids,
+                    mask_kinase=klifs_attention_mask,
                 )
 
                 # Calculate loss
@@ -236,14 +235,18 @@ def train_model_with_wandb(
 
     # Define optimizer and loss function
     optimizer = optim.AdamW(
-        model.parameters(), lr=learning_rate, weight_decay=weight_decay
+        model.parameters(), 
+        lr=learning_rate, 
+        weight_decay=weight_decay,
     )
     criterion = nn.MSELoss()
 
     # Create a learning rate scheduler
     total_steps = len(train_dataloader) * epochs
     scheduler = get_linear_schedule_with_warmup(
-        optimizer, num_warmup_steps=0.1 * total_steps, num_training_steps=total_steps
+        optimizer, 
+        num_warmup_steps=0.1 * total_steps, 
+        num_training_steps=total_steps,
     )
 
     # Create checkpoint directory
@@ -279,10 +282,10 @@ def train_model_with_wandb(
 
             # Forward pass
             outputs = model(
-                smiles_input_ids=smiles_input_ids,
-                smiles_attention_mask=smiles_attention_mask,
-                klifs_input_ids=klifs_input_ids,
-                klifs_attention_mask=klifs_attention_mask,
+                input_drug=smiles_input_ids,
+                mask_drug=smiles_attention_mask,
+                input_kinase=klifs_input_ids,
+                mask_kinase=klifs_attention_mask,
             )
 
             # Calculate loss
@@ -328,10 +331,10 @@ def train_model_with_wandb(
 
                 # Forward pass
                 outputs = model(
-                    smiles_input_ids=smiles_input_ids,
-                    smiles_attention_mask=smiles_attention_mask,
-                    klifs_input_ids=klifs_input_ids,
-                    klifs_attention_mask=klifs_attention_mask,
+                    input_drug=smiles_input_ids,
+                    mask_drug=smiles_attention_mask,
+                    input_kinase=klifs_input_ids,
+                    mask_kinase=klifs_attention_mask,
                 )
 
                 # Calculate loss
@@ -446,12 +449,14 @@ def evaluate_model_with_wandb(model, test_dataloader, scaler):
             klifs_attention_mask = batch["klifs_attention_mask"].to(device)
             labels = batch["labels"].to(device)
 
+            print()
+
             # Forward pass
             outputs = model(
-                smiles_input_ids=smiles_input_ids,
-                smiles_attention_mask=smiles_attention_mask,
-                klifs_input_ids=klifs_input_ids,
-                klifs_attention_mask=klifs_attention_mask,
+                input_drug=smiles_input_ids,
+                mask_drug=smiles_attention_mask,
+                input_kinase=klifs_input_ids,
+                mask_kinase=klifs_attention_mask,
             )
 
             # Store predictions and labels
