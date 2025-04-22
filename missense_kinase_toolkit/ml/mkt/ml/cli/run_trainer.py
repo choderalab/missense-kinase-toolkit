@@ -2,7 +2,7 @@ from mkt.ml.datasets.pkis2 import PKIS2Dataset
 from mkt.ml.log_config import configure_logging
 from mkt.ml.models.pooling import CombinedPoolingModel
 from mkt.ml.trainer import create_dataloaders, run_pipeline_with_wandb, train_model
-from mkt.ml.utils import return_device
+# from mkt.ml.utils import return_device
 
 
 def main():
