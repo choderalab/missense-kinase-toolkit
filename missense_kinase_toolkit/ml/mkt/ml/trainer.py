@@ -1,7 +1,6 @@
 import heapq
 import logging
 import os
-from collections import defaultdict
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -542,13 +541,13 @@ def train_model(
                 f"Model saved at epoch {epoch+1}. Keeping best {len(saved_models)} models."
             )
 
-            # Log best model metadata
-            model_metadata = {
-                "epoch": epoch + 1,
-                "val_loss": avg_val_loss,
-                "val_rmse": rmse,
-                "val_r2": r2,
-            }
+            # Log best model metadata - doesn't seem to go anywhere...
+            # model_metadata = {
+            #     "epoch": epoch + 1,
+            #     "val_loss": avg_val_loss,
+            #     "val_rmse": rmse,
+            #     "val_r2": r2,
+            # }
 
             # Save checkpoint with metadata
             checkpoint_path = save_checkpoint(
