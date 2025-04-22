@@ -50,15 +50,15 @@ class FineTuneDataset:
     list_kinase_split: list[str] | None = None
     # TODO: Add drug_split parameter - add col_col too
     # list_drug_split: list[str] | None = None
-    model_kinase: str = "facebook/esm2_t6_8M_UR50D"
     model_drug: str = "DeepChem/ChemBERTa-77M-MTR"
+    model_kinase: str = "facebook/esm2_t6_8M_UR50D"
 
     def __post_init__(self):
         """Post-initialization method to load the dataset."""
         self.df = self.load_dataset()
 
-        self.tokenizer_kinase = AutoTokenizer.from_pretrained(self.model_kinase)
         self.tokenizer_drug = AutoTokenizer.from_pretrained(self.model_drug)
+        self.tokenizer_kinase = AutoTokenizer.from_pretrained(self.model_kinase)
 
         if self.list_kinase_split is not None:
             df_train, df_test = self.prepare_splits()
@@ -67,13 +67,14 @@ class FineTuneDataset:
             df_train, df_test = self.df, self.df
 
         df_train, df_test, self.scaler = self.standardize_target(df_train, df_test)
+        max_drug, max_kinase = self.find_max_length()
 
         self.dataset_train = Dataset.from_pandas(df_train).map(
-            lambda x: self.tokenize_and_combine(x),
+            lambda x: self.tokenize_and_combine(x, max_drug, max_kinase),
             batched=True,
         )
         self.dataset_test = Dataset.from_pandas(df_test).map(
-            lambda x: self.tokenize_and_combine(x),
+            lambda x: self.tokenize_and_combine(x, max_drug, max_kinase),
             batched=True,
         )
 
@@ -145,24 +146,78 @@ class FineTuneDataset:
 
         return df_train, df_test, scaler
 
-    def tokenize_and_combine(self, dataset_in: Dataset) -> dict[str, Any]:
-        """Tokenize and combine kinase and drug sequences.
+    def find_max_length(self) -> int:
+        """Find the maximum length of sequences in the dataset.
+
+        Parameters:
+        -----------
+        dataset_in: Dataset
+            Input dataset
 
         Returns:
         --------
-        df: pd.DataFrame
-            DataFrame with tokenized sequences
+        int: Maximum length of sequences
         """
-        smiles_tokenized = self.tokenizer_kinase(
-            dataset_in["Smiles"],
-            return_tensors="pt",
-            padding=True,
+        # add 2 for special tokens like [CLS] and [SEP]
+        max_smiles_length = (
+            max(
+                [
+                    len(self.tokenizer_drug.tokenize(x))
+                    for x in self.df[self.col_drug].unique()
+                ]
+            )
+            + 2
         )
 
-        klifs_tokenized = self.tokenizer_drug(
-            dataset_in["klifs"],
+        max_klifs_length = (
+            max(
+                [
+                    len(self.tokenizer_kinase.tokenize(x))
+                    for x in self.df[self.col_kinase].unique()
+                ]
+            )
+            + 2
+        )
+
+        return max_smiles_length, max_klifs_length
+
+    def tokenize_and_combine(
+        self,
+        batch_in: Dataset,
+        max_drug: int,
+        max_kinase: int,
+    ) -> dict[str, Any]:
+        """Tokenize and combine kinase and drug sequences.
+
+        Parameters:
+        -----------
+        batch_in: Dataset
+            Batch of input dataset
+        max_drug: int
+            Maximum length for drug sequences
+        max_kinase: int
+            Maximum length for kinase sequences
+
+        Returns:
+        --------
+        result: dict[str, Any]
+            Dictionary with tokenized sequences, masks, and labels
+
+        """
+        smiles_tokenized = self.tokenizer_drug(
+            batch_in[self.col_drug],
+            padding="max_length",
+            truncation=True,
+            max_length=max_drug,
             return_tensors="pt",
-            padding=True,
+        )
+
+        klifs_tokenized = self.tokenizer_kinase(
+            batch_in[self.col_kinase],
+            padding="max_length",
+            truncation=True,
+            max_length=max_kinase,
+            return_tensors="pt",
         )
 
         result = {
@@ -170,7 +225,7 @@ class FineTuneDataset:
             "smiles_attention_mask": smiles_tokenized.attention_mask,
             "klifs_input_ids": klifs_tokenized.input_ids,
             "klifs_attention_mask": klifs_tokenized.attention_mask,
-            "labels": dataset_in[self.col_yval + "_std"],
+            "labels": batch_in[self.col_yval + "_std"],
         }
 
         return result

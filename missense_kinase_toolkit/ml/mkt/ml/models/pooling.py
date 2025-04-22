@@ -7,21 +7,21 @@ class CombinedPoolingModel(nn.Module):
 
     def __init__(
         self,
-        model_name_kinase,
         model_name_drug,
+        model_name_kinase,
         hidden_size=256,
         bool_freeze=False,
         dropout_rate=0.1,
     ):
         super().__init__()
-        self.model_name_kinase = model_name_kinase
         self.model_name_drug = model_name_drug
+        self.model_name_kinase = model_name_kinase
         self.hidden_size = hidden_size
         self.bool_freeze = bool_freeze
         self.dropout_rate = dropout_rate
 
-        self.model_kinase = AutoModel.from_pretrained(self.model_name_kinase)
         self.model_drug = AutoModel.from_pretrained(self.model_name_drug)
+        self.model_kinase = AutoModel.from_pretrained(self.model_name_kinase)
 
         if self.bool_freeze:
             for param in self.model_kinase.parameters():
@@ -45,19 +45,21 @@ class CombinedPoolingModel(nn.Module):
 
     def forward(
         self,
-        input_kinase,
-        mask_kinase,
         input_drug,
         mask_drug,
+        input_kinase,
+        mask_kinase,
     ):
-        mx_kinase = self.model_kinase(
-            input_ids=input_kinase,
-            attention_mask=mask_kinase,
-            output_hidden_states=True,
-        )
+
         mx_drug = self.model_drug(
             input_ids=input_drug,
             attention_mask=mask_drug,
+            output_hidden_states=True,
+        )
+
+        mx_kinase = self.model_kinase(
+            input_ids=input_kinase,
+            attention_mask=mask_kinase,
             output_hidden_states=True,
         )
 
