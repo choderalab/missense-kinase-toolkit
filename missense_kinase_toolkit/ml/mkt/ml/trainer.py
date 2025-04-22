@@ -106,7 +106,7 @@ def train_model(
     log_interval: int = 10,
 ):
     """Train the combined model with optional wandb logging.
-    
+
     Parameters
     ----------
     model : nn.Module
@@ -133,7 +133,7 @@ def train_model(
         Window size for moving average of loss
     log_interval : int
         Interval for logging metrics to wandb
-    
+
     Returns
     -------
     model : nn.Module
@@ -216,23 +216,23 @@ def train_model(
             if bool_wandb:
                 recent_losses.append(loss.item())
                 recent_lr.append(scheduler.get_last_lr()[0])
-                
+
                 # Keep lists at window size
                 if len(recent_losses) > moving_avg_window:
                     recent_losses.pop(0)
                 if len(recent_lr) > moving_avg_window:
                     recent_lr.pop(0)
-                
+
                 # Log smoothed values every log_interval batches
                 if batch_count % log_interval == 0:
                     avg_loss = sum(recent_losses) / len(recent_losses)
                     avg_lr = sum(recent_lr) / len(recent_lr)
-                    
+
                     log_metrics_to_wandb(
                         {
-                            "loss": avg_loss, 
+                            "loss": avg_loss,
                             "loss_raw": loss.item(),  # Also log raw value for comparison
-                            "learning_rate": avg_lr
+                            "learning_rate": avg_lr,
                         },
                         step=global_step,
                         prefix="train/",
@@ -300,11 +300,17 @@ def train_model(
         # Handle wandb-specific operations
         if bool_wandb:
             # Create metrics dictionary for wandb
-            metrics = {"loss": avg_val_loss, "mse": mse, "rmse": rmse, "mae": mae, "r2": r2}
-            
+            metrics = {
+                "loss": avg_val_loss,
+                "mse": mse,
+                "rmse": rmse,
+                "mae": mae,
+                "r2": r2,
+            }
+
             # Log metrics to wandb
             log_metrics_to_wandb(metrics, step=epoch, prefix="val/")
-            
+
             # Save checkpoint
             if epoch % save_every == 0 or epoch == epochs - 1:
                 checkpoint_path = save_checkpoint(
@@ -317,7 +323,7 @@ def train_model(
                     checkpoint_dir=checkpoint_dir,
                 )
                 print(f"Checkpoint saved to {checkpoint_path}")
-            
+
             # Create and log validation prediction plot
             plt.figure(figsize=(10, 6))
             plt.scatter(all_labels, all_preds, alpha=0.5)
@@ -330,7 +336,9 @@ def train_model(
             plt.ylabel("Predicted standardized percent_displacement")
             plt.title(f"Predictions vs. Actual Values (Epoch {epoch+1})")
 
-            plot_path = os.path.join(checkpoint_dir, f"val_predictions_epoch_{epoch+1}.png")
+            plot_path = os.path.join(
+                checkpoint_dir, f"val_predictions_epoch_{epoch+1}.png"
+            )
             plt.savefig(plot_path)
             plt.close()
 
@@ -340,7 +348,7 @@ def train_model(
         # Save best model
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
-            
+
             if bool_wandb:
                 best_model_path = os.path.join(checkpoint_dir, "best_model.pt")
                 # Log best model to wandb
@@ -355,7 +363,7 @@ def train_model(
                 )
             else:
                 best_model_path = "best_combined_model.pt"
-                
+
             torch.save(model.state_dict(), best_model_path)
             print("Best model saved!")
 

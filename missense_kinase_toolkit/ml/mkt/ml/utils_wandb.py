@@ -6,7 +6,7 @@ import wandb
 
 
 def setup_wandb(
-    project_name: str, 
+    project_name: str,
     config: dict,
 ) -> wandb.run:
     """Set up Weights & Biases for experiment tracking.
@@ -34,12 +34,12 @@ def setup_wandb(
 
 
 def save_checkpoint(
-    model: torch.nn.Module, 
-    optimizer: torch.optim.Optimizer, 
-    epoch: int, 
-    train_loss: float, 
-    val_loss: float, 
-    metrics: dict, 
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    epoch: int,
+    train_loss: float,
+    val_loss: float,
+    metrics: dict,
     checkpoint_dir: str,
 ) -> str:
     """Save model checkpoint.
@@ -65,7 +65,7 @@ def save_checkpoint(
     --------
     str
         Path to saved checkpoint
-    
+
     """
     os.makedirs(checkpoint_dir, exist_ok=True)
 
@@ -88,7 +88,7 @@ def save_checkpoint(
 
 def load_checkpoint(
     checkpoint_path: str,
-    model: torch.nn.Module, 
+    model: torch.nn.Module,
     optimizer: torch.optim.Optimizer | None = None,
 ) -> dict:
     """Load model from checkpoint.
@@ -106,7 +106,7 @@ def load_checkpoint(
     --------
     dict
         Dictionary containing checkpoint data
-    
+
     """
     checkpoint = torch.load(checkpoint_path)
 
@@ -119,8 +119,8 @@ def load_checkpoint(
 
 
 def log_metrics_to_wandb(
-    metrics: dict, 
-    step: int, 
+    metrics: dict,
+    step: int,
     prefix="",
 ):
     """Log metrics to wandb.
@@ -133,7 +133,7 @@ def log_metrics_to_wandb(
         Current step (epoch or batch)
     prefix: str, optional
         Optional prefix for metric names (e.g., "train/" or "val/")
-    
+
     Returns:
     --------
     None
