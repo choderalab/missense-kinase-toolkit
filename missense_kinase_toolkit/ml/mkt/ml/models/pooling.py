@@ -11,7 +11,8 @@ class CombinedPoolingModel(nn.Module):
         model_name_drug,
         model_name_kinase,
         hidden_size=256,
-        bool_freeze=False,
+        bool_drug_freeze=False,
+        bool_kinase_freeze=False,
         dropout_rate=0.1,
     ):
         super().__init__()
@@ -24,21 +25,23 @@ class CombinedPoolingModel(nn.Module):
         self.model_drug = AutoModel.from_pretrained(self.model_name_drug)
         self.model_kinase = AutoModel.from_pretrained(self.model_name_kinase)
 
-        if self.bool_freeze:
-            for param in self.model_kinase.parameters():
-                param.requires_grad = False
+        if self.bool_drug_freeze:
             for param in self.model_drug.parameters():
                 param.requires_grad = False
 
-        self.linear_kinase = nn.Sequential(
-            nn.Linear(self.model_kinase.config.hidden_size, self.hidden_size),
+        if self.bool_kinase_freeze:
+            for param in self.model_kinase.parameters():
+                param.requires_grad = False
+
+        self.linear_drug = nn.Sequential(
+            nn.Linear(self.model_drug.config.hidden_size, self.hidden_size),
             nn.ReLU(),
             nn.Dropout(self.dropout_rate),
             nn.Linear(self.hidden_size, self.hidden_size),
         )
 
-        self.linear_drug = nn.Sequential(
-            nn.Linear(self.model_drug.config.hidden_size, self.hidden_size),
+        self.linear_kinase = nn.Sequential(
+            nn.Linear(self.model_kinase.config.hidden_size, self.hidden_size),
             nn.ReLU(),
             nn.Dropout(self.dropout_rate),
             nn.Linear(self.hidden_size, self.hidden_size),
