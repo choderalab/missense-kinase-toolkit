@@ -1,7 +1,7 @@
 from collections import defaultdict
 
-from mkt.ml.datasets.pkis2 import PKIS2Dataset
 from mkt.mk.models.pooling import CombinedPoolingModel
+from mkt.ml.datasets.pkis2 import PKIS2Dataset
 
 DICT_DATASET = {
     "pkis2": PKIS2Dataset,
@@ -17,7 +17,6 @@ DICT_MODELS = defaultdict(None, DICT_MODELS)
 
 LIST_DRUG_MODELS = [
     "DeepChem/ChemBERTa-77M-MTR",
-    
 ]
 
 LIST_KINASE_MODELS = [
@@ -28,4 +27,3 @@ LIST_KINASE_MODELS = [
     "esm2_t36_3B_UR50D",
     "esm2_t48_15B_UR50D",
 ]
-
