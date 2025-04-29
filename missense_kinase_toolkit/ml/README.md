@@ -13,4 +13,4 @@ The following drug and protein language models are supported. Theoretically, the
 | esm2_t36_3B_UR50D          | ESM2        | 36 layers / 3B parameters   |
 | esm2_t48_15B_UR50D         | ESM2        | 48 layers / 15B parameters  |
 | DeepChem/ChemBERTa-77M-MTR | ChemBERTa-2 | Multi-task regression       |
-| DeepChem/ChemBERTa-77M-MLM | ChemBERTa-2 | Masked language modeling    |
+| DeepChem/ChemBERTa-77M-MLM | ChemBERTa-2 | Masked language model       |
