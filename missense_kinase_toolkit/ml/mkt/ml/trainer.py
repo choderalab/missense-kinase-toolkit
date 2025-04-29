@@ -12,11 +12,7 @@ from datasets import Dataset
 from mkt.ml.datasets.pkis2 import PKIS2Dataset
 from mkt.ml.models.pooling import CombinedPoolingModel
 from mkt.ml.utils import return_device
-from mkt.ml.utils_wandb import (
-    # log_metrics_to_wandb,
-    # log_model_to_wandb,
-    # log_plots_to_wandb,
-    # save_checkpoint,
+from mkt.ml.utils_wandb import (  # log_metrics_to_wandb,; log_model_to_wandb,; log_plots_to_wandb,; save_checkpoint,
     setup_wandb,
 )
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
