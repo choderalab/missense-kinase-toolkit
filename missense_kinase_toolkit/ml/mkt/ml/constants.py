@@ -1,9 +1,9 @@
 # from collections import defaultdict
 from enum import Enum
-from strenum import StrEnum
 
-from mkt.ml.datasets.pkis2 import PKIS2KinaseSplit, PKIS2CrossValidation
+from mkt.ml.datasets.pkis2 import PKIS2CrossValidation, PKIS2KinaseSplit
 from mkt.ml.models.pooling import CombinedPoolingModel
+from strenum import StrEnum
 
 # DICT_DATASET = {
 #     "pkis2": PKIS2Dataset,
@@ -20,20 +20,27 @@ from mkt.ml.models.pooling import CombinedPoolingModel
 
 class DataSet(Enum):
     """Enum for dataset names."""
+
     PKIS2_Kinase_Split = PKIS2KinaseSplit
     PKIS2_CV_Split = PKIS2CrossValidation
 
+
 class ModelType(Enum):
     """Enum for model types."""
+
     pooling = CombinedPoolingModel
+
 
 class DrugModel(StrEnum):
     """StrEnum for drug models."""
+
     CHEMBERTA_MTR = "DeepChem/ChemBERTa-77M-MTR"
     CHEMBERTA_MLM = "DeepChem/ChemBERTa-77M-MLM"
 
+
 class KinaseModel(StrEnum):
     """StrEnum for kinase models."""
+
     ESM2_T6_8M = "facebook/esm2_t6_8M_UR50D"
     ESM2_T12_35M = "facebook/esm2_t12_35M_UR50D"
     ESM2_T30_150M = "facebook/esm2_t30_150M_UR50D"

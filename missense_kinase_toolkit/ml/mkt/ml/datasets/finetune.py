@@ -1,14 +1,14 @@
-from abc import ABC, abstractmethod
 import logging
 import os
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from tqdm import tqdm
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from datasets import Dataset
 from sklearn.preprocessing import StandardScaler
+from tqdm import tqdm
 from transformers import AutoTokenizer
 
 logger = logging.getLogger(__name__)
@@ -40,12 +40,13 @@ class FineTuneDataset(ABC):
             If None, no seed is set.
 
     """
+
     filepath: str
     col_labels: str
     col_kinase: str
     col_drug: str
     model_drug: str = "DeepChem/ChemBERTa-77M-MTR"
-    model_kinase: str = "facebook/esm2_t6_8M_UR50D"  
+    model_kinase: str = "facebook/esm2_t6_8M_UR50D"
     k_folds: int | None = None
     seed: int | None = None
     col_kinase_split: str | None = None
@@ -68,7 +69,9 @@ class FineTuneDataset(ABC):
             try:
                 df_train, df_test = self.prepare_splits()
             except Exception as e:
-                logger.info(f"Exception: {e}\nNo split applied. Using the entire dataset.\n")
+                logger.info(
+                    f"Exception: {e}\nNo split applied. Using the entire dataset.\n"
+                )
                 df_train, df_test = self.df, self.df
             df_train, df_test, self.scaler = self.standardize_target(df_train, df_test)
             self.dataset_train = Dataset.from_pandas(df_train).map(
@@ -106,27 +109,31 @@ class FineTuneDataset(ABC):
         full_dataset = Dataset.from_pandas(self.df)
         if self.seed is not None:
             full_dataset = full_dataset.shuffle(seed=self.seed)
-        
+
         total_size = len(full_dataset)
         fold_size = total_size // self.k_folds
-        
+
         dict_dataset = {}
         for fold_idx in tqdm(range(self.k_folds), desc="Creating CV folds..."):
             # calculate start and end indices for validation set
             val_start = fold_idx * fold_size
-            val_end = val_start + fold_size if fold_idx < self.k_folds - 1 else total_size
-            
+            val_end = (
+                val_start + fold_size if fold_idx < self.k_folds - 1 else total_size
+            )
+
             # create train and validation indices
             val_indices = list(range(val_start, val_end))
             train_indices = [i for i in range(total_size) if i not in val_indices]
-            
+
             # select samples by indices
             train_dataset = full_dataset.select(train_indices)
             val_dataset = full_dataset.select(val_indices)
 
             # standardize the labels
             scaler = StandardScaler()
-            train_column_values = np.array(train_dataset[self.col_labels]).reshape(-1, 1)
+            train_column_values = np.array(train_dataset[self.col_labels]).reshape(
+                -1, 1
+            )
             scaler.fit(train_column_values)
 
             def add_standardized_column(example):
@@ -134,7 +141,7 @@ class FineTuneDataset(ABC):
                 standardized_value = scaler.transform(value).item()
                 example[self.col_labels + "_std"] = standardized_value
                 return example
-                
+
             logger.info(f"Standardizing labels fold-{fold_idx+1}...")
             train_dataset_scaled = train_dataset.map(add_standardized_column)
             val_dataset_scaled = val_dataset.map(add_standardized_column)

@@ -1,8 +1,8 @@
-from dataclasses import field
 import logging
+from dataclasses import field
 from os import path
-import pandas as pd
 
+import pandas as pd
 from mkt.ml.datasets.finetune import FineTuneDataset
 from mkt.ml.utils import get_repo_root
 
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class PKIS2KinaseSplit(FineTuneDataset):
     """PKIS2 dataset kinase split.
-    
+
     Parameters
     ----------
     col_kinase_split : str
@@ -20,6 +20,7 @@ class PKIS2KinaseSplit(FineTuneDataset):
         List of kinase groups to use for testing. If None, no split is applied.
 
     """
+
     # FineTuneDataset arguments
     filepath: str | None = None
     col_labels: str | None = None
@@ -58,18 +59,23 @@ class PKIS2KinaseSplit(FineTuneDataset):
         # Make sure the column exists in the dataframe
         if self.col_kinase_split not in self.df.columns:
             logger.error(f"Column '{self.col_kinase_split}' not found in the dataset")
-            raise ValueError(f"Column '{self.col_kinase_split}' not found in the dataset")
-        
+            raise ValueError(
+                f"Column '{self.col_kinase_split}' not found in the dataset"
+            )
+
         # Make sure list_kinase_split is not None
         if self.list_kinase_split is None:
             logger.warning("list_kinase_split is None. Using the entire dataset.")
             return self.df, self.df
-        
+
         idx_test = self.df[self.col_kinase_split].apply(
             lambda x: x in self.list_kinase_split
         )
 
-        df_train, df_test = self.df.loc[~idx_test, :].copy(), self.df.loc[idx_test, :].copy()
+        df_train, df_test = (
+            self.df.loc[~idx_test, :].copy(),
+            self.df.loc[idx_test, :].copy(),
+        )
 
         logger.info(
             f"Training set size: {len(df_train)}\n"
@@ -82,6 +88,7 @@ class PKIS2KinaseSplit(FineTuneDataset):
 
 class PKIS2CrossValidation(FineTuneDataset):
     """PKIS2 dataset split."""
+
     # FineTuneDataset arguments
     filepath: str | None = None
     col_labels: str | None = None

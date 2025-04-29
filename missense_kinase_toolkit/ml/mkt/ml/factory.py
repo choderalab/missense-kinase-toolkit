@@ -1,9 +1,10 @@
-from os import path
 import logging
 from dataclasses import dataclass
-import yaml
+from os import path
 
-from mkt.ml.constants import DataSet, ModelType, DrugModel, KinaseModel
+import yaml
+from mkt.ml.constants import DataSet, DrugModel, KinaseModel, ModelType
+
 # from mkt.ml.constants import DICT_DATASET, DICT_MODELS
 
 logger = logging.getLogger(__name__)
