@@ -1,9 +1,10 @@
+from os import path
 import logging
 from dataclasses import dataclass
-
 import yaml
-from mkt.ml.constants import DICT_DATASET, DICT_MODELS
-from mkt.ml.log_config import configure_logging
+
+from mkt.ml.constants import DataSet, ModelType, DrugModel, KinaseModel
+# from mkt.ml.constants import DICT_DATASET, DICT_MODELS
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +42,12 @@ class ExperimentFactory:
                     "Configuration file must contain 'data', 'model' and 'trainer' keys."
                 )
 
-            self.dataset, self.model = self.create_experiment()
+            self.seed = self.config["seed"]
 
         except Exception as e:
             logger.error(f"Error loading configuration file: {e}")
 
-    def create_experiment(self) -> tuple[object | None, object | None]:
+    def build(self) -> tuple[object | None, object | None]:
         """Create an experiment based on the configuration file.
 
         Returns
@@ -58,25 +59,29 @@ class ExperimentFactory:
 
         """
         try:
+            self.seed = self.config["seed"]
 
-            dataset_class = DICT_DATASET.get(self.config["data"]["source"])
-            model_class = DICT_MODELS.get(self.config["model"]["model_type"])
+            # validate the configuration file models
+            self.config["data"]["configs"]["model_drug"] = getattr(
+                DrugModel, self.config["data"]["configs"]["model_drug"]
+            ).value
+            self.config["data"]["configs"]["model_kinase"] = getattr(
+                KinaseModel, self.config["data"]["configs"]["model_kinase"]
+            ).value
 
-            if dataset_class is None:
-                raise ValueError(f"Dataset {self.config["data"]["source"]} not found.")
-            if model_class is None:
-                raise ValueError(
-                    f"Model {self.config["model"]["model_type"]} not found."
-                )
+            dataset_class = getattr(DataSet, self.config["data"]["type"])
+            model_class = getattr(ModelType, self.config["model"]["type"])
 
             # instantiate the dataset class
-            dataset = dataset_class(**self.config["data"]["configs"])
+            logger.info(f"Dataset configs:\n{self.config["data"]["configs"]}\n")
+            dataset = dataset_class.value(**self.config["data"]["configs"])
 
-            # instantiate the model class
+            # instantiate the model class and make sure tokenizer matches model
             dict_model_configs = self.config["model"]["configs"]
             dict_model_configs["model_name_drug"] = dataset.model_drug
             dict_model_configs["model_name_kinase"] = dataset.model_kinase
-            model = model_class(**dict_model_configs)
+            logger.info(f"Model configs:\n{dict_model_configs}\n")
+            model = model_class.value(**dict_model_configs)
 
             return dataset, model
 
