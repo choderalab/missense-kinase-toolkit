@@ -2,7 +2,7 @@
 
 This package is meant to facilitate machine learning experiments using kinase representations derived from `mkt.databases` and consolidated in `mkt.schema`.
 
-The following drug and protein language models are supported. Theoretically, the `CombinedPoolingModel` in the `mkt.ml.models.pooling` module should be compatible with any pretrained SMILES and amino acid language models with a pooling layer.
+The following drug and protein language models are supported. Theoretically, the `CombinedPoolingModel` in the `mkt.ml.models.pooling` module should be compatible with any pretrained SMILES and amino acid language models with a pooling layer if support is implemented in the `mkt.ml.constants` module (i.e., models added to `DrugModel` and/or `KinaseModel`).
 
 | Model name                 | Type        | Description                 |
 | :------------------------: | :---------: | :-------------------------- |
