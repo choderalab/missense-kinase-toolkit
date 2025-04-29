@@ -12,15 +12,12 @@ from datasets import Dataset
 from mkt.ml.datasets.pkis2 import PKIS2Dataset
 from mkt.ml.models.pooling import CombinedPoolingModel
 from mkt.ml.utils import return_device
-from mkt.ml.utils_wandb import (
-    log_metrics_to_wandb,
-    log_model_to_wandb,
-    log_plots_to_wandb,
-    save_checkpoint,
+from mkt.ml.utils_wandb import (  # log_metrics_to_wandb,; log_model_to_wandb,; log_plots_to_wandb,; save_checkpoint,
     setup_wandb,
 )
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
 
 logger = logging.getLogger(__name__)
@@ -92,7 +89,12 @@ def create_dataloaders(
     return train_dataloader, test_dataloader
 
 
-def evaluate_model(model, dataloader, criterion, device):
+def evaluate_model(
+    model: nn.Module,
+    dataloader: DataLoader,
+    criterion: nn.Module,
+    device: str,
+):
     """Evaluate the model on the given dataloader.
 
     Parameters
@@ -103,7 +105,7 @@ def evaluate_model(model, dataloader, criterion, device):
         DataLoader for evaluation
     criterion : nn.Module
         Loss function
-    device : torch.device
+    device : str
         Device to run evaluation on
 
     Returns
@@ -162,7 +164,13 @@ def evaluate_model(model, dataloader, criterion, device):
     }
 
 
-def create_prediction_plot(labels, preds, title, epoch=None, step=None):
+def create_prediction_plot(
+    labels: list,
+    preds: list,
+    title: str,
+    epoch: int | None = None,
+    step: int | None = None,
+) -> str:
     """Create a scatter plot of predictions vs actual values.
 
     Parameters
@@ -201,11 +209,11 @@ def create_prediction_plot(labels, preds, title, epoch=None, step=None):
     plt.ylabel("Predicted standardized percent_displacement")
     plt.title(subplot_title)
 
-    if epoch is not None:
-        if step is not None:
-            plot_path = f"val_predictions_epoch_{epoch+1}_step_{step}.png"
-        else:
-            plot_path = f"val_predictions_epoch_{epoch+1}.png"
+    # Generate a different filename based on context
+    if step is not None:
+        plot_path = f"val_predictions_step_{step}.png"
+    elif epoch is not None:
+        plot_path = f"val_predictions_epoch_{epoch+1}.png"
     else:
         plot_path = "val_predictions.png"
 
@@ -219,14 +227,15 @@ def train_model(
     model: nn.Module,
     train_dataloader: DataLoader,
     test_dataloader: DataLoader,
-    epochs: int = 10,
-    learning_rate: float = 2e-5,
-    weight_decay: float = 0.01,
+    epochs: int,
+    learning_rate: float,
+    weight_decay: float,
+    percent_warmup: float = 0.1,
     bool_clip_grad: bool = True,
     bool_wandb: float = False,
     checkpoint_dir: str = "checkpoints",
     save_every: int = 1,
-    moving_avg_window: int = 20,
+    moving_avg_window: int = 100,
     log_interval: int = 10,
     validation_step_interval: int = 1000,
     best_models_to_keep: int = 5,
@@ -288,7 +297,7 @@ def train_model(
     total_steps = len(train_dataloader) * epochs
     scheduler = get_linear_schedule_with_warmup(
         optimizer,
-        num_warmup_steps=0.1 * total_steps,
+        num_warmup_steps=percent_warmup * total_steps,
         num_training_steps=total_steps,
     )
 
@@ -296,6 +305,11 @@ def train_model(
     if bool_wandb:
         os.makedirs(checkpoint_dir, exist_ok=True)
         wandb.watch(model, criterion, log="all", log_freq=10)
+
+        # define custom metrics to avoid monotonically increasing step warnings
+        wandb.define_metric("train/*", step_metric="train_step")
+        wandb.define_metric("val_step/*", step_metric="val_step")
+        wandb.define_metric("val/*", step_metric="epoch")
 
     best_val_loss = float("inf")
     training_stats = []
@@ -305,11 +319,11 @@ def train_model(
     recent_losses = []
     recent_lr = []
 
-    # For tracking best models
+    # tracking best models
     best_model_heap = []
     saved_models = {}
 
-    # For tracking loss over time
+    # tracking loss over time
     epoch_list = []
     train_loss_list = []
     val_loss_list = []
@@ -317,12 +331,12 @@ def train_model(
     step_val_loss_list = []
 
     # training loop
-    for epoch in range(epochs):
+    for epoch in tqdm(range(epochs), desc="Training epochs..."):
         model.train()
         total_train_loss = 0
         batch_count = 0
 
-        for batch in train_dataloader:
+        for batch in tqdm(train_dataloader, desc="Training batches..."):
             batch_count += 1
             global_step += 1
 
@@ -358,55 +372,65 @@ def train_model(
                 recent_losses.append(loss.item())
                 recent_lr.append(scheduler.get_last_lr()[0])
 
-                # Keep lists at window size
+                # keep loss and lr lists at window size
                 if len(recent_losses) > moving_avg_window:
                     recent_losses.pop(0)
                 if len(recent_lr) > moving_avg_window:
                     recent_lr.pop(0)
 
-                # Log smoothed values every log_interval batches
+                # log smoothed values every log_interval batches
                 if batch_count % log_interval == 0:
                     avg_loss = sum(recent_losses) / len(recent_losses)
                     avg_lr = sum(recent_lr) / len(recent_lr)
 
-                    log_metrics_to_wandb(
+                    # use the custom step metric
+                    wandb.log(
                         {
-                            "loss": avg_loss,
-                            "loss_raw": loss.item(),  # Also log raw value for comparison
-                            "learning_rate": avg_lr,
-                        },
-                        step=global_step,
-                        prefix="train/",
+                            "train_step": global_step,
+                            "train/loss": avg_loss,
+                            "train/loss_raw": loss.item(),
+                            "train/learning_rate": avg_lr,
+                        }
                     )
 
-            # Run validation at regular intervals during training
+            # run validation at regular intervals during training
             if (global_step % validation_step_interval == 0) and bool_wandb:
                 print(f"Running validation at step {global_step}...")
-                # Evaluate model
+                # evaluate model
                 val_metrics = evaluate_model(model, test_dataloader, criterion, device)
 
-                # Log metrics to wandb
-                log_metrics_to_wandb(val_metrics, step=global_step, prefix="val_step/")
+                # log metrics to wandb with custom step
+                step_metrics = {
+                    "val_step": global_step,
+                    "val_step/loss": val_metrics["loss"],
+                    "val_step/mse": val_metrics["mse"],
+                    "val_step/rmse": val_metrics["rmse"],
+                    "val_step/mae": val_metrics["mae"],
+                    "val_step/r2": val_metrics["r2"],
+                }
+                wandb.log(step_metrics)
 
-                # Plot and log predictions
+                # plot and log predictions
                 plot_path = create_prediction_plot(
                     val_metrics["labels"],
                     val_metrics["predictions"],
                     "Predictions vs. Actual Values",
-                    epoch=epoch,
                     step=global_step,
                 )
 
-                # Log plot to wandb
-                log_plots_to_wandb(
-                    {"val_step_predictions": plot_path}, step=global_step
+                # log plot to wandb with custom step
+                wandb.log(
+                    {
+                        "val_step": global_step,
+                        "val_step/predictions": wandb.Image(plot_path),
+                    }
                 )
 
-                # Track for loss over time plot
+                # track for loss over time plot
                 step_list.append(global_step)
                 step_val_loss_list.append(val_metrics["loss"])
 
-                # Plot loss over time
+                # plot loss over time
                 plt.figure(figsize=(12, 6))
                 plt.plot(
                     step_list,
@@ -415,7 +439,7 @@ def train_model(
                     label="Validation Loss (by step)",
                 )
                 if epoch_list and val_loss_list:
-                    # Convert epoch numbers to equivalent step numbers for plotting on same axis
+                    # convert epoch numbers to equivalent step numbers for plotting on same axis
                     epoch_steps = [(e + 1) * len(train_dataloader) for e in epoch_list]
                     plt.plot(
                         epoch_steps,
@@ -433,14 +457,20 @@ def train_model(
                 plt.savefig(loss_plot_path)
                 plt.close()
 
-                log_plots_to_wandb({"loss_over_time": loss_plot_path}, step=global_step)
+                # log plot to wandb with custom step
+                wandb.log(
+                    {
+                        "val_step": global_step,
+                        "val_step/loss_over_time": wandb.Image(loss_plot_path),
+                    }
+                )
 
-                # Return to training mode
+                # return to training mode
                 model.train()
 
         avg_train_loss = total_train_loss / len(train_dataloader)
 
-        # Full Validation at end of epoch
+        # full validation at end of epoch
         model.eval()
         val_metrics = evaluate_model(model, test_dataloader, criterion, device)
         avg_val_loss = val_metrics["loss"]
@@ -451,7 +481,7 @@ def train_model(
         all_preds = val_metrics["predictions"]
         all_labels = val_metrics["labels"]
 
-        # Save training stats
+        # save training stats
         epoch_stats = {
             "epoch": epoch + 1,
             "train_loss": avg_train_loss,
@@ -463,7 +493,7 @@ def train_model(
         }
         training_stats.append(epoch_stats)
 
-        # Update loss tracking lists for plotting
+        # update loss tracking lists for plotting
         epoch_list.append(epoch)
         train_loss_list.append(avg_train_loss)
         val_loss_list.append(avg_val_loss)
@@ -472,29 +502,30 @@ def train_model(
         print(f"Train Loss: {avg_train_loss:.4f}")
         print(f"Val Loss: {avg_val_loss:.4f}, RMSE: {rmse:.4f}, R^2: {r2:.4f}")
 
-        # Handle wandb-specific operations
+        # handle wandb-specific operations
         if bool_wandb:
-            # Create metrics dictionary for wandb
-            metrics = {
-                "loss": avg_val_loss,
-                "mse": mse,
-                "rmse": rmse,
-                "mae": mae,
-                "r2": r2,
+            # create metrics dictionary for wandb with custom epoch step
+            epoch_metrics = {
+                "epoch": epoch,
+                "val/loss": avg_val_loss,
+                "val/mse": mse,
+                "val/rmse": rmse,
+                "val/mae": mae,
+                "val/r2": r2,
             }
 
-            # Log metrics to wandb
-            log_metrics_to_wandb(metrics, step=epoch, prefix="val/")
+            # log metrics to wandb
+            wandb.log(epoch_metrics)
 
-            # Create and log validation prediction plot
+            # create and log validation prediction plot
             plot_path = create_prediction_plot(
                 all_labels, all_preds, "Predictions vs. Actual Values", epoch=epoch
             )
 
-            # Log plot to wandb
-            log_plots_to_wandb({"val_predictions": plot_path}, step=epoch + 1)
+            # log plot to wandb with custom epoch step
+            wandb.log({"epoch": epoch, "val/predictions": wandb.Image(plot_path)})
 
-            # Plot loss over time (epoch-based)
+            # plot loss over time (epoch-based)
             plt.figure(figsize=(12, 6))
             plt.plot(epoch_list, train_loss_list, "g-", label="Training Loss")
             plt.plot(epoch_list, val_loss_list, "r-", label="Validation Loss")
@@ -508,32 +539,32 @@ def train_model(
             plt.savefig(loss_plot_path)
             plt.close()
 
-            log_plots_to_wandb({"loss_curves": loss_plot_path}, step=epoch + 1)
+            wandb.log({"epoch": epoch, "val/loss_curves": wandb.Image(loss_plot_path)})
 
-        # Save model checkpoint and manage best models
+        # save model checkpoint and manage best models
         if bool_wandb and (epoch % save_every == 0 or epoch == epochs - 1):
             model_name = f"model_epoch_{epoch+1}.pt"
             model_path = os.path.join(checkpoint_dir, model_name)
 
-            # Save the model
+            # save the model
             torch.save(model.state_dict(), model_path)
 
-            # Add to best models heap if needed
+            # add to best models heap if needed
             if len(best_model_heap) < best_models_to_keep:
                 heapq.heappush(best_model_heap, (-avg_val_loss, model_path, epoch + 1))
                 saved_models[model_path] = -avg_val_loss
             elif -avg_val_loss > best_model_heap[0][0]:
-                # Remove worst model from saved models
+                # remove worst model from saved models
                 _, worst_path, _ = heapq.heappop(best_model_heap)
                 if os.path.exists(worst_path):
                     os.remove(worst_path)
                 del saved_models[worst_path]
 
-                # Add new model to best models
+                # add new model to best models
                 heapq.heappush(best_model_heap, (-avg_val_loss, model_path, epoch + 1))
                 saved_models[model_path] = -avg_val_loss
             else:
-                # Not among best models, delete it
+                # not among best models, delete it
                 if os.path.exists(model_path):
                     os.remove(model_path)
 
@@ -541,63 +572,99 @@ def train_model(
                 f"Model saved at epoch {epoch+1}. Keeping best {len(saved_models)} models."
             )
 
-            # Log best model metadata - doesn't seem to go anywhere...
-            # model_metadata = {
-            #     "epoch": epoch + 1,
-            #     "val_loss": avg_val_loss,
-            #     "val_rmse": rmse,
-            #     "val_r2": r2,
-            # }
-
-            # Save checkpoint with metadata
-            checkpoint_path = save_checkpoint(
-                model=model,
-                optimizer=optimizer,
-                epoch=epoch + 1,
-                train_loss=avg_train_loss,
-                val_loss=avg_val_loss,
-                metrics=metrics,
-                checkpoint_dir=checkpoint_dir,
+            # save checkpoint with metadata
+            checkpoint_path = os.path.join(
+                checkpoint_dir, f"checkpoint_epoch_{epoch+1}.pt"
+            )
+            torch.save(
+                {
+                    "epoch": epoch + 1,
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "train_loss": avg_train_loss,
+                    "val_loss": avg_val_loss,
+                    "metrics": {
+                        "mse": mse,
+                        "rmse": rmse,
+                        "mae": mae,
+                        "r2": r2,
+                    },
+                },
+                checkpoint_path,
             )
             print(f"Checkpoint saved to {checkpoint_path}")
 
-        # Save best model
+        # save best model
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
 
             if bool_wandb:
                 best_model_path = os.path.join(checkpoint_dir, "best_model.pt")
-                # Log best model to wandb
-                log_model_to_wandb(
-                    model_path=best_model_path,
-                    metadata={
-                        "epoch": epoch + 1,
-                        "val_loss": avg_val_loss,
-                        "val_rmse": rmse,
-                        "val_r2": r2,
-                    },
-                )
+                # save best model
+                torch.save(model.state_dict(), best_model_path)
+
+                # only log to wandb if the file exists
+                if os.path.exists(best_model_path):
+                    # create model artifact
+                    model_artifact = wandb.Artifact(
+                        name=f"model-{wandb.run.id}",
+                        type="model",
+                        description="Best model based on validation loss",
+                        metadata={
+                            "epoch": epoch + 1,
+                            "val_loss": avg_val_loss,
+                            "val_rmse": rmse,
+                            "val_r2": r2,
+                        },
+                    )
+                    # add file to artifact
+                    model_artifact.add_file(best_model_path)
+                    # log artifact
+                    wandb.log_artifact(model_artifact)
+                    print("Best model saved and logged to wandb!")
+                else:
+                    print(
+                        f"Warning: Could not find best model file at {best_model_path}"
+                    )
             else:
                 best_model_path = "best_combined_model.pt"
+                torch.save(model.state_dict(), best_model_path)
+                print("Best model saved!")
 
-            torch.save(model.state_dict(), best_model_path)
-            print("Best model saved!")
-
-    # Print summary of kept models
+    # print summary of kept models
     if bool_wandb:
         print("\nBest models summary:")
         sorted_models = sorted(
-            [(val, path, epoch) for path, val in saved_models.items()],
-            key=lambda x: x[0],
+            [(val, path) for path, val in saved_models.items()], key=lambda x: x[0]
         )
-        for i, (neg_loss, path, _) in enumerate(sorted_models):
+        for i, (neg_loss, path) in enumerate(sorted_models):
             print(f"{i+1}. Model at {path}: Val Loss = {-neg_loss:.6f}")
 
     return model, training_stats
 
 
-def evaluate_model_with_wandb(model, test_dataloader, scaler):
-    """Evaluate the trained model on the test set with wandb logging."""
+def evaluate_model_with_wandb(
+    model: nn.Module,
+    test_dataloader: DataLoader,
+    scaler: object,
+):
+    """Evaluate the trained model on the test set with wandb logging.
+
+    Parameters
+    ----------
+    model : nn.Module
+        The trained model to evaluate
+    test_dataloader : DataLoader
+        DataLoader containing test data
+    scaler : object
+        Scaler used for standardizing the data
+
+    Returns
+    -------
+    dict
+        Dictionary containing evaluation metrics
+
+    """
     device = return_device()
     model = model.to(device)
     model.eval()
@@ -633,14 +700,13 @@ def evaluate_model_with_wandb(model, test_dataloader, scaler):
     r2_std = r2_score(all_labels, all_preds)
 
     # Log standardized metrics
-    log_metrics_to_wandb(
+    wandb.log(
         {
-            "mse_standardized": mse_std,
-            "rmse_standardized": rmse_std,
-            "mae_standardized": mae_std,
-            "r2_standardized": r2_std,
-        },
-        prefix="test/",
+            "test/mse_standardized": mse_std,
+            "test/rmse_standardized": rmse_std,
+            "test/mae_standardized": mae_std,
+            "test/r2_standardized": r2_std,
+        }
     )
 
     # Convert back to original scale
@@ -654,9 +720,7 @@ def evaluate_model_with_wandb(model, test_dataloader, scaler):
     r2 = r2_score(all_labels_original, all_preds_original)
 
     # Log original scale metrics
-    log_metrics_to_wandb(
-        {"mse": mse, "rmse": rmse, "mae": mae, "r2": r2}, prefix="test/"
-    )
+    wandb.log({"test/mse": mse, "test/rmse": rmse, "test/mae": mae, "test/r2": r2})
 
     print("Test set metrics (original scale):")
     print(f"MSE: {mse:.4f}")
@@ -681,7 +745,7 @@ def evaluate_model_with_wandb(model, test_dataloader, scaler):
     plt.close()
 
     # Log plot to wandb
-    log_plots_to_wandb({"test_predictions": plot_path})
+    wandb.log({"test/predictions": wandb.Image(plot_path)})
 
     # Create and log error distribution histogram
     errors = all_preds_original.flatten() - all_labels_original.flatten()
@@ -697,7 +761,7 @@ def evaluate_model_with_wandb(model, test_dataloader, scaler):
     plt.close()
 
     # Log error plot to wandb
-    log_plots_to_wandb({"error_distribution": error_plot_path})
+    wandb.log({"test/error_distribution": wandb.Image(error_plot_path)})
 
     # Create a table of actual vs predicted values for wandb
     data = []
@@ -720,8 +784,6 @@ def evaluate_model_with_wandb(model, test_dataloader, scaler):
 
 
 def run_pipeline_with_wandb(
-    # csv_file_path,
-    # test_kincore_groups,
     batch_size=32,
     epochs=100,
     learning_rate=2e-5,
@@ -732,11 +794,9 @@ def run_pipeline_with_wandb(
     best_models_to_keep=5,
 ):
     """Run the complete training and evaluation pipeline with wandb integration."""
-    # Set up wandb config
+    # set up wandb config
     config = {
         "model_name": "Pooling_ESM2_ChemBERTa",
-        # "dataset": csv_file_path,
-        # "test_groups": test_kincore_groups,
         "batch_size": batch_size,
         "epochs": epochs,
         "learning_rate": learning_rate,
@@ -785,7 +845,7 @@ def run_pipeline_with_wandb(
             checkpoint_dir=checkpoint_dir,
             bool_wandb=True,
             save_every=1,
-            moving_avg_window=20,
+            moving_avg_window=100,
             log_interval=10,
             validation_step_interval=validation_step_interval,
             best_models_to_keep=best_models_to_keep,

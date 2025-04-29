@@ -55,3 +55,63 @@ def try_except_string_in_list(str_in, list_in):
             f"Error in try_except_string_in_list: {e}. str_in: {str_in}, list_in: {list_in}"
         )
         return False
+
+
+def set_seed(
+    seed: int = 42,
+    bool_deterministic: bool = False,
+) -> None:
+    """Set all seeds to make results reproducible.
+
+    Parameters:
+    -----------
+    seed: int
+        Seed value for random number generators
+    bool_deterministic: bool
+        If True, set PyTorch to deterministic mode
+
+    """
+    # python random seed
+    import random
+
+    random.seed(seed)
+
+    # numpy random seed
+    try:
+        import numpy as np
+
+        np.random.seed(seed)
+    except ImportError:
+        logger.warning("NumPy is not installed. Skipping NumPy seed setting...")
+
+    # pytorch random seeds
+    try:
+        import torch
+
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # multi-GPU setups
+
+        if bool_deterministic:
+            # make PyTorch deterministic
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+    except ImportError:
+        logger.warning("PyTorch is not installed. Skipping PyTorch seed setting...")
+
+    # transformers seed
+    try:
+        import transformers
+
+        transformers.set_seed(seed, deterministic=bool_deterministic)
+    except ImportError:
+        logger.warning(
+            "Transformers is not installed. Skipping transformers seed setting..."
+        )
+
+    # set environment variable for python hash seed
+    import os
+
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    logger.info(f"All random seeds have been set to {seed}")
