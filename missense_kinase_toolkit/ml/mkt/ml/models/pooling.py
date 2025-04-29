@@ -19,7 +19,8 @@ class CombinedPoolingModel(nn.Module):
         self.model_name_drug = model_name_drug
         self.model_name_kinase = model_name_kinase
         self.hidden_size = hidden_size
-        self.bool_freeze = bool_freeze
+        self.bool_drug_freeze = bool_drug_freeze
+        self.bool_kinase_freeze = bool_kinase_freeze
         self.dropout_rate = dropout_rate
 
         self.model_drug = AutoModel.from_pretrained(self.model_name_drug)
