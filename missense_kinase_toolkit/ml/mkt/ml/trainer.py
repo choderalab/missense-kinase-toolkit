@@ -9,8 +9,6 @@ import torch.nn as nn
 import torch.optim as optim
 import wandb
 from datasets import Dataset
-from mkt.ml.datasets.pkis2 import PKIS2Dataset
-from mkt.ml.models.pooling import CombinedPoolingModel
 from mkt.ml.utils import return_device
 from mkt.ml.utils_wandb import (  # log_metrics_to_wandb,; log_model_to_wandb,; log_plots_to_wandb,; save_checkpoint,
     setup_wandb,
@@ -232,18 +230,17 @@ def train_model(
     test_dataloader: DataLoader,
     checkpoint_dir: str,
     plot_dir: str,
+    bool_wandb: float,
     epochs: int,
     learning_rate: float,
     weight_decay: float,
     percent_warmup: float,
     bool_clip_grad: bool,
-    bool_wandb: float,
     save_every: int,
     moving_avg_window: int,
     log_interval: int,
     validation_step_interval: int,
     best_models_to_keep: int,
-    plot_dir: str,
 ):
     """Train the combined model with optional wandb logging.
 
@@ -255,6 +252,12 @@ def train_model(
         DataLoader containing training data
     test_dataloader : DataLoader
         DataLoader containing test data
+    checkpoint_dir : str
+        Directory to save model checkpoints
+    plot_dir : str
+        Directory to save plots
+    bool_wandb : bool
+        Whether to use wandb logging
     epochs : int
         Number of training epochs
     learning_rate : float
@@ -263,10 +266,6 @@ def train_model(
         Weight decay for optimizer
     bool_clip_grad : bool
         Whether to clip gradients
-    bool_wandb : bool
-        Whether to use wandb logging
-    checkpoint_dir : str
-        Directory to save model checkpoints
     save_every : int
         Save checkpoint every N epochs
     moving_avg_window : int
@@ -867,7 +866,6 @@ def run_pipeline_with_wandb(
         "weight_decay": weight_decay,
         "percent_warmup": percent_warmup,
         "bool_clip_grad": bool_clip_grad,
-        "bool_wandb": bool_wandb,
         "save_every": save_every,
         "moving_avg_window": moving_avg_window,
         "log_interval": log_interval,
@@ -922,15 +920,16 @@ def run_pipeline_with_wandb(
                 "best_val_loss": min([stat["val_loss"] for stat in training_stats]),
                 "best_val_rmse": min([stat["val_rmse"] for stat in training_stats]),
                 "best_val_r2": max([stat["val_r2"] for stat in training_stats]),
-                "test_rmse": eval_results["rmse"],
-                "test_r2": eval_results["r2"],
+                # "test_rmse": eval_results["rmse"],
+                # "test_r2": eval_results["r2"],
             }
         )
 
         # mark the run as successful
         wandb.run.tags = wandb.run.tags + ("success",)
 
-        return trained_model, training_stats, eval_results
+        # return trained_model, training_stats, eval_results
+        return trained_model, training_stats
 
     except Exception as e:
         wandb.run.tags = wandb.run.tags + ("error",)
