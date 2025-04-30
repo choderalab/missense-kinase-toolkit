@@ -60,8 +60,6 @@ class ExperimentFactory:
 
         """
         try:
-            self.seed = self.config["seed"]
-
             # validate the configuration file models
             self.config["data"]["configs"]["model_drug"] = getattr(
                 DrugModel, self.config["data"]["configs"]["model_drug"]
@@ -84,7 +82,20 @@ class ExperimentFactory:
             logger.info(f"Model configs:\n{dict_model_configs}\n")
             model = model_class.value(**dict_model_configs)
 
-            return dataset, model
+            dict_trainer_configs = self.config["trainer"]["configs"]
+            model_name = (
+                self.config["data"]["type"].upper()
+                + "-"
+                + self.config["data"]["configs"]["model_drug"].upper()
+                + "-"
+                + self.config["data"]["configs"]["model_kinase"].upper()
+                + "-"
+                + self.config["model"]["type"].upper()
+            )
+            dict_trainer_configs["model_name"] = model_name
+            logger.info(f"Trainer configs:\n{dict_trainer_configs}\n")
+
+            return dataset, model, dict_trainer_configs
 
         except Exception as e:
 

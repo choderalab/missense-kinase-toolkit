@@ -9,8 +9,6 @@ import torch.nn as nn
 import torch.optim as optim
 import wandb
 from datasets import Dataset
-from mkt.ml.datasets.pkis2 import PKIS2Dataset
-from mkt.ml.models.pooling import CombinedPoolingModel
 from mkt.ml.utils import return_device
 from mkt.ml.utils_wandb import (  # log_metrics_to_wandb,; log_model_to_wandb,; log_plots_to_wandb,; save_checkpoint,
     setup_wandb,
@@ -26,7 +24,7 @@ logger = logging.getLogger(__name__)
 def create_dataloaders(
     train_dataset: Dataset,
     test_dataset: Dataset,
-    batch_size: int = 32,
+    batch_size: int,
     bool_train_shuffle: bool = True,
 ):
     """Create PyTorch DataLoaders from HuggingFace datasets.
@@ -168,6 +166,7 @@ def create_prediction_plot(
     labels: list,
     preds: list,
     title: str,
+    plot_dir: str,
     epoch: int | None = None,
     step: int | None = None,
 ) -> str:
@@ -181,6 +180,8 @@ def create_prediction_plot(
         Predicted values
     title : str
         Plot title
+    plot_dir : str
+        Directory to save the plot
     epoch : int, optional
         Current epoch
     step : int, optional
@@ -217,7 +218,7 @@ def create_prediction_plot(
     else:
         plot_path = "val_predictions.png"
 
-    plt.savefig(plot_path)
+    plt.savefig(os.path.join(plot_dir, plot_path))
     plt.close()
 
     return plot_path
@@ -227,18 +228,19 @@ def train_model(
     model: nn.Module,
     train_dataloader: DataLoader,
     test_dataloader: DataLoader,
+    checkpoint_dir: str,
+    plot_dir: str,
+    bool_wandb: float,
     epochs: int,
     learning_rate: float,
     weight_decay: float,
-    percent_warmup: float = 0.1,
-    bool_clip_grad: bool = True,
-    bool_wandb: float = False,
-    checkpoint_dir: str = "checkpoints",
-    save_every: int = 1,
-    moving_avg_window: int = 100,
-    log_interval: int = 10,
-    validation_step_interval: int = 1000,
-    best_models_to_keep: int = 5,
+    percent_warmup: float,
+    bool_clip_grad: bool,
+    save_every: int,
+    moving_avg_window: int,
+    log_interval: int,
+    validation_step_interval: int,
+    best_models_to_keep: int,
 ):
     """Train the combined model with optional wandb logging.
 
@@ -250,6 +252,12 @@ def train_model(
         DataLoader containing training data
     test_dataloader : DataLoader
         DataLoader containing test data
+    checkpoint_dir : str
+        Directory to save model checkpoints
+    plot_dir : str
+        Directory to save plots
+    bool_wandb : bool
+        Whether to use wandb logging
     epochs : int
         Number of training epochs
     learning_rate : float
@@ -258,10 +266,6 @@ def train_model(
         Weight decay for optimizer
     bool_clip_grad : bool
         Whether to clip gradients
-    bool_wandb : bool
-        Whether to use wandb logging
-    checkpoint_dir : str
-        Directory to save model checkpoints
     save_every : int
         Save checkpoint every N epochs
     moving_avg_window : int
@@ -415,6 +419,7 @@ def train_model(
                     val_metrics["labels"],
                     val_metrics["predictions"],
                     "Predictions vs. Actual Values",
+                    plot_dir,
                     step=global_step,
                 )
 
@@ -454,7 +459,7 @@ def train_model(
                 plt.grid(True)
 
                 loss_plot_path = "validation_loss_over_time.png"
-                plt.savefig(loss_plot_path)
+                plt.savefig(os.path.join(plot_dir, loss_plot_path))
                 plt.close()
 
                 # log plot to wandb with custom step
@@ -519,7 +524,11 @@ def train_model(
 
             # create and log validation prediction plot
             plot_path = create_prediction_plot(
-                all_labels, all_preds, "Predictions vs. Actual Values", epoch=epoch
+                all_labels,
+                all_preds,
+                "Predictions vs. Actual Values",
+                plot_dir,
+                epoch=epoch,
             )
 
             # log plot to wandb with custom epoch step
@@ -536,7 +545,7 @@ def train_model(
             plt.grid(True)
 
             loss_plot_path = "loss_curves.png"
-            plt.savefig(loss_plot_path)
+            plt.savefig(os.path.join(plot_dir, loss_plot_path))
             plt.close()
 
             wandb.log({"epoch": epoch, "val/loss_curves": wandb.Image(loss_plot_path)})
@@ -647,6 +656,7 @@ def evaluate_model_with_wandb(
     model: nn.Module,
     test_dataloader: DataLoader,
     scaler: object,
+    plot_dir: str,
 ):
     """Evaluate the trained model on the test set with wandb logging.
 
@@ -658,6 +668,8 @@ def evaluate_model_with_wandb(
         DataLoader containing test data
     scaler : object
         Scaler used for standardizing the data
+    plot_dir : str
+        Directory to save plots
 
     Returns
     -------
@@ -741,7 +753,7 @@ def evaluate_model_with_wandb(
     plt.title("Predictions vs. Actual Values (Test Set)")
 
     plot_path = "test_prediction_scatter.png"
-    plt.savefig(plot_path)
+    plt.savefig(os.path.join(plot_dir, plot_path))
     plt.close()
 
     # Log plot to wandb
@@ -757,7 +769,7 @@ def evaluate_model_with_wandb(
     plt.title("Distribution of Prediction Errors")
 
     error_plot_path = "error_distribution.png"
-    plt.savefig(error_plot_path)
+    plt.savefig(os.path.join(plot_dir, error_plot_path))
     plt.close()
 
     # Log error plot to wandb
@@ -784,79 +796,123 @@ def evaluate_model_with_wandb(
 
 
 def run_pipeline_with_wandb(
+    model: nn.Module,
+    dataset_train: Dataset,
+    dataset_test: Dataset,
+    # scaler: object = None,
+    model_name: str,
     batch_size=32,
     epochs=100,
-    learning_rate=2e-5,
-    hidden_size=256,
+    learning_rate=2e-5,  # optimizer
+    weight_decay=0.01,  # optimizer
+    percent_warmup: float = 0.1,  # scheduler
+    bool_clip_grad: bool = True,
+    save_every: int = 1,
+    moving_avg_window: int = 100,
+    log_interval: int = 10,
+    validation_step_interval: int = 1000,
+    best_models_to_keep: int = 5,
     project_name: str = "ki_llm_mxfactor",
     entity_name: str | None = "tansey-lab",
-    validation_step_interval=1000,
-    best_models_to_keep=5,
 ):
-    """Run the complete training and evaluation pipeline with wandb integration."""
-    # set up wandb config
-    config = {
-        "model_name": "Pooling_ESM2_ChemBERTa",
-        "batch_size": batch_size,
+    """Run the complete training and evaluation pipeline with wandb integration.
+
+    Parameters
+    ----------
+    model : nn.Module
+        The model to train
+    dataset_train : Dataset
+        Dataset containing training data
+    dataset_test : Dataset
+        Dataset containing test data
+    model_name : str
+        Informative name of the model in wandb logging
+    epochs : int
+        Number of training epochs
+    learning_rate : float
+        Learning rate for optimizer
+    weight_decay : float
+        Weight decay for optimizer
+    bool_clip_grad : bool
+        Whether to clip gradients
+    bool_wandb : bool
+        Whether to use wandb logging
+    checkpoint_dir : str
+        Directory to save model checkpoints
+    save_every : int
+        Save checkpoint every N epochs
+    moving_avg_window : int
+        Window size for moving average of loss
+    log_interval : int
+        Interval for logging metrics to wandb
+    validation_step_interval : int
+        Run validation every N steps
+    best_models_to_keep : int
+        Number of best models to keep based on validation loss
+
+    """
+    # arguments to be logged only
+    config_log = {
+        "model_name": model_name,
+        "optimizer": "AdamW",  # only thing currently implemented
+        "scheduler": "linear_with_warmup",  # only thing currently implemented
+        "batch_size": batch_size,  # only in dataloader
+    }
+
+    # configs passed to train_model()
+    config_train = {
         "epochs": epochs,
         "learning_rate": learning_rate,
-        "hidden_size": hidden_size,
-        "optimizer": "AdamW",
-        "weight_decay": 0.01,
-        "scheduler": "linear_with_warmup",
+        "weight_decay": weight_decay,
+        "percent_warmup": percent_warmup,
+        "bool_clip_grad": bool_clip_grad,
+        "save_every": save_every,
+        "moving_avg_window": moving_avg_window,
+        "log_interval": log_interval,
         "validation_step_interval": validation_step_interval,
         "best_models_to_keep": best_models_to_keep,
     }
 
-    run = setup_wandb(project_name, entity_name, config)
+    config_log.update(config_train)
+
+    run = setup_wandb(project_name, entity_name, config_log)
 
     try:
-        dataset_pkis2 = PKIS2Dataset()
-
         wandb.run.summary.update(
-            {
-                "train_size": len(dataset_pkis2.dataset_train),
-                "test_size": len(dataset_pkis2.dataset_test),
-            }
+            {"train_size": len(dataset_train), "test_size": len(dataset_test)}
         )
 
         train_dataloader, test_dataloader = create_dataloaders(
-            dataset_pkis2.dataset_train,
-            dataset_pkis2.dataset_test,
-        )
-
-        model = CombinedPoolingModel(
-            model_name_drug=dataset_pkis2.model_drug,
-            model_name_kinase=dataset_pkis2.model_kinase,
-            hidden_size=hidden_size,
+            dataset_train,
+            dataset_test,
+            batch_size,
         )
 
         # create checkpoint directory locally with run ID
         checkpoint_dir = f"checkpoints/{wandb.run.id}"
-        os.makedirs(checkpoint_dir, exist_ok=True)
+        plot_dir = f"{checkpoint_dir}/figures"
+        os.makedirs(plot_dir, exist_ok=True)
+        logger.info(f"Checkpoint directory: {checkpoint_dir}")
+        logger.info(f"Plot directory: {plot_dir}\n")
 
         # train model with wandb logging
         trained_model, training_stats = train_model(
             model=model,
             train_dataloader=train_dataloader,
             test_dataloader=test_dataloader,
-            epochs=epochs,
-            learning_rate=learning_rate,
             checkpoint_dir=checkpoint_dir,
-            bool_wandb=True,
-            save_every=1,
-            moving_avg_window=100,
-            log_interval=10,
-            validation_step_interval=validation_step_interval,
-            best_models_to_keep=best_models_to_keep,
+            plot_dir=plot_dir,
+            bool_wandb=True,  # wandb logging by definition
+            **config_train,
         )
 
         # evaluate model with wandb logging
-        eval_results = evaluate_model_with_wandb(
-            model=trained_model,
-            test_dataloader=test_dataloader,
-            scaler=dataset_pkis2.scaler,
-        )
+        # eval_results = evaluate_model_with_wandb(
+        #     model=trained_model,
+        #     test_dataloader=test_dataloader,
+        #     scaler=scaler,
+        #     plot_dir=plot_dir, #TODO
+        # )
 
         # log a summary of the best results
         wandb.run.summary.update(
@@ -864,20 +920,21 @@ def run_pipeline_with_wandb(
                 "best_val_loss": min([stat["val_loss"] for stat in training_stats]),
                 "best_val_rmse": min([stat["val_rmse"] for stat in training_stats]),
                 "best_val_r2": max([stat["val_r2"] for stat in training_stats]),
-                "test_rmse": eval_results["rmse"],
-                "test_r2": eval_results["r2"],
+                # "test_rmse": eval_results["rmse"],
+                # "test_r2": eval_results["r2"],
             }
         )
 
         # mark the run as successful
         wandb.run.tags = wandb.run.tags + ("success",)
 
-        return trained_model, training_stats, eval_results
+        # return trained_model, training_stats, eval_results
+        return trained_model, training_stats
 
     except Exception as e:
         wandb.run.tags = wandb.run.tags + ("error",)
         wandb.run.summary.update({"error": str(e)})
-        raise e
+        logger.error(f"Error during training: {e}")
 
     finally:
         run.finish()
