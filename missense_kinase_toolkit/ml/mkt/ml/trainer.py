@@ -936,7 +936,7 @@ def run_pipeline_with_wandb(
     except Exception as e:
         wandb.run.tags = wandb.run.tags + ("error",)
         wandb.run.summary.update({"error": str(e)})
-        logging.error(f"Error during training: {e}")
+        logger.error(f"Error during training: {e}")
 
     finally:
         run.finish()
