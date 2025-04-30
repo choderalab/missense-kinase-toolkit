@@ -244,7 +244,6 @@ def train_model(
     validation_step_interval: int,
     best_models_to_keep: int,
     plot_dir: str,
-
 ):
     """Train the combined model with optional wandb logging.
 
@@ -526,9 +525,9 @@ def train_model(
 
             # create and log validation prediction plot
             plot_path = create_prediction_plot(
-                all_labels, 
-                all_preds, 
-                "Predictions vs. Actual Values", 
+                all_labels,
+                all_preds,
+                "Predictions vs. Actual Values",
                 plot_dir,
                 epoch=epoch,
             )
@@ -805,9 +804,9 @@ def run_pipeline_with_wandb(
     model_name: str,
     batch_size=32,
     epochs=100,
-    learning_rate=2e-5, # optimizer
-    weight_decay=0.01, # optimizer
-    percent_warmup: float = 0.1, # scheduler
+    learning_rate=2e-5,  # optimizer
+    weight_decay=0.01,  # optimizer
+    percent_warmup: float = 0.1,  # scheduler
     bool_clip_grad: bool = True,
     save_every: int = 1,
     moving_avg_window: int = 100,
@@ -818,7 +817,7 @@ def run_pipeline_with_wandb(
     entity_name: str | None = "tansey-lab",
 ):
     """Run the complete training and evaluation pipeline with wandb integration.
-    
+
     Parameters
     ----------
     model : nn.Module
@@ -856,9 +855,9 @@ def run_pipeline_with_wandb(
     # arguments to be logged only
     config_log = {
         "model_name": model_name,
-        "optimizer": "AdamW", # only thing currently implemented
-        "scheduler": "linear_with_warmup", # only thing currently implemented
-        "batch_size": batch_size, # only in dataloader
+        "optimizer": "AdamW",  # only thing currently implemented
+        "scheduler": "linear_with_warmup",  # only thing currently implemented
+        "batch_size": batch_size,  # only in dataloader
     }
 
     # configs passed to train_model()
@@ -886,7 +885,7 @@ def run_pipeline_with_wandb(
         )
 
         train_dataloader, test_dataloader = create_dataloaders(
-            dataset_train, 
+            dataset_train,
             dataset_test,
             batch_size,
         )
@@ -905,7 +904,7 @@ def run_pipeline_with_wandb(
             test_dataloader=test_dataloader,
             checkpoint_dir=checkpoint_dir,
             plot_dir=plot_dir,
-            bool_wandb=True, # wandb logging by definition
+            bool_wandb=True,  # wandb logging by definition
             **config_train,
         )
 

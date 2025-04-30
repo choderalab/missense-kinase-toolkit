@@ -84,10 +84,13 @@ class ExperimentFactory:
 
             dict_trainer_configs = self.config["trainer"]["configs"]
             model_name = (
-                self.config["data"]["type"].upper() + "-" + 
-                self.config["data"]["configs"]["model_drug"].upper() + "-" +
-                self.config["data"]["configs"]["model_kinase"].upper() + "-" +
-                self.config["model"]["type"].upper()               
+                self.config["data"]["type"].upper()
+                + "-"
+                + self.config["data"]["configs"]["model_drug"].upper()
+                + "-"
+                + self.config["data"]["configs"]["model_kinase"].upper()
+                + "-"
+                + self.config["model"]["type"].upper()
             )
             dict_trainer_configs["model_name"] = model_name
             logger.info(f"Trainer configs:\n{dict_trainer_configs}\n")
