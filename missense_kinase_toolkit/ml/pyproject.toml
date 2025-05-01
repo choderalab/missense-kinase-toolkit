@@ -8,7 +8,7 @@ dynamic = ["version"]
 authors = [
   { name="Jess White", email="jessica.white@choderalab.org" },
 ]
-description = "Module in missense-kinase-toolkit for querying databases"
+description = "Module in missense-kinase-toolkit for machine learning experiments"
 readme = "README.md"
 requires-python = ">=3.9,<3.13"
 classifiers = [

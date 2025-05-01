@@ -35,6 +35,8 @@ class FineTuneDataset(ABC):
     k_folds : int | None
         Number of folds for cross-validation.
             If None, splits are applied via prepare_splits.
+    fold_idx : int | None
+        Index of the fold to use for testing.
     seed : int | None
         Random seed for reproducibility.
             If None, no seed is set.
@@ -45,9 +47,10 @@ class FineTuneDataset(ABC):
     col_labels: str
     col_kinase: str
     col_drug: str
-    model_drug: str = "DeepChem/ChemBERTa-77M-MTR"
-    model_kinase: str = "facebook/esm2_t6_8M_UR50D"
+    model_drug: str
+    model_kinase: str
     k_folds: int | None = None
+    fold_idx: int | None = None
     seed: int | None = None
     col_kinase_split: str | None = None
     list_kinase_split: list[str] | None = None
@@ -114,53 +117,58 @@ class FineTuneDataset(ABC):
         fold_size = total_size // self.k_folds
 
         dict_dataset = {}
+
         for fold_idx in tqdm(range(self.k_folds), desc="Creating CV folds..."):
-            # calculate start and end indices for validation set
-            val_start = fold_idx * fold_size
-            val_end = (
-                val_start + fold_size if fold_idx < self.k_folds - 1 else total_size
-            )
+            if self.fold_idx is not None and fold_idx != self.fold_idx:
+                logger.info(f"Skipping fold {fold_idx + 1}...")
+                continue
+            else:
+                # calculate start and end indices for validation set
+                val_start = fold_idx * fold_size
+                val_end = (
+                    val_start + fold_size if fold_idx < self.k_folds - 1 else total_size
+                )
 
-            # create train and validation indices
-            val_indices = list(range(val_start, val_end))
-            train_indices = [i for i in range(total_size) if i not in val_indices]
+                # create train and validation indices
+                val_indices = list(range(val_start, val_end))
+                train_indices = [i for i in range(total_size) if i not in val_indices]
 
-            # select samples by indices
-            train_dataset = full_dataset.select(train_indices)
-            val_dataset = full_dataset.select(val_indices)
+                # select samples by indices
+                train_dataset = full_dataset.select(train_indices)
+                val_dataset = full_dataset.select(val_indices)
 
-            # standardize the labels
-            scaler = StandardScaler()
-            train_column_values = np.array(train_dataset[self.col_labels]).reshape(
-                -1, 1
-            )
-            scaler.fit(train_column_values)
+                # standardize the labels
+                scaler = StandardScaler()
+                train_column_values = np.array(train_dataset[self.col_labels]).reshape(
+                    -1, 1
+                )
+                scaler.fit(train_column_values)
 
-            def add_standardized_column(example):
-                value = np.array([example[self.col_labels]]).reshape(-1, 1)
-                standardized_value = scaler.transform(value).item()
-                example[self.col_labels + "_std"] = standardized_value
-                return example
+                def add_standardized_column(example):
+                    value = np.array([example[self.col_labels]]).reshape(-1, 1)
+                    standardized_value = scaler.transform(value).item()
+                    example[self.col_labels + "_std"] = standardized_value
+                    return example
 
-            logger.info(f"Standardizing labels fold-{fold_idx+1}...")
-            train_dataset_scaled = train_dataset.map(add_standardized_column)
-            val_dataset_scaled = val_dataset.map(add_standardized_column)
+                logger.info(f"Standardizing labels fold-{fold_idx+1}...")
+                train_dataset_scaled = train_dataset.map(add_standardized_column)
+                val_dataset_scaled = val_dataset.map(add_standardized_column)
 
-            logger.info(f"Tokenizing and combining sequences fold-{fold_idx+1}...")
-            train_dataset_tokenize = train_dataset_scaled.map(
-                lambda x: self.tokenize_and_combine(x),
-                batched=True,
-            )
-            val_dataset_tokenize = val_dataset_scaled.map(
-                lambda x: self.tokenize_and_combine(x),
-                batched=True,
-            )
+                logger.info(f"Tokenizing and combining sequences fold-{fold_idx+1}...")
+                train_dataset_tokenize = train_dataset_scaled.map(
+                    lambda x: self.tokenize_and_combine(x),
+                    batched=True,
+                )
+                val_dataset_tokenize = val_dataset_scaled.map(
+                    lambda x: self.tokenize_and_combine(x),
+                    batched=True,
+                )
 
-            dict_dataset[f"fold_{fold_idx+1}"] = {
-                "train": train_dataset_tokenize,
-                "val": val_dataset_tokenize,
-                "scaler": scaler,
-            }
+                dict_dataset[f"fold_{fold_idx+1}"] = {
+                    "train": train_dataset_tokenize,
+                    "val": val_dataset_tokenize,
+                    "scaler": scaler,
+                }
 
         return dict_dataset
 

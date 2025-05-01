@@ -1,4 +1,5 @@
 import heapq
+import json
 import logging
 import os
 
@@ -390,7 +391,7 @@ def train_model(
                     # use the custom step metric
                     wandb.log(
                         {
-                            "train_step": global_step,
+                            "train_step": global_step * 10,  # since log_interval is 10
                             "train/loss": avg_loss,
                             "train/loss_raw": loss.item(),
                             "train/learning_rate": avg_lr,
@@ -892,8 +893,14 @@ def run_pipeline_with_wandb(
         checkpoint_dir = f"checkpoints/{wandb.run.id}"
         plot_dir = f"{checkpoint_dir}/figures"
         os.makedirs(plot_dir, exist_ok=True)
-        logger.info(f"Checkpoint directory: {checkpoint_dir}")
-        logger.info(f"Plot directory: {plot_dir}\n")
+        logger.info(f"Checkpoint directory: {checkpoint_dir}...")
+        logger.info(f"Plot directory: {plot_dir}...\n")
+
+        # save dict_log in checkpoint directory as a json file
+        config_log_path = os.path.join(checkpoint_dir, "config_log.json")
+        with open(config_log_path, "w") as f:
+            json.dump(config_log, f, indent=4)
+        logger.info(f"Config log saved to {config_log_path}...\n")
 
         # train model with wandb logging
         trained_model, training_stats = train_model(
