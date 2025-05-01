@@ -2,7 +2,7 @@ import logging
 import os
 import subprocess
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ def create_slurm_script(
 
     # add environment activation if needed
     if env_name:
-        content.append(f"\nsource ~/.bashrc")
+        content.append("\nsource ~/.bashrc")
         content.append(f"mamba activate {env_name}")
 
     # change to the script fold directory for the purposes of checkpointing/plotting
@@ -148,7 +148,7 @@ def batch_submit_folds(
         Path to the configuration file
     folds : int
         Number of folds to train
-    slurm_params : Dict[str, Any]
+    slurm_params : dict[str, Any]
         Dictionary of parameters for SLURM job submission
 
     Returns
