@@ -1,21 +1,8 @@
-# from collections import defaultdict
 from enum import Enum
 
 from mkt.ml.datasets.pkis2 import PKIS2CrossValidation, PKIS2KinaseSplit
 from mkt.ml.models.pooling import CombinedPoolingModel
 from strenum import StrEnum
-
-# DICT_DATASET = {
-#     "pkis2": PKIS2Dataset,
-# }
-# """dict[str, type]: Dictionary mapping dataset names to their respective classes."""
-# DICT_DATASET = defaultdict(None, DICT_DATASET)
-
-# DICT_MODELS = {
-#     "pooling": CombinedPoolingModel,
-# }
-# """dict[str, type]: Dictionary mapping model names to their respective classes."""
-# DICT_MODELS = defaultdict(None, DICT_MODELS)
 
 
 class DataSet(Enum):
