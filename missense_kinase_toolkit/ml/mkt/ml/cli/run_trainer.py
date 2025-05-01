@@ -1,4 +1,5 @@
 import argparse
+from datetime import datetime
 import logging
 
 from mkt.ml.factory import ExperimentFactory
@@ -167,6 +168,12 @@ def main():
         logger.info("Train/test split detected...")
 
         dataset, model, dict_trainer_configs = experiment.build()
+
+        now = datetime.now()
+        out_dir = os.path.join("train_test", now.strftime("%Y-%m-%d_%H-%M-%S"))
+        os.makedirs(out_dir, exist_ok=True)
+        logger.info(f"Output directory: {out_dir}...")
+        os.chdir(out_dir)
 
         run_pipeline_with_wandb(
             model=model,
