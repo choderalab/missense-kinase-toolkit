@@ -48,7 +48,7 @@ class ExperimentFactory:
         except Exception as e:
             logger.error(f"Error loading configuration file: {e}")
 
-    def build(self) -> tuple[object | None, object | None]:
+    def build(self) -> tuple[object | None, object | None, dict | None]:
         """Create an experiment based on the configuration file.
 
         Returns
@@ -57,13 +57,17 @@ class ExperimentFactory:
             The dataset object.
         model : object | None
             The model object.
+        dict_trainer_configs : dict | None
+            The trainer configurations.
 
         """
         try:
             # validate the configuration file models
+            model_drug_short = self.config["data"]["configs"]["model_drug"]
             self.config["data"]["configs"]["model_drug"] = getattr(
                 DrugModel, self.config["data"]["configs"]["model_drug"]
             ).value
+            model_kinase_short = self.config["data"]["configs"]["model_kinase"]
             self.config["data"]["configs"]["model_kinase"] = getattr(
                 KinaseModel, self.config["data"]["configs"]["model_kinase"]
             ).value
@@ -83,16 +87,31 @@ class ExperimentFactory:
             model = model_class.value(**dict_model_configs)
 
             dict_trainer_configs = self.config["trainer"]["configs"]
+            # model_name
+            split_type = ""
+            if "col_kinase_split" in self.config["data"]["configs"]:
+                split_type += (
+                    self.config["data"]["configs"]["col_kinase_split"].upper() + "_"
+                    + "_".join(
+                        self.config["data"]["configs"]["list_kinase_split"]
+                    )
+                )
+            if split_type == "":
+                split_type = "CV"
             model_name = (
-                self.config["data"]["type"].upper()
-                + "-"
-                + self.config["data"]["configs"]["model_drug"].upper()
-                + "-"
-                + self.config["data"]["configs"]["model_kinase"].upper()
-                + "-"
-                + self.config["model"]["type"].upper()
+                self.config["data"]["type"].upper() + "-"
+                + self.config["data"]["configs"]["col_kinase"].upper() + "-"
+                + self.config["data"]["configs"]["col_drug"].upper() + "-"
+                + model_drug_short.upper() + "-"
+                + model_kinase_short.upper() + "-"
+                + self.config["model"]["type"].upper() + "-"                
+                + split_type
             )
             dict_trainer_configs["model_name"] = model_name
+            # otherwise treats as string if contains e
+            dict_trainer_configs["learning_rate"] = float(
+                dict_trainer_configs["learning_rate"]
+            )
             logger.info(f"Trainer configs:\n{dict_trainer_configs}\n")
 
             return dataset, model, dict_trainer_configs
@@ -101,4 +120,4 @@ class ExperimentFactory:
 
             logger.error(f"Error creating experiment: {e}")
 
-            return None, None
+            return None, None, None
