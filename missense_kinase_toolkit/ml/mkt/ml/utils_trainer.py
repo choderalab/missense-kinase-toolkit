@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 def create_slurm_script(
     fold_number: int,
     config_path: str,
-    script_dir: str = "slurm_scripts",
+    script_dir: str,
     job_name: str = "cv_trainer",
     partition: str = "componc_gpu",
     nodes: int = 1,
@@ -57,13 +57,6 @@ def create_slurm_script(
     str
         Path to the created SLURM script
     """
-    # create datetime string for the script directory
-    now = datetime.now()
-    script_dir = os.path.join(script_dir, now.strftime("%Y-%m-%d_%H-%M-%S"))
-    os.makedirs(script_dir)
-    for subdir in ["stdout", "stderr", f"fold_{fold_number + 1}"]:
-        os.makedirs(os.path.join(script_dir, subdir))
-
     fold_name = f"fold_{fold_number + 1}"
     
     # create a script filename
@@ -79,8 +72,8 @@ def create_slurm_script(
         f"#SBATCH --mem-per-cpu={mem_per_cpu}",
         f"#SBATCH --gpus-per-task={gpus_per_task}",
         f"#SBATCH --time={time}",
-        f"#SBATCH --output={os.path.join(script_dir, "stdout")}/%x_{fold_name}_%j.out",
-        f"#SBATCH --error={os.path.join(script_dir, "stderr")}/%x_{fold_name}_%j.err",
+        f"#SBATCH --output={script_dir}/%x_{fold_name}_%j.out",
+        f"#SBATCH --error={script_dir}/%x_{fold_name}_%j.err",
     ]
     
     # add account if specified
@@ -93,11 +86,11 @@ def create_slurm_script(
         content.append(f"mamba activate {env_name}")
     
     # change to the script fold directory for the purposes of checkpointing/plotting
-    content.append(f"\ncd {os.path.join(script_dir, f"fold_{fold_number + 1}")}")
+    content.append(f"\ncd {script_dir}")
 
     # add the training command with fold argument
     content.append("\n# Run the training script")
-    content.append(f"python -m run_trainer --config {config_path} --fold {fold_number}")
+    content.append(f"run_trainer --config {config_path} --fold {fold_number}")
     
     # Write the script to file
     with open(script_path, "w") as f:
@@ -145,7 +138,8 @@ def submit_job(script_path: str) -> str:
 def batch_submit_folds(
     config_path: str,
     folds: int,
-    slurm_params: Dict[str, Any]
+    slurm_params: Dict[str, Any],
+    outer_dir: str = "cv_trainer",
 ) -> Dict[str, str]:
     """
     Batch submit multiple fold training jobs to SLURM.
@@ -164,16 +158,28 @@ def batch_submit_folds(
     Dict[str, str]
         Dictionary mapping fold names to their job IDs
     """
-    job_ids = {}
-    
+    # create datetime string for the script directory
+    now = datetime.now()
+    inner_dir = os.path.join(outer_dir, now.strftime("%Y-%m-%d_%H-%M-%S"))
+    os.makedirs(inner_dir)
+
+    job_ids = {}    
     for fold in range(folds):
         fold_name = f"fold_{fold + 1}"
+
+        fold_dir = os.path.join(inner_dir, fold_name)
+        os.makedirs(fold_dir)
+        # just store stdout/stderr in the fold_dir for now
+        # for subdir in ["stdout", "stderr"]:
+        #     os.makedirs(os.path.join(fold_dir, subdir))
+
         logger.info(f"Creating and submitting job for {fold_name}")
-        
+
         # create a SLURM script for this fold
         script_path = create_slurm_script(
             fold_number=fold,
             config_path=config_path,
+            script_dir=fold_dir,
             **slurm_params,
         )
         
