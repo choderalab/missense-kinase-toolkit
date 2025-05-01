@@ -61,7 +61,7 @@ def create_slurm_script(
     now = datetime.now()
     script_dir = os.path.join(script_dir, now.strftime("%Y-%m-%d_%H-%M-%S"))
     os.makedirs(script_dir)
-    for subdir in ["stdout", "stderr"]:
+    for subdir in ["stdout", "stderr", f"fold_{fold_number + 1}"]:
         os.makedirs(os.path.join(script_dir, subdir))
 
     fold_name = f"fold_{fold_number + 1}"
@@ -92,6 +92,9 @@ def create_slurm_script(
         content.append(f"\nsource ~/.bashrc")
         content.append(f"mamba activate {env_name}")
     
+    # change to the script fold directory for the purposes of checkpointing/plotting
+    content.append(f"\ncd {os.path.join(script_dir, f"fold_{fold_number + 1}")}")
+
     # add the training command with fold argument
     content.append("\n# Run the training script")
     content.append(f"python -m run_trainer --config {config_path} --fold {fold_number}")
