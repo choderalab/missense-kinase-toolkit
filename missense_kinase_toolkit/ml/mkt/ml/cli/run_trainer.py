@@ -1,3 +1,4 @@
+import os
 import argparse
 from datetime import datetime
 import logging
@@ -6,7 +7,7 @@ from mkt.ml.factory import ExperimentFactory
 from mkt.ml.log_config import add_logging_flags, configure_logging
 from mkt.ml.trainer import run_pipeline_with_wandb
 from mkt.ml.utils import set_seed
-from mkt.ml.utils_trainer import batch_submit_folds, run_fold_locally
+from mkt.ml.utils_trainer import batch_submit_folds
 
 logger = logging.getLogger(__name__)
 
@@ -24,16 +25,16 @@ def parse_args():
     
     parser.add_argument(
         "--fold",
-        action=int,
+        type=int,
         nargs="?", # 0 or 1 - if not provided for CV, batch all folds
         help="Run a single fold of cross-validation.",
     )
 
     parser.add_argument(
-        "--script_dir",
+        "--out_dir",
         type=str,
-        default="slurm_scripts",
-        help="Directory for SLURM output files.",
+        default=".",
+        help="Output directory.",
     )
 
     parser.add_argument(
@@ -120,7 +121,7 @@ def main():
 
         # SLURM parameters from args
         slurm_params = {
-            "script_dir": args.script_dir,
+            # "script_dir": args.script_dir,
             "job_name": args.job_name,
             "partition": args.partition,
             "nodes": args.nodes,
@@ -142,6 +143,7 @@ def main():
                 config_path=args.config,
                 folds=k_folds,
                 slurm_params=slurm_params,
+                outer_dir=os.path.join(args.out_dir, "cv_trainer"),
             )
             
             logger.info(f"Submitted {len(job_ids)} jobs to SLURM")
@@ -170,7 +172,7 @@ def main():
         dataset, model, dict_trainer_configs = experiment.build()
 
         now = datetime.now()
-        out_dir = os.path.join("train_test", now.strftime("%Y-%m-%d_%H-%M-%S"))
+        out_dir = os.path.join(args.out_dir, "train_test", now.strftime("%Y-%m-%d_%H-%M-%S"))
         os.makedirs(out_dir, exist_ok=True)
         logger.info(f"Output directory: {out_dir}...")
         os.chdir(out_dir)
