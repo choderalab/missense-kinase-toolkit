@@ -131,7 +131,7 @@ class FineTuneDataset(ABC):
 
                 # create train and validation indices
                 val_indices = list(range(val_start, val_end))
-                train_indices = [i for i in range(total_size) if i not in val_indices]                
+                train_indices = [i for i in range(total_size) if i not in val_indices]
 
                 # select samples by indices
                 train_dataset = full_dataset.select(train_indices)

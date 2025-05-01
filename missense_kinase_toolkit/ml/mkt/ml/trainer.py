@@ -1,7 +1,7 @@
 import heapq
+import json
 import logging
 import os
-import json
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -391,7 +391,7 @@ def train_model(
                     # use the custom step metric
                     wandb.log(
                         {
-                            "train_step": global_step * 10, # since log_interval is 10
+                            "train_step": global_step * 10,  # since log_interval is 10
                             "train/loss": avg_loss,
                             "train/loss_raw": loss.item(),
                             "train/learning_rate": avg_lr,

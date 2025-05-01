@@ -91,20 +91,25 @@ class ExperimentFactory:
             split_type = ""
             if "col_kinase_split" in self.config["data"]["configs"]:
                 split_type += (
-                    self.config["data"]["configs"]["col_kinase_split"].upper() + "_"
-                    + "_".join(
-                        self.config["data"]["configs"]["list_kinase_split"]
-                    )
+                    self.config["data"]["configs"]["col_kinase_split"].upper()
+                    + "_"
+                    + "_".join(self.config["data"]["configs"]["list_kinase_split"])
                 )
             if split_type == "":
                 split_type = "CV"
             model_name = (
-                self.config["data"]["type"].upper() + "-"
-                + self.config["data"]["configs"]["col_kinase"].upper() + "-"
-                + self.config["data"]["configs"]["col_drug"].upper() + "-"
-                + model_drug_short.upper() + "-"
-                + model_kinase_short.upper() + "-"
-                + self.config["model"]["type"].upper() + "-"                
+                self.config["data"]["type"].upper()
+                + "-"
+                + self.config["data"]["configs"]["col_kinase"].upper()
+                + "-"
+                + self.config["data"]["configs"]["col_drug"].upper()
+                + "-"
+                + model_drug_short.upper()
+                + "-"
+                + model_kinase_short.upper()
+                + "-"
+                + self.config["model"]["type"].upper()
+                + "-"
                 + split_type
             )
             dict_trainer_configs["model_name"] = model_name

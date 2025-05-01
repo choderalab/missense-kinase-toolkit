@@ -1,7 +1,7 @@
-import os
 import argparse
-from datetime import datetime
 import logging
+import os
+from datetime import datetime
 
 from mkt.ml.factory import ExperimentFactory
 from mkt.ml.log_config import add_logging_flags, configure_logging
@@ -22,11 +22,11 @@ def parse_args():
         required=True,
         help="Path to the configuration file.",
     )
-    
+
     parser.add_argument(
         "--fold",
         type=int,
-        nargs="?", # 0 or 1 - if not provided for CV, batch all folds
+        nargs="?",  # 0 or 1 - if not provided for CV, batch all folds
         help="Run a single fold of cross-validation.",
     )
 
@@ -78,21 +78,21 @@ def parse_args():
         default=1,
         help="Number of GPUs per task for SLURM job (default: 1).",
     )
-            
+
     parser.add_argument(
         "--time",
         type=str,
         default="24:00:00",
         help="Time limit for SLURM job (HH:MM:SS).",
     )
-        
+
     parser.add_argument(
         "--account",
         type=str,
         default=None,
         help="SLURM account to use.",
     )
-        
+
     parser.add_argument(
         "--env_name",
         type=str,
@@ -114,7 +114,7 @@ def main():
     set_seed()
 
     experiment = ExperimentFactory(args.config)
-    
+
     # cross-validation setup
     if "CV" in experiment.config["data"]["type"]:
         logger.info("Cross-validation setup detected...")
@@ -134,10 +134,10 @@ def main():
         }
 
         if args.fold is None:
-            logger.info("Submitting all folds as separate SLURM jobs...") 
+            logger.info("Submitting all folds as separate SLURM jobs...")
 
             k_folds = experiment.config["data"]["configs"]["k_folds"]
-        
+
             # submit jobs for all folds
             job_ids = batch_submit_folds(
                 config_path=args.config,
@@ -145,11 +145,11 @@ def main():
                 slurm_params=slurm_params,
                 outer_dir=os.path.join(args.out_dir, "cv_trainer"),
             )
-            
+
             logger.info(f"Submitted {len(job_ids)} jobs to SLURM")
             for fold, job_id in job_ids.items():
                 logger.info(f"Fold {fold}: Job ID {job_id}")
-            
+
         else:
             fold = args.fold
             logger.info(f"Running CV job fold-{fold+1}...")
@@ -172,7 +172,9 @@ def main():
         dataset, model, dict_trainer_configs = experiment.build()
 
         now = datetime.now()
-        out_dir = os.path.join(args.out_dir, "train_test", now.strftime("%Y-%m-%d_%H-%M-%S"))
+        out_dir = os.path.join(
+            args.out_dir, "train_test", now.strftime("%Y-%m-%d_%H-%M-%S")
+        )
         os.makedirs(out_dir, exist_ok=True)
         logger.info(f"Output directory: {out_dir}...")
         os.chdir(out_dir)
