@@ -96,6 +96,7 @@ class PKIS2CrossValidation(FineTuneDataset):
 
     # kinase split arguments
     k_folds: int | None = None
+    fold_idx: int | None = None
     seed: int | None = None
 
     def __init__(self, **kwargs):
@@ -110,6 +111,8 @@ class PKIS2CrossValidation(FineTuneDataset):
             kwargs["col_drug"] = "Smiles"
         if "k_folds" not in kwargs:
             kwargs["k_folds"] = 5
+        if "fold_idx" not in kwargs:
+            kwargs["fold_idx"] = None
         if "seed" not in kwargs:
             kwargs["seed"] = 42
 
