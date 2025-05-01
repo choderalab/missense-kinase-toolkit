@@ -213,13 +213,15 @@ def create_prediction_plot(
 
     # Generate a different filename based on context
     if step is not None:
-        plot_path = f"val_predictions_step_{step}.png"
+        plot_filename = f"val_predictions_step_{step}.png"
     elif epoch is not None:
-        plot_path = f"val_predictions_epoch_{epoch+1}.png"
+        plot_filename = f"val_predictions_epoch_{epoch+1}.png"
     else:
-        plot_path = "val_predictions.png"
+        plot_filename = "val_predictions.png"
 
-    plt.savefig(os.path.join(plot_dir, plot_path))
+    plot_path = os.path.join(plot_dir, plot_filename)
+
+    plt.savefig(plot_path)
     plt.close()
 
     return plot_path
@@ -391,7 +393,7 @@ def train_model(
                     # use the custom step metric
                     wandb.log(
                         {
-                            "train_step": global_step * 10,  # since log_interval is 10
+                            "train_step": global_step,
                             "train/loss": avg_loss,
                             "train/loss_raw": loss.item(),
                             "train/learning_rate": avg_lr,
@@ -400,7 +402,7 @@ def train_model(
 
             # run validation at regular intervals during training
             if (global_step % validation_step_interval == 0) and bool_wandb:
-                print(f"Running validation at step {global_step}...")
+                logger.info(f"Running validation at step {global_step}...")
                 # evaluate model
                 val_metrics = evaluate_model(model, test_dataloader, criterion, device)
 
@@ -459,8 +461,8 @@ def train_model(
                 plt.legend()
                 plt.grid(True)
 
-                loss_plot_path = "validation_loss_over_time.png"
-                plt.savefig(os.path.join(plot_dir, loss_plot_path))
+                loss_plot_path = os.path.join(plot_dir, "validation_loss_over_time.png")
+                plt.savefig(loss_plot_path)
                 plt.close()
 
                 # log plot to wandb with custom step
@@ -504,9 +506,9 @@ def train_model(
         train_loss_list.append(avg_train_loss)
         val_loss_list.append(avg_val_loss)
 
-        print(f"Epoch: {epoch+1}/{epochs}")
-        print(f"Train Loss: {avg_train_loss:.4f}")
-        print(f"Val Loss: {avg_val_loss:.4f}, RMSE: {rmse:.4f}, R^2: {r2:.4f}")
+        logger.info(f"Epoch: {epoch+1}/{epochs}")
+        logger.info(f"Train Loss: {avg_train_loss:.4f}")
+        logger.info(f"Val Loss: {avg_val_loss:.4f}, RMSE: {rmse:.4f}, R^2: {r2:.4f}")
 
         # handle wandb-specific operations
         if bool_wandb:
@@ -545,8 +547,8 @@ def train_model(
             plt.legend()
             plt.grid(True)
 
-            loss_plot_path = "loss_curves.png"
-            plt.savefig(os.path.join(plot_dir, loss_plot_path))
+            loss_plot_path = os.path.join(plot_dir, "loss_curves.png")
+            plt.savefig(loss_plot_path)
             plt.close()
 
             wandb.log({"epoch": epoch, "val/loss_curves": wandb.Image(loss_plot_path)})
@@ -578,7 +580,7 @@ def train_model(
                 if os.path.exists(model_path):
                     os.remove(model_path)
 
-            print(
+            logger.info(
                 f"Model saved at epoch {epoch+1}. Keeping best {len(saved_models)} models."
             )
 
@@ -602,7 +604,7 @@ def train_model(
                 },
                 checkpoint_path,
             )
-            print(f"Checkpoint saved to {checkpoint_path}")
+            logger.info(f"Checkpoint saved to {checkpoint_path}")
 
         # save best model
         if avg_val_loss < best_val_loss:
@@ -631,24 +633,24 @@ def train_model(
                     model_artifact.add_file(best_model_path)
                     # log artifact
                     wandb.log_artifact(model_artifact)
-                    print("Best model saved and logged to wandb!")
+                    logger.info("Best model saved and logged to wandb!")
                 else:
-                    print(
+                    logger.info(
                         f"Warning: Could not find best model file at {best_model_path}"
                     )
             else:
                 best_model_path = "best_combined_model.pt"
                 torch.save(model.state_dict(), best_model_path)
-                print("Best model saved!")
+                logger.info("Best model saved!")
 
-    # print summary of kept models
+    # logger.info summary of kept models
     if bool_wandb:
-        print("\nBest models summary:")
+        logger.info("\nBest models summary:")
         sorted_models = sorted(
             [(val, path) for path, val in saved_models.items()], key=lambda x: x[0]
         )
         for i, (neg_loss, path) in enumerate(sorted_models):
-            print(f"{i+1}. Model at {path}: Val Loss = {-neg_loss:.6f}")
+            logger.info(f"{i+1}. Model at {path}: Val Loss = {-neg_loss:.6f}")
 
     return model, training_stats
 
@@ -735,11 +737,11 @@ def evaluate_model_with_wandb(
     # Log original scale metrics
     wandb.log({"test/mse": mse, "test/rmse": rmse, "test/mae": mae, "test/r2": r2})
 
-    print("Test set metrics (original scale):")
-    print(f"MSE: {mse:.4f}")
-    print(f"RMSE: {rmse:.4f}")
-    print(f"MAE: {mae:.4f}")
-    print(f"R^2: {r2:.4f}")
+    logger.info("Test set metrics (original scale):")
+    logger.info(f"MSE: {mse:.4f}")
+    logger.info(f"RMSE: {rmse:.4f}")
+    logger.info(f"MAE: {mae:.4f}")
+    logger.info(f"R^2: {r2:.4f}")
 
     # Plot predictions vs. actual values
     plt.figure(figsize=(10, 6))
@@ -753,8 +755,8 @@ def evaluate_model_with_wandb(
     plt.ylabel("Predicted percent_displacement")
     plt.title("Predictions vs. Actual Values (Test Set)")
 
-    plot_path = "test_prediction_scatter.png"
-    plt.savefig(os.path.join(plot_dir, plot_path))
+    plot_path = os.path.join(plot_dir, "test_prediction_scatter.png")
+    plt.savefig(plot_path)
     plt.close()
 
     # Log plot to wandb
@@ -769,8 +771,8 @@ def evaluate_model_with_wandb(
     plt.ylabel("Count")
     plt.title("Distribution of Prediction Errors")
 
-    error_plot_path = "error_distribution.png"
-    plt.savefig(os.path.join(plot_dir, error_plot_path))
+    error_plot_path = os.path.join(plot_dir, "error_distribution.png")
+    plt.savefig(error_plot_path)
     plt.close()
 
     # Log error plot to wandb
