@@ -167,9 +167,6 @@ def batch_submit_folds(
 
         fold_dir = os.path.join(inner_dir, fold_name)
         os.makedirs(fold_dir)
-        # just store stdout/stderr in the fold_dir for now
-        # for subdir in ["stdout", "stderr"]:
-        #     os.makedirs(os.path.join(fold_dir, subdir))
 
         logger.info(f"Creating and submitting job for {fold_name}")
 
