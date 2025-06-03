@@ -6,6 +6,8 @@ from mkt.databases.api_schema import APIKeySwaggerClient
 from mkt.databases.config import get_cbioportal_instance, maybe_get_cbioportal_token
 from mkt.databases.io_utils import parse_iterabc2dataframe, save_dataframe_to_csv
 
+# from tqdm import tqdm
+
 logger = logging.getLogger(__name__)
 
 
@@ -116,10 +118,7 @@ class Mutations(cBioPortal):
 
         return muts
 
-    def get_cbioportal_cohort_mutations(
-        self,
-        bool_save=False,
-    ) -> None:
+    def get_cbioportal_cohort_mutations(self, bool_save=False) -> None | pd.DataFrame:
         """Get cBioPortal cohort mutations and optionally save as a CSV file.
 
         Parameters
@@ -135,15 +134,74 @@ class Mutations(cBioPortal):
 
         """
         df_muts = parse_iterabc2dataframe(self._mutations)
-        df_genes = parse_iterabc2dataframe(df_muts["gene"])
-        df_combo = pd.concat([df_muts, df_genes], axis=1)
-        df_combo = df_combo.drop(["gene"], axis=1)
+
+        # extract columns that are ABC objects
+        list_abc_cols = df_muts.columns[
+            df_muts.map(lambda x: type(x).__module__ == "abc").sum() == df_muts.shape[0]
+        ].tolist()
+
+        df_combo = df_muts.copy()
+        if len(list_abc_cols) > 0:
+            # parse the ABC object cols and concatenate with main dataframe
+            for col in list_abc_cols:
+                df_combo = pd.concat(
+                    [df_combo, parse_iterabc2dataframe(df_muts[col], str_prefix=col)],
+                    axis=1,
+                ).drop([col], axis=1)
 
         if bool_save:
             filename = f"{self.study_id}_mutations.csv"
             save_dataframe_to_csv(df_combo, filename)
         else:
             return df_combo
+
+    # def get_kinase_mutations(self, bool_save=False) -> None | pd.DataFrame:
+    #     """Get cBioPortal kinase mutations and optionally save as a CSV file.
+
+    #     Parameters
+    #     ----------
+    #     bool_save : bool
+    #         Save cBioPortal kinase mutations as a CSV file if True
+
+    #     Returns
+    #     -------
+    #     pd.DataFrame | None
+    #         DataFrame of kinase mutations if successful, otherwise None
+
+    #     """
+    #     from mkt.databases.hgnc import hgnc
+
+    #     df_muts = self.get_cbioportal_cohort_mutations(bool_save=False)
+
+    #     # filter for single amino acid missense mutations
+    #     df_muts_missense = df_muts.loc[
+    #         df_muts["mutationType"] == "Missense_Mutation", :].reset_index(drop=True)
+    #     df_muts_missense = df_muts_missense.loc[df_muts_missense["proteinChange"].apply(
+    #         lambda x: type(self.try_except_middle_int(x)) is int), :].reset_index(drop=True)
+
+    #     # extract the HGNC gene names from the mutations
+    #     set_hgnc = set(df_chord_missense["hugoGeneSymbol"].tolist())
+    #     dict_hgnc2uniprot = dict.fromkeys(set_hgnc)
+    #     list_err = []
+    #     for hgnc_name in tqdm(set_hgnc, desc="Querying HGNC..."):
+    #         temp = hgnc.HGNC(input_symbol_or_id=hgnc_name)
+    #         try:
+    #             uniprot_id = temp.maybe_get_info_from_hgnc_fetch(
+    #                 list_to_extract = ["uniprot_ids"]
+    #             )["uniprot_ids"][0][0]
+    #         except Exception as e:
+    #             logging.error(f"Error retrieving Uniprot ID for {hgnc_name}: {e}")
+    #             list_err.append(hgnc_name)
+    #         dict_hgnc2uniprot[hgnc_name] = uniprot_id
+    #     print(f"List errors:\n{list_err}")
+
+    #     if df_muts is not None:
+    #         df_kinase_muts = df_muts[df_muts["gene"].str.contains("KINASE")]
+    #         if bool_save:
+    #             filename = f"{self.study_id}_kinase_mutations.csv"
+    #             save_dataframe_to_csv(df_kinase_muts, filename)
+    #         else:
+    #             return df_kinase_muts
 
     @staticmethod
     def try_except_middle_int(str_in):

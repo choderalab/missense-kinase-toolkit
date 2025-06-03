@@ -5,6 +5,7 @@ import tarfile
 import git
 import pandas as pd
 from mkt.databases.config import OUTPUT_DIR_VAR
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +134,7 @@ def concatenate_csv_files_with_glob(
 
 def parse_iterabc2dataframe(
     input_object: iter,
+    str_prefix: str | None = None,
 ) -> pd.DataFrame:
     """Parse an iterable containing Abstract Base Classes into a dataframe.
 
@@ -140,6 +142,8 @@ def parse_iterabc2dataframe(
     ----------
     input_object : iter
         Iterable of Abstract Base Classes objects
+    str_prefix : str | None, optional
+        Prefix to add to the column names, by default None
 
     Returns
     -------
@@ -150,13 +154,20 @@ def parse_iterabc2dataframe(
     list_dir = [dir(entry) for entry in input_object]
     set_dir = {item for sublist in list_dir for item in sublist}
 
-    dict_dir = {attr: [] for attr in set_dir}
-    for entry in input_object:
-        for attr in dict_dir.keys():
-            try:
-                dict_dir[attr].append(getattr(entry, attr))
-            except AttributeError:
-                dict_dir[attr].append(None)
+    dict_dir = {}
+    for attr in tqdm(set_dir, desc="Parsing attributes:"):
+        if str_prefix:
+            attr_prefix = f"{str_prefix}_{attr}"
+        else:
+            attr_prefix = attr
+        # check if the attribute exists in the entry
+        try:
+            dict_dir[attr_prefix] = [
+                getattr(entry, attr)
+                for entry in tqdm(input_object, desc=f"Extracting {attr_prefix}:")
+            ]
+        except AttributeError:
+            dict_dir[attr_prefix] = [None for _ in input_object]
 
     df = pd.DataFrame.from_dict(dict_dir)
     df = df[sorted(df.columns.to_list())]
