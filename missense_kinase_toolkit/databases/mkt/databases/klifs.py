@@ -1080,7 +1080,7 @@ class KLIFSPocket:
         list_keys = list(dict_in.keys())
         list_idx = [idx for idx, i in enumerate(dict_in.keys()) if region in i]
 
-        # TODO: ATR and CAMKK1 have inter hinge:linker region
+        # ATR and CAMKK1 have inter hinge:linker region
         start = list_idx[idx_in]
         end = list_idx[idx_out]
 
