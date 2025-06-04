@@ -155,7 +155,7 @@ def parse_iterabc2dataframe(
     set_dir = {item for sublist in list_dir for item in sublist}
 
     dict_dir = {}
-    for attr in tqdm(set_dir, desc="Parsing attributes:"):
+    for attr in tqdm(set_dir, desc="Parsing attributes from ABC..."):
         if str_prefix:
             attr_prefix = f"{str_prefix}_{attr}"
         else:
@@ -166,7 +166,7 @@ def parse_iterabc2dataframe(
                 getattr(entry, attr)
                 for entry in input_object
                 # too noisy - uncomment and comment above if needed
-                # for entry in tqdm(input_object, desc=f"Extracting {attr_prefix}:")
+                # for entry in tqdm(input_object, desc=f"Extracting {attr_prefix}...")
             ]
         except AttributeError:
             dict_dir[attr_prefix] = [None for _ in input_object]
