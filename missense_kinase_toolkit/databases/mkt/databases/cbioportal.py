@@ -551,7 +551,7 @@ class KinaseMissenseMutations(Mutations):
                 "shrink": 0.5,
                 "orientation": "horizontal",
             },
-            cbar_pos=(0.85, 1, 0.1, 0.01),
+            cbar_pos=(0.85, 1.02, 0.1, 0.01),
             figsize=(20, 20),
             dendrogram_ratio=(0.05, 0.05),
             row_cluster=True,
