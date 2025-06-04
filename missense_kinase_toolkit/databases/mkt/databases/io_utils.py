@@ -225,3 +225,29 @@ def create_tar_without_metadata(
                 file_path = os.path.join(root, file)
                 if not file.startswith("._"):
                     tar.add(file_path, arcname=os.path.relpath(file_path, path_source))
+
+
+def return_kinase_dict(bool_hgnc: bool = True) -> dict[str, object]:
+    """Return a dictionary of kinase objects.
+
+    Parameters
+    ----------
+    bool_hgnc : bool, optional
+        If True, return a dictionary of kinase objects with HGNC IDs, by default True
+
+    Returns
+    -------
+    dict[str, object]
+        Dictionary of kinase objects with HGNC IDs as keys if bool_hgnc is True,
+        otherwise with UniProt IDs as keys
+
+    """
+    from mkt.schema import io_utils
+
+    dict_kinase = io_utils.deserialize_kinase_dict()
+
+    # use HGNC IDs as keys if bool_hgnc is True, else use UniProt IDs
+    if not bool_hgnc:
+        dict_kinase = {v.uniprot_id: v for v in dict_kinase.values()}
+
+    return dict_kinase
