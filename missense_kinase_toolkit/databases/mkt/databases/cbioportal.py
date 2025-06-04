@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 from bravado.client import SwaggerClient
+from mkt.databases import klifs
 from mkt.databases.api_schema import APIKeySwaggerClient
 from mkt.databases.config import get_cbioportal_instance, maybe_get_cbioportal_token
 from mkt.databases.io_utils import (
@@ -287,10 +288,10 @@ class KinaseMissenseMutations(Mutations):
                 uniprot_id = temp.maybe_get_info_from_hgnc_fetch(
                     list_to_extract=["uniprot_ids"]
                 )["uniprot_ids"][0][0]
+                dict_hgnc2uniprot[hgnc_name] = uniprot_id
             except Exception as e:
                 logger.error(f"Error retrieving Uniprot ID for {hgnc_name}: {e}")
                 list_err.append(hgnc_name)
-            dict_hgnc2uniprot[hgnc_name] = uniprot_id
         logger.error(f"List errors:\n{list_err}")
 
         # replace any HGNC gene names in the dictionary
@@ -322,8 +323,8 @@ class KinaseMissenseMutations(Mutations):
         df_muts = self.get_cbioportal_cohort_mutations(bool_save=False)
 
         logger.info(
-            f"Patients in {self.study_id} with mutations: {df_muts['patientId'].nunique()}"
-            f"Samples in {self.study_id} with mutations: {df_muts['sampleId'].nunique()}"
+            f"\nPatients in {self.study_id} with mutations: {df_muts['patientId'].nunique():,}\n"
+            f"Samples in {self.study_id} with mutations: {df_muts['sampleId'].nunique():,}"
         )
 
         col_hgnc = self.return_adjusted_colname("hugoGeneSymbol")
@@ -516,7 +517,7 @@ class KinaseMissenseMutations(Mutations):
         )
 
         logger.info(
-            "Percent of KLIFS residues + kinase with no documented missense mutation: "
+            "\nPercent of KLIFS residues + kinase with no documented missense mutation: "
             f"{pivot_table.apply(lambda x: x == 0).sum().sum() / pivot_table.size:.1%}"
         )
 
@@ -528,22 +529,65 @@ class KinaseMissenseMutations(Mutations):
             lambda x: np.log10(x + 1) if pd.api.types.is_numeric_dtype(x) else x
         )
 
-        plt.figure(figsize=(20, 20))
-        sns.heatmap(
-            pivot_table,
-            annot=False,
-            cmap="Blues",
-            linewidths=0.5,
-            cbar_kws={"label": "log10(count + 1)", "shrink": 0.5},
-            square=True,
+        custom_palette = dict(
+            zip(
+                pivot_table.columns,
+                pivot_table.columns.map(
+                    lambda x: klifs.DICT_POCKET_KLIFS_REGIONS[x.split(":")[0]]["color"]
+                ),
+            )
         )
 
-        plt.title("Missense Mutation Counts by KLIFS Region", fontsize=12, pad=20)
-        plt.xlabel("KLIFS Region", fontsize=12)
-        plt.ylabel("Gene Symbol", fontsize=12)
+        vmax_value = int(np.ceil(pivot_table.values.max()))
+
+        g = sns.clustermap(
+            pivot_table,
+            fmt="d",
+            cmap="YlOrRd",
+            vmin=0,
+            vmax=vmax_value,
+            cbar_kws={
+                "label": "$log_{10}$(count + 1)",
+                "shrink": 0.5,
+                "orientation": "horizontal",
+            },
+            cbar_pos=(0.85, 1, 0.1, 0.01),
+            figsize=(20, 20),
+            dendrogram_ratio=(0.05, 0.05),
+            row_cluster=True,
+            col_cluster=True,
+            method="average",
+            metric="euclidean",
+        )
+
+        g.fig.suptitle("Missense Mutation Counts by KLIFS Region", y=1.02, fontsize=20)
+        g.ax_heatmap.set_xlabel("KLIFS Region", fontsize=16)
+        g.ax_heatmap.set_ylabel("Gene Symbol", fontsize=16)
+        g.ax_heatmap.tick_params(axis="x", which="major", labelsize=12)
+        g.ax_heatmap.tick_params(axis="y", which="major", labelsize=12)
+
+        x_labels = g.ax_heatmap.get_xticklabels()
+        for label in x_labels:
+            label_text = label.get_text()
+            if label_text in custom_palette:
+                label.set_color(custom_palette[label_text])
+
+        # plt.figure(figsize=(20, 20))
+        # sns.heatmap(
+        #     pivot_table,
+        #     annot=False,
+        #     cmap="Blues",
+        #     linewidths=0.5,
+        #     cbar_kws={"label": "log10(count + 1)", "shrink": 0.5},
+        #     square=True,
+        # )
+        # plt.title("Missense Mutation Counts by KLIFS Region", fontsize=20, pad=20)
+        # plt.xlabel("KLIFS Region", fontsize=12)
+        # plt.ylabel("Gene Symbol", fontsize=12)
+
         plt.xticks(rotation=90, ha="center")
         plt.yticks(rotation=0)
-        plt.tight_layout()
+        # plt.tight_layout()
 
         if filename:
             plt.savefig(
