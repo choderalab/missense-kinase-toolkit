@@ -534,7 +534,7 @@ class KinaseMissenseMutations(Mutations):
             annot=False,
             cmap="Blues",
             linewidths=0.5,
-            cbar_kws={"label": "log10(count + 1)", "shrink": 0.8},
+            cbar_kws={"label": "log10(count + 1)", "shrink": 0.5},
             square=True,
         )
 
