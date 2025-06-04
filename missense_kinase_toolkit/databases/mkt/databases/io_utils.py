@@ -164,7 +164,9 @@ def parse_iterabc2dataframe(
         try:
             dict_dir[attr_prefix] = [
                 getattr(entry, attr)
-                for entry in tqdm(input_object, desc=f"Extracting {attr_prefix}:")
+                for entry in input_object
+                # too noisy - uncomment and comment above if needed
+                # for entry in tqdm(input_object, desc=f"Extracting {attr_prefix}:")
             ]
         except AttributeError:
             dict_dir[attr_prefix] = [None for _ in input_object]
