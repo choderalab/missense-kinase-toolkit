@@ -488,6 +488,8 @@ class KinaseMissenseMutations(Mutations):
         self,
         df_in,
         filename: str | None = None,
+        bool_log10: bool = True,
+        max_value: int | None = None,
     ) -> None:
         """Generate a heatmap figure of missense mutation counts by KLIFS region.
 
@@ -505,8 +507,10 @@ class KinaseMissenseMutations(Mutations):
             Displays the heatmap figure; saves it if bool_save is True
 
         """
+        import matplotlib.colors as mcolors
         import matplotlib.pyplot as plt
         import seaborn as sns
+        from matplotlib.colors import ListedColormap
 
         pivot_table = (
             df_in.groupby(self.return_adjusted_colname("hugoGeneSymbol"))[
@@ -525,8 +529,9 @@ class KinaseMissenseMutations(Mutations):
             pivot_table.columns.map(lambda x: int(x.split(":")[1])).argsort()
         ]
         pivot_table = pivot_table[sorted_columns]
-        pivot_table = pivot_table.apply(
-            lambda x: np.log10(x + 1) if pd.api.types.is_numeric_dtype(x) else x
+        pivot_table = pivot_table.map(
+            lambda x: self.convert_log_and_truncate(x, bool_log10, max_value),
+            # lambda x: np.log10(x + 1) if pd.api.types.is_numeric_dtype(x) else x
         )
 
         custom_palette = dict(
@@ -540,27 +545,47 @@ class KinaseMissenseMutations(Mutations):
 
         vmax_value = int(np.ceil(pivot_table.values.max()))
 
+        # create custom colormap where grey is for 0 values and YlOrRd for >0 to max
+        ylord_cmap = plt.cm.get_cmap("YlOrRd")
+        n_colors = 100
+
+        # Create colors: 1 for grey (0) + n_colors for gradient (>0 to max)
+        colors = ["lightgrey"]  # Grey for exactly 0
+        colors.extend([ylord_cmap(i) for i in np.linspace(0.1, 1, n_colors)])
+        custom_cmap = ListedColormap(colors)
+
+        # Create boundaries: n_colors + 2 boundaries for n_colors + 1 colors
+        bounds = [0]  # Start at 0
+        bounds.extend(
+            np.linspace(0.001, vmax_value, n_colors + 1)
+        )  # n_colors + 1 boundaries from >0 to max
+        norm = mcolors.BoundaryNorm(
+            bounds, len(colors)
+        )  # Use len(colors) instead of custom_cmap.N
+
         g = sns.clustermap(
             pivot_table,
             fmt="d",
-            cmap="YlOrRd",
+            cmap=custom_cmap,
+            norm=norm,
             vmin=0,
             vmax=vmax_value,
             cbar_kws={
-                "label": "$log_{10}$(count + 1)",
+                "label": "$log_{10}$(count)",
                 "shrink": 0.5,
                 "orientation": "horizontal",
+                "ticks": np.arange(0, vmax_value + 0.5, 0.5),
             },
-            cbar_pos=(0.85, 1.02, 0.1, 0.01),
+            cbar_pos=(0.85, 0.98, 0.1, 0.01),
             figsize=(20, 20),
             dendrogram_ratio=(0.05, 0.05),
             row_cluster=True,
-            col_cluster=True,
+            col_cluster=False,
             method="average",
             metric="euclidean",
         )
 
-        g.fig.suptitle("Missense Mutation Counts by KLIFS Region", y=1.02, fontsize=20)
+        g.fig.suptitle("Missense Mutation Counts by KLIFS Region", y=0.98, fontsize=20)
         g.ax_heatmap.set_xlabel("KLIFS Region", fontsize=16)
         g.ax_heatmap.set_ylabel("Gene Symbol", fontsize=16)
         g.ax_heatmap.tick_params(axis="x", which="major", labelsize=12)
@@ -595,6 +620,61 @@ class KinaseMissenseMutations(Mutations):
             )
 
         plt.show()
+
+    @staticmethod
+    def convert_log_and_truncate(
+        x: int | float | str,
+        bool_log10: bool,
+        max_value: int | None,
+    ) -> int | float | str:
+        """Convert a value to log10 and truncate if necessary.
+
+        Parameters
+        ----------
+        x : int | float | str
+            Value to convert to log10
+        bool_truncate : bool
+            Truncate the value to max_value if True; default is True
+        max_value : int
+            Maximum value to truncate to if bool_truncate is True; default is 1.5
+
+        Returns
+        -------
+        int | float | str
+            Log10 converted value if numeric, otherwise original value;
+            truncated to max_value if bool_truncate is True
+
+        """
+        # if x is not numeric, try to convert to float or return as is
+        if not isinstance(x, (int, float)):
+            try:
+                x = float(x)
+            except ValueError:
+                logger.error(f"Value {x} cannot be converted to float.")
+            return x
+
+        # nan handling
+        if pd.isna(x):
+            return np.nan
+
+        # if zezro or negative, return 0
+        if x <= 0:
+            return 0
+
+        # log conversion
+        if bool_log10:
+            x = np.log10(x)
+        else:
+            x = np.log2(x)
+
+        # truncate to max_value if provided
+        if max_value is not None:
+            if x > max_value:
+                return max_value
+            else:
+                return x
+        else:
+            return x
 
 
 # TODO: implement clinical annotations class
