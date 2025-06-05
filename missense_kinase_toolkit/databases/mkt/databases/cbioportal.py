@@ -490,6 +490,7 @@ class KinaseMissenseMutations(Mutations):
         filename: str | None = None,
         bool_log10: bool = True,
         max_value: int | None = None,
+        dict_clustermap_args: dict | None = None,
     ) -> None:
         """Generate a heatmap figure of missense mutation counts by KLIFS region.
 
@@ -500,6 +501,15 @@ class KinaseMissenseMutations(Mutations):
         filename : str | None
             Path and filename (incl format) to save the heatmap figure;
                 if None, the figure will not be saved
+        bool_log10 : bool
+            Convert counts to log10 if True; default is True
+        max_value : int | None
+            Maximum value to truncate the log10 counts to if bool_log10 is True;
+                if None, no truncation is applied; default is None
+        str_method : str
+            Clustering method to use for the heatmap; default is "average"
+        metric : str
+            Distance metric to use for clustering; default is "euclidean"
 
         Returns
         -------
@@ -511,6 +521,9 @@ class KinaseMissenseMutations(Mutations):
         import matplotlib.pyplot as plt
         import seaborn as sns
         from matplotlib.colors import ListedColormap
+
+        if filename is not None:
+            plt.ioff()
 
         pivot_table = (
             df_in.groupby(self.return_adjusted_colname("hugoGeneSymbol"))[
@@ -548,44 +561,68 @@ class KinaseMissenseMutations(Mutations):
         # create custom colormap where grey is for 0 values and YlOrRd for >0 to max
         ylord_cmap = plt.cm.get_cmap("YlOrRd")
         n_colors = 100
-
-        # Create colors: 1 for grey (0) + n_colors for gradient (>0 to max)
+        # create colors: 1 for grey (0) + n_colors for gradient (>0 to max)
         colors = ["lightgrey"]  # Grey for exactly 0
         colors.extend([ylord_cmap(i) for i in np.linspace(0.1, 1, n_colors)])
         custom_cmap = ListedColormap(colors)
-
-        # Create boundaries: n_colors + 2 boundaries for n_colors + 1 colors
+        # create boundaries: n_colors + 2 boundaries for n_colors + 1 colors
         bounds = [0]  # Start at 0
         bounds.extend(
             np.linspace(0.001, vmax_value, n_colors + 1)
         )  # n_colors + 1 boundaries from >0 to max
         norm = mcolors.BoundaryNorm(
             bounds, len(colors)
-        )  # Use len(colors) instead of custom_cmap.N
+        )  # use len(colors) instead of custom_cmap.N
 
-        g = sns.clustermap(
-            pivot_table,
-            fmt="d",
-            cmap=custom_cmap,
-            norm=norm,
-            vmin=0,
-            vmax=vmax_value,
-            cbar_kws={
+        dict_kwargs = {
+            "fmt": "d",
+            "cmap": custom_cmap,
+            "norm": norm,
+            "vmin": 0,
+            "vmax": vmax_value,
+            "linewidths": 0.25,
+            "linecolor": "white",
+            "cbar_kws": {
                 "label": "$log_{10}$(count)",
                 "shrink": 0.5,
                 "orientation": "horizontal",
                 "ticks": np.arange(0, vmax_value + 0.5, 0.5),
             },
-            cbar_pos=(0.85, 0.98, 0.1, 0.01),
-            figsize=(20, 20),
-            dendrogram_ratio=(0.05, 0.05),
-            row_cluster=True,
-            col_cluster=False,
-            method="average",
-            metric="euclidean",
-        )
+            "cbar_pos": (0.85, 0.98, 0.1, 0.01),
+            "figsize": (20, 20),
+            "dendrogram_ratio": (0.05, 0.05),
+            "row_cluster": True,
+            "col_cluster": False,
+            "method": "average",
+            "metric": "euclidean",
+        }
 
-        g.fig.suptitle("Missense Mutation Counts by KLIFS Region", y=0.98, fontsize=20)
+        if dict_clustermap_args is not None:
+            dict_kwargs.update(dict_clustermap_args)
+
+        try:
+            g = sns.clustermap(pivot_table, **dict_kwargs)
+        except Exception as e:
+            plt.close()
+            logger.error(
+                f"Error generating clustermap: {e}\n"
+                f"Inputs: method={dict_kwargs['method'].title()}, "
+                f"metric={dict_kwargs['metric'].title()}\n"
+                f"Adding small, random noise to pivot table to avoid error."
+            )
+            np.random.seed(42)
+            g = sns.clustermap(
+                pivot_table + np.random.normal(0, 1e-10, pivot_table.shape),
+                **dict_kwargs,
+            )
+
+        g.fig.suptitle(
+            f"Missense Mutation Counts by KLIFS Region\n"
+            f"Method: {dict_kwargs['method'].title()}, "
+            f"Metric: {dict_kwargs['metric'].title()}",
+            y=0.98,
+            fontsize=20,
+        )
         g.ax_heatmap.set_xlabel("KLIFS Region", fontsize=16)
         g.ax_heatmap.set_ylabel("Gene Symbol", fontsize=16)
         g.ax_heatmap.tick_params(axis="x", which="major", labelsize=12)
@@ -597,29 +634,21 @@ class KinaseMissenseMutations(Mutations):
             if label_text in custom_palette:
                 label.set_color(custom_palette[label_text])
 
-        # plt.figure(figsize=(20, 20))
-        # sns.heatmap(
-        #     pivot_table,
-        #     annot=False,
-        #     cmap="Blues",
-        #     linewidths=0.5,
-        #     cbar_kws={"label": "log10(count + 1)", "shrink": 0.5},
-        #     square=True,
-        # )
-        # plt.title("Missense Mutation Counts by KLIFS Region", fontsize=20, pad=20)
-        # plt.xlabel("KLIFS Region", fontsize=12)
-        # plt.ylabel("Gene Symbol", fontsize=12)
-
         plt.xticks(rotation=90, ha="center")
         plt.yticks(rotation=0)
-        # plt.tight_layout()
 
         if filename:
             plt.savefig(
-                filename, format=filename.split(".")[-1], bbox_inches="tight", dpi=300
+                filename,
+                format=filename.split(".")[-1],
+                bbox_inches="tight",
+                dpi=300,
             )
-
-        plt.show()
+            plt.close()
+            plt.ion()
+        else:
+            plt.show()
+            plt.close()
 
     @staticmethod
     def convert_log_and_truncate(
