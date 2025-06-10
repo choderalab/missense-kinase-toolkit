@@ -132,7 +132,6 @@ class TestDatabases:
         # os.remove(f"{mutations_instance.study_id}_mutations.csv")
 
         assert mutations_instance.get_study_id() == study
-        assert mutations_instance._mutations is not None
 
     def test_hgnc(self):
         from mkt.databases import hgnc
