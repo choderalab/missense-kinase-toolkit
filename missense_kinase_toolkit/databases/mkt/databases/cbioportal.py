@@ -1,4 +1,5 @@
 import logging
+from abc import abstractmethod
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -17,27 +18,26 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 
+@dataclass
 class cBioPortal(APIKeySwaggerClient):
     """Class to interact with the cBioPortal API."""
 
-    def __init__(self):
-        """Initialize cBioPortal Class object.
+    instance: str = field(init=False, default="")
+    """cBioPortal instance."""
+    url: str = field(init=False, default="")
+    """cBioPortal API URL."""
+    _cbioportal: SwaggerClient | None = field(init=False, default=None)
+    """cBioPortal API object (post-init)."""
 
-        Upon initialization, cBioPortal API is queried.
-
-        Attributes
-        ----------
-        instance : str
-            cBioPortal instance
-        url : str
-            cBioPortal API URL
-        _cbioportal : bravado.client.SwaggerClient | None
-            cBioPortal API object (post-init)
-
-        """
+    def __post_init__(self):
+        """Post-initialization to set up cBioPortal API client."""
         self.instance = get_cbioportal_instance()
-        self.url: str = f"https://{self.instance}/api/v2/api-docs"
+        self.url = f"https://{self.instance}/api/v2/api-docs"
         self._cbioportal = self.query_api()
+        if self._cbioportal is None:
+            logger.error(
+                f"Failed to initialize cBioPortal API client for instance {self.instance}"
+            )
 
     def maybe_get_token(self):
         return maybe_get_cbioportal_token()
@@ -71,96 +71,199 @@ class cBioPortal(APIKeySwaggerClient):
 
 
 @dataclass
-class Mutations(cBioPortal):
+class StudyData(cBioPortal):
     """Class to get mutations from a cBioPortal study."""
 
     study_id: str
     """cBioPortal study ID."""
     bool_prefix: bool = True
     """Add prefix to ABC column names if True; default is True."""
-    _mutations: list | None = field(init=False, default=None)
-    """List of cBioPortal mutations; None if study not found (post-init)."""
+    list_col_explode: list[str] | None = field(default=None)
+    """List of columns to explode in convert_api_query_to_dataframe;
+        None if no columns to explode (post-init)."""
+    _study_data: list | None = field(init=False, default=None)
+    """List of cBioPortal sub-API queries; None if study not found (post-init)."""
+    _df: pd.DataFrame | None = field(init=False, default=None)
 
     def __post_init__(self):
-        """Post-initialization to get mutations from cBioPortal."""
-        super().__init__()
-        self._mutations = self.get_all_mutations_by_study()
-        if self._mutations is None:
-            logger.error(f"Mutations for study {self.study_id} not found.")
+        """Post-initialization to check study ID in instance and query api data."""
+        super().__post_init__()
+        if not self.check_study_id():
+            logger.error(
+                f"Study {self.study_id} not found in "
+                f"cBioPortal instance {self.instance}"
+            )
+        else:
+            self._study_data = self.query_sub_api()
+            if self._study_data is None:
+                logger.error(
+                    f"Data for study {self.study_id} not found "
+                    f"in cBioPortal instance {self.instance}"
+                )
+            else:
+                self._df = self.convert_api_query_to_dataframe()
+                if self._df is None:
+                    logger.error(
+                        f"DataFrame for study {self.study_id} could not be created."
+                    )
 
-    def get_all_mutations_by_study(
-        self,
-    ) -> list | None:
-        """Get mutations  cBioPortal data
+    def check_study_id(self) -> bool:
+        """Check if the study ID is valid.
 
         Returns
         -------
-        list | None
-            cBioPortal data of Abstract Base Classes objects if successful, otherwise None
+        bool
+            True if the study ID is valid, False otherwise
 
         """
         studies = self._cbioportal.Studies.getAllStudiesUsingGET().result()
         study_ids = [study.studyId for study in studies]
+        return self.study_id in study_ids
 
-        if self.study_id in study_ids:
+    @abstractmethod
+    def query_sub_api(self):
+        """Query a sub-API of cBioPortal and return result.
+
+        Returns
+        -------
+        SwaggerClient
+            API response
+
+        """
+        ...
+
+    def convert_api_query_to_dataframe(self) -> pd.DataFrame | None:
+        """Convert API to query to a dataframe.
+
+        Returns
+        -------
+        pd.DataFrame | None
+            DataFrame of API query if successful, otherwise None
+
+        """
+        try:
+            df = parse_iterabc2dataframe(self._study_data)
+
+            # explode columns, if specified
+            if self.list_col_explode is not None:
+                for col in self.list_col_explode:
+                    if col in df.columns:
+                        df = df.explode(col).reset_index(drop=True)
+
+            # extract columns that are ABC objects
+            list_abc_cols = df.columns[
+                df.map(lambda x: type(x).__module__ == "abc").sum() == df.shape[0]
+            ].tolist()
+
+            # parse the ABC object cols and concatenate with main dataframe
+            df_combo = df.copy()
+            if len(list_abc_cols) > 0:
+                for col in list_abc_cols:
+                    if self.bool_prefix:
+                        df_abc = parse_iterabc2dataframe(df[col], str_prefix=col)
+                    else:
+                        df_abc = parse_iterabc2dataframe(df[col])
+                    df_combo = pd.concat([df_combo, df_abc], axis=1).drop([col], axis=1)
+
+            return df_combo
+
+        except Exception as e:
+            logger.error(f"Error converting API query to DataFrame: {e}")
+            return None
+
+    def return_adjusted_colname(
+        self,
+        colname: str,
+        prefix: str = "gene",
+    ) -> str:
+        """Return adjusted column name based on bool_prefix.
+
+        Parameters
+        ----------
+        colname : str
+            Column name to adjust
+        prefix : str
+            Prefix to add to the column name if bool_prefix is True; default is "gene"
+
+        Returns
+        -------
+        str
+            Adjusted column name
+
+        """
+        if self.bool_prefix:
+            return f"{prefix}_{colname}"
+        else:
+            return colname
+
+    def get_study_id(self):
+        """Get cBioPortal study ID."""
+        return self.study_id
+
+    def get_study_data(self):
+        """Get cBioPortal study data."""
+        if self._study_data is not None:
+            return self._study_data
+        else:
+            logger.error(f"Data for study {self.study_id} not found.")
+            return None
+
+    def get_df(self):
+        """Get DataFrame of cBioPortal study data in dataframe."""
+        if self._df is not None:
+            return self._df
+        else:
+            logger.error(f"DataFrame for study {self.study_id} not found.")
+            return None
+
+
+@dataclass
+class Mutations(StudyData):
+    """Class to get mutations from a cBioPortal study."""
+
+    def __post_init__(self):
+        """Post-initialization to get mutations from cBioPortal."""
+        super().__post_init__()
+
+    def query_sub_api(self) -> list | None:
+        """Get mutations cBioPortal data.
+
+        Returns
+        -------
+        list | None
+            cBioPortal data as list of Abstract Base Classes
+                objects if successful, otherwise None.
+
+        """
+        try:
             # TODO: add incremental error handling beyond missing study
             muts = self._cbioportal.Mutations.getMutationsInMolecularProfileBySampleListIdUsingGET(
                 molecularProfileId=f"{self.study_id}_mutations",
                 sampleListId=f"{self.study_id}_all",
                 projection="DETAILED",
             ).result()
-        else:
-            logging.error(
-                f"Study {self.study_id} not found in cBioPortal instance {self.instance}"
-            )
-
+        except Exception as e:
+            logger.error(f"Error retrieving mutations for study {self.study_id}: {e}")
+            muts = None
         return muts
 
-    def get_cbioportal_cohort_mutations(
-        self,
-        bool_save: bool = False,
-    ) -> None | pd.DataFrame:
-        """Get cBioPortal cohort mutations and optionally save as a CSV file.
 
-        Parameters
-        ----------
-        bool_save : bool
-            Save cBioPortal cohort mutations as a CSV file if True
+@dataclass
+class KinaseMissenseMutations(Mutations):
+    """Class to get kinase mutations from a cBioPortal study."""
 
-        Returns
-        -------
-        pd.DataFrame | None
-            DataFrame of cBioPortal cohort mutations if successful, otherwise None
+    dict_replace: dict[str, str] = field(default_factory=lambda: {"STK19": "WHR1"})
+    """Dictionary mapping cBioPortal to MKT HGNC gene names for mismatches; default is {"STK19": "WHR1"}."""
 
-        Notes
-        -----
-            The CSV file will be saved in the output directory specified in the configuration file.
-            As the "gene" ABC object is nested within the "mutation" ABC object,
-                the two dataframes are parsed and concatenated.
-
-        """
-        df_muts = parse_iterabc2dataframe(self._mutations)
-
-        # extract columns that are ABC objects
-        list_abc_cols = df_muts.columns[
-            df_muts.map(lambda x: type(x).__module__ == "abc").sum() == df_muts.shape[0]
-        ].tolist()
-
-        # parse the ABC object cols and concatenate with main dataframe
-        df_combo = df_muts.copy()
-        if len(list_abc_cols) > 0:
-            for col in list_abc_cols:
-                if self.bool_prefix:
-                    df_abc = parse_iterabc2dataframe(df_muts[col], str_prefix=col)
-                else:
-                    df_abc = parse_iterabc2dataframe(df_muts[col])
-                df_combo = pd.concat([df_combo, df_abc], axis=1).drop([col], axis=1)
-
-        if bool_save:
-            filename = f"{self.study_id}_mutations.csv"
-            save_dataframe_to_csv(df_combo, filename)
-        else:
-            return df_combo
+    def __post_init__(self):
+        super().__post_init__()
+        # overwrite _df with kinase missense mutations
+        self._df = self.get_kinase_missense_mutations()
+        if self._df is None:
+            logger.error(
+                "DataFrame for kinase missense mutations in study "
+                f"{self.study_id} could not be created."
+            )
 
     def filter_single_aa_missense_mutations(
         self,
@@ -194,29 +297,6 @@ class Mutations(cBioPortal):
 
         return df_missense
 
-    def return_adjusted_colname(
-        self,
-        colname: str,
-        prefix: str = "gene",
-    ) -> str:
-        """Return adjusted column name based on bool_prefix.
-
-        Parameters
-        ----------
-        colname : str
-            Column name to adjust
-
-        Returns
-        -------
-        str
-            Adjusted column name
-
-        """
-        if self.bool_prefix:
-            return f"{prefix}_{colname}"
-        else:
-            return colname
-
     @staticmethod
     def try_except_middle_int(str_in):
         """Try to convert string [1:-1] characters to integer.
@@ -237,25 +317,6 @@ class Mutations(cBioPortal):
             return int(str_in[1:-1])
         except ValueError:
             return None
-
-    def get_study_id(self):
-        """Get cBioPortal study ID."""
-        return self.study_id
-
-    def get_mutations(self):
-        """Get cBioPortal mutations."""
-        return self._mutations
-
-
-@dataclass
-class KinaseMissenseMutations(Mutations):
-    """Class to get kinase mutations from a cBioPortal study."""
-
-    dict_replace: dict[str, str] = field(default_factory=lambda: {"STK19": "WHR1"})
-    """Dictionary mapping cBioPortal to MKT HGNC gene names for mismatches; default is {"STK19": "WHR1"}."""
-
-    def __post_init__(self):
-        super().__post_init__()
 
     def query_hgnc_gene_names(
         self,
@@ -320,17 +381,10 @@ class KinaseMissenseMutations(Mutations):
         """
         dict_in = return_kinase_dict()
 
-        df_muts = self.get_cbioportal_cohort_mutations(bool_save=False)
-
-        logger.info(
-            f"\nPatients in {self.study_id} with mutations: {df_muts['patientId'].nunique():,}\n"
-            f"Samples in {self.study_id} with mutations: {df_muts['sampleId'].nunique():,}"
-        )
-
         col_hgnc = self.return_adjusted_colname("hugoGeneSymbol")
 
         # filter for single amino acid missense mutations
-        df_muts_missense = self.filter_single_aa_missense_mutations(df_muts)
+        df_muts_missense = self.filter_single_aa_missense_mutations(self._df)
 
         # extract the HGNC gene names from the mutations
         dict_hgnc2uniprot = self.query_hgnc_gene_names(
@@ -486,7 +540,6 @@ class KinaseMissenseMutations(Mutations):
 
     def generate_heatmap_fig(
         self,
-        df_in,
         filename: str | None = None,
         bool_log10: bool = True,
         max_value: int | None = None,
@@ -526,7 +579,7 @@ class KinaseMissenseMutations(Mutations):
             plt.ioff()
 
         pivot_table = (
-            df_in.groupby(self.return_adjusted_colname("hugoGeneSymbol"))[
+            self._df.groupby(self.return_adjusted_colname("hugoGeneSymbol"))[
                 "klifs_region"
             ]
             .value_counts(dropna=True)
@@ -706,4 +759,34 @@ class KinaseMissenseMutations(Mutations):
             return x
 
 
-# TODO: implement clinical annotations class
+@dataclass
+class Treatment(StudyData):
+    """Class to get treatment information from a cBioPortal study."""
+
+    list_col_explode: list[str] | None = field(default_factory=lambda: ["samples"])
+    """List of columns to explode in convert_api_query_to_dataframe;
+        ["samples"] if no columns to explode (post-init)."""
+
+    def __post_init__(self):
+        """Post-initialization to get mutations from cBioPortal."""
+        super().__post_init__()
+
+    def query_sub_api(self) -> list | None:
+        """Get mutations cBioPortal data.
+
+        Returns
+        -------
+        list | None
+            cBioPortal data as list of Abstract Base Classes
+                objects if successful, otherwise None.
+
+        """
+        try:
+            # TODO: add incremental error handling beyond missing study
+            treatment = self._cbioportal.Treatments.getAllSampleTreatmentsUsingPOST(
+                studyViewFilter={"studyIds": [self.study_id], "tiersBooleanMap": {}}
+            ).result()
+        except Exception as e:
+            logger.error(f"Error retrieving treatments for study {self.study_id}: {e}")
+            treatment = None
+        return treatment
