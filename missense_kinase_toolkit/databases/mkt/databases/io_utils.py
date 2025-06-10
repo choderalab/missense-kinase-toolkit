@@ -135,6 +135,7 @@ def concatenate_csv_files_with_glob(
 def parse_iterabc2dataframe(
     input_object: iter,
     str_prefix: str | None = None,
+    verbose: bool = True,
 ) -> pd.DataFrame:
     """Parse an iterable containing Abstract Base Classes into a dataframe.
 
@@ -155,7 +156,9 @@ def parse_iterabc2dataframe(
     set_dir = {item for sublist in list_dir for item in sublist}
 
     dict_dir = {}
-    for attr in tqdm(set_dir, desc="Parsing attributes from ABC..."):
+    for attr in tqdm(
+        set_dir, desc="Parsing attributes from ABC...", disable=not verbose
+    ):
         if str_prefix:
             attr_prefix = f"{str_prefix}_{attr}"
         else:
