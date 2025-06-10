@@ -92,8 +92,6 @@ class TestDatabases:
         assert out == "Error code: 400\n"
 
     def test_cbioportal(self):
-        import os
-
         from mkt.databases import cbioportal, config
 
         config.set_cbioportal_instance("www.cbioportal.org")
@@ -123,16 +121,15 @@ class TestDatabases:
         )
         list_study_ids = [study.studyId for study in list_studies]
         assert study in list_study_ids
-
-        # test that the function to get all mutations by study works
-        df = cbioportal.Mutations(study).get_cbioportal_cohort_mutations()
-        assert df.shape[0] == 78142
-
-        # make sure save works
         mutations_instance = cbioportal.Mutations(study)
-        mutations_instance.get_cbioportal_cohort_mutations(bool_save=True)
-        assert os.path.isfile(f"{mutations_instance.study_id}_mutations.csv") is True
-        os.remove(f"{mutations_instance.study_id}_mutations.csv")
+        assert mutations_instance._df.shape[0] == 78142
+
+        # make sure save works - no longer saving to file
+        # import os
+        # mutations_instance = cbioportal.Mutations(study)
+        # mutations_instance.get_cbioportal_cohort_mutations(bool_save=True)
+        # assert os.path.isfile(f"{mutations_instance.study_id}_mutations.csv") is True
+        # os.remove(f"{mutations_instance.study_id}_mutations.csv")
 
         assert mutations_instance.get_study_id() == study
         assert mutations_instance._mutations is not None
