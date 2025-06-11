@@ -426,3 +426,45 @@ def return_bool_at_index(
 
     """
     return [i for i, j in zip(list_in, list_bool) if j == bool_return]
+
+
+def add_one_hot_encoding_to_dataframe(
+    df: pd.DataFrame,
+    col_name: str,
+    prefix: str = "",
+    bool_drop: bool = True,
+) -> pd.DataFrame:
+    """
+    Add one-hot encoding for a specified column in a DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame.
+    col_name : str
+        Column name to apply one-hot encoding.
+    prefix : str, optional
+        Prefix for the new columns, by default "".
+    bool_drop : bool, optional
+        If True, drop the original column after encoding, by default True.
+    # bool_drop_first : bool, optional
+    #     If True, drop the first column to avoid multicollinearity, by default False.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with one-hot encoded columns added.
+    """
+    one_hot = pd.get_dummies(df[col_name], prefix=prefix)
+
+    if bool_drop:
+        df = df.drop(columns=[col_name])  # Drop the original column
+
+    # if bool_drop_first:
+    #     one_hot = one_hot.iloc[:, 1:]  # Drop the first column to avoid multicollinearity
+    # else:
+    #     one_hot = one_hot.copy()  # Keep all columns
+
+    df_out = pd.concat([df, one_hot], axis=1)
+
+    return df_out
