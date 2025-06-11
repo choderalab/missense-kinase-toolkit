@@ -1,11 +1,13 @@
 import logging
+import os
 from abc import abstractmethod
 from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
+from Bio import Align
 from bravado.client import SwaggerClient
-from mkt.databases import klifs
+from mkt.databases import klifs, properties
 from mkt.databases.api_schema import APIKeySwaggerClient
 from mkt.databases.config import get_cbioportal_instance, maybe_get_cbioportal_token
 from mkt.databases.io_utils import (
@@ -13,6 +15,7 @@ from mkt.databases.io_utils import (
     return_kinase_dict,
     save_dataframe_to_csv,
 )
+from mkt.databases.utils import add_one_hot_encoding_to_dataframe
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -254,6 +257,8 @@ class KinaseMissenseMutations(Mutations):
 
     dict_replace: dict[str, str] = field(default_factory=lambda: {"STK19": "WHR1"})
     """Dictionary mapping cBioPortal to MKT HGNC gene names for mismatches; default is {"STK19": "WHR1"}."""
+    str_blosom: str = "BLOSUM80"
+    """BLOSUM matrix to use for mutation analysis; default is "BLOSUM80"."""
 
     def __post_init__(self):
         super().__post_init__()
@@ -501,40 +506,63 @@ class KinaseMissenseMutations(Mutations):
             DataFrame of mutations with kinase regions annotated
 
         """
-        list_klifs, list_kincore = [], []
+        mx_blosum = Align.substitution_matrices.load(self.str_blosom)
+
+        dict_out = {
+            "klifs_region": [],
+            "kincore_kd": [],
+            "blosum_penalty": [],
+            "charge": [],
+            "volume": [],
+        }
         for _, row in df.iterrows():
 
             hgnc_name = row[self.return_adjusted_colname("hugoGeneSymbol")]
             codon = row["proteinChange"]
             idx = self.try_except_middle_int(codon)
+            aa_from = codon[0].upper()
+            aa_to = codon[-1].upper()
 
             # KLIFS
             if dict_in[hgnc_name].KLIFS2UniProtIdx is None:
-                list_klifs.append(None)
+                dict_out["klifs_region"].append(None)
             elif idx in dict_in[hgnc_name].KLIFS2UniProtIdx.values():
                 klifs_region = [
                     k
                     for k, v in dict_in[hgnc_name].KLIFS2UniProtIdx.items()
                     if v == idx
                 ][0]
-                list_klifs.append(klifs_region)
+                dict_out["klifs_region"].append(klifs_region)
             else:
-                list_klifs.append(None)
+                dict_out["klifs_region"].append(None)
 
             # KinCore
             if dict_in[hgnc_name].kincore is None:
-                list_kincore.append(None)
+                dict_out["kincore_kd"].append(None)
             elif (
                 dict_in[hgnc_name].kincore.fasta.start
                 <= idx
                 <= dict_in[hgnc_name].kincore.fasta.end
             ):
-                list_kincore.append(True)
+                dict_out["kincore_kd"].append(True)
             else:
-                list_kincore.append(False)
+                dict_out["kincore_kd"].append(False)
 
-        df["klifs_region"] = list_klifs
-        df["kincore_region"] = list_kincore
+            # BLOSUM penalty
+            dict_out["blosum_penalty"].append(mx_blosum[aa_from, aa_to])
+
+            # property changes
+            dict_temp = properties.classify_aa_change(aa_from=aa_from, aa_to=aa_to)
+            for k, v in dict_temp.items():
+                if type(v) is str:
+                    v = v.replace(", ", "-").replace(" ", "_")
+                dict_out[k].append(v)
+
+        for key, value in dict_out.items():
+            df[key] = value
+
+        for col in ["charge", "volume"]:
+            df = add_one_hot_encoding_to_dataframe(df, col)
 
         return df
 
@@ -691,6 +719,7 @@ class KinaseMissenseMutations(Mutations):
         plt.yticks(rotation=0)
 
         if filename:
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
             plt.savefig(
                 filename,
                 format=filename.split(".")[-1],
