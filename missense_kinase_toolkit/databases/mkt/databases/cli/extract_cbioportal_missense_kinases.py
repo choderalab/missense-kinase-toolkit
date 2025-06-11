@@ -51,7 +51,7 @@ def get_parser():
         "--cache",
         type=str,
         default=None,
-        help="Use a cache for cBioPortal requests to speed up repeated queries.",
+        help="Path to save requests cache; default: None (will try root repo, else current wd).",
     )
 
     parser.add_argument(
