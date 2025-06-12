@@ -566,9 +566,107 @@ class KinaseMissenseMutations(Mutations):
 
         return df
 
+    def generate_pivot_table(
+        self,
+        colname: str,
+        bool_onehot: bool,
+        bool_log10: bool,
+        max_value: int | None,
+    ) -> pd.DataFrame:
+        """Generate a pivot table of missense mutation counts by KLIFS region.
+
+        Parameters
+        ----------
+        colname : str
+            Column name to pivot on; default is "klifs_region"
+        bool_onehot : bool
+            Column name to pivot on; default is "klifs_region" (just counts);
+                if "blosum_penalty", the mean BLOSUM penalty is used instead;
+                    if starts with "_", it is treated as a one-hot encoded column
+        bool_log10 : bool
+            Convert counts to log10 if True; default is True
+        max_value : int | None
+            Maximum value to truncate the log10 counts to if bool_log10 is True;
+                if None, no truncation is applied; default is None
+
+        Returns
+        -------
+        pd.DataFrame
+            Pivot table of missense mutation counts by KLIFS region
+
+        """
+        if colname not in self._df.columns:
+            colname = self.return_adjusted_colname(colname)
+            if colname not in self._df.columns:
+                logger.warning(
+                    f"Column {colname} not found in DataFrame. "
+                    f"Available columns: {self._df.columns.tolist()}"
+                )
+                return None
+
+        dict_out = dict.fromkeys(["dataframe", "title"])
+        dict_out["title"] = "Missense mutation counts by KLIFS region"
+        col_hgnc = self.return_adjusted_colname("hugoGeneSymbol")
+        col_klifs = "klifs_region"
+        # BLOSUM take mean, others take value counts
+        if colname == "blosum_penalty":
+            pivot_table = (
+                self._df.groupby([col_hgnc, col_klifs])[colname]
+                .agg("mean")
+                .unstack(fill_value=0)
+            )
+            title = ", BLOSUM Penalty (Mean)"
+        # one-hot encoding columns
+        elif colname.startswith("_"):
+            # keep only values that correpond to the one-hot encoding
+            df_temp = self._df.loc[self._df[colname] == bool_onehot, :].reset_index(
+                drop=True
+            )
+            pivot_table = (
+                df_temp.groupby([col_hgnc, col_klifs])[colname]
+                .value_counts(dropna=True)
+                .unstack(fill_value=0)
+                .unstack(fill_value=0)
+            )
+            # drop True/False index level
+            pivot_table.columns = [col[1] for col in pivot_table.columns]
+            title = (
+                f"{' (' if bool_onehot else ' (Not '}"
+                f"{colname[1:].replace('-', ', ').replace('_', ' ').title()})"
+            )
+        # value count of KLIFS regions by gene only
+        else:
+            pivot_table = (
+                self._df.groupby(col_hgnc)[colname]
+                .value_counts(dropna=True)
+                .unstack(fill_value=0)
+            )
+            title = ""
+
+        sorted_columns = pivot_table.columns[
+            pivot_table.columns.map(lambda x: int(x.split(":")[1])).argsort()
+        ]
+        pivot_table = pivot_table[sorted_columns]
+
+        if colname != "blosum_penalty":
+            logger.info(
+                "\nPercent of KLIFS residues + kinase with no documented missense mutation: "
+                f"{pivot_table.apply(lambda x: x == 0).sum().sum() / pivot_table.size:.1%}"
+            )
+            pivot_table = pivot_table.map(
+                lambda x: self.convert_log_and_truncate(x, bool_log10, max_value),
+            )
+
+        dict_out["dataframe"] = pivot_table
+        dict_out["title"] = dict_out["title"] + title
+
+        return dict_out
+
     def generate_heatmap_fig(
         self,
         filename: str | None = None,
+        colname: str = "klifs_region",
+        bool_onehot: bool = True,
         bool_log10: bool = True,
         max_value: int | None = None,
         dict_clustermap_args: dict | None = None,
@@ -582,15 +680,21 @@ class KinaseMissenseMutations(Mutations):
         filename : str | None
             Path and filename (incl format) to save the heatmap figure;
                 if None, the figure will not be saved
+        colname : str
+            Column name to pivot on; default is "klifs_region" (just counts);
+                if "blosum_penalty", the mean BLOSUM penalty is used instead;
+                    if starts with "_", it is treated as a one-hot encoded column
+        bool_onehot : bool
+            If colname corresponds to one-hot encoded columns, which values to keep;
+                default is True
         bool_log10 : bool
             Convert counts to log10 if True; default is True
         max_value : int | None
             Maximum value to truncate the log10 counts to if bool_log10 is True;
                 if None, no truncation is applied; default is None
-        str_method : str
-            Clustering method to use for the heatmap; default is "average"
-        metric : str
-            Distance metric to use for clustering; default is "euclidean"
+        dict_clustermap_args : dict | None
+            Additional arguments for the seaborn clustermap function;
+            if None, default arguments are used; default is None
 
         Returns
         -------
@@ -606,27 +710,26 @@ class KinaseMissenseMutations(Mutations):
         if filename is not None:
             plt.ioff()
 
-        pivot_table = (
-            self._df.groupby(self.return_adjusted_colname("hugoGeneSymbol"))[
-                "klifs_region"
-            ]
-            .value_counts(dropna=True)
-            .unstack(fill_value=0)
+        dict_data = self.generate_pivot_table(
+            colname=colname,
+            bool_onehot=bool_onehot,
+            bool_log10=bool_log10,
+            max_value=max_value,
         )
+        if dict_data is None:
+            logger.error(
+                f"Could not generate pivot table for column {colname} in DataFrame."
+            )
+            return
 
-        logger.info(
-            "\nPercent of KLIFS residues + kinase with no documented missense mutation: "
-            f"{pivot_table.apply(lambda x: x == 0).sum().sum() / pivot_table.size:.1%}"
-        )
-
-        sorted_columns = pivot_table.columns[
-            pivot_table.columns.map(lambda x: int(x.split(":")[1])).argsort()
-        ]
-        pivot_table = pivot_table[sorted_columns]
-        pivot_table = pivot_table.map(
-            lambda x: self.convert_log_and_truncate(x, bool_log10, max_value),
-            # lambda x: np.log10(x + 1) if pd.api.types.is_numeric_dtype(x) else x
-        )
+        pivot_table = dict_data["dataframe"]
+        title = dict_data["title"]
+        if pivot_table.empty:
+            logger.error(
+                f"Pivot table for column {colname} is empty. "
+                "No heatmap will be generated."
+            )
+            return
 
         custom_palette = dict(
             zip(
@@ -675,7 +778,7 @@ class KinaseMissenseMutations(Mutations):
             "row_cluster": True,
             "col_cluster": False,
             "method": "average",
-            "metric": "euclidean",
+            "metric": "correlation",
         }
 
         if dict_clustermap_args is not None:
@@ -698,7 +801,7 @@ class KinaseMissenseMutations(Mutations):
             )
 
         g.fig.suptitle(
-            f"Missense Mutation Counts by KLIFS Region\n"
+            f"{title}\n"
             f"Method: {dict_kwargs['method'].title()}, "
             f"Metric: {dict_kwargs['metric'].title()}",
             y=0.98,
