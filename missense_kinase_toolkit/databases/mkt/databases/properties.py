@@ -34,22 +34,23 @@ This dictionary can be used to look up properties of amino acids by their single
 """
 
 DICT_AA_CHANGES = {
-    "charge gain, positive": {
+    # no charge change not included to avoid multicollinearity
+    "charge gain, neutral to positive": {
         "property": "charge",
         "from": "nonpolar" or "polar",
         "to": "positive",
     },
-    "charge gain, negative": {
+    "charge gain, neutral to negative": {
         "property": "charge",
         "from": "nonpolar" or "polar",
         "to": "negtive",
     },
-    "charge loss, positive": {
+    "charge loss, positive to neutral": {
         "property": "charge",
         "from": "positive",
         "to": "nonpolar" or "polar",
     },
-    "charge loss, negative": {
+    "charge loss, negative to neutral": {
         "property": "charge",
         "from": "negative",
         "to": "nonpolar" or "polar",
@@ -64,6 +65,7 @@ DICT_AA_CHANGES = {
         "from": "negative",
         "to": "positive",
     },
+    # no polarity change not included to avoid multicollinearity
     "polarity gain": {
         "property": "charge",
         "from": "nonpolar",
@@ -74,6 +76,7 @@ DICT_AA_CHANGES = {
         "from": "polar",
         "to": "nonpolar",
     },
+    # +/- 25 cubic angstrom change not included to avoid multicollinearity
     # >75 cubic angstrom gain
     "volume gain, large": {
         "property": "volume",
