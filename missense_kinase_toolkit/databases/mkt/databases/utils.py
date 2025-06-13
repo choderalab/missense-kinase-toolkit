@@ -428,43 +428,103 @@ def return_bool_at_index(
     return [i for i, j in zip(list_in, list_bool) if j == bool_return]
 
 
+def convert_input2list(obj_in: Any, bool_empty: bool = False) -> list | None:
+    """Convert input to a list if it is not already a list.
+
+    Parameters
+    ----------
+    obj_in : Any
+        Input object to convert to a list.
+    bool_empty : bool, optional
+        If True, return an empty list if obj_in is None, by default False
+
+    Returns
+    -------
+    list
+        List containing the input if it is not already a list, otherwise returns the input as is.
+    """
+    if isinstance(obj_in, list):
+        return obj_in
+    elif isinstance(obj_in, (int, float, str)):
+        return [obj_in]
+    elif bool_empty and obj_in is None:
+        return []
+    else:
+        logger.error("Input is not a list or convertible to a list.")
+        return None
+
+
 def add_one_hot_encoding_to_dataframe(
     df: pd.DataFrame,
-    col_name: str,
-    prefix: str = "",
+    col_name: str | list[str],
+    prefix: str | list[str] | None = None,
     bool_drop: bool = True,
+    col_drop: str | list[str] | None = None,
 ) -> pd.DataFrame:
     """
-    Add one-hot encoding for a specified column in a DataFrame.
+    Add one-hot encoding for one or more specified columns in a DataFrame.
 
     Parameters
     ----------
     df : pd.DataFrame
         Input DataFrame.
-    col_name : str
-        Column name to apply one-hot encoding.
-    prefix : str, optional
-        Prefix for the new columns, by default "".
+    col_name : str | list[str]
+        Column name(s) to apply one-hot encoding.
+    prefix : str | list[str] | None, optional
+        Prefix(es) for the new columns. If None, uses column names as prefixes.
+        If list, must match length of col_name, by default None.
     bool_drop : bool, optional
-        If True, drop the original column after encoding, by default True.
-    # bool_drop_first : bool, optional
-    #     If True, drop the first column to avoid multicollinearity, by default False.
+        If True, drop the original column(s) after encoding, by default True.
+    col_drop : str | list[str] | None, optional
+        If specified, drop these column(s) after encoding (i.e., to avoid multicollinearity).
 
     Returns
     -------
     pd.DataFrame
         DataFrame with one-hot encoded columns added.
     """
-    one_hot = pd.get_dummies(df[col_name], prefix=prefix)
+    col_names = convert_input2list(col_name, bool_empty=False)
+    cols_to_drop = convert_input2list(col_drop, bool_empty=True)
+
+    if prefix is None:
+        prefixes = [""] * len(col_names)
+    elif isinstance(prefix, str):
+        prefixes = [prefix] * len(col_names)
+    else:
+        if len(prefix) != len(col_names):
+            raise ValueError(
+                f"Length of prefix ({len(prefix)}) must "
+                f"match length of col_name ({len(col_names)})"
+            )
+        prefixes = prefix
+
+    one_hot_dfs = []
+    for col, pref in zip(col_names, prefixes):
+        if col not in df.columns:
+            logger.warning(f"Column '{col}' not found in DataFrame.")
+            continue
+        one_hot = pd.get_dummies(df[col], prefix=pref)
+        one_hot_dfs.append(one_hot)
+    if one_hot_dfs:
+        combined_one_hot = pd.concat(one_hot_dfs, axis=1)
+        for col_to_drop in cols_to_drop:
+            if col_to_drop in combined_one_hot.columns:
+                combined_one_hot = combined_one_hot.drop(columns=[col_to_drop])
+            else:
+                logger.warning(
+                    f"Column '{col_to_drop}' not found in one-hot encoded columns."
+                )
+    else:
+        combined_one_hot = pd.DataFrame(index=df.index)
 
     if bool_drop:
-        df = df.drop(columns=[col_name])  # Drop the original column
+        df_base = df.drop(columns=col_names, errors="ignore")
+    else:
+        df_base = df.copy()
 
-    # if bool_drop_first:
-    #     one_hot = one_hot.iloc[:, 1:]  # Drop the first column to avoid multicollinearity
-    # else:
-    #     one_hot = one_hot.copy()  # Keep all columns
-
-    df_out = pd.concat([df, one_hot], axis=1)
+    if not combined_one_hot.empty:
+        df_out = pd.concat([df_base, combined_one_hot], axis=1, copy=False)
+    else:
+        df_out = df_base
 
     return df_out
