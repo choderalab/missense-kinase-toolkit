@@ -214,7 +214,8 @@ class StudyData(cBioPortal):
     def get_df(self):
         """Get DataFrame of cBioPortal study data in dataframe."""
         if self._df is not None:
-            return self._df
+            # defensive copy to avoid modifying original DataFrame
+            return self._df.copy()
         else:
             logger.error(f"DataFrame for study {self.study_id} not found.")
             return None
@@ -259,12 +260,12 @@ class KinaseMissenseMutations(Mutations):
     """Dictionary mapping cBioPortal to MKT HGNC gene names for mismatches; default is {"STK19": "WHR1"}."""
     str_blosom: str = "BLOSUM80"
     """BLOSUM matrix to use for mutation analysis; default is "BLOSUM80"."""
+    _df_filter: pd.DataFrame | None = field(init=False, default=None)
 
     def __post_init__(self):
         super().__post_init__()
-        # overwrite _df with kinase missense mutations
-        self._df = self.get_kinase_missense_mutations()
-        if self._df is None:
+        self._df_filter = self.get_kinase_missense_mutations()
+        if self._df_filter is None:
             logger.error(
                 "DataFrame for kinase missense mutations in study "
                 f"{self.study_id} could not be created."
@@ -389,7 +390,8 @@ class KinaseMissenseMutations(Mutations):
         col_hgnc = self.return_adjusted_colname("hugoGeneSymbol")
 
         # filter for single amino acid missense mutations
-        df_muts_missense = self.filter_single_aa_missense_mutations(self._df)
+        df = self._df.copy()  # defensive copy to avoid modifying original DataFrame
+        df_muts_missense = self.filter_single_aa_missense_mutations(df)
 
         # extract the HGNC gene names from the mutations
         dict_hgnc2uniprot = self.query_hgnc_gene_names(
@@ -595,12 +597,13 @@ class KinaseMissenseMutations(Mutations):
             Pivot table of missense mutation counts by KLIFS region
 
         """
-        if colname not in self._df.columns:
+        df = self._df_filter.copy()
+        if colname not in df.columns:
             colname = self.return_adjusted_colname(colname)
-            if colname not in self._df.columns:
+            if colname not in df.columns:
                 logger.warning(
                     f"Column {colname} not found in DataFrame. "
-                    f"Available columns: {self._df.columns.tolist()}"
+                    f"Available columns: {df.columns.tolist()}"
                 )
                 return None
 
@@ -611,7 +614,7 @@ class KinaseMissenseMutations(Mutations):
         # BLOSUM take mean, others take value counts
         if colname == "blosum_penalty":
             pivot_table = (
-                self._df.groupby([col_hgnc, col_klifs])[colname]
+                df.groupby([col_hgnc, col_klifs])[colname]
                 .agg("mean")
                 .unstack(fill_value=0)
             )
@@ -619,9 +622,7 @@ class KinaseMissenseMutations(Mutations):
         # one-hot encoding columns
         elif colname.startswith("_"):
             # keep only values that correpond to the one-hot encoding
-            df_temp = self._df.loc[self._df[colname] == bool_onehot, :].reset_index(
-                drop=True
-            )
+            df_temp = df.loc[df[colname] == bool_onehot, :].reset_index(drop=True)
             pivot_table = (
                 df_temp.groupby([col_hgnc, col_klifs])[colname]
                 .value_counts(dropna=True)
@@ -637,7 +638,7 @@ class KinaseMissenseMutations(Mutations):
         # value count of KLIFS regions by gene only
         else:
             pivot_table = (
-                self._df.groupby(col_hgnc)[colname]
+                df.groupby(col_hgnc)[colname]
                 .value_counts(dropna=True)
                 .unstack(fill_value=0)
             )
@@ -922,3 +923,33 @@ class Treatment(StudyData):
             logger.error(f"Error retrieving treatments for study {self.study_id}: {e}")
             treatment = None
         return treatment
+
+
+@dataclass
+class Clinical(StudyData):
+    """Class to get clinical information from a cBioPortal study."""
+
+    def __post_init__(self):
+        """Post-initialization to get clinical info from cBioPortal."""
+        super().__post_init__()
+
+    def query_sub_api(self) -> list | None:
+        """Get clinical info cBioPortal data.
+
+        Returns
+        -------
+        list | None
+            cBioPortal data as list of Abstract Base Classes
+                objects if successful, otherwise None.
+
+        """
+        try:
+            clinical = self._cbioportal.Clinical_Data.getAllClinicalDataInStudyUsingGET(
+                studyId=self.study_id
+            ).result()
+        except Exception as e:
+            logger.error(
+                f"Error retrieving clinical data for study {self.study_id}: {e}"
+            )
+            clinical = None
+        return clinical
