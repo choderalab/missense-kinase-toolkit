@@ -32,7 +32,7 @@ def get_parser():
         help="cBioPortal instance; default: public (alternative: cbioportal.mskcc.org, requires token).",
     )
 
-    # CBIO_PASSWORD=$(cat '<PATH_TO_FILE>/cbioportal_data_access_token.txt' | sed 's/^token: //')
+    # CBIO_TOKEN=$(cat '<PATH_TO_FILE>/cbioportal_data_access_token.txt' | sed 's/^token: //')
     parser.add_argument(
         "--cbioportalToken",
         type=str,
