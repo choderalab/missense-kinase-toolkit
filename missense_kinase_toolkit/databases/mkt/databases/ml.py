@@ -46,9 +46,7 @@ class PoissonRegressionNoInteraction:
 
     def __post_init__(self):
         if self.df.empty:
-            raise logger.error(
-                "Input DataFrame is empty. Please provide a valid DataFrame."
-            )
+            logger.error("Input DataFrame is empty. Please provide a valid DataFrame.")
 
         self.df_onehot = self.return_onehot_dataframe()
         self.df_count = self.return_count_dataframe()
@@ -80,7 +78,7 @@ class PoissonRegressionNoInteraction:
             The fitted Poisson regression model.
         """
         if self.df_count.empty:
-            raise logger.error(
+            logger.error(
                 "One-hot encoded DataFrame is empty. Please check the input DataFrame."
             )
 
@@ -96,9 +94,7 @@ class PoissonRegressionNoInteraction:
     def summary(self) -> Any:
         """Return the summary of the Poisson regression model."""
         if self.model is None:
-            raise logger.error(
-                "Model has not been fitted yet. Please run `fit()` first."
-            )
+            logger.error("Model has not been fitted yet. Please run `fit()` first.")
 
         return self.results.summary()
 
@@ -161,9 +157,10 @@ class PoissonRegressionNoInteraction:
         col_color: str,
         str_xaxis: str,
         str_legend: str,
+        p_value: float | None,
+        bool_keep_sig: bool,
         figsize: tuple[int, int] = (14, 8),
         xpos_legend: float = 0.9,
-        p_value: float | None = 0.05,
         use_symlog: bool = False,
     ) -> tuple:
         """Create a seaborn-styled barplot with error bars and significance asterisks
@@ -198,26 +195,22 @@ class PoissonRegressionNoInteraction:
         """
         df = self.convert_coef2df()
         if df.empty:
-            raise logger.error("DataFrame is empty. Please run `fit()` first.")
-        if not any(df.columns.map(lambda x: x.startswith(col_plot))):
-            raise logger.error(
+            logger.error("DataFrame is empty. Please run `fit()` first.")
+        if not all(col in df.columns for col in ["coef", "[0.025", "0.975]", "P>|z|"]):
+            logger.error(
+                "DataFrame must contain 'coef', '[0.025', '0.975]', and 'P>|z|' columns for plotting."
+            )
+        if not any(df.index.map(lambda x: x.startswith(col_plot))):
+            logger.error(
                 f"Columns starting with '{col_plot}' not found in DataFrame. "
                 f"Available columns: {df.columns.tolist()}"
             )
-        if col_color not in df.columns:
-            raise logger.error(
-                f"Column '{col_color}' not found in DataFrame. "
-                f"Available columns: {df.columns.tolist()}"
-            )
-        if not all(col in df.columns for col in ["coef", "[0.025", "0.975]", "P>|z|"]):
-            raise logger.error(
-                "DataFrame must contain 'coef', '[0.025', '0.975]', and 'P>|z|' columns for plotting."
-            )
 
         # filter and sort DataFrame based on col_plot
-        df = df.loc[df.index.map(lambda x: str(x).startswith(col_plot)), :].sort_values(
-            by="coef", ascending=False
-        )
+        df = df.loc[df.index.map(lambda x: str(x).startswith(col_plot)), :]
+        if bool_keep_sig:
+            df = df[df["P>|z|"] < p_value].sort_values(by="coef", ascending=False)
+        df = df.sort_values(by="coef", ascending=False)
         # add any incremental data needed for plotting
         if col_plot == "_":
             df.index = df.index.map(
@@ -229,6 +222,17 @@ class PoissonRegressionNoInteraction:
                 lambda x: dict_kinase[x.split("_")[1]].adjudicate_group()
             )
 
+        if all(df.index.map(lambda x: "_" in x)):
+            df["x_labels"] = df.index.map(lambda x: x.split("_")[1])
+        else:
+            df["x_labels"] = df.index.map(lambda x: x.split("_")[0])
+
+        if col_color not in df.columns:
+            logger.error(
+                f"Column '{col_color}' not found in DataFrame. "
+                f"Available columns: {df.columns.tolist()}"
+            )
+
         dict_color = fn_color(df, dict_color)
 
         sns.set_style("white")
@@ -236,26 +240,20 @@ class PoissonRegressionNoInteraction:
 
         fig, ax = plt.subplots(figsize=figsize)
 
-        df_plot = df.copy()
-        if all(df_plot.index.map(lambda x: "_" in x)):
-            df_plot["x_labels"] = df_plot.index.map(lambda x: x.split("_")[1])
-        else:
-            df_plot["x_labels"] = df_plot.index.map(lambda x: x.split("_")[0])
-
         # calculate error bars (distance from coefficient to CI bounds)
-        lower_error = df_plot["coef"] - df_plot["[0.025"]
-        upper_error = df_plot["0.975]"] - df_plot["coef"]
+        lower_error = df["coef"] - df["[0.025"]
+        upper_error = df["0.975]"] - df["coef"]
 
         # map colors based on group
-        bar_colors = [dict_color.get(group, "#000000") for group in df_plot[col_color]]
+        bar_colors = [dict_color.get(group, "#000000") for group in df[col_color]]
 
         # create bar positions
-        x_pos = range(len(df_plot))
+        x_pos = range(len(df))
 
         # create the barplot with seaborn styling
         bars = ax.bar(
             x_pos,
-            df_plot["coef"],
+            df["coef"],
             color=bar_colors,
             alpha=0.85,
             edgecolor="white",
@@ -272,7 +270,7 @@ class PoissonRegressionNoInteraction:
         # add error bars with lighter, thinner styling
         ax.errorbar(
             x_pos,
-            df_plot["coef"],
+            df["coef"],
             yerr=[lower_error, upper_error],
             fmt="none",
             color="#666666",
@@ -286,7 +284,7 @@ class PoissonRegressionNoInteraction:
         # add significance asterisks
         dist_star = 0.05
         if p_value:
-            for i, (idx, row) in enumerate(df_plot.iterrows()):
+            for i, (idx, row) in enumerate(df.iterrows()):
                 stars = "*" if row["P>|z|"] < p_value else ""
                 if stars:
                     coef_val = row["coef"]
@@ -311,7 +309,7 @@ class PoissonRegressionNoInteraction:
         ax.set_xlabel(f"{str_xaxis}", fontsize=14, fontweight="bold", color="#2E2E2E")
         ax.set_xticks(x_pos)
         ax.set_xticklabels(
-            df_plot["x_labels"].apply(
+            df["x_labels"].apply(
                 lambda x: x.replace(", ", ",\n") if len(x) > 15 else x
             ),
             rotation=90,
@@ -334,7 +332,7 @@ class PoissonRegressionNoInteraction:
                 "Coefficient", fontsize=14, fontweight="bold", color="#2E2E2E"
             )
 
-        ax.set_xlim(-0.5, len(df_plot) - 0.5)
+        ax.set_xlim(-0.5, len(df) - 0.5)
         ax.axhline(
             y=0, color="black", linestyle="-", alpha=0.6, linewidth=1.2, zorder=1
         )
@@ -342,7 +340,7 @@ class PoissonRegressionNoInteraction:
 
         # set up legend
         dict_color_rev = {
-            k: v for k, v in dict_color.items() if k in df_plot[col_color].tolist()
+            k: v for k, v in dict_color.items() if k in df[col_color].tolist()
         }
         dict_color_rev = self.revise_dict_col(dict_color_rev)
         legend_elements = [
@@ -371,7 +369,7 @@ class PoissonRegressionNoInteraction:
 
         if p_value:
             set_sig_levels = set(
-                df_plot["P>|z|"].apply(lambda x: "*" if x < p_value else "").tolist()
+                df["P>|z|"].apply(lambda x: "*" if x < p_value else "").tolist()
             )
             set_sig_levels.discard("")
             if set_sig_levels:
@@ -463,10 +461,11 @@ DICT_BARPLOT_OPTIONS = {
     "kinase": {
         "col_plot": "gene_",
         "dict_color": DICT_KINASE_GROUP_COLORS,
-        "fn_color": lambda x: x,
+        "fn_color": lambda x, y: y,
         "col_color": "group",
         "str_xaxis": "Kinases",
         "str_legend": "Kinase Groups",
+        "p_value": None,
     },
     "klifs": {
         "col_plot": "klifs_",
@@ -476,6 +475,7 @@ DICT_BARPLOT_OPTIONS = {
         "str_xaxis": "KLIFS Residue",
         "xpos_legend": 0.85,
         "str_legend": "KLIFS Regions",
+        "p_value": None,
     },
     "biochem": {
         "col_plot": "_",
@@ -484,5 +484,7 @@ DICT_BARPLOT_OPTIONS = {
         "col_color": "x_labels",
         "str_xaxis": "Biochemical Properties",
         "str_legend": "KLIFS Regions",
+        "p_value": 0.05,
+        "bool_keep_sig": False,
     },
 }
