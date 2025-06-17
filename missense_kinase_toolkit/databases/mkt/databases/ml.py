@@ -71,7 +71,7 @@ class PoissonRegressionNoInteraction:
 
         return df_count
 
-    def fit(self) -> tuple(Any, Any):
+    def fit(self) -> tuple[Any, Any]:
         """Run Poisson regression on the one-hot encoded DataFrame.
 
         Returns
@@ -100,7 +100,7 @@ class PoissonRegressionNoInteraction:
                 "Model has not been fitted yet. Please run `fit()` first."
             )
 
-        return self.model.summary()
+        return self.results.summary()
 
     def convert_coef2df(self) -> pd.DataFrame:
         """Convert the results of the Poisson regression model to a DataFrame."""
@@ -197,14 +197,9 @@ class PoissonRegressionNoInteraction:
             Containing fig and ax
         """
         df = self.convert_coef2df()
-        if col_color == "group":
-            dict_kinase = io_utils.deserialize_kinase_dict()
-            df["group"] = df.index.map(
-                lambda x: dict_kinase[x.split("_")[1]].adjudicate_group()
-            )
         if df.empty:
             raise logger.error("DataFrame is empty. Please run `fit()` first.")
-        if col_plot not in any(df.columns.map(lambda x: x.startswith(col_plot))):
+        if not any(df.columns.map(lambda x: x.startswith(col_plot))):
             raise logger.error(
                 f"Columns starting with '{col_plot}' not found in DataFrame. "
                 f"Available columns: {df.columns.tolist()}"
@@ -219,12 +214,19 @@ class PoissonRegressionNoInteraction:
                 "DataFrame must contain 'coef', '[0.025', '0.975]', and 'P>|z|' columns for plotting."
             )
 
+        # filter and sort DataFrame based on col_plot
         df = df.loc[df.index.map(lambda x: str(x).startswith(col_plot)), :].sort_values(
             by="coef", ascending=False
         )
+        # add any incremental data needed for plotting
         if col_plot == "_":
             df.index = df.index.map(
                 lambda x: x[1:].replace("_", " ").replace("-", ", ").title()
+            )
+        if col_color == "group":
+            dict_kinase = io_utils.deserialize_kinase_dict()
+            df["group"] = df.index.map(
+                lambda x: dict_kinase[x.split("_")[1]].adjudicate_group()
             )
 
         dict_color = fn_color(df, dict_color)
