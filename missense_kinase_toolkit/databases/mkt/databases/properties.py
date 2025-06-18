@@ -4,6 +4,7 @@ logger = logging.getLogger(__name__)
 
 
 # https://www.imgt.org/IMGTeducation/Aide-memoire/_UK/aminoacids/abbreviation.html#refs
+# https://www.imgt.org/IMGTeducation/Aide-memoire/_UK/aminoacids/IMGTclasses.html
 DICT_AA_PROPERTIES = {
     "A": {"charge": "nonpolar", "volume": 88.6},
     "C": {"charge": "polar", "volume": 108.5},
@@ -11,7 +12,7 @@ DICT_AA_PROPERTIES = {
     "E": {"charge": "negative", "volume": 138.4},
     "F": {"charge": "nonpolar", "volume": 189.9},
     "G": {"charge": "nonpolar", "volume": 60.1},
-    "H": {"charge": "positive", "volume": 153.2},
+    "H": {"charge": "positive", "volume": 153.2},  # pKa around 6.0
     "I": {"charge": "nonpolar", "volume": 166.7},
     "K": {"charge": "positive", "volume": 168.6},
     "L": {"charge": "nonpolar", "volume": 166.7},
@@ -69,11 +70,11 @@ DICT_AA_CHANGES = {
     "polarity gain": {
         "property": "charge",
         "from": "nonpolar",
-        "to": "polar",
+        "to": "polar" or "positive" or "negative",
     },
     "polarity loss": {
         "property": "charge",
-        "from": "polar",
+        "from": "polar" or "positive" or "negative",
         "to": "nonpolar",
     },
     # +/- 25 cubic angstrom change not included to avoid multicollinearity

@@ -303,3 +303,27 @@ class KinaseInfo(BaseModel):
             return dict_temp
         else:
             return None
+
+    def adjudicate_group(self) -> str | None:
+        """Adjudicate group based on available data.
+
+        Returns
+        -------
+        str | None
+            The group of the kinase if available, otherwise None.
+        """
+        if self.kincore is not None:
+            group = self.kincore.fasta.group
+            if group is not None:
+                return group
+        elif self.kinhub is not None:
+            group = self.kinhub.group
+            if group is not None:
+                return group
+        elif self.klifs is not None:
+            group = self.klifs.group
+            if group is not None:
+                return group
+        else:
+            logger.info(f"No group found for {self.hgnc_name}")
+            return None
