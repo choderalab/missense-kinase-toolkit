@@ -5,8 +5,6 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 import matplotlib.pyplot as plt
-
-# import numpy as np
 import pandas as pd
 import seaborn as sns
 import statsmodels.api as sm
@@ -157,8 +155,8 @@ class PoissonRegressionNoInteraction:
         col_color: str,
         str_xaxis: str,
         str_legend: str,
-        p_value: float | None,
         bool_keep_sig: bool,
+        p_value: float = 0.05,
         figsize: tuple[int, int] = (14, 8),
         xpos_legend: float = 0.9,
         use_symlog: bool = False,
@@ -179,14 +177,16 @@ class PoissonRegressionNoInteraction:
             Label for x-axis
         str_legend: str
             Legend title
+        bool_keep_sig: bool
+            Whether to keep only significant results based on p_value
+        p_value: float
+            Cut-off significance value for astrices; default: 0.05
         figsize: tuple[int, int]
             Figure size; default: (14, 8)
         xpos_legend: float
             Position of legend in x direction; default: 0.9
-        p_value: float | None
-            Cut-off significance value for astrices; default: 0.05, if None don't show astrices
         use_symlog: bool
-            Whether to use symmetric log scale for better visualization of values near zero
+            Whether to use symmetric log scale for better visualization of values near zero; default: False
 
         Returns
         -------
@@ -283,7 +283,7 @@ class PoissonRegressionNoInteraction:
 
         # add significance asterisks
         dist_star = 0.05
-        if p_value:
+        if p_value and not bool_keep_sig:
             for i, (idx, row) in enumerate(df.iterrows()):
                 stars = "*" if row["P>|z|"] < p_value else ""
                 if stars:
@@ -465,7 +465,7 @@ DICT_BARPLOT_OPTIONS = {
         "col_color": "group",
         "str_xaxis": "Kinases",
         "str_legend": "Kinase Groups",
-        "p_value": None,
+        "bool_keep_sig": True,
     },
     "klifs": {
         "col_plot": "klifs_",
@@ -475,7 +475,7 @@ DICT_BARPLOT_OPTIONS = {
         "str_xaxis": "KLIFS Residue",
         "xpos_legend": 0.85,
         "str_legend": "KLIFS Regions",
-        "p_value": None,
+        "bool_keep_sig": True,
     },
     "biochem": {
         "col_plot": "_",
@@ -484,7 +484,6 @@ DICT_BARPLOT_OPTIONS = {
         "col_color": "x_labels",
         "str_xaxis": "Biochemical Properties",
         "str_legend": "KLIFS Regions",
-        "p_value": 0.05,
         "bool_keep_sig": False,
     },
 }
