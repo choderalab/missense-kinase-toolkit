@@ -38,44 +38,44 @@ DICT_AA_CHANGES = {
     # no charge change not included to avoid multicollinearity
     "charge gain, neutral to positive": {
         "property": "charge",
-        "from": "nonpolar" or "polar",
-        "to": "positive",
+        "from": ["nonpolar", "polar"],
+        "to": ["positive"],
     },
     "charge gain, neutral to negative": {
         "property": "charge",
-        "from": "nonpolar" or "polar",
-        "to": "negtive",
+        "from": ["nonpolar", "polar"],
+        "to": ["negative"],
     },
     "charge loss, positive to neutral": {
         "property": "charge",
-        "from": "positive",
-        "to": "nonpolar" or "polar",
+        "from": ["positive"],
+        "to": ["nonpolar", "polar"],
     },
     "charge loss, negative to neutral": {
         "property": "charge",
-        "from": "negative",
-        "to": "nonpolar" or "polar",
+        "from": ["negative"],
+        "to": ["nonpolar", "polar"],
     },
     "charge change, positive to negative": {
         "property": "charge",
-        "from": "positive",
-        "to": "negative",
+        "from": ["positive"],
+        "to": ["negative"],
     },
     "charge change, negative to positive": {
         "property": "charge",
-        "from": "negative",
-        "to": "positive",
+        "from": ["negative"],
+        "to": ["positive"],
     },
     # no polarity change not included to avoid multicollinearity
     "polarity gain": {
         "property": "charge",
-        "from": "nonpolar",
-        "to": "polar" or "positive" or "negative",
+        "from": ["nonpolar"],
+        "to": ["polar", "positive", "negative"],
     },
     "polarity loss": {
         "property": "charge",
-        "from": "polar" or "positive" or "negative",
-        "to": "nonpolar",
+        "from": ["polar", "positive", "negative"],
+        "to": ["nonpolar"],
     },
     # +/- 25 cubic angstrom change not included to avoid multicollinearity
     # >75 cubic angstrom gain
@@ -170,7 +170,7 @@ def classify_aa_change(
         if dict_inner["property"] == "charge":
             charge_from = properties_from[dict_inner["property"]]
             charge_to = properties_to[dict_inner["property"]]
-            if charge_from == dict_inner["from"] and charge_to == dict_inner["to"]:
+            if charge_from in dict_inner["from"] and charge_to in dict_inner["to"]:
                 dict_out[dict_inner["property"]] = change
         # check volume changes
         elif dict_inner["property"] == "volume":
