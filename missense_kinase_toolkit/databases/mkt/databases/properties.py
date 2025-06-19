@@ -44,7 +44,7 @@ DICT_AA_CHANGES = {
     "charge gain, neutral to negative": {
         "property": "charge",
         "from": "nonpolar" or "polar",
-        "to": "negtive",
+        "to": "negative",
     },
     "charge loss, positive to neutral": {
         "property": "charge",
