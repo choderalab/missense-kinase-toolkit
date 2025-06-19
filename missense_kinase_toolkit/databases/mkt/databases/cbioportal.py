@@ -84,6 +84,8 @@ class StudyData(cBioPortal):
     list_col_explode: list[str] | None = field(default=None)
     """List of columns to explode in convert_api_query_to_dataframe;
         None if no columns to explode (post-init)."""
+    pathfile: str | None = field(default=None)
+    """Path to load dataframe from CSV file; if None, regenerate (post-init)."""
     _study_data: list | None = field(init=False, default=None)
     """List of cBioPortal sub-API queries; None if study not found (post-init)."""
     _df: pd.DataFrame | None = field(init=False, default=None)
@@ -93,22 +95,19 @@ class StudyData(cBioPortal):
         super().__post_init__()
         if not self.check_study_id():
             logger.error(
-                f"Study {self.study_id} not found in "
-                f"cBioPortal instance {self.instance}"
+                f"Study {self.study_id} not found in cBioPortal instance {self.instance}"
             )
-        else:
-            self._study_data = self.query_sub_api()
-            if self._study_data is None:
+        if self.pathfile is not None:
+            try:
+                self._df = self.load_from_csv()
+            except Exception as e:
                 logger.error(
-                    f"Data for study {self.study_id} not found "
-                    f"in cBioPortal instance {self.instance}"
+                    f"Error loading DataFrame from {self.pathfile}: {e}\n"
+                    "Regenerating DataFrame from API query..."
                 )
-            else:
-                self._df = self.convert_api_query_to_dataframe()
-                if self._df is None:
-                    logger.error(
-                        f"DataFrame for study {self.study_id} could not be created."
-                    )
+                self._df = self.regenerate_dataframe()
+        else:
+            self._df = self.regenerate_dataframe()
 
     def check_study_id(self) -> bool:
         """Check if the study ID is valid.
@@ -134,6 +133,49 @@ class StudyData(cBioPortal):
 
         """
         ...
+
+    def load_from_csv(self) -> pd.DataFrame | None:
+        """Load DataFrame from CSV file.
+
+        Returns
+        -------
+        pd.DataFrame | None
+            DataFrame loaded from CSV file if successful, otherwise None
+
+        """
+        if self.pathfile is not None and os.path.exists(self.pathfile):
+            try:
+                df = pd.read_csv(self.pathfile)
+                return df
+            except Exception as e:
+                logger.error(f"Error loading DataFrame from {self.pathfile}: {e}")
+                return None
+        else:
+            logger.error(f"Path {self.pathfile} does not exist or is not specified.")
+            return None
+
+    def regenerate_dataframe(self) -> pd.DataFrame | None:
+        """Regenerate DataFrame from API query.
+
+        Returns
+        -------
+        pd.DataFrame | None
+            DataFrame of API query if successful, otherwise None
+
+        """
+        self._study_data = self.query_sub_api()
+        if self._study_data is None:
+            logger.error(
+                f"Data for study {self.study_id} not found "
+                f"in cBioPortal instance {self.instance}"
+            )
+        else:
+            self._df = self.convert_api_query_to_dataframe()
+            if self._df is None:
+                logger.error(
+                    f"DataFrame for study {self.study_id} could not be created."
+                )
+            return None
 
     def convert_api_query_to_dataframe(self) -> pd.DataFrame | None:
         """Convert API to query to a dataframe.
@@ -261,6 +303,7 @@ class KinaseMissenseMutations(Mutations):
     str_blosom: str = "BLOSUM80"
     """BLOSUM matrix to use for mutation analysis; default is "BLOSUM80"."""
     _df_filter: pd.DataFrame | None = field(init=False, default=None)
+    """DataFrame of kinase missense mutations; None if DataFrame could not be created (post-init)."""
 
     def __post_init__(self):
         super().__post_init__()
