@@ -307,12 +307,17 @@ class KinaseMissenseMutations(Mutations):
 
     def __post_init__(self):
         super().__post_init__()
-        self._df_filter = self.get_kinase_missense_mutations()
-        if self._df_filter is None:
-            logger.error(
-                "DataFrame for kinase missense mutations in study "
-                f"{self.study_id} could not be created."
+        if self.pathfile is not None:
+            logger.info(
+                f"Loading filtered DataFrame from {self.pathfile} for study {self.study_id}."
             )
+            self._df_filter = self._df.copy()
+        else:
+            self._df_filter = self.get_kinase_missense_mutations()
+            if self._df_filter is None:
+                logger.error(
+                    f"DataFrame for kinase missense mutations in study {self.study_id} could not be created."
+                )
 
     def filter_single_aa_missense_mutations(
         self,
