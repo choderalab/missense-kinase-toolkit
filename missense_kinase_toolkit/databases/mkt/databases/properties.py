@@ -164,14 +164,17 @@ def classify_aa_change(
     properties_from = DICT_AA_PROPERTIES[aa_from]
     properties_to = DICT_AA_PROPERTIES[aa_to]
 
-    dict_out = dict.fromkeys(["charge", "volume"])
+    dict_out = dict.fromkeys(["charge", "polarity", "volume"])
     for change, dict_inner in DICT_AA_CHANGES.items():
         # check charge changes, including polarity
         if dict_inner["property"] == "charge":
             charge_from = properties_from[dict_inner["property"]]
             charge_to = properties_to[dict_inner["property"]]
             if charge_from in dict_inner["from"] and charge_to in dict_inner["to"]:
-                dict_out[dict_inner["property"]] = change
+                if change.startswith("polarity"):
+                    dict_out["polarity"] = change
+                else:
+                    dict_out["charge"] = change
         # check volume changes
         elif dict_inner["property"] == "volume":
             volume_change = properties_to["volume"] - properties_from["volume"]
