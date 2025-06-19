@@ -495,7 +495,7 @@ class TestDatabases:
         df_pfam = pfam.Pfam("P00519")._pfam
         assert df_pfam.shape[0] == 4
         # allow for 18 or 19 columns, depending on the version of the Pfam database
-        assert df_pfam.shape[1] == 18 | df_pfam.shape[1] == 19
+        assert df_pfam.shape[1] == 18 or df_pfam.shape[1] == 19
         assert "uniprot" in df_pfam.columns
         assert "start" in df_pfam.columns
         assert "end" in df_pfam.columns
