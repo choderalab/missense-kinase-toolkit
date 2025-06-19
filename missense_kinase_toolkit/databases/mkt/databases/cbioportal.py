@@ -562,6 +562,7 @@ class KinaseMissenseMutations(Mutations):
             "kincore_kd": [],
             "blosum_penalty": [],
             "charge": [],
+            "polarity": [],
             "volume": [],
         }
         for _, row in df.iterrows():
@@ -610,8 +611,9 @@ class KinaseMissenseMutations(Mutations):
         for key, value in dict_out.items():
             df[key] = value
 
-        for col in ["charge", "volume"]:
-            df = add_one_hot_encoding_to_dataframe(df, col)
+        df = add_one_hot_encoding_to_dataframe(
+            df, col_name=["charge", "polarity", "volume"]
+        )
 
         return df
 
