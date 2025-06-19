@@ -84,7 +84,7 @@ class StudyData(cBioPortal):
     list_col_explode: list[str] | None = field(default=None)
     """List of columns to explode in convert_api_query_to_dataframe;
         None if no columns to explode (post-init)."""
-    pathfile: str | None = field(default=None)
+    pathfile: str | None = None
     """Path to load dataframe from CSV file; if None, regenerate (post-init)."""
     _study_data: list | None = field(init=False, default=None)
     """List of cBioPortal sub-API queries; None if study not found (post-init)."""
@@ -105,9 +105,9 @@ class StudyData(cBioPortal):
                     f"Error loading DataFrame from {self.pathfile}: {e}\n"
                     "Regenerating DataFrame from API query..."
                 )
-                self._df = self.regenerate_dataframe()
+                self.regenerate_dataframe()
         else:
-            self._df = self.regenerate_dataframe()
+            self.regenerate_dataframe()
 
     def check_study_id(self) -> bool:
         """Check if the study ID is valid.
@@ -175,7 +175,6 @@ class StudyData(cBioPortal):
                 logger.error(
                     f"DataFrame for study {self.study_id} could not be created."
                 )
-            return None
 
     def convert_api_query_to_dataframe(self) -> pd.DataFrame | None:
         """Convert API to query to a dataframe.
