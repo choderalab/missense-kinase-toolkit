@@ -9,6 +9,7 @@ from Bio import Align
 from bravado.client import SwaggerClient
 from mkt.databases import klifs, properties
 from mkt.databases.api_schema import APIKeySwaggerClient
+from mkt.databases.colors import DICT_KINASE_GROUP_COLORS
 from mkt.databases.config import get_cbioportal_instance, maybe_get_cbioportal_token
 from mkt.databases.io_utils import (
     parse_iterabc2dataframe,
@@ -19,6 +20,9 @@ from mkt.databases.utils import add_one_hot_encoding_to_dataframe
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
+
+
+DICT_KINASE = return_kinase_dict()
 
 
 @dataclass
@@ -432,7 +436,7 @@ class KinaseMissenseMutations(Mutations):
             DataFrame of kinase mutations if successful, otherwise None
 
         """
-        dict_in = return_kinase_dict()
+        # dict_in = return_kinase_dict()
 
         col_hgnc = self.return_adjusted_colname("hugoGeneSymbol")
 
@@ -443,20 +447,20 @@ class KinaseMissenseMutations(Mutations):
         # extract the HGNC gene names from the mutations
         dict_hgnc2uniprot = self.query_hgnc_gene_names(
             list_hgnc=df_muts_missense[col_hgnc].tolist(),
-            dict_kinase=dict_in,
+            dict_kinase=DICT_KINASE,
         )
 
         # hgnc2uniprot filtered to mutations in the kinase dictionary
         dict_hgnc2uniprot_kin = {
             k: v
             for k, v in dict_hgnc2uniprot.items()
-            if v in [v.uniprot_id for v in dict_in.values()]
+            if v in [v.uniprot_id for v in DICT_KINASE.values()]
         }
 
         # dict_kinase is filtered to only include kinases with mutations
         dict_kinase_cbio = {
             k: v
-            for k, v in dict_in.items()
+            for k, v in DICT_KINASE.items()
             if v.uniprot_id.split("_")[0] in dict_hgnc2uniprot_kin.values()
         }
         # replace any mismatched gene names in the dictionary
@@ -790,6 +794,17 @@ class KinaseMissenseMutations(Mutations):
             )
         )
 
+        kinfam_palette = dict(
+            zip(
+                pivot_table.index,
+                pivot_table.index.map(
+                    lambda x: DICT_KINASE_GROUP_COLORS[
+                        DICT_KINASE[x].adjudicate_group()
+                    ]
+                ),
+            )
+        )
+
         vmax_value = int(np.ceil(pivot_table.values.max()))
 
         # create custom colormap where grey is for 0 values and YlOrRd for >0 to max
@@ -829,6 +844,7 @@ class KinaseMissenseMutations(Mutations):
             "col_cluster": False,
             "method": "average",
             "metric": "correlation",
+            "row_colors": pivot_table.index.map(kinfam_palette),
         }
 
         if dict_clustermap_args is not None:
