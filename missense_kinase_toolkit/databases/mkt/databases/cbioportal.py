@@ -878,6 +878,24 @@ class KinaseMissenseMutations(Mutations):
         g.ax_heatmap.tick_params(axis="x", which="major", labelsize=12)
         g.ax_heatmap.tick_params(axis="y", which="major", labelsize=12)
 
+        # kinase group legend
+        custom_handles = [
+            plt.Line2D([], [], color=color, marker="s", linestyle="None", markersize=8)
+            for color in DICT_KINASE_GROUP_COLORS.values()
+        ]
+        custom_labels = list(DICT_KINASE_GROUP_COLORS.keys())
+        g.fig.legend(
+            handles=custom_handles,
+            labels=custom_labels,
+            loc="lower center",
+            bbox_to_anchor=(0.5, -0.03),
+            ncol=len(custom_labels),
+            title="Kinase Groups",
+            frameon=True,
+            fancybox=True,
+            shadow=True,
+        )
+
         x_labels = g.ax_heatmap.get_xticklabels()
         for label in x_labels:
             label_text = label.get_text()
