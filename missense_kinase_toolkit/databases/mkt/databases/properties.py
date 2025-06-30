@@ -34,27 +34,30 @@ Keys are single-letter amino acid codes, and values are dictionaries with proper
 This dictionary can be used to look up properties of amino acids by their single-letter code.
 """
 
+LIST_UNCHARGED = ["nonpolar", "polar"]
+LIST_POLAR = ["polar", "positive", "negative"]
+
 DICT_AA_CHANGES = {
     # no charge change not included to avoid multicollinearity
     "charge gain, neutral to positive": {
         "property": "charge",
-        "from": ["nonpolar", "polar"],
+        "from": LIST_UNCHARGED,
         "to": ["positive"],
     },
     "charge gain, neutral to negative": {
         "property": "charge",
-        "from": ["nonpolar", "polar"],
+        "from": LIST_UNCHARGED,
         "to": ["negative"],
     },
     "charge loss, positive to neutral": {
         "property": "charge",
         "from": ["positive"],
-        "to": ["nonpolar", "polar"],
+        "to": LIST_UNCHARGED,
     },
     "charge loss, negative to neutral": {
         "property": "charge",
         "from": ["negative"],
-        "to": ["nonpolar", "polar"],
+        "to": LIST_UNCHARGED,
     },
     "charge change, positive to negative": {
         "property": "charge",
@@ -70,11 +73,11 @@ DICT_AA_CHANGES = {
     "polarity gain": {
         "property": "charge",
         "from": ["nonpolar"],
-        "to": ["polar", "positive", "negative"],
+        "to": LIST_POLAR,
     },
     "polarity loss": {
         "property": "charge",
-        "from": ["polar", "positive", "negative"],
+        "from": LIST_POLAR,
         "to": ["nonpolar"],
     },
     # +/- 25 cubic angstrom change not included to avoid multicollinearity
