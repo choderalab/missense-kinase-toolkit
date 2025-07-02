@@ -132,7 +132,7 @@ class OncoKBProteinChange(OncoKB):
             json_data = self._json
             gene_exists = json_data["geneExist"]
             variant_exists = json_data["variantExist"]
-                
+
             if gene_exists and variant_exists:
                 self.annotate_highest_level()
                 self.get_treatments()
