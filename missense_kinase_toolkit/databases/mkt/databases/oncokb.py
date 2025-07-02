@@ -137,7 +137,7 @@ class OncoKBProteinChange(OncoKB):
                 self.annotate_highest_level()
                 self.get_treatments()
                 self.oncogenic = json_data.get("oncogenic", None)
-                self.vus = sjson_data.get("vus", None)
+                self.vus = json_data.get("vus", None)
                 if "mutationEffect" in json_data:
                     self.known_effect = json_data["mutationEffect"].get(
                         "knownEffect", None
