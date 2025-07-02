@@ -136,11 +136,11 @@ class OncoKBProteinChange(OncoKB):
                         self.known_effect = self._json["mutationEffect"].get(
                             "knownEffect", None
                         )
-                elif self._json["geneExist"]:
+                elif self._json["geneExist"] and self.verbose:
                     logger.error(
                         f"Alteration {self.alteration} does not exist for gene {self.gene_name} in OncoKB."
                     )
-                elif self._json["variantExist"]:
+                elif self._json["variantExist"] and self.verbose:
                     logger.error(
                         f"Gene {self.gene_name} does not exist in OncoKB for alteration {self.alteration}."
                     )
