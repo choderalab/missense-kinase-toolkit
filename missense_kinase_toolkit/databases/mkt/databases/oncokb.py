@@ -126,28 +126,30 @@ class OncoKBProteinChange(OncoKB):
             logger.error("Gene name and alteration must be provided.")
         else:
             super().__post_init__()
-            if self.has_json():
-                if self._json["geneExist"] and self._json["variantExist"]:
-                    self.annotate_highest_level()
-                    self.get_treatments()
-                    self.oncogenic = self._json.get("oncogenic", None)
-                    self.vus = self._json.get("vus", None)
-                    if "mutationEffect" in self._json:
-                        self.known_effect = self._json["mutationEffect"].get(
-                            "knownEffect", None
-                        )
-                elif self._json["geneExist"] and self.verbose:
-                    logger.error(
-                        f"Alteration {self.alteration} does not exist for gene {self.gene_name} in OncoKB."
+            if not self.has_json():
+                return
+
+            json_data = self._json
+            gene_exists = json_data["geneExist"]
+            variant_exists = json_data["variantExist"]
+                
+            if gene_exists and variant_exists:
+                self.annotate_highest_level()
+                self.get_treatments()
+                self.oncogenic = json_data.get("oncogenic", None)
+                self.vus = sjson_data.get("vus", None)
+                if "mutationEffect" in json_data:
+                    self.known_effect = json_data["mutationEffect"].get(
+                        "knownEffect", None
                     )
-                elif self._json["variantExist"] and self.verbose:
-                    logger.error(
-                        f"Gene {self.gene_name} does not exist in OncoKB for alteration {self.alteration}."
-                    )
+            elif self.verbose:
+                if gene_exists:
+                    msg = f"Alteration {self.alteration} does not exist for gene {self.gene_name} in OncoKB."
+                if variant_exists:
+                    msg = f"Gene {self.gene_name} does not exist in OncoKB for alteration {self.alteration}."
                 else:
-                    logger.error(
-                        f"Gene {self.gene_name} and alteration {self.alteration} does not exist in OncoKB."
-                    )
+                    msg = f"Gene {self.gene_name} and alteration {self.alteration} does not exist in OncoKB."
+                logger.error(msg)
 
     def update_url(self):
         """Update the URL for the OncoKB API query based on the UniProt ID."""
