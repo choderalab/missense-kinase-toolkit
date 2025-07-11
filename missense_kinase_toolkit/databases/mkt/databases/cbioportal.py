@@ -868,8 +868,8 @@ class KinaseMissenseMutations(Mutations):
 
         g.fig.suptitle(
             f"{title}\n"
-            f"Method: {dict_kwargs['method'].title()}, "
-            f"Metric: {dict_kwargs['metric'].title()}",
+            f"{dict_kwargs['method'].title()} Linkage, "
+            f"{dict_kwargs['metric'].title()} Metric",
             y=0.98,
             fontsize=20,
         )
