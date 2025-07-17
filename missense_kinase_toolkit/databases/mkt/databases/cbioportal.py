@@ -78,11 +78,9 @@ class cBioPortal(APIKeySwaggerClient):
 
 
 @dataclass
-class StudyData(cBioPortal):
-    """Class to get mutations from a cBioPortal study."""
+class cBioPortalQuery(cBioPortal):
+    """Class to get data from a cBioPortal instance."""
 
-    study_id: str
-    """cBioPortal study ID."""
     bool_prefix: bool = True
     """Add prefix to ABC column names if True; default is True."""
     list_col_explode: list[str] | None = field(default=None)
@@ -90,16 +88,16 @@ class StudyData(cBioPortal):
         None if no columns to explode (post-init)."""
     pathfile: str | None = None
     """Path to load dataframe from CSV file; if None, regenerate (post-init)."""
-    _study_data: list | None = field(init=False, default=None)
-    """List of cBioPortal sub-API queries; None if study not found (post-init)."""
+    _data: list | None = field(init=False, default=None)
+    """List of cBioPortal sub-API queries; None if ID not found (post-init)."""
     _df: pd.DataFrame | None = field(init=False, default=None)
 
     def __post_init__(self):
-        """Post-initialization to check study ID in instance and query api data."""
+        """Post-initialization to check study ID in instance and query API data."""
         super().__post_init__()
-        if not self.check_study_id():
+        if not self.check_entity_id():
             logger.error(
-                f"Study {self.study_id} not found in cBioPortal instance {self.instance}"
+                f"Study {self.get_entity_id()} not found in cBioPortal instance {self.instance}"
             )
         if self.pathfile is not None:
             try:
@@ -113,18 +111,27 @@ class StudyData(cBioPortal):
         else:
             self.regenerate_dataframe()
 
-    def check_study_id(self) -> bool:
-        """Check if the study ID is valid.
+    @abstractmethod
+    def get_entity_id(self):
+        """Get the entity ID (study_id or panel_id).
+
+        Returns
+        -------
+        str
+            Entity ID
+        """
+        ...
+
+    @abstractmethod
+    def check_entity_id(self) -> bool:
+        """Check if the entity ID is valid.
 
         Returns
         -------
         bool
-            True if the study ID is valid, False otherwise
-
+            True if the entity ID is valid, False otherwise
         """
-        studies = self._cbioportal.Studies.getAllStudiesUsingGET().result()
-        study_ids = [study.studyId for study in studies]
-        return self.study_id in study_ids
+        ...
 
     @abstractmethod
     def query_sub_api(self):
@@ -134,7 +141,6 @@ class StudyData(cBioPortal):
         -------
         SwaggerClient
             API response
-
         """
         ...
 
@@ -145,7 +151,6 @@ class StudyData(cBioPortal):
         -------
         pd.DataFrame | None
             DataFrame loaded from CSV file if successful, otherwise None
-
         """
         if self.pathfile is not None and os.path.exists(self.pathfile):
             try:
@@ -165,19 +170,18 @@ class StudyData(cBioPortal):
         -------
         pd.DataFrame | None
             DataFrame of API query if successful, otherwise None
-
         """
-        self._study_data = self.query_sub_api()
-        if self._study_data is None:
+        self._data = self.query_sub_api()
+        if self._data is None:
             logger.error(
-                f"Data for study {self.study_id} not found "
+                f"Data for {self.get_entity_id()} not found "
                 f"in cBioPortal instance {self.instance}"
             )
         else:
             self._df = self.convert_api_query_to_dataframe()
             if self._df is None:
                 logger.error(
-                    f"DataFrame for study {self.study_id} could not be created."
+                    f"DataFrame for {self.get_entity_id()} could not be created."
                 )
 
     def convert_api_query_to_dataframe(self) -> pd.DataFrame | None:
@@ -187,10 +191,9 @@ class StudyData(cBioPortal):
         -------
         pd.DataFrame | None
             DataFrame of API query if successful, otherwise None
-
         """
         try:
-            df = parse_iterabc2dataframe(self._study_data)
+            df = parse_iterabc2dataframe(self._data)
 
             # explode columns, if specified
             if self.list_col_explode is not None:
@@ -237,33 +240,55 @@ class StudyData(cBioPortal):
         -------
         str
             Adjusted column name
-
         """
         if self.bool_prefix:
             return f"{prefix}_{colname}"
         else:
             return colname
 
-    def get_study_id(self):
-        """Get cBioPortal study ID."""
-        return self.study_id
-
-    def get_study_data(self):
-        """Get cBioPortal study data."""
-        if self._study_data is not None:
-            return self._study_data
+    def get_data(self):
+        """Get cBioPortal data."""
+        if self._data is not None:
+            return self._data
         else:
-            logger.error(f"Data for study {self.study_id} not found.")
+            logger.error(f"Data for {self.get_entity_id()} not found.")
             return None
 
     def get_df(self):
-        """Get DataFrame of cBioPortal study data in dataframe."""
+        """Get DataFrame of cBioPortal data in dataframe."""
         if self._df is not None:
             # defensive copy to avoid modifying original DataFrame
             return self._df.copy()
         else:
-            logger.error(f"DataFrame for study {self.study_id} not found.")
+            logger.error(f"DataFrame for {self.get_entity_id()} not found.")
             return None
+
+
+@dataclass
+class StudyData(cBioPortalQuery):
+    """Class to get mutations from a cBioPortal study."""
+
+    study_id: str = field(kw_only=True)
+    """cBioPortal study ID."""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+    def get_entity_id(self):
+        """Get cBioPortal study ID."""
+        return self.study_id
+
+    def check_entity_id(self) -> bool:
+        """Check if the study ID is valid.
+
+        Returns
+        -------
+        bool
+            True if the study ID is valid, False otherwise
+        """
+        studies = self._cbioportal.Studies.getAllStudiesUsingGET().result()
+        study_ids = [study.studyId for study in studies]
+        return self.study_id in study_ids
 
 
 @dataclass
@@ -1036,3 +1061,64 @@ class Clinical(StudyData):
             )
             clinical = None
         return clinical
+
+
+@dataclass
+class PanelData(cBioPortalQuery):
+    """Class to get gene panel information from a cBioPortal instance."""
+
+    panel_id: str = field(kw_only=True)
+    """cBioPortal panel ID."""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+    def get_entity_id(self):
+        """Get cBioPortal panel ID."""
+        return self.panel_id
+
+    def check_entity_id(self) -> bool:
+        """Check if the panel ID is valid.
+
+        Returns
+        -------
+        bool
+            True if the panel ID is valid, False otherwise
+        """
+        panels = self._cbioportal.Gene_Panels.getAllGenePanelsUsingGET().result()
+        panel_ids = [panel.genePanelId for panel in panels]
+        return self.panel_id in panel_ids
+
+
+@dataclass
+class GenePanel(PanelData):
+    """Class to get gene panel information from a cBioPortal study."""
+
+    def __post_init__(self):
+        """Post-initialization to get clinical info from cBioPortal."""
+        super().__post_init__()
+
+    def query_sub_api(self) -> list | None:
+        """Get gene panel genes cBioPortal data.
+
+        Returns
+        -------
+        list | None
+            cBioPortal data as list of Abstract Base Classes
+                objects if successful, otherwise None.
+
+        """
+        try:
+            gene_panels = (
+                self._cbioportal.Gene_Panels.getGenePanelUsingGET(
+                    genePanelId=self.panel_id
+                )
+                .result()
+                .genes
+            )
+        except Exception as e:
+            logger.error(
+                f"Error retrieving gene panel data for panel {self.panel_id}: {e}"
+            )
+            gene_panels = None
+        return gene_panels
