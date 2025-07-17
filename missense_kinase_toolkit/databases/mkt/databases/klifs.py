@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 # start/end and colors courtesy of OpenCADD
+# https://github.com/volkamerlab/opencadd/blob/master/opencadd/databases/klifs/schema.py
 DICT_POCKET_KLIFS_REGIONS = {
     "I": {
         "start": 1,
