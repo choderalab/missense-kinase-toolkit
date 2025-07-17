@@ -116,12 +116,9 @@ class TestDatabases:
 
         # test that Zehir cohort is available
         study = "msk_impact_2017"
-        list_studies = (
-            cbioportal_instance._cbioportal.Studies.getAllStudiesUsingGET().result()
-        )
-        list_study_ids = [study.studyId for study in list_studies]
-        assert study in list_study_ids
-        mutations_instance = cbioportal.Mutations(study)
+        mutations_instance = cbioportal.Mutations(study_id=study)
+        assert mutations_instance.check_entity_id() is True
+        assert mutations_instance.get_entity_id() == study
         assert mutations_instance._df.shape[0] == 78142
 
         # make sure save works - no longer saving to file
@@ -131,7 +128,11 @@ class TestDatabases:
         # assert os.path.isfile(f"{mutations_instance.study_id}_mutations.csv") is True
         # os.remove(f"{mutations_instance.study_id}_mutations.csv")
 
-        assert mutations_instance.get_study_id() == study
+        panel = "IMPACT341"
+        panel_instance = cbioportal.GenePanel(panel_id=panel)
+        assert panel_instance.check_entity_id() is True
+        assert panel_instance._df.shape[0] == 341
+        assert panel_instance._df.shape[1] == 2
 
     def test_hgnc(self):
         from mkt.databases import hgnc
