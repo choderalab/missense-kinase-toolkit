@@ -1,5 +1,5 @@
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from mkt.databases.api_schema import RESTAPIClient
 from mkt.databases.requests_wrapper import get_cached_session
