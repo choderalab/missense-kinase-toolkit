@@ -1,5 +1,5 @@
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from mkt.databases.api_schema import RESTAPIClient
 from mkt.databases.requests_wrapper import get_cached_session
@@ -19,7 +19,7 @@ class ChEMBL(RESTAPIClient):
     """URL suffix to update for specific queries."""
     url_query: str | None = None
     """URL query for specific queries."""
-    params: dict | None = None
+    params: dict = field(default_factory=lambda x: {"q": "<ID>", "format": "json"})
     """Parameters for the API query."""
     _json: dict | None = None
 
@@ -29,8 +29,7 @@ class ChEMBL(RESTAPIClient):
             self.url_query = f"{self.url_base}{self.url_suffix}"
         else:
             self.url_query = f"{self.url_base}/molecule/search"
-        if self.params is None:
-            self.params = {"q": self.id, "format": "json"}
+        self.params = {k: v.replace("<ID>", self.id) for k, v in self.params.items()}
         self.query_api()
 
     def query_api(self):
