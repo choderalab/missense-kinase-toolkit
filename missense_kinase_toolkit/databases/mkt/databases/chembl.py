@@ -29,7 +29,8 @@ class ChEMBL(RESTAPIClient):
             self.url_query = f"{self.url_base}{self.url_suffix}"
         else:
             self.url_query = f"{self.url_base}/molecule/search"
-        self.params = {"q": self.id, "format": "json"}
+        if self.params is None:
+            self.params = {"q": self.id, "format": "json"}
         self.query_api()
 
     def query_api(self):
