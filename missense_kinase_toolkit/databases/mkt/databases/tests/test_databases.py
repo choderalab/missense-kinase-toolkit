@@ -559,3 +559,14 @@ class TestDatabases:
 
         chembl_query = chembl.ChEMBLMolecule(id="TESTTESTTEST")
         assert chembl_query.get_chembl_id() is None
+
+    def test_opentargets(self):
+        from mkt.databases import open_targets
+
+        # test that the function to get drug mechanism of action works
+        drug_moa = open_targets.OpenTargetsDrugMoA(chembl_id="CHEMBL1079742")
+        set_moa = drug_moa.get_moa()
+        assert set_moa == {"EGFR"}
+
+        test = open_targets.OpenTargetsDrugMoA(chembl_id="TEST")
+        assert test.get_moa() is None
