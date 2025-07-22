@@ -19,7 +19,7 @@ class ChEMBL(RESTAPIClient):
     """URL suffix to update for specific queries."""
     url_query: str | None = None
     """URL query for specific queries."""
-    params: dict = field(default_factory=lambda x: {"q": "<ID>", "format": "json"})
+    params: dict = field(default_factory=lambda: {"q": "<ID>", "format": "json"})
     """Parameters for the API query."""
     _json: dict | None = None
 
