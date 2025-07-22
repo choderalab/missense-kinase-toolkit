@@ -547,7 +547,10 @@ class TestDatabases:
     def test_chembl(self):
         from mkt.databases import chembl
 
-        chembl_query = chembl.ChEMBLMolecule(id="erlotinib")
+        # drug present
+        drug = "erlotinib"
+        # ChEMBLMoleculeSearch
+        chembl_query = chembl.ChEMBLMoleculeSearch(id=drug)
         set_id = set(chembl_query.get_chembl_id())
         assert {
             "CHEMBL1079742",
@@ -556,9 +559,16 @@ class TestDatabases:
             "CHEMBL5220676",
             "CHEMBL553",
         } == set_id
+        # ChEMBLMoleculeExact
+        assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() == ["CHEMBL553"]
+        # ChEMBLMoleculePreferred
+        assert chembl.ChEMBLMoleculePreferred(id=drug).get_chembl_id() == ["CHEMBL553"]
 
-        chembl_query = chembl.ChEMBLMolecule(id="TESTTESTTEST")
-        assert chembl_query.get_chembl_id() is None
+        # drug not present
+        drug = "TESTTESTTEST"
+        assert chembl.ChEMBLMoleculeSearch(id=drug).get_chembl_id() is None
+        assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() is None
+        assert chembl.ChEMBLMoleculePreferred(id=drug).get_chembl_id() is None
 
     def test_opentargets(self):
         from mkt.databases import open_targets
