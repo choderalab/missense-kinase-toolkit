@@ -56,19 +56,6 @@ class PKIS2KinaseSplit(FineTuneDataset):
             if key not in kwargs:
                 kwargs[key] = value
 
-        # if "filepath" not in kwargs:
-        #     kwargs["filepath"] = path.join(get_repo_root(), "data/pkis_data.csv")
-        # if "col_labels" not in kwargs:
-        #     kwargs["col_labels"] = "percent_displacement"
-        # if "col_kinase" not in kwargs:
-        #     kwargs["col_kinase"] = "klifs"
-        # if "col_drug" not in kwargs:
-        #     kwargs["col_drug"] = "Smiles"
-        # if "col_kinase_split" not in kwargs:
-        #     kwargs["col_kinase_split"] = "kincore_group"
-        # if "list_kinase_split" not in kwargs:
-        #     kwargs["list_kinase_split"] = ["TK", "TKL"]
-
         super().__init__(**kwargs)
 
     def prepare_splits(self) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -129,21 +116,6 @@ class PKIS2CrossValidation(FineTuneDataset):
         for key, value in dict_kwargs.items():
             if key not in kwargs:
                 kwargs[key] = value
-
-        # if "filepath" not in kwargs:
-        #     kwargs["filepath"] = path.join(get_repo_root(), "data/pkis_data.csv")
-        # if "col_labels" not in kwargs:
-        #     kwargs["col_labels"] = "percent_displacement"
-        # if "col_kinase" not in kwargs:
-        #     kwargs["col_kinase"] = "klifs"
-        # if "col_drug" not in kwargs:
-        #     kwargs["col_drug"] = "Smiles"
-        # if "k_folds" not in kwargs:
-        #     kwargs["k_folds"] = 5
-        # if "fold_idx" not in kwargs:
-        #     kwargs["fold_idx"] = None
-        # if "seed" not in kwargs:
-        #     kwargs["seed"] = 42
 
         super().__init__(**kwargs)
 
