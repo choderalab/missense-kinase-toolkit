@@ -21,7 +21,10 @@ class ChEMBL(RESTAPIClient):
     """URL query for specific queries."""
     params: dict = field(default_factory=lambda: {"q": "<ID>", "format": "json"})
     """Parameters for the API query."""
+    verbose: bool = False
+    """Flag to enable verbose logging."""
     _json: dict | None = None
+    """JSON response from the API query."""
 
     def __post_init__(self):
         """Initialize the ChEMBL API client."""
@@ -53,12 +56,14 @@ class ChEMBL(RESTAPIClient):
         """Get the ChEMBL ID for the queried molecule."""
         if self._json is not None and "molecules" in self._json:
             if len(self._json["molecules"]) == 0:
-                logger.error("No molecules found in the response.")
+                if self.verbose:
+                    logger.error(f"No molecules found in the response for {self.id}.")
                 return None
             else:
                 return [i["molecule_chembl_id"] for i in self._json["molecules"]]
         else:
-            logger.error("No ChEMBL ID found in the response.")
+            if self.verbose:
+                logger.error(f"No ChEMBL ID found in the response for {self.id}.")
             return None
 
 
@@ -95,3 +100,38 @@ class ChEMBLMoleculePreferred(ChEMBL):
         default_factory=lambda: {"pref_name__iexact": "<ID>", "format": "json"}
     )
     """Parameters for the molecule preferred match API query."""
+
+
+def return_chembl_id(drug: str):
+    """Return the ChEMBL ID for a given drug name.
+
+    Parameters
+    ----------
+    drug : str
+        The name of the drug to search for in ChEMBL.
+
+    Returns
+    -------
+    tuple
+        A tuple containing the ChEMBL ID and the source of the ID (exact, preferred, or search);
+            if no ID is found, returns (None, None).
+    """
+    chembl_id = ChEMBLMoleculeExact(id=drug).get_chembl_id()
+    source = "exact"
+
+    # if None try preferred match
+    if chembl_id == [] or chembl_id is None:
+        chembl_id = ChEMBLMoleculePreferred(id=drug).get_chembl_id()
+        source = "preferred"
+
+    # if still None, do search
+    if chembl_id == [] or chembl_id is None:
+        chembl_id = ChEMBLMoleculeSearch(id=drug, verbose=True).get_chembl_id()
+        source = "search"
+
+    # if still None, return None
+    if chembl_id == [] or chembl_id is None:
+        logger.error(f"No ChEMBL ID found for {drug}.")
+        chembl_id, source = None, None
+
+    return chembl_id, source
