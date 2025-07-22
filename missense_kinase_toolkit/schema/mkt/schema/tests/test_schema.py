@@ -155,6 +155,10 @@ class TestSchema:
         assert min(obj_abl1.KLIFS2UniProtIdx.values()) == 246
         assert max(obj_abl1.KLIFS2UniProtIdx.values()) == 385
 
+        assert dict_kinase["ABL1"].adjudicate_group() == "TK"
+        assert dict_kinase["ABR"].adjudicate_group() == "Atypical"
+        assert dict_kinase["ANTXR1"].adjudicate_group() == "Atypical"
+
     # TODO: downsample toml files to speed up test
     # TODO: add .tar.gz test for yaml/toml - currently only presumed to work
     def test_serialization(self, caplog):

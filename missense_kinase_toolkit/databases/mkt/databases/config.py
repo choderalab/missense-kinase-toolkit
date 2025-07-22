@@ -11,6 +11,8 @@ CBIOPORTAL_TOKEN_VAR = "CBIOPORTAL_TOKEN"
 REQUESTS_CACHE_VAR = "REQUESTS_CACHE"
 """str: Environment variable for request cache file prefix; \
     if none provided, default is requests_cache in CLI scripts"""
+ONCOKB_TOKEN_VAR = "ONCOKB_TOKEN"
+"""str: Environment variable for OncoKB token; if none provided, default is `None` in CLI scripts"""
 
 
 def set_output_dir(val: str) -> None:
@@ -136,5 +138,35 @@ def maybe_get_request_cache() -> str | None:
     """
     try:
         return os.environ[REQUESTS_CACHE_VAR]
+    except KeyError:
+        return None
+
+
+def set_oncokb_token(val: str) -> None:
+    """Set the OncoKB token in the environment variables.
+
+    Parameters
+    ----------
+    val : str
+        OncoKB token
+
+    Returns
+    -------
+    None
+
+    """
+    os.environ[ONCOKB_TOKEN_VAR] = val
+
+
+def maybe_get_oncokb_token() -> str | None:
+    """Get the OncoKB token from the environment.
+
+    Returns
+    -------
+    str | None
+        OncoKB token as string if exists, otherwise None
+    """
+    try:
+        return os.environ[ONCOKB_TOKEN_VAR]
     except KeyError:
         return None

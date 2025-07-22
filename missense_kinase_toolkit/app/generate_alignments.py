@@ -302,7 +302,7 @@ class SequenceAlignment:
 
         # sequence text view with ability to scroll along x axis
         # view_range is for the close up view
-        view_range = (0, viewlen)
+        view_range = (-8, viewlen)
         plot_height = 100
         p1 = figure(
             title=None,
@@ -339,7 +339,31 @@ class SequenceAlignment:
         p1.grid.visible = False
 
         p1.xaxis.ticker = FixedTicker(ticks=list(range(1, N + 1)))
-        p1.xaxis.formatter = CustomJSTickFormatter(code="return String(tick)")
+
+        # Add KLIFS pocket labels as custom labels
+        # Create KLIFS position mapping for the formatter
+        klifs_mapping = {}
+        if (
+            hasattr(self.obj_kinase, "KLIFS2UniProtIdx")
+            and self.obj_kinase.KLIFS2UniProtIdx
+        ):
+            klifs_mapping = {
+                pos: label
+                for label, pos in self.obj_kinase.KLIFS2UniProtIdx.items()
+                if pos is not None
+            }
+
+        # Custom formatter that includes KLIFS labels
+        formatter_code = f"""
+        var klifs_map = {klifs_mapping};
+        var base_label = String(tick);
+        if (klifs_map[tick]) {{
+            return klifs_map[tick] + "\t\t" + base_label;
+        }}
+        return base_label;
+        """
+
+        p1.xaxis.formatter = CustomJSTickFormatter(code=formatter_code)
 
         p1.xaxis.major_label_orientation = np.pi / 2  # Rotate labels 90 degrees
         p1.xaxis.major_label_standoff = 2  # Add some space between axis and labels
@@ -362,8 +386,6 @@ class SequenceAlignment:
                 x_offset=-10,  # Offset to position it near the axis
             )
             p1.add_layout(custom_label)
-
-        # TODO: Add second axis for KLIFS pocket
 
         p1.yaxis.minor_tick_line_width = 0
         p1.yaxis.major_tick_line_width = 0

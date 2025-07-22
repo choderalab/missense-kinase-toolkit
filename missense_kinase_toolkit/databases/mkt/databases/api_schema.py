@@ -77,3 +77,29 @@ class APIKeySwaggerClient(SwaggerAPIClient, ABC):
 class RESTAPIClient(APIClient, ABC):
     @abstractmethod
     def query_api(self): ...
+
+
+class APIKeyRESTAPIClient(RESTAPIClient, ABC):
+    @abstractmethod
+    def maybe_get_token(self) -> str | None:
+        """Get API token, if available.
+
+        Returns
+        -------
+        str | None
+            API token if available; None otherwise
+
+        """
+        ...
+
+    def set_api_key(self) -> dict:
+        """Set API token for REST API.
+
+        Returns
+        -------
+        dict
+            Dictionary with API token set
+
+        """
+        token = self.maybe_get_token()
+        return {"Authorization": f"Bearer {token}"} if token else {}
