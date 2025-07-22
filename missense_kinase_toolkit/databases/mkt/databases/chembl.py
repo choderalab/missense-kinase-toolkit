@@ -19,7 +19,7 @@ class ChEMBL(RESTAPIClient):
     """URL suffix to update for specific queries."""
     url_query: str | None = None
     """URL query for specific queries."""
-    params: dict = field(default_factory=dict, init=False)
+    params: dict = field(default_factory=lambda: {"q": "<ID>", "format": "json"})
     """Parameters for the API query."""
     _json: dict | None = None
 
@@ -29,7 +29,7 @@ class ChEMBL(RESTAPIClient):
             self.url_query = f"{self.url_base}{self.url_suffix}"
         else:
             self.url_query = f"{self.url_base}/molecule/search"
-        self.params = {"q": self.id, "format": "json"}
+        self.params = {k: v.replace("<ID>", self.id) for k, v in self.params.items()}
         self.query_api()
 
     def query_api(self):
