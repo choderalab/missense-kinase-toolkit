@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class FineTuneDataset(ABC):
     """Fine-tune dataset for kinase and drug interactions."""
+
     filepath: str
     """Path to the dataset file."""
     col_labels: str

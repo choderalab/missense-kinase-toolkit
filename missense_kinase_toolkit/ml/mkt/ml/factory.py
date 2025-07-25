@@ -5,7 +5,6 @@ from os import path
 import yaml
 from mkt.ml.constants import DataSet, DrugModel, KinaseModel, ModelType
 
-
 logger = logging.getLogger(__name__)
 
 

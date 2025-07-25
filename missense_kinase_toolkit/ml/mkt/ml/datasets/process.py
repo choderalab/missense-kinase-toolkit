@@ -1,17 +1,18 @@
 import logging
-import pandas as pd
-from pydantic import BaseModel
-from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 
-from mkt.schema.io_utils import deserialize_kinase_dict
+import pandas as pd
 from mkt.ml.constnts import KinaseGroupSource
 from mkt.ml.utils import get_repo_root, rgetattr
+from mkt.schema.io_utils import deserialize_kinase_dict
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 
 DICT_KINASE = deserialize_kinase_dict()
+
 
 class DatasetConfig(BaseModel):
     name: str
@@ -31,25 +32,33 @@ class DatasetConfig(BaseModel):
     df: pd.DataFrame | None = None
     """DataFrame containing the dataset."""
 
+
 class PKIS2Config(DatasetConfig):
     """Configuration for the PKIS2 dataset."""
+
     name: str = "PKIS2"
-    url: str = "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv"
+    url: str = (
+        "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv"
+    )
     col_drug: str = "Smiles"
     col_kinase: str = "Kinase"
     col_y: str = "Percent Displacement"
 
+
 class DavisConfig(DatasetConfig):
     """Configuration for the Davis dataset."""
+
     name: str = "DAVIS"
     url: str | None = None  # URL will be set in the DavisDataset class
     col_drug: str = "Drug"
     col_kinase: str = "Target_ID"
     col_y: str = "Y"
 
+
 @dataclass
 class ProcessDataset(ABC):
     """DataSet class for handling dataset configurations."""
+
     bool_save: bool = True
     """Whether to save the processed dataset to a CSV file."""
     df: pd.DataFrame | None = None
@@ -91,12 +100,17 @@ class ProcessDataset(ABC):
         df = self.df.copy()
         if self.attr_group.value is None:
             df["group"] = df[self.col_kinase].apply(
-                lambda x: DICT_KINASE.get(x, None).adjudicate_group() \
-                    if DICT_KINASE.get(x, None) else None
+                lambda x: (
+                    DICT_KINASE.get(x, None).adjudicate_group()
+                    if DICT_KINASE.get(x, None)
+                    else None
+                )
             )
         else:
             df["group"] = df[self.col_kinase].apply(
-                lambda x: rgetattr(DICT_KINASE.get(x, None), self.attr_group.value, None)
+                lambda x: rgetattr(
+                    DICT_KINASE.get(x, None), self.attr_group.value, None
+                )
             )
         return df
 
@@ -104,9 +118,12 @@ class ProcessDataset(ABC):
 @dataclass
 class PKIS2Dataset(ProcessDataset, PKIS2Config):
     """PKIS2 dataset processing class."""
+
     name: str = "PKIS2"
     """Name of the dataset."""
-    url: str = "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv"
+    url: str = (
+        "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv"
+    )
     """URL to the PKIS2 dataset CSV file."""
     col_drug: str = "Smiles"
     """Column name for drug SMILES in the dataset."""
@@ -132,7 +149,7 @@ class PKIS2Dataset(ProcessDataset, PKIS2Config):
 
         df_melt = df_pivot.reset_index().melt(
             id_vars=self.col_drug,
-            var_name=self.col_kinase, 
+            var_name=self.col_kinase,
             value_name=self.col_y,
         )
 
@@ -154,9 +171,13 @@ class DavisDataset(ProcessDataset, DavisConfig):
         col_davis_y = "Y"
         col_davis_y_transformed = "Y_trans"
 
-        data_davis = DTI(name = "DAVIS")
+        data_davis = DTI(name="DAVIS")
         data_davis.harmonize_affinities("mean")
         df_davis = data_davis.get_data()
-        df_davis_pivot = df_davis.pivot(index=col_davis_drug, columns=col_davis_target, values=col_davis_y)
+        df_davis_pivot = df_davis.pivot(
+            index=col_davis_drug, columns=col_davis_target, values=col_davis_y
+        )
         df_davis[col_davis_y_transformed] = convert_to_percentile(df_davis[col_davis_y])
-        temp = convert_from_percentile(df_davis[col_davis_y_transformed], df_davis[col_davis_y])
+        temp = convert_from_percentile(
+            df_davis[col_davis_y_transformed], df_davis[col_davis_y]
+        )
