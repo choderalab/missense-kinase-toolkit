@@ -16,44 +16,29 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class FineTuneDataset(ABC):
-    """Fine-tune dataset for kinase and drug interactions.
-
-    Parameters
-    ----------
-    filepath : str
-        Path to the dataset file.
-    col_labels : str
-        Column name for labels values in the dataset.
-    col_kinase : str
-        Column name for kinase identifiers in the dataset.
-    col_drug : str
-        Column name for drug identifiers in the dataset.
-    model_drug : str
-        Pre-trained model name for drug sequences; default is DeepChem/ChemBERTa-77M-MTR.
-    model_kinase : str
-        Pre-trained model name for kinase sequences; default is facebook/esm2_t6_8M_UR50D.
-    k_folds : int | None
-        Number of folds for cross-validation.
-            If None, splits are applied via prepare_splits.
-    fold_idx : int | None
-        Index of the fold to use for testing.
-    seed : int | None
-        Random seed for reproducibility.
-            If None, no seed is set.
-
-    """
-
+    """Fine-tune dataset for kinase and drug interactions."""
     filepath: str
+    """Path to the dataset file."""
     col_labels: str
+    """Column name for labels values in the dataset."""
     col_kinase: str
+    """Column name for kinase identifiers in the dataset."""
     col_drug: str
+    """Column name for drug identifiers in the dataset."""
     model_drug: str
+    """Pre-trained model name for drug sequences; default is DeepChem/ChemBERTa-77M-MTR."""
     model_kinase: str
+    """Pre-trained model name for kinase sequences; default is facebook/esm2_t6_8M_UR50D."""
     k_folds: int | None = None
+    """Number of folds for cross-validation. If None, splits are applied via prepare_splits."""
     fold_idx: int | None = None
+    """Index of the fold to use for testing."""
     seed: int | None = None
+    """Random seed for reproducibility. If None, no seed is set."""
     col_kinase_split: str | None = None
+    """Column name for kinase groups in the dataset."""
     list_kinase_split: list[str] | None = None
+    """List of kinase groups to use for testing. If None, no split is applied."""
 
     def __post_init__(self):
         """Post-initialization method to load the dataset."""
