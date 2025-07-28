@@ -115,3 +115,31 @@ def set_seed(
     os.environ["PYTHONHASHSEED"] = str(seed)
 
     logger.info(f"All random seeds have been set to {seed}")
+
+
+def rgetattr(obj, attr, *args):
+    """Get attribute from object recursively.
+
+    Parameters
+    ----------
+    obj : Any
+        Object to get attribute from.
+    attr : str
+        Attribute to get.
+    *args : Any
+        Any additional arguments to pass to getattr.
+
+    Returns
+    -------
+    Any
+        Value of attribute if found.
+    """
+    import functools
+
+    def _getattr(obj, attr):
+        return getattr(obj, attr, *args)
+
+    try:
+        return functools.reduce(_getattr, [obj] + attr.split("."))
+    except AttributeError:
+        return None

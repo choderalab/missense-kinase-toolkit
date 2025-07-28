@@ -8,6 +8,25 @@ from mkt.ml.utils import get_repo_root
 logger = logging.getLogger(__name__)
 
 
+DICT_PKIS2_KWARGS = {
+    "base": {
+        "filepath": path.join(get_repo_root(), "data/pkis_data.csv"),
+        "col_labels": "percent_displacement",
+        "col_kinase": "klifs",
+        "col_drug": "Smiles",
+    },
+    "kinase_split": {
+        "col_kinase_split": "kincore_group",
+        "list_kinase_split": ["TK", "TKL"],
+    },
+    "cross_validation": {
+        "k_folds": 5,
+        "fold_idx": None,
+        "seed": 42,
+    },
+}
+
+
 class PKIS2KinaseSplit(FineTuneDataset):
     """PKIS2 dataset kinase split.
 
@@ -32,18 +51,10 @@ class PKIS2KinaseSplit(FineTuneDataset):
 
     def __init__(self, **kwargs):
         """Initialize the PKIS2KinaseSplit dataset."""
-        if "filepath" not in kwargs:
-            kwargs["filepath"] = path.join(get_repo_root(), "data/pkis_data.csv")
-        if "col_labels" not in kwargs:
-            kwargs["col_labels"] = "percent_displacement"
-        if "col_kinase" not in kwargs:
-            kwargs["col_kinase"] = "klifs"
-        if "col_drug" not in kwargs:
-            kwargs["col_drug"] = "Smiles"
-        if "col_kinase_split" not in kwargs:
-            kwargs["col_kinase_split"] = "kincore_group"
-        if "list_kinase_split" not in kwargs:
-            kwargs["list_kinase_split"] = ["TK", "TKL"]
+        dict_kwargs = DICT_PKIS2_KWARGS["base"] | DICT_PKIS2_KWARGS["kinase_split"]
+        for key, value in dict_kwargs.items():
+            if key not in kwargs:
+                kwargs[key] = value
 
         super().__init__(**kwargs)
 
@@ -101,20 +112,10 @@ class PKIS2CrossValidation(FineTuneDataset):
 
     def __init__(self, **kwargs):
         """Initialize the PKIS2CrossValidation dataset."""
-        if "filepath" not in kwargs:
-            kwargs["filepath"] = path.join(get_repo_root(), "data/pkis_data.csv")
-        if "col_labels" not in kwargs:
-            kwargs["col_labels"] = "percent_displacement"
-        if "col_kinase" not in kwargs:
-            kwargs["col_kinase"] = "klifs"
-        if "col_drug" not in kwargs:
-            kwargs["col_drug"] = "Smiles"
-        if "k_folds" not in kwargs:
-            kwargs["k_folds"] = 5
-        if "fold_idx" not in kwargs:
-            kwargs["fold_idx"] = None
-        if "seed" not in kwargs:
-            kwargs["seed"] = 42
+        dict_kwargs = DICT_PKIS2_KWARGS["base"] | DICT_PKIS2_KWARGS["cross_validation"]
+        for key, value in dict_kwargs.items():
+            if key not in kwargs:
+                kwargs[key] = value
 
         super().__init__(**kwargs)
 

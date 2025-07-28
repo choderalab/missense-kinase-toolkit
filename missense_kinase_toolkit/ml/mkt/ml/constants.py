@@ -5,6 +5,15 @@ from mkt.ml.models.pooling import CombinedPoolingModel
 from strenum import StrEnum
 
 
+class KinaseGroupSource(Enum):
+    """Enum for kinase groups."""
+
+    kincore = "kincore.fasta.group"
+    kinhub = "kinhub.group"
+    klifs = "klifs.group"
+    consensus = None
+
+
 class DataSet(Enum):
     """Enum for dataset names."""
 
