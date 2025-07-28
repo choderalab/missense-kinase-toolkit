@@ -74,6 +74,7 @@ class ProcessDataset(ABC):
         self.df = self.add_kinase_group_column()
         self.df = self.drop_na_rows()
         self.df = self.standardize_colnames()
+        self.df = self.add_source_column()
 
         if getattr(self, "bool_save", True):
             self.save_data2csv()
@@ -81,6 +82,11 @@ class ProcessDataset(ABC):
     @abstractmethod
     def process(self):
         """Process the dataset."""
+        ...
+
+    @abstractmethod
+    def add_source_column(self) -> pd.DataFrame:
+        """Add a source name column to the DataFrame."""
         ...
 
     def save_data2csv(self) -> None:
@@ -182,6 +188,12 @@ class PKIS2Dataset(PKIS2Config, ProcessDataset):
 
         return df_melt
 
+    def add_source_column(self) -> pd.DataFrame:
+        """Add a PKIS2 name column to the DataFrame."""
+        df = self.df.copy()
+        df["source"] = self.name
+        return df
+
 
 class DavisDataset(DavisConfig, ProcessDataset):
     """Davis dataset processing class."""
@@ -209,3 +221,9 @@ class DavisDataset(DavisConfig, ProcessDataset):
         df_keep = df[[self.col_drug, self.col_kinase, self.col_y]]
 
         return df_keep
+
+    def add_source_column(self) -> pd.DataFrame:
+        """Add a Davis name column to the DataFrame."""
+        df = self.df.copy()
+        df["source"] = self.name.title()
+        return df
