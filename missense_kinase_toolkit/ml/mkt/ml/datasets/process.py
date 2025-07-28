@@ -72,6 +72,7 @@ class ProcessDataset(ABC):
         self.df = self.add_klifs_column()
         self.df = self.add_kincore_kd_column()
         self.df = self.add_kinase_group_column()
+        #TODO: better map Davis kinase names (e.g., mutant, phos, domains, etc.)
         self.df = self.drop_na_rows()
         self.df = self.standardize_colnames()
         self.df = self.add_source_column()
@@ -161,14 +162,11 @@ class PKIS2Dataset(PKIS2Config, ProcessDataset):
 
     def __init__(self, **kwargs):
         """Initialize PKIS2 dataset."""
-        # Initialize the Pydantic model first
         super().__init__(**kwargs)
 
-        # Get config defaults and update with any provided kwargs
         config_dict = PKIS2Config().model_dump()
         config_dict.update(kwargs)
 
-        # Initialize ProcessDataset with the config values
         ProcessDataset.__init__(self, **config_dict)
 
     def process(self) -> pd.DataFrame:
@@ -200,14 +198,11 @@ class DavisDataset(DavisConfig, ProcessDataset):
 
     def __init__(self, **kwargs):
         """Initialize Davis dataset."""
-        # Initialize the Pydantic model first
         super().__init__(**kwargs)
 
-        # Get config defaults and update with any provided kwargs
         config_dict = DavisConfig().model_dump()
         config_dict.update(kwargs)
 
-        # Initialize ProcessDataset with the config values
         ProcessDataset.__init__(self, **config_dict)
 
     def process(self) -> pd.DataFrame:
