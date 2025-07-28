@@ -5,6 +5,7 @@ import tarfile
 import git
 import pandas as pd
 from mkt.databases.config import OUTPUT_DIR_VAR
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,7 @@ def load_csv_to_dataframe(
     try:
         df = pd.read_csv(os.path.join(path_data, filename))
     except FileNotFoundError:
-        print(f"File {filename} not found in {path_data}...")
+        logger.info(f"File {filename} not found in {path_data}...")
     return df
 
 
@@ -124,7 +125,7 @@ def concatenate_csv_files_with_glob(
             df = pd.read_csv(csv_file, low_memory=False)
             df_combo = pd.concat([df_combo, df])
     else:
-        print(f"No files matching {str_find} found in {path_data}...")
+        logger.info(f"No files matching {str_find} found in {path_data}...")
 
     # TODO: implement remove duplicates
 
@@ -133,6 +134,8 @@ def concatenate_csv_files_with_glob(
 
 def parse_iterabc2dataframe(
     input_object: iter,
+    str_prefix: str | None = None,
+    verbose: bool = True,
 ) -> pd.DataFrame:
     """Parse an iterable containing Abstract Base Classes into a dataframe.
 
@@ -140,6 +143,8 @@ def parse_iterabc2dataframe(
     ----------
     input_object : iter
         Iterable of Abstract Base Classes objects
+    str_prefix : str | None, optional
+        Prefix to add to the column names, by default None
 
     Returns
     -------
@@ -150,13 +155,24 @@ def parse_iterabc2dataframe(
     list_dir = [dir(entry) for entry in input_object]
     set_dir = {item for sublist in list_dir for item in sublist}
 
-    dict_dir = {attr: [] for attr in set_dir}
-    for entry in input_object:
-        for attr in dict_dir.keys():
-            try:
-                dict_dir[attr].append(getattr(entry, attr))
-            except AttributeError:
-                dict_dir[attr].append(None)
+    dict_dir = {}
+    for attr in tqdm(
+        set_dir, desc="Parsing attributes from ABC...", disable=not verbose
+    ):
+        if str_prefix:
+            attr_prefix = f"{str_prefix}_{attr}"
+        else:
+            attr_prefix = attr
+        # check if the attribute exists in the entry
+        try:
+            dict_dir[attr_prefix] = [
+                getattr(entry, attr)
+                for entry in input_object
+                # too noisy - uncomment and comment above if needed
+                # for entry in tqdm(input_object, desc=f"Extracting {attr_prefix}...")
+            ]
+        except AttributeError:
+            dict_dir[attr_prefix] = [None for _ in input_object]
 
     df = pd.DataFrame.from_dict(dict_dir)
     df = df[sorted(df.columns.to_list())]
@@ -176,7 +192,7 @@ def get_repo_root():
         repo = git.Repo(".", search_parent_directories=True)
         return repo.working_tree_dir
     except git.InvalidGitRepositoryError:
-        print("Not a git repository; using current directory as root...")
+        logger.info("Not a git repository; using current directory as root...")
         return "."
 
 
@@ -214,3 +230,29 @@ def create_tar_without_metadata(
                 file_path = os.path.join(root, file)
                 if not file.startswith("._"):
                     tar.add(file_path, arcname=os.path.relpath(file_path, path_source))
+
+
+def return_kinase_dict(bool_hgnc: bool = True) -> dict[str, object]:
+    """Return a dictionary of kinase objects.
+
+    Parameters
+    ----------
+    bool_hgnc : bool, optional
+        If True, return a dictionary of kinase objects with HGNC IDs, by default True
+
+    Returns
+    -------
+    dict[str, object]
+        Dictionary of kinase objects with HGNC IDs as keys if bool_hgnc is True,
+        otherwise with UniProt IDs as keys
+
+    """
+    from mkt.schema import io_utils
+
+    dict_kinase = io_utils.deserialize_kinase_dict()
+
+    # use HGNC IDs as keys if bool_hgnc is True, else use UniProt IDs
+    if not bool_hgnc:
+        dict_kinase = {v.uniprot_id: v for v in dict_kinase.values()}
+
+    return dict_kinase

@@ -23,6 +23,7 @@ dependencies:
   - biopython
   - pydantic
   - GitPython
+  - importlib-resources
 
     # schema
   - gitpython

@@ -1,7 +1,10 @@
+import logging
 from typing import Any
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 def try_except_split_concat_str(
@@ -51,6 +54,20 @@ def create_strsplit_list(
 ) -> list[str]:
     """
     Split list or Series of strings on delim with exception handling.
+
+    Parameters
+    ----------
+    list_in : list[str]
+        List of strings to split
+    idx_start : int
+        Starting index
+    idx_end : int
+        Ending index
+
+    Returns
+    -------
+    list[str]
+        List of concatenated strings split on delim from idx_start:idx_end
 
     """
     return [
@@ -162,6 +179,21 @@ def return_list_out(
     list_kinhub_uniprot: list[str | float],
     list_assay_name: list[str],
 ):
+    """Return list of indices where str_in matches entry or entries in list_in.
+
+    Parameters
+    ----------
+    list_kinhub_uniprot : list[str | float]
+        List of string or list of list of strings to check for str_in match
+    list_assay_name : list[str]
+        List of string to check for matches in list_in
+
+    Returns
+    -------
+    list_out : list[int] | None
+        Returns index of matching entries in list
+
+    """
     list_out = [
         return_list_match_indices(x, list_kinhub_uniprot) for x in list_assay_name
     ]
@@ -171,6 +203,19 @@ def return_list_out(
 
 
 def try_except_convert_str2int(str_in: str):
+    """Convert string to int with exception handling.
+
+    Parameters
+    ----------
+    str_in : str
+        Input string to convert to int
+
+    Returns
+    -------
+    int | str
+        Returns int if conversion successful, otherwise returns str_in
+
+    """
     try:
         return int(str_in)
     except ValueError:
@@ -178,6 +223,21 @@ def try_except_convert_str2int(str_in: str):
 
 
 def try_except_substraction(a, b):
+    """Subtract two values with exception handling.
+
+    Parameters
+    ----------
+    a : Any
+        First value to subtract from
+    b : Any
+        Second value to subtract
+
+    Returns
+    -------
+    Any
+        Returns difference if subtraction successful, otherwise returns None
+
+    """
     try:
         return b - a
     except TypeError:
@@ -189,6 +249,23 @@ def aggregate_df_by_col_set(
     col_group: str,
     bool_str: bool = True,
 ) -> pd.DataFrame:
+    """Aggregate DataFrame by column and convert to set.
+
+    Parameters
+    ----------
+    df_in : pd.DataFrame
+        Input DataFrame to aggregate
+    col_group : str
+        Column to group by
+    bool_str : bool, optional
+        If True, convert set to string, by default True
+
+    Returns
+    -------
+    pd.DataFrame
+        Aggregated DataFrame with set values
+
+    """
     list_cols = df_in.columns.to_list()
     list_cols.remove(col_group)
 
@@ -205,6 +282,21 @@ def aggregate_df_by_col_set(
 
 
 def split_on_first_only(str_in, delim):
+    """Split string on first occurrence of delim.
+
+    Parameters
+    ----------
+    str_in : str
+        Input string to split
+    delim : str
+        Delimiter to split on
+
+    Returns
+    -------
+    tuple
+        Tuple containing two strings: str1 and str2
+
+    """
     list_split = str_in.split(delim)
     str1 = list_split[0]
     str2 = "".join(list_split[1:])
@@ -212,6 +304,19 @@ def split_on_first_only(str_in, delim):
 
 
 def flatten_iterables_in_iterable(data):
+    """Flatten nested lists or tuples into a single list.
+
+    Parameters
+    ----------
+    data : list or tuple
+        Input data to flatten
+
+    Returns
+    -------
+    list
+        Flattened list containing all elements from the input data
+
+    """
     flattened_list = []
     for item in data:
         if isinstance(item, (list, tuple)):
@@ -236,7 +341,7 @@ def rgetattr(obj, attr, *args):
     Returns
     -------
     Any
-        Value of attribute if found, otherwise default value.
+        Value of attribute if found.
     """
     import functools
 
@@ -273,6 +378,31 @@ def rsetattr(obj, attr, val, *args):
     return functools.reduce(_setattr, [obj] + attr.split("."))
 
 
+def try_except_return_none_rgetattr(obj, attr, *args):
+    """Get attribute from object recursively.
+
+    Parameters
+    ----------
+    obj : Any
+        Object to get attribute from.
+    attr : str
+        Attribute to get.
+    *args : Any
+        Any additional arguments to pass to getattr.
+
+    Returns
+    -------
+    Any
+        Value of attribute if found, otherwise None.
+    """
+
+    try:
+        return rgetattr(obj, attr, *args)
+    except Exception as e:
+        logging.error(f"Unexpected error: {e}")
+        return None
+
+
 def return_bool_at_index(
     list_in: list,
     list_bool: list,
@@ -296,3 +426,105 @@ def return_bool_at_index(
 
     """
     return [i for i, j in zip(list_in, list_bool) if j == bool_return]
+
+
+def convert_input2list(obj_in: Any, bool_empty: bool = False) -> list | None:
+    """Convert input to a list if it is not already a list.
+
+    Parameters
+    ----------
+    obj_in : Any
+        Input object to convert to a list.
+    bool_empty : bool, optional
+        If True, return an empty list if obj_in is None, by default False
+
+    Returns
+    -------
+    list
+        List containing the input if it is not already a list, otherwise returns the input as is.
+    """
+    if isinstance(obj_in, list):
+        return obj_in
+    elif isinstance(obj_in, (int, float, str)):
+        return [obj_in]
+    elif bool_empty and obj_in is None:
+        return []
+    else:
+        logger.error("Input is not a list or convertible to a list.")
+        return None
+
+
+def add_one_hot_encoding_to_dataframe(
+    df: pd.DataFrame,
+    col_name: str | list[str],
+    prefix: str | list[str] | None = None,
+    bool_drop: bool = True,
+    col_drop: str | list[str] | None = None,
+) -> pd.DataFrame:
+    """
+    Add one-hot encoding for one or more specified columns in a DataFrame.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame.
+    col_name : str | list[str]
+        Column name(s) to apply one-hot encoding.
+    prefix : str | list[str] | None, optional
+        Prefix(es) for the new columns. If None, uses column names as prefixes.
+        If list, must match length of col_name, by default None.
+    bool_drop : bool, optional
+        If True, drop the original column(s) after encoding, by default True.
+    col_drop : str | list[str] | None, optional
+        If specified, drop these column(s) after encoding (i.e., to avoid multicollinearity).
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with one-hot encoded columns added.
+    """
+    col_names = convert_input2list(col_name, bool_empty=False)
+    cols_to_drop = convert_input2list(col_drop, bool_empty=True)
+
+    if prefix is None:
+        prefixes = [""] * len(col_names)
+    elif isinstance(prefix, str):
+        prefixes = [prefix] * len(col_names)
+    else:
+        if len(prefix) != len(col_names):
+            raise ValueError(
+                f"Length of prefix ({len(prefix)}) must "
+                f"match length of col_name ({len(col_names)})"
+            )
+        prefixes = prefix
+
+    one_hot_dfs = []
+    for col, pref in zip(col_names, prefixes):
+        if col not in df.columns:
+            logger.warning(f"Column '{col}' not found in DataFrame.")
+            continue
+        one_hot = pd.get_dummies(df[col], prefix=pref)
+        one_hot_dfs.append(one_hot)
+    if one_hot_dfs:
+        combined_one_hot = pd.concat(one_hot_dfs, axis=1)
+        for col_to_drop in cols_to_drop:
+            if col_to_drop in combined_one_hot.columns:
+                combined_one_hot = combined_one_hot.drop(columns=[col_to_drop])
+            else:
+                logger.warning(
+                    f"Column '{col_to_drop}' not found in one-hot encoded columns."
+                )
+    else:
+        combined_one_hot = pd.DataFrame(index=df.index)
+
+    if bool_drop:
+        df_base = df.drop(columns=col_names, errors="ignore")
+    else:
+        df_base = df.copy()
+
+    if not combined_one_hot.empty:
+        df_out = pd.concat([df_base, combined_one_hot], axis=1, copy=False)
+    else:
+        df_out = df_base
+
+    return df_out

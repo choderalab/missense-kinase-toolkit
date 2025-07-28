@@ -47,19 +47,53 @@ def generate_kinase_info_plot(
 
 @dataclass
 class SequenceAlignment:
+    """Class for sequence alignment plot."""
+
+    # required parameters
     list_sequences: list[str]
     """List of sequences to show in aligner."""
     list_ids: list[str]
     """List of sequence IDs."""
     dict_colors: dict[str, str]
     """Dictionary of colors for each sequence."""
+
+    # optional formatting parameters
     font_size: int = 9
     """Font size for alignment."""
     plot_width: int = 800
     """Width of the plot."""
+    plot_height: int = None
+    """Height of the plot; default None and will full-page heuristic."""
+    bool_top: bool = True
+    """Show entire sequence view on top or not (no text, with zoom)."""
+    bool_reverse: bool = True
+    """Reverse the sequence or not."""
+    bool_gridplot: bool = True
+    """Use gridplot or not."""
 
     def __post_init__(self):
-        self.generate_alignment()
+        # reverse input sequences and ids if bool_reverse is True
+        if self.bool_reverse:
+            self.list_sequences = self.list_sequences[::-1]
+            self.list_ids = self.list_ids[::-1]
+
+        # set up variables
+        self.list_text = [i for s in self.list_sequences for i in s]
+        self.colors = self.get_colors(self.list_text, self.dict_colors)
+        self.N = len(self.list_sequences[0])  # number of residues
+        self.S = len(self.list_sequences)  # number of sequences
+
+        # bokeh plots
+        self.source = self.create_coldatasource()
+        self.plot_bottom = self.generate_bottom_plot()
+        if self.bool_top:
+            self.plot_top = self.generate_top_plot()
+        else:
+            self.plot_top = None
+        if self.bool_gridplot:
+            self.gridplot = self.generate_gridplot()
+        else:
+            self.gridplot = None
 
     @staticmethod
     def get_colors(
@@ -83,18 +117,9 @@ class SequenceAlignment:
         list_colors = [dict_colors[i] for i in list_str]
         return list_colors
 
-    def generate_alignment(self) -> None:
-        """Generate sequence alignment plot adapted from https://dmnfarrell.github.io/bioinformatics/bokeh-sequence-aligner."""
-
-        # reverse text and colors so A-Z is top-bottom not bottom-top
-        list_text = [i for s in self.list_sequences[::-1] for i in s]
-        colors = self.get_colors(list_text, self.dict_colors)
-
-        N = len(self.list_sequences[0])
-        S = len(self.list_sequences)
-
-        x = np.arange(1, N + 1)
-        y = np.arange(0, S, 1)
+    def create_coldatasource(self):
+        x = np.arange(1, self.N + 1)
+        y = np.arange(0, self.S, 1)
         # creates a 2D grid of coords from the 1D arrays
         xx, yy = np.meshgrid(x, y)
         # flattens the arrays
@@ -108,23 +133,24 @@ class SequenceAlignment:
                 x=gx,
                 y=gy,
                 recty=recty,
-                text=list_text,
-                colors=colors,
+                text=self.list_text,
+                colors=self.colors,
             )
         )
-        x_range = Range1d(0, N + 1, bounds="auto")
-        if N > 100:
-            viewlen = 100
-        else:
-            viewlen = N
+        return source
+
+    def generate_top_plot(self) -> None:
+        """Generate sequence alignment plot adapted from https://dmnfarrell.github.io/bioinformatics/bokeh-sequence-aligner."""
+
+        x_range = Range1d(0, self.N + 1, bounds="auto")
 
         # entire sequence view (no text, with zoom)
-        p = figure(
+        p_top = figure(
             title=None,
             frame_width=self.plot_width,
             frame_height=50,
             x_range=x_range,
-            y_range=(0, S),
+            y_range=(0, self.S),
             tools="xpan, xwheel_zoom, reset, save",
             min_border=0,
             toolbar_location="below",
@@ -138,23 +164,36 @@ class SequenceAlignment:
             line_color=None,
             fill_alpha=0.6,
         )
-        p.add_glyph(source, rects)
-        p.yaxis.visible = False
-        p.grid.visible = False
+        p_top.add_glyph(self.source, rects)
+        p_top.yaxis.visible = False
+        p_top.grid.visible = False
+
+        return p_top
+
+    def generate_bottom_plot(self) -> None:
+        """Generate sequence alignment plot adapted from https://dmnfarrell.github.io/bioinformatics/bokeh-sequence-aligner."""
+
+        if self.N > 100:
+            viewlen = 100
+        else:
+            viewlen = self.N
 
         # sequence text view with ability to scroll along x axis
         # view_range is for the close up view
         view_range = (0, viewlen)
-        plot_height = S * 15 + 50
-        p1 = figure(
+        if self.plot_height is None:
+            self.plot_height = self.S * 15 + 50
+        p_bottom = figure(
             title=None,
             frame_width=self.plot_width,
-            frame_height=plot_height,
+            frame_height=self.plot_height,
             x_range=view_range,
-            y_range=self.list_ids[::-1],
-            tools="xpan,reset",
+            y_range=self.list_ids,
+            tools="xpan, xwheel_zoom, reset, save",
             min_border=0,
             toolbar_location="below",
+            background_fill_color="white",
+            border_fill_color="white",
         )
         glyph = Text(
             x="x",
@@ -173,23 +212,30 @@ class SequenceAlignment:
             line_color=None,
             fill_alpha=0.4,
         )
-        p1.add_glyph(source, glyph)
-        p1.add_glyph(source, rects)
-        p1.grid.visible = False
-        p1.xaxis.major_label_text_font_style = "bold"
-        p1.yaxis.minor_tick_line_width = 0
-        p1.yaxis.major_tick_line_width = 0
+        p_bottom.add_glyph(self.source, glyph)
+        p_bottom.add_glyph(self.source, rects)
+        p_bottom.grid.visible = False
+        p_bottom.xaxis.major_label_text_font_style = "bold"
+        p_bottom.yaxis.minor_tick_line_width = 0
+        p_bottom.yaxis.major_tick_line_width = 0
+        p_bottom.yaxis.axis_label_text_color = "black"
+        p_bottom.yaxis.major_label_text_color = "black"
+        p_bottom.xaxis.axis_label_text_color = "black"
+        p_bottom.xaxis.major_label_text_color = "black"
 
-        self.plot = gridplot([[p], [p1]], toolbar_location="below")
+        return p_bottom
+
+    def generate_gridplot(self) -> None:
+        """Generate sequence alignment gridplot."""
+        if self.bool_top:
+            return gridplot(
+                [[self.plot_top], [self.plot_bottom]], toolbar_location="below"
+            )
+        else:
+            return gridplot([[self.plot_bottom]], toolbar_location="below")
 
     def show_plot(self) -> None:
-        """Show sequence alignment plot via Bokeh."""
+        """Show sequence alignment plot via Bokeh in separate window."""
         from bokeh.plotting import show
 
-        # show in separate window
-        show(self.plot)
-
-        # notebook alternative
-        # import panel as pn # not dependency - install separately
-        # pn.extension()
-        # pn.pane.Bokeh(alignment_klifs_min.plot)
+        show(self.gridplot)

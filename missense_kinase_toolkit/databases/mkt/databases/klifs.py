@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 # start/end and colors courtesy of OpenCADD
+# https://github.com/volkamerlab/opencadd/blob/master/opencadd/databases/klifs/schema.py
 DICT_POCKET_KLIFS_REGIONS = {
     "I": {
         "start": 1,
@@ -1080,7 +1081,7 @@ class KLIFSPocket:
         list_keys = list(dict_in.keys())
         list_idx = [idx for idx, i in enumerate(dict_in.keys()) if region in i]
 
-        # TODO: ATR and CAMKK1 have inter hinge:linker region
+        # ATR and CAMKK1 have inter hinge:linker region
         start = list_idx[idx_in]
         end = list_idx[idx_out]
 
