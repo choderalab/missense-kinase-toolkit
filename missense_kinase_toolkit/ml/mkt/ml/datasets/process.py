@@ -1,15 +1,13 @@
-from os import path
 import logging
-import pandas as pd
-from pydantic import BaseModel, Field
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from os import path
 
-from mkt.schema.io_utils import deserialize_kinase_dict
+import pandas as pd
 from mkt.ml.constants import KinaseGroupSource
 from mkt.ml.utils import get_repo_root, rgetattr
 from mkt.schema.io_utils import deserialize_kinase_dict
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +35,6 @@ class DatasetConfig(BaseModel):
         arbitrary_types_allowed = True
 
 
-
 class PKIS2Config(DatasetConfig):
     """Configuration for the PKIS2 dataset."""
 
@@ -62,13 +59,16 @@ class DavisConfig(DatasetConfig):
 
 class ProcessDataset(ABC):
     """DataSet class for handling dataset configurations."""
-    df: pd.DataFrame = Field(default=None, exclude=True, validate_default=False, repr=False)
+
+    df: pd.DataFrame = Field(
+        default=None, exclude=True, validate_default=False, repr=False
+    )
     """DataFrame to hold the processed dataset."""
-    
+
     def __init__(self, **kwargs):
         """Initialize the dataset processor."""
         self.__dict__.update(kwargs)
-        
+
         self.df = self.process()
         self.df = self.add_klifs_column()
         self.df = self.add_kincore_kd_column()
@@ -76,7 +76,7 @@ class ProcessDataset(ABC):
         self.df = self.drop_na_rows()
         self.df = self.standardize_colnames()
 
-        if getattr(self, 'bool_save', True):
+        if getattr(self, "bool_save", True):
             self.save_data2csv()
 
     @abstractmethod
@@ -89,7 +89,9 @@ class ProcessDataset(ABC):
         if self.df is None:
             logger.error("DataFrame is None. Cannot save to CSV.")
             return
-        filepath = path.join(get_repo_root(), f"data/{self.name.lower()}_data_processed.csv")
+        filepath = path.join(
+            get_repo_root(), f"data/{self.name.lower()}_data_processed.csv"
+        )
         self.df.to_csv(filepath, index=False)
         logger.info(f"Processed data saved to {filepath}")
 
@@ -101,7 +103,7 @@ class ProcessDataset(ABC):
         )
         return df
 
-    #TODO: use cif first and then fallback to fasta
+    # TODO: use cif first and then fallback to fasta
     def add_kincore_kd_column(self) -> pd.DataFrame:
         """Add Kincore KD column to the DataFrame."""
         df = self.df.copy()
@@ -115,13 +117,18 @@ class ProcessDataset(ABC):
         df = self.df.copy()
         if self.attr_group.value is None:
             df["group_consensus"] = df[self.col_kinase].apply(
-                lambda x: DICT_KINASE.get(x, None).adjudicate_group() \
-                    if DICT_KINASE.get(x, None) else None
+                lambda x: (
+                    DICT_KINASE.get(x, None).adjudicate_group()
+                    if DICT_KINASE.get(x, None)
+                    else None
+                )
             )
         else:
             suffix = self.attr_group.value.split(".")[0]
             df[f"group_{suffix}"] = df[self.col_kinase].apply(
-                lambda x: rgetattr(DICT_KINASE.get(x, None), self.attr_group.value, None)
+                lambda x: rgetattr(
+                    DICT_KINASE.get(x, None), self.attr_group.value, None
+                )
             )
         return df
 
@@ -151,11 +158,11 @@ class PKIS2Dataset(PKIS2Config, ProcessDataset):
         """Initialize PKIS2 dataset."""
         # Initialize the Pydantic model first
         super().__init__(**kwargs)
-        
+
         # Get config defaults and update with any provided kwargs
         config_dict = PKIS2Config().model_dump()
         config_dict.update(kwargs)
-        
+
         # Initialize ProcessDataset with the config values
         ProcessDataset.__init__(self, **config_dict)
 
@@ -184,11 +191,11 @@ class DavisDataset(DavisConfig, ProcessDataset):
         """Initialize Davis dataset."""
         # Initialize the Pydantic model first
         super().__init__(**kwargs)
-        
+
         # Get config defaults and update with any provided kwargs
         config_dict = DavisConfig().model_dump()
         config_dict.update(kwargs)
-        
+
         # Initialize ProcessDataset with the config values
         ProcessDataset.__init__(self, **config_dict)
 
@@ -196,12 +203,10 @@ class DavisDataset(DavisConfig, ProcessDataset):
         """Process the Davis dataset."""
         from tdc.multi_pred import DTI
 
-        data = DTI(name = self.name)
+        data = DTI(name=self.name)
         data.harmonize_affinities("mean")
 
         df = data.get_data()
-        df_keep = df[
-            [self.col_drug, self.col_kinase, self.col_y]
-        ]
+        df_keep = df[[self.col_drug, self.col_kinase, self.col_y]]
 
         return df_keep
