@@ -3,10 +3,13 @@ import logging
 import pandas as pd
 from pydantic import BaseModel, Field
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 
 from mkt.schema.io_utils import deserialize_kinase_dict
 from mkt.ml.constants import KinaseGroupSource
 from mkt.ml.utils import get_repo_root, rgetattr
+from mkt.schema.io_utils import deserialize_kinase_dict
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +37,14 @@ class DatasetConfig(BaseModel):
         arbitrary_types_allowed = True
 
 
+
 class PKIS2Config(DatasetConfig):
     """Configuration for the PKIS2 dataset."""
+
     name: str = "PKIS2"
-    url: str = "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv"
+    url: str = (
+        "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv"
+    )
     col_drug: str = "Smiles"
     col_kinase: str = "Kinase"
     col_y: str = "Percent Displacement"
@@ -45,6 +52,7 @@ class PKIS2Config(DatasetConfig):
 
 class DavisConfig(DatasetConfig):
     """Configuration for the Davis dataset."""
+
     name: str = "DAVIS"
     url: str | None = None  # URL will be set in the DavisDataset class
     col_drug: str = "Drug"
@@ -162,7 +170,7 @@ class PKIS2Dataset(PKIS2Config, ProcessDataset):
 
         df_melt = df_pivot.reset_index().melt(
             id_vars=self.col_drug,
-            var_name=self.col_kinase, 
+            var_name=self.col_kinase,
             value_name=self.col_y,
         )
 
