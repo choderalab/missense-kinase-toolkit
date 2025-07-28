@@ -86,6 +86,14 @@ class ProcessDataset(ABC):
         )
         return df
 
+    def add_kincore_kd_column(self) -> pd.DataFrame:
+        """Add Kincore KD column to the DataFrame."""
+        df = self.df.copy()
+        df["kincore_kd"] = df[self.col_kinase].apply(
+            lambda x: rgetattr(DICT_KINASE.get(x, None), "kincore.kd", None)
+        )
+        return df
+
     def add_kinase_group_column(self) -> pd.DataFrame:
         """Add kinase group column to the DataFrame."""
         df = self.df.copy()
