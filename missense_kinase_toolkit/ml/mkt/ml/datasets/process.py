@@ -72,7 +72,7 @@ class ProcessDataset(ABC):
         self.df = self.add_klifs_column()
         self.df = self.add_kincore_kd_column()
         self.df = self.add_kinase_group_column()
-        #TODO: better map Davis kinase names (e.g., mutant, phos, domains, etc.)
+        # TODO: better map Davis kinase names (e.g., mutant, phos, domains, etc.)
         self.df = self.drop_na_rows()
         self.df = self.standardize_colnames()
         self.df = self.add_source_column()
