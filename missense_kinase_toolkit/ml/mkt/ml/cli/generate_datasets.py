@@ -1,12 +1,12 @@
-import logging
 import argparse
-import numpy as np
-import pandas as pd
+import logging
 from os import path
 
+import numpy as np
+import pandas as pd
+from mkt.ml.datasets.process import DavisDataset, PKIS2Dataset
 from mkt.ml.log_config import add_logging_flags, configure_logging
 from mkt.ml.utils import get_repo_root
-from mkt.ml.datasets.process import DavisDataset, PKIS2Dataset
 
 logger = logging.getLogger(__name__)
 
@@ -18,19 +18,19 @@ def parse_args():
     parser.add_argument(
         "--drop_pkis2",
         action="store_true",
-        help="Drop PKIS2 values where percent displacement is 0."
+        help="Drop PKIS2 values where percent displacement is 0.",
     )
 
     parser.add_argument(
         "--drop_davis",
         action="store_true",
-        help="Drop Davis values where Kd exceeds 10,000."
+        help="Drop Davis values where Kd exceeds 10,000.",
     )
 
     parser.add_argument(
         "--col_dropna",
         type=str,
-        nargs='+',
+        nargs="+",
         default=["klifs", "kincore_kd"],
         help="Column to drop NA values from (default: kincore_kd).",
     )
@@ -38,6 +38,7 @@ def parse_args():
     parser = add_logging_flags(parser)
 
     return parser.parse_args()
+
 
 def main():
     """Main function to process datasets and print DataFrame shapes."""
@@ -74,21 +75,31 @@ def main():
     if list_drop != []:
         logger.info(f"Dropping NAs from columns: {list_drop}")
 
-        logger.info(f"PKIS2: {df_pkis2[list_drop].isna().any(axis=1).sum():,} rows with NAs")
+        logger.info(
+            f"PKIS2: {df_pkis2[list_drop].isna().any(axis=1).sum():,} rows with NAs"
+        )
         df_pkis2 = df_pkis2.dropna(subset=list_drop).reset_index(drop=True)
         if args.drop_pkis2:
-            logger.info(f"PKIS2: {(df_pkis2['y'] == 0).sum():,} rows with 0 percent displacement")
+            logger.info(
+                f"PKIS2: {(df_pkis2['y'] == 0).sum():,} rows with 0 percent displacement"
+            )
             df_pkis2 = df_pkis2[df_pkis2["y"] != 0].reset_index(drop=True)
         # higher percent displacement values are more potent
-        df_pkis2["z-score"] = (df_pkis2["y"] - df_pkis2["y"].mean()) / df_pkis2["y"].std()
+        df_pkis2["z-score"] = (df_pkis2["y"] - df_pkis2["y"].mean()) / df_pkis2[
+            "y"
+        ].std()
 
-        logger.info(f"Davis: {df_davis[list_drop].isna().any(axis=1).sum():,} rows with NAs")
+        logger.info(
+            f"Davis: {df_davis[list_drop].isna().any(axis=1).sum():,} rows with NAs"
+        )
         df_davis = df_davis.dropna(subset=list_drop).reset_index(drop=True)
         if args.drop_davis:
-            logger.info(f"Davis: {(df_davis['y'] == 10000).sum():,} rows with Kd = 10,000")
+            logger.info(
+                f"Davis: {(df_davis['y'] == 10000).sum():,} rows with Kd = 10,000"
+            )
             df_davis = df_davis[df_davis["y"] < 10000].reset_index(drop=True)
         # lower Kd values are more potent - convert to micromolar and then pKd
-        series_pkd = df_davis["y"].apply(lambda x: -np.log10(x/1000))
+        series_pkd = df_davis["y"].apply(lambda x: -np.log10(x / 1000))
         df_davis["z-score"] = (series_pkd - series_pkd.mean()) / series_pkd.std()
 
     df_concat = pd.concat([df_pkis2, df_davis], ignore_index=True)
