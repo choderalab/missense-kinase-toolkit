@@ -16,15 +16,15 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Generate datasets for ML models.")
 
     parser.add_argument(
-        "--drop_pkis2",
+        "--keep_pkis2",
         action="store_true",
-        help="Drop PKIS2 values where percent displacement is 0.",
+        help="Keep PKIS2 values where percent displacement is 0.",
     )
 
     parser.add_argument(
-        "--drop_davis",
+        "--keep_davis",
         action="store_true",
-        help="Drop Davis values where Kd exceeds 10,000.",
+        help="Keep Davis values where Kd exceeds 10,000.",
     )
 
     parser.add_argument(
@@ -48,7 +48,7 @@ def main():
     configure_logging()
 
     try:
-        pkis2_dataset = PKIS2Dataset()
+        pkis2_dataset = PKIS2Dataset(bool_save=False)
         logger.info(
             "Initialized PKIS2Dataset successfully and saved.\n"
             f"Number of kinases: {pkis2_dataset.df["kinase_name"].nunique():,}\n"
@@ -59,7 +59,7 @@ def main():
         return
 
     try:
-        davis_dataset = DavisDataset()
+        davis_dataset = DavisDataset(bool_save=False)
         logger.info(
             "Initialized DavisDataset successfully and saved.\n"
             f"Number of kinases: {davis_dataset.df["kinase_name"].nunique():,}\n"
@@ -79,7 +79,7 @@ def main():
             f"PKIS2: {df_pkis2[list_drop].isna().any(axis=1).sum():,} rows with NAs"
         )
         df_pkis2 = df_pkis2.dropna(subset=list_drop).reset_index(drop=True)
-        if args.drop_pkis2:
+        if not args.keep_pkis2:
             logger.info(
                 f"PKIS2: {(df_pkis2['y'] == 0).sum():,} rows with 0 percent displacement"
             )
@@ -93,7 +93,7 @@ def main():
             f"Davis: {df_davis[list_drop].isna().any(axis=1).sum():,} rows with NAs"
         )
         df_davis = df_davis.dropna(subset=list_drop).reset_index(drop=True)
-        if args.drop_davis:
+        if not args.keep_davis:
             logger.info(
                 f"Davis: {(df_davis['y'] == 10000).sum():,} rows with Kd = 10,000"
             )
@@ -109,6 +109,12 @@ def main():
         f"Compounds: {df_concat.loc[df_concat['source'] == 'PKIS2', 'smiles'].nunique()} (PKIS2), "
         f"{df_concat.loc[df_concat['source'] == 'Davis', 'smiles'].nunique()} (Davis)\n"
     )
+
+    filepath = path.join(get_repo_root(), "data/pkis2_data_processed.csv")
+    df_pkis2.to_csv(filepath, index=False)
+
+    filepath = path.join(get_repo_root(), "data/davis_data_processed.csv")
+    df_davis.to_csv(filepath, index=False)
 
     filepath = path.join(get_repo_root(), "data/concat_data_processed.csv")
     df_concat.to_csv(filepath, index=False)
