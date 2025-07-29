@@ -13,13 +13,13 @@ else
     exit 1
 fi
 
-# check if boltz2 env already exists
-if conda env list | grep -q ${ENV_NAME}; then
-    echo "${ENV_NAME} environment already exists. Please remove it first."
-    exit 1
-else
-    echo "${ENV_NAME} environment does not exist, proceeding with creation..."
-fi
+# check if boltz2 env already exists - this doesn't work properly!
+# if conda env list | grep -q ${ENV_NAME}; then
+#     echo "${ENV_NAME} environment already exists. Please remove it first."
+#     exit 1
+# else
+#     echo "${ENV_NAME} environment does not exist, proceeding with creation..."
+# fi
 
 # check if GPU is available
 if command -v nvidia-smi &> /dev/null; then
@@ -46,7 +46,7 @@ else
     conda env config vars set BOLTZ_CACHE=${BOLTZ_CACHE}
 fi
 
-pip install boltz -U
+pip install boltz[cuda] -U
 
 if [ $? -eq 0 ]; then
     echo "Environment boltz2 created and activated successfully."
