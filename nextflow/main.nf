@@ -26,9 +26,11 @@ log.info """\
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-include { CREATE_YAML       } from './modules/boltz2/main.nf'  addParams(OUTPUT: "${params.outputDir}/outputs/yaml")
-include { RUN_BOLTZ2        } from './modules/boltz2/main.nf'  addParams(OUTPUT: "${params.outputDir}/outputs/boltz_results")
-include { SAVE_RESULTS_CSV  } from './modules/utils/main.nf' addParams(outputDir: "${params.outputDir}/outputs")
+include { CREATE_YAML       } from './modules/boltz2/main.nf'   addParams(OUTPUT: "${params.outputDir}/outputs/yaml")
+include { RUN_BOLTZ2        } from './modules/boltz2/main.nf'   addParams(OUTPUT: "${params.outputDir}/outputs/boltz_results")
+
+include { WRITE_CSV_ROW     } from './modules/utils/main.nf'
+include { COMBINE_CSV_ROWS  } from './modules/utils/main.nf'   addParams(OUTPUT: "${params.outputDir}/outputs")
 
 /*
 ========================================================================================
@@ -59,8 +61,14 @@ workflow BOLTZ_CSV {
     RUN_BOLTZ2( CREATE_YAML.out.yaml )
 
     csv_tuples
-        .join(RUN_BOLTZ2.out.all_results, by: 0) // Join by UUID (first element)
+        .join(RUN_BOLTZ2.out.all_results, by: 0)
         .set { joined_results }
-
-    SAVE_RESULTS_CSV( joined_results )
+    
+    WRITE_CSV_ROW( joined_results )
+    
+    WRITE_CSV_ROW.out.csv_row
+        .collect()
+        .set { all_csv_rows }
+    
+    COMBINE_CSV_ROWS( all_csv_rows )
 }
