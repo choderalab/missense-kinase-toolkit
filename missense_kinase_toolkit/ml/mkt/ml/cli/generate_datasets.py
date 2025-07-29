@@ -116,5 +116,6 @@ def main():
     filepath = path.join(get_repo_root(), "data/davis_data_processed.csv")
     df_davis.to_csv(filepath, index=False)
 
+
     filepath = path.join(get_repo_root(), "data/concat_data_processed.csv")
     df_concat.to_csv(filepath, index=False)
