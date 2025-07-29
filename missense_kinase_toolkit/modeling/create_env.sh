@@ -6,7 +6,7 @@ ENV_NAME="boltz2"
 source ~/.bashrc
 
 # check if mamba is installed
-if command -v mamba &> /dev/null; then  
+if command -v mamba &> /dev/null; then
     echo "mamba is installed, proceeding with environment creation..."
 else
     echo "mamba is not installed. Please install mamba first."
