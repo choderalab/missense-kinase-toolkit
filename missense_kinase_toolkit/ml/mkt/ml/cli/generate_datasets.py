@@ -1,5 +1,6 @@
 import logging
 import argparse
+import numpy as np
 import pandas as pd
 from os import path
 
@@ -78,6 +79,7 @@ def main():
         if args.drop_pkis2:
             logger.info(f"PKIS2: {(df_pkis2['y'] == 0).sum():,} rows with 0 percent displacement")
             df_pkis2 = df_pkis2[df_pkis2["y"] != 0].reset_index(drop=True)
+        # higher percent displacement values are more potent
         df_pkis2["z-score"] = (df_pkis2["y"] - df_pkis2["y"].mean()) / df_pkis2["y"].std()
 
         logger.info(f"Davis: {df_davis[list_drop].isna().any(axis=1).sum():,} rows with NAs")
@@ -85,7 +87,9 @@ def main():
         if args.drop_davis:
             logger.info(f"Davis: {(df_davis['y'] == 10000).sum():,} rows with Kd = 10,000")
             df_davis = df_davis[df_davis["y"] < 10000].reset_index(drop=True)
-        df_davis["z-score"] = (df_davis["y"] - df_davis["y"].mean()) / df_davis["y"].std()    
+        # lower Kd values are more potent - convert to micromolar and then pKd
+        series_pkd = df_davis["y"].apply(lambda x: -np.log10(x/1000))
+        df_davis["z-score"] = (series_pkd - series_pkd.mean()) / series_pkd.std()
 
     df_concat = pd.concat([df_pkis2, df_davis], ignore_index=True)
     logger.info(
