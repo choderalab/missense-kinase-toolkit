@@ -41,13 +41,13 @@ workflow {
         .map { row ->
             [
                 UUID.randomUUID().toString(),
-                row.smiles, 
-                row.kinase_name, 
-                row.y, 
-                row.klifs, 
-                row.kincore_kd, 
-                row.group_consensus, 
-                row.source, 
+                row.smiles,
+                row.kinase_name,
+                row.y,
+                row.klifs,
+                row.kincore_kd,
+                row.group_consensus,
+                row.source,
                 row.'z-score'
             ]
         }

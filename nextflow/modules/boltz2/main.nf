@@ -17,7 +17,7 @@ process CREATE_YAML {
 
     output:
     tuple val(uuid), path("${uuid}.yaml"), emit: yaml
-    
+
     script:
     """
     create_yaml.py \\
@@ -29,17 +29,17 @@ process CREATE_YAML {
 
 process RUN_BOLTZ2 {
     label 'gpu'
-    
+
     conda "${params.envBoltz}"
     publishDir "${params.OUTPUT}", mode: 'copy', overwrite: true
-    
+
     input:
     tuple val(uuid), path(yaml_file)
-    
+
     output:
     tuple val(uuid), path("boltz_results_${uuid}"), emit: all_results
     tuple val(uuid), path("boltz_results_${uuid}/predictions/${uuid}/*.cif"), emit: cif_file
-    
+
     script:
     def msa_server_flag = params.useMSAServer ? "--use_msa_server" : ""
     """
