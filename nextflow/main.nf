@@ -26,8 +26,9 @@ log.info """\
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-include { CREATE_YAML   } from './modules/boltz2/main.nf'  addParams(OUTPUT: "${params.outputDir}/outputs/yaml")
-include { RUN_BOLTZ2    } from './modules/boltz2/main.nf'  addParams(OUTPUT: "${params.outputDir}/outputs/boltz_results")
+include { CREATE_YAML       } from './modules/boltz2/main.nf'  addParams(OUTPUT: "${params.outputDir}/outputs/yaml")
+include { RUN_BOLTZ2        } from './modules/boltz2/main.nf'  addParams(OUTPUT: "${params.outputDir}/outputs/boltz_results")
+include { SAVE_RESULTS_CSV  } from './modules/utils/main.nf' addParams(outputDir: "${params.outputDir}/outputs")
 
 /*
 ========================================================================================
@@ -35,7 +36,7 @@ include { RUN_BOLTZ2    } from './modules/boltz2/main.nf'  addParams(OUTPUT: "${
 ========================================================================================
 */
 
-workflow {
+workflow BOLTZ_CSV {
     Channel.fromPath("${params.fileName}", checkIfExists: true)
         .splitCsv(header: true)
         .map { row ->
@@ -53,8 +54,13 @@ workflow {
         }
         .set { csv_tuples }
 
-
     CREATE_YAML( csv_tuples )
 
     RUN_BOLTZ2( CREATE_YAML.out.yaml )
+
+    csv_tuples
+        .join(RUN_BOLTZ2.out.all_results, by: 0) // Join by UUID (first element)
+        .set { joined_results }
+
+    SAVE_RESULTS_CSV( joined_results )
 }
