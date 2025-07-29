@@ -1,8 +1,7 @@
-process SAVE_RESULTS_CSV {
+process WRITE_CSV_ROW {
     label 'cpu'
     
     conda "${params.envModeling}"
-    publishDir "${params.outputDir}/results", mode: 'copy', overwrite: true
     
     input:
     tuple val(uuid),
@@ -17,16 +16,32 @@ process SAVE_RESULTS_CSV {
           path(boltz_results)
     
     output:
+    path "${uuid}.csv", emit: csv_row
+    
+    script:
+    """
+    echo "${uuid},${smiles},${kinase_name},${y},${klifs},${kincore_kd},${group_consensus},${source},${z_score},${boltz_results}" > ${uuid}.csv
+    """
+}
+
+process COMBINE_CSV_ROWS {
+    label 'cpu'
+    
+    conda "${params.envModeling}"
+    publishDir "${params.OUTPUT}", mode: 'copy', overwrite: true
+    
+    input:
+    path csv_rows, stageAs: "row_*.csv"
+    
+    output:
     path "results_with_uuid.csv", emit: results_csv
     
     script:
     """
-    # Create CSV header if it doesn't exist
-    if [ ! -f results_with_uuid.csv ]; then
-        echo "uuid,smiles,kinase_name,y,klifs,kincore_kd,group_consensus,source,z-score,boltz_output_dir" > results_with_uuid.csv
-    fi
+    # Create header
+    echo "uuid,smiles,kinase_name,y,klifs,kincore_kd,group_consensus,source,z-score,boltz_output_dir" > results_with_uuid.csv
     
-    # Append this row to the CSV
-    echo "${uuid},${smiles},${kinase_name},${y},${klifs},${kincore_kd},${group_consensus},${source},${z_score},${boltz_results}" >> results_with_uuid.csv
+    # Combine all row files
+    cat row_*.csv >> results_with_uuid.csv
     """
 }
