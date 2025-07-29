@@ -63,12 +63,12 @@ workflow BOLTZ_CSV {
     csv_tuples
         .join(RUN_BOLTZ2.out.all_results, by: 0)
         .set { joined_results }
-    
+
     WRITE_CSV_ROW( joined_results )
-    
+
     WRITE_CSV_ROW.out.csv_row
         .collect()
         .set { all_csv_rows }
-    
+
     COMBINE_CSV_ROWS( all_csv_rows )
 }
