@@ -43,7 +43,7 @@ workflow BOLTZ_CSV {
         .splitCsv(header: true)
         .map { row ->
             [
-                UUID.randomUUID().toString(),
+                row.uuid,
                 row.smiles,
                 row.kinase_name,
                 row.y,
