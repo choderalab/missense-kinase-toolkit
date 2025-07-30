@@ -1,12 +1,14 @@
 import argparse
 import logging
 from os import path
+import random
+import uuid
 
 import numpy as np
 import pandas as pd
 from mkt.ml.datasets.process import DavisDataset, PKIS2Dataset
 from mkt.ml.log_config import add_logging_flags, configure_logging
-from mkt.ml.utils import get_repo_root
+from mkt.ml.utils import get_repo_root, random_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +70,13 @@ def main():
     except Exception as e:
         logger.error(f"Failed to process DavisDataset: {e}")
 
+    random.seed(42)
+
     df_pkis2 = pkis2_dataset.df.copy()
+    df_pkis2.insert(0, "uuid", [str(uuid.uuid4()) for _ in range(len(df_pkis2))])
+
     df_davis = davis_dataset.df.copy()
+    df_davis.insert(0, "uuid", [str(uuid.uuid4()) for _ in range(len(df_davis))])
 
     list_drop = args.col_dropna
     if list_drop != []:
