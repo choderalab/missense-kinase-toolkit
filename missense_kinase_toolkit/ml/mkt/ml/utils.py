@@ -145,6 +145,7 @@ def rgetattr(obj, attr, *args):
         return None
 
 
+# adapted from: https://nathanielknight.ca/articles/consistent_random_uuids_in_python.html
 def random_uuid():
     """Generate a random UUID that allows to set a seed.
 
