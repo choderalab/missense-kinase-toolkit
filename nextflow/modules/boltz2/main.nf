@@ -41,6 +41,7 @@ process RUN_BOLTZ2 {
     tuple val(uuid), path("boltz_results_${uuid}/predictions/${uuid}/*.cif"), emit: cif_file
 
     script:
+    def output_format_flag = params.usePDB ? "--output_format pdb" : "--output_format mmcif"
     def msa_server_flag = params.useMSAServer ? "--use_msa_server" : ""
     """
     echo "Running boltz with:"
@@ -52,6 +53,7 @@ process RUN_BOLTZ2 {
     boltz predict ${yaml_file} \\
         --accelerator gpu \\
         --cache \$BOLTZ_CACHE \\
+        ${output_format_flag} \\
         ${msa_server_flag}
     """
 }
