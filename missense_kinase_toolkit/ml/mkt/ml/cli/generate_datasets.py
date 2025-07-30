@@ -73,10 +73,10 @@ def main():
     random.seed(42)
 
     df_pkis2 = pkis2_dataset.df.copy()
-    df_pkis2.insert(0, "uuid", [str(uuid.uuid4()) for _ in range(len(df_pkis2))])
+    df_pkis2.insert(0, "uuid", [str(random_uuid()) for _ in range(len(df_pkis2))])
 
     df_davis = davis_dataset.df.copy()
-    df_davis.insert(0, "uuid", [str(uuid.uuid4()) for _ in range(len(df_davis))])
+    df_davis.insert(0, "uuid", [str(random_uuid()) for _ in range(len(df_davis))])
 
     list_drop = args.col_dropna
     if list_drop != []:
