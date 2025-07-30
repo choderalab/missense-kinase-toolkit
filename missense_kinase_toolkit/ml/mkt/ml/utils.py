@@ -144,6 +144,7 @@ def rgetattr(obj, attr, *args):
     except AttributeError:
         return None
 
+
 def random_uuid():
     """Generate a random UUID that allows to set a seed.
 

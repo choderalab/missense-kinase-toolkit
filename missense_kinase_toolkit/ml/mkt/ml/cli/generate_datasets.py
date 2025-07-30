@@ -1,8 +1,8 @@
 import argparse
 import logging
-from os import path
 import random
 import uuid
+from os import path
 
 import numpy as np
 import pandas as pd
