@@ -1,7 +1,6 @@
 import argparse
 import logging
 import random
-import uuid
 from os import path
 
 import numpy as np
