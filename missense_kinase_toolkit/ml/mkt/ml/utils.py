@@ -143,3 +143,16 @@ def rgetattr(obj, attr, *args):
         return functools.reduce(_getattr, [obj] + attr.split("."))
     except AttributeError:
         return None
+
+def random_uuid():
+    """Generate a random UUID that allows to set a seed.
+
+    Returns
+    -------
+    str
+        A random UUID as a string.
+    """
+    import random
+    import uuid
+
+    return uuid.UUID(bytes=bytes(random.getrandbits(8) for _ in range(16)), version=4)
