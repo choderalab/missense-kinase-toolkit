@@ -3,12 +3,12 @@ requires = ["setuptools>=61.0", "versioningit"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mkt-ml"
+name = "mkt-modeling"
 dynamic = ["version"]
 authors = [
   { name="Jess White", email="jessica.white@choderalab.org" },
 ]
-description = "Module in missense-kinase-toolkit for machine learning experiments"
+description = "Module in missense-kinase-toolkit for modeling experiments"
 readme = "README.md"
 requires-python = ">=3.9,<3.13"
 classifiers = [
@@ -28,10 +28,6 @@ test = ["pytest==8.0.1", "pytest-runner==6.0.1"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-
-[project.scripts]
-generate_datasets = "mkt.ml.cli.generate_datasets:main"
-run_trainer = "mkt.ml.cli.run_trainer:main"
 
 [tool.versioningit]
 default-version = "1+unknown"
