@@ -7,6 +7,7 @@ logger = logging.getLogger(__name__)
 LIST_PFAM_KD = [
     "Protein kinase domain",
     "Protein tyrosine and serine/threonine kinase",
+    "Serine/threonine-protein kinase mTOR domain",
 ]
 """list[str]: List of Pfam kinase domain names."""
 

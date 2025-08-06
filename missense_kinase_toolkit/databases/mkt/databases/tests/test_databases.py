@@ -67,13 +67,15 @@ class TestDatabases:
         assert io_utils.convert_str2list("a,b,c") == ["a", "b", "c"]
         assert io_utils.convert_str2list("a, b, c") == ["a", "b", "c"]
 
-    def test_requests_wrapper(self, capsys):
+    def test_utils_requests(self, capsys):
         import requests
         from mkt.databases import uniprot, utils_requests
 
-        uniprot.UniProtFASTA("TEST")
+        # conform with SwissProt ID pattern
+        uniprot_id = "L91119"
+        uniprot.UniProtFASTA(uniprot_id)
         out, _ = capsys.readouterr()
-        assert out == "Error code: 400 (Bad request)\n"
+        assert out == f"Error code: 400 (Bad request)\nUniProt ID: {uniprot_id}\n\n"
 
         utils_requests.print_status_code_if_res_not_ok(
             requests.get("https://rest.uniprot.org/uniprotkb/TEST"),
@@ -90,8 +92,6 @@ class TestDatabases:
         assert out == "Error code: 400\n"
 
     def test_cbioportal(self):
-        import os
-
         from mkt.databases import cbioportal, config
 
         config.set_cbioportal_instance("www.cbioportal.org")
@@ -116,24 +116,23 @@ class TestDatabases:
 
         # test that Zehir cohort is available
         study = "msk_impact_2017"
-        list_studies = (
-            cbioportal_instance._cbioportal.Studies.getAllStudiesUsingGET().result()
-        )
-        list_study_ids = [study.studyId for study in list_studies]
-        assert study in list_study_ids
+        mutations_instance = cbioportal.Mutations(study_id=study)
+        assert mutations_instance.check_entity_id() is True
+        assert mutations_instance.get_entity_id() == study
+        assert mutations_instance._df.shape[0] == 78142
 
-        # test that the function to get all mutations by study works
-        df = cbioportal.Mutations(study).get_cbioportal_cohort_mutations()
-        assert df.shape[0] == 78142
+        # make sure save works - no longer saving to file
+        # import os
+        # mutations_instance = cbioportal.Mutations(study)
+        # mutations_instance.get_cbioportal_cohort_mutations(bool_save=True)
+        # assert os.path.isfile(f"{mutations_instance.study_id}_mutations.csv") is True
+        # os.remove(f"{mutations_instance.study_id}_mutations.csv")
 
-        # make sure save works
-        mutations_instance = cbioportal.Mutations(study)
-        mutations_instance.get_cbioportal_cohort_mutations(bool_save=True)
-        assert os.path.isfile(f"{mutations_instance.study_id}_mutations.csv") is True
-        os.remove(f"{mutations_instance.study_id}_mutations.csv")
-
-        assert mutations_instance.get_study_id() == study
-        assert mutations_instance._mutations is not None
+        panel = "IMPACT341"
+        panel_instance = cbioportal.GenePanel(panel_id=panel)
+        assert panel_instance.check_entity_id() is True
+        assert panel_instance._df.shape[0] == 341
+        assert panel_instance._df.shape[1] == 2
 
     def test_hgnc(self):
         from mkt.databases import hgnc
@@ -171,33 +170,48 @@ class TestDatabases:
         assert test.hgnc == "ABL1"
 
     def test_kincore_klifs(self):
+        from itertools import chain
+
         from mkt.databases import klifs, uniprot
         from mkt.databases.kincore import (
             align_kincore2uniprot,
-            extract_pk_fasta_info_as_dict,
+            extract_pk_cif_files_as_list,
+            harmonize_kincore_fasta_cif,
         )
 
         # test KinCore
         uniprot_id = "P00533"
         egfr_uniprot = uniprot.UniProtFASTA(uniprot_id)
-        dict_kincore = extract_pk_fasta_info_as_dict()
+        dict_kincore = harmonize_kincore_fasta_cif()
+
+        # make sure the number of non-None cif files is correct
+        list_dict_cif_hgnc = [
+            [entry.cif.hgnc for entry in v if entry.cif is not None]
+            for v in dict_kincore.values()
+        ]
+        list_dict_cif_hgnc = list(chain(*list_dict_cif_hgnc))
+        list_kincore_cif = extract_pk_cif_files_as_list()
+        assert len(list_dict_cif_hgnc) == len(list_kincore_cif)
+
+        assert len(dict_kincore[uniprot_id]) == 1
 
         egfr_align = align_kincore2uniprot(
-            str_kincore=dict_kincore[uniprot_id]["seq"],
+            str_kincore=dict_kincore[uniprot_id][0].fasta.seq,
             str_uniprot=egfr_uniprot._sequence,
         )
 
         assert (
             egfr_align["seq"]
-            == "FKKIKVLGSGAFGTVYKGLWIPEGEKVKIPVAIKELREATSPKANKEILDEAYVMASVDNPHVCRLLGICLTSTVQLITQLMPFGCLLDYVREHKDNIGSQYLLNWCVQIAKGMNYLEDRRLVHRDLAARNVLVKTPQHVKITDFGLAKLLGAEEKEYHAEGGKVPIKWMALESILHRIYTHQSDVWSYGVTVWELMTFGSKPYDGIPASEISSILEKGERLPQPPICTIDVYMIMVKCWMIDADSRPKFRELIIEFSK"
+            == "LRILKETEFKKIKVLGSGAFGTVYKGLWIPEGEKVKIPVAIKELREATSPKANKEILDEAYVMASVDNPHVCRLLGICLTSTVQLITQLMPFGCLLDYVREHKDNIGSQYLLNWCVQIAKGMNYLEDRRLVHRDLAARNVLVKTPQHVKITDFGLAKLLGAEEKEYHAEGGKVPIKWMALESILHRIYTHQSDVWSYGVTVWELMTFGSKPYDGIPASEISSILEKGERLPQPPICTIDVYMIMVKCWMIDADSRPKFRELIIEFSKMARDPQRY"
         )
-        assert egfr_align["start"] == 712
-        assert egfr_align["end"] == 970
+        assert egfr_align["start"] == 704
+        assert egfr_align["end"] == 978
         assert egfr_align["mismatch"] is None
 
         # test KLIFS
         temp_obj = klifs.KinaseInfo("EGFR")
-        dict_egfr = temp_obj._kinase_info
+        assert len(temp_obj._kinase_info) == 1
+        dict_egfr = temp_obj.get_kinase_info()[0]
         if temp_obj.status_code == 200:
             assert dict_egfr["family"] == "EGFR"
             assert dict_egfr["full_name"] == "epidermal growth factor receptor"
@@ -393,7 +407,7 @@ class TestDatabases:
 
         # test that the function to scrape the KinHub database works
         df_kinhub = scrapers.kinhub()
-        assert df_kinhub.shape[0] == 517
+        assert df_kinhub.shape[0] == 536
         assert df_kinhub.shape[1] == 8
         assert "HGNC Name" in df_kinhub.columns
         assert "UniprotID" in df_kinhub.columns
@@ -481,7 +495,8 @@ class TestDatabases:
         # test that the function to find Pfam domain for a given HGNC symbol and position works
         df_pfam = pfam.Pfam("P00519")._pfam
         assert df_pfam.shape[0] == 4
-        assert df_pfam.shape[1] == 18
+        # allow for 18 or 19 columns, depending on the version of the Pfam database
+        assert df_pfam.shape[1] == 18 or df_pfam.shape[1] == 19
         assert "uniprot" in df_pfam.columns
         assert "start" in df_pfam.columns
         assert "end" in df_pfam.columns
@@ -528,3 +543,40 @@ class TestDatabases:
         assert seq_obj.list_seq == [
             "MTSTGKDGGAQHAQYVGPYRLEKTLGKGQTGLVKLGVHCVTCQKVAIKIVNREKLSESVLMKVEREIAILKLIEHPHVLKLHDVYENKKYLYLVLEHVSGGELFDYLVKKGRLTPKEARKFFRQIISALDFCHSHSICHRDLKPENLLLDEKNNIRIADFGMASLQVGDSLLETSCGSPHYACPEVIRGEKYDGRKADVWSCGVILFALLVGALPFDDDNLRQLLEKVKRGVFHMPHFIPPDCQSLLRGMIEVDAARRLTLEHIQKHIWYIGGKNEPEPEQPIPRKVQIRSLPSLEDIDPDVLDSMHSLGCFRDRNKLLQDLLSEEENQEKMIYFLLLDRKERYPSQEDEDLPPRNEIDPPRKRVDSPMLNRHGKRRPERKSMEVLSVTDGGSPVPARRAIEMAQHGQRSRSISGASSGLSTSPLSSPRVTPHPSPRGSPLPTPKGTPVHTPKESPAGTPNPTPPSSPSVGGVPWRARLNSIKNSFLGSPRFHRRKLQVPTPEEMSNLTPESSPELAKKSWFGNFISLEKEEQIFVVIKDKPLSSIKADIVHAFLSIPSLSHSVISQTSFRAEYKATGGPAVFQKPVKFQVDITYTEGGEAQKENGIYSVTFTLLSGPSRRFKRVVETIQAQLLSTHDPPAAQHLSEPPPPAPGLSWGAGLKGQKVATSYESSL"
         ]
+
+    def test_chembl(self):
+        from mkt.databases import chembl
+
+        # drug present
+        drug = "erlotinib"
+        # ChEMBLMoleculeSearch
+        chembl_query = chembl.ChEMBLMoleculeSearch(id=drug)
+        set_id = set(chembl_query.get_chembl_id())
+        assert {
+            "CHEMBL1079742",
+            "CHEMBL3186743",
+            "CHEMBL5220042",
+            "CHEMBL5220676",
+            "CHEMBL553",
+        } == set_id
+        # ChEMBLMoleculeExact
+        assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() == ["CHEMBL553"]
+        # ChEMBLMoleculePreferred
+        assert chembl.ChEMBLMoleculePreferred(id=drug).get_chembl_id() == ["CHEMBL553"]
+
+        # drug not present
+        drug = "TESTTESTTEST"
+        assert chembl.ChEMBLMoleculeSearch(id=drug).get_chembl_id() is None
+        assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() is None
+        assert chembl.ChEMBLMoleculePreferred(id=drug).get_chembl_id() is None
+
+    def test_opentargets(self):
+        from mkt.databases import open_targets
+
+        # test that the function to get drug mechanism of action works
+        drug_moa = open_targets.OpenTargetsDrugMoA(chembl_id="CHEMBL1079742")
+        set_moa = drug_moa.get_moa()
+        assert set_moa == {"EGFR"}
+
+        test = open_targets.OpenTargetsDrugMoA(chembl_id="TEST")
+        assert test.get_moa() is None

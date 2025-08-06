@@ -10,7 +10,7 @@ authors = [
 ]
 description = "Module in missense-kinase-toolkit for schema management"
 readme = "README.md"
-requires-python = ">=3.9,<3.12"
+requires-python = ">=3.9,<3.13"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -32,7 +32,7 @@ test = ["pytest==8.0.1", "pytest-runner==6.0.1"]
 
 [tool.setuptools.package-data]
 schema = [
-    "KinaseInfo/*.json",
+    "KinaseInfo.tar.gz",
 ]
 
 [project.urls]

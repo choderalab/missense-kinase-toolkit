@@ -1,7 +1,10 @@
 import json
+import logging
 
 import pandas as pd
 from mkt.databases import requests_wrapper, utils_requests
+
+logger = logging.getLogger(__name__)
 
 
 class Pfam:
@@ -39,7 +42,7 @@ class Pfam:
 
         if res.ok:
             if len(res.text) == 0:
-                print(f"No PFAM domains found: {self.uniprot_id}")
+                logger.warning(f"No PFAM domains found: {self.uniprot_id}...")
                 return None
             else:
                 list_json = json.loads(res.text)["results"]
