@@ -38,7 +38,7 @@ process RUN_BOLTZ2 {
 
     output:
     tuple val(uuid), path("boltz_results_${uuid}"), emit: all_results
-    tuple val(uuid), path("boltz_results_${uuid}/predictions/${uuid}/*.cif"), emit: cif_file
+    tuple val(uuid), path("boltz_results_${uuid}/predictions/${uuid}/*.{cif,pdb}"), emit: structure
 
     script:
     def output_format_flag = params.usePDB ? "--output_format pdb" : "--output_format mmcif"
