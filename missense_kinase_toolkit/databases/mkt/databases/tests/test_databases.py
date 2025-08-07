@@ -543,3 +543,40 @@ class TestDatabases:
         assert seq_obj.list_seq == [
             "MTSTGKDGGAQHAQYVGPYRLEKTLGKGQTGLVKLGVHCVTCQKVAIKIVNREKLSESVLMKVEREIAILKLIEHPHVLKLHDVYENKKYLYLVLEHVSGGELFDYLVKKGRLTPKEARKFFRQIISALDFCHSHSICHRDLKPENLLLDEKNNIRIADFGMASLQVGDSLLETSCGSPHYACPEVIRGEKYDGRKADVWSCGVILFALLVGALPFDDDNLRQLLEKVKRGVFHMPHFIPPDCQSLLRGMIEVDAARRLTLEHIQKHIWYIGGKNEPEPEQPIPRKVQIRSLPSLEDIDPDVLDSMHSLGCFRDRNKLLQDLLSEEENQEKMIYFLLLDRKERYPSQEDEDLPPRNEIDPPRKRVDSPMLNRHGKRRPERKSMEVLSVTDGGSPVPARRAIEMAQHGQRSRSISGASSGLSTSPLSSPRVTPHPSPRGSPLPTPKGTPVHTPKESPAGTPNPTPPSSPSVGGVPWRARLNSIKNSFLGSPRFHRRKLQVPTPEEMSNLTPESSPELAKKSWFGNFISLEKEEQIFVVIKDKPLSSIKADIVHAFLSIPSLSHSVISQTSFRAEYKATGGPAVFQKPVKFQVDITYTEGGEAQKENGIYSVTFTLLSGPSRRFKRVVETIQAQLLSTHDPPAAQHLSEPPPPAPGLSWGAGLKGQKVATSYESSL"
         ]
+
+    def test_chembl(self):
+        from mkt.databases import chembl
+
+        # drug present
+        drug = "erlotinib"
+        # ChEMBLMoleculeSearch
+        chembl_query = chembl.ChEMBLMoleculeSearch(id=drug)
+        set_id = set(chembl_query.get_chembl_id())
+        assert {
+            "CHEMBL1079742",
+            "CHEMBL3186743",
+            "CHEMBL5220042",
+            "CHEMBL5220676",
+            "CHEMBL553",
+        } == set_id
+        # ChEMBLMoleculeExact
+        assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() == ["CHEMBL553"]
+        # ChEMBLMoleculePreferred
+        assert chembl.ChEMBLMoleculePreferred(id=drug).get_chembl_id() == ["CHEMBL553"]
+
+        # drug not present
+        drug = "TESTTESTTEST"
+        assert chembl.ChEMBLMoleculeSearch(id=drug).get_chembl_id() is None
+        assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() is None
+        assert chembl.ChEMBLMoleculePreferred(id=drug).get_chembl_id() is None
+
+    def test_opentargets(self):
+        from mkt.databases import open_targets
+
+        # test that the function to get drug mechanism of action works
+        drug_moa = open_targets.OpenTargetsDrugMoA(chembl_id="CHEMBL1079742")
+        set_moa = drug_moa.get_moa()
+        assert set_moa == {"EGFR"}
+
+        test = open_targets.OpenTargetsDrugMoA(chembl_id="TEST")
+        assert test.get_moa() is None

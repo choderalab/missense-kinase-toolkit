@@ -2,6 +2,18 @@
 
 This package is meant to facilitate machine learning experiments using kinase representations derived from `mkt.databases` and consolidated in `mkt.schema`.
 
+## Setting up environment
+
+In the `missense_kinase_toolkit/ml` sub-directory, use the following:
+
+```
+conda env create -f environment.yml
+conda activate mkt_ml_plus
+pip install -e '.[dev,test]'
+```
+
+## Supported models
+
 The following drug and protein language models are supported. Theoretically, the `CombinedPoolingModel` in the `mkt.ml.models.pooling` module should be compatible with any pretrained SMILES and amino acid language models with a pooling layer if support is implemented in the `mkt.ml.constants` module (i.e., models added to `DrugModel` and/or `KinaseModel`).
 
 | Model name                 | Type        | Description                 |
@@ -26,7 +38,10 @@ Running an experiment consists of the following steps:
 
 #### Train-test kinase split
 
-Hold out all tyrosine kinases (TK) and tyrosine kinase-like (TKL) samples in the test set:
+Hold out all tyrosine kinases (TK) and tyrosine kinase-like (TKL) samples in the test set. Replace the following placeholders:
++ <PATH_TO_DATA>: Path where csv file of data resides
++ <WANDB_ENTITY_NAME>: If using, username or team name under which the runs will be logged; else None
++ <WANDB_PROJECT_NAME>: The name of the project under which this run will be logged
 
 ```
 seed: 42
@@ -67,7 +82,10 @@ trainer:
 
 #### Cross-validation
 
-Five-fold cross-validation:
+Five-fold cross-validation. Replace the following placeholders:
++ <PATH_TO_DATA>: Path where csv file of data resides
++ <WANDB_ENTITY_NAME>: If using, username or team name under which the runs will be logged; else None
++ <WANDB_PROJECT_NAME>: The name of the project under which this run will be logged
 
 ```
 seed: 42

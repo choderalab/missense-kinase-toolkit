@@ -6,8 +6,8 @@ import os
 from ast import literal_eval
 
 from mkt.databases import cbioportal, config
-from mkt.databases.io_utils import get_repo_root
 from mkt.databases.log_config import add_logging_flags, configure_logging
+from mkt.schema.io_utils import get_repo_root
 
 logger = logging.getLogger(__name__)
 
