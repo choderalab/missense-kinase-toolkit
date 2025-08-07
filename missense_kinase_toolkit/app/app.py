@@ -8,10 +8,14 @@ from generate_properties import PropertyTables
 from generate_structures import StructureVisualizer
 from mkt.databases.colors import DICT_COLORS
 from mkt.databases.log_config import configure_logging
-from mkt.databases.utils import try_except_return_none_rgetattr
-from mkt.schema import io_utils
-from mkt.schema.io_utils import DICT_FUNCS
+from mkt.schema.io_utils import (
+    DICT_FUNCS,
+    deserialize_kinase_dict,
+    return_str_path_from_pkg_data,
+    untar_files_in_memory,
+)
 from mkt.schema.kinase_schema import KinaseInfo
+from mkt.schema.utils import rgetattr
 from streamlit_bokeh import streamlit_bokeh
 
 logger = logging.getLogger(__name__)
@@ -39,9 +43,9 @@ class Dashboard:
     @st.cache_resource
     def _load_data():
         """Load and cache the data - only load filenames and unload KinaseInfo objects separately."""
-        str_path = io_utils.return_str_path_from_pkg_data()
+        str_path = return_str_path_from_pkg_data()
 
-        list_kinases, _ = io_utils.untar_files_in_memory(str_path, bool_extract=False)
+        list_kinases, _ = untar_files_in_memory(str_path, bool_extract=False)
         list_kinases.sort()
 
         return list_kinases
@@ -124,7 +128,7 @@ class Dashboard:
 
         """
         # load KinaseInfo model
-        obj_temp = io_utils.deserialize_kinase_dict(list_ids=[dashboard_state.kinase])[
+        obj_temp = deserialize_kinase_dict(list_ids=[dashboard_state.kinase])[
             dashboard_state.kinase
         ]
         str_json = self.generate_json_file(obj_temp)
@@ -174,7 +178,7 @@ class Dashboard:
                                 "KLIFS2UniProtIdx",
                             ]
                         )
-                        if try_except_return_none_rgetattr(obj_temp, i) is not None
+                        if rgetattr(obj_temp, i) is not None
                     ]
 
                     annotation = st.radio(  # noqa: F841

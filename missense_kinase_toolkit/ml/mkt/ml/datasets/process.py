@@ -4,8 +4,8 @@ from os import path
 
 import pandas as pd
 from mkt.ml.constants import KinaseGroupSource
-from mkt.ml.utils import get_repo_root, rgetattr
-from mkt.schema.io_utils import deserialize_kinase_dict
+from mkt.schema.io_utils import deserialize_kinase_dict, get_repo_root
+from mkt.schema.utils import rgetattr
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)

@@ -24,6 +24,7 @@ dependencies = [
     "toml",
     "pyyaml",
     "tqdm",
+    "git",
 ]
 
 [project.optional-dependencies]
