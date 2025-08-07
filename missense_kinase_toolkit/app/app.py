@@ -165,46 +165,45 @@ class Dashboard:
 
         with col1:
             with st.expander("Structure", expanded=True):
-                st.markdown("### KinCore active structure\n")
-                try:
-                    plot_spot = st.empty()
+                if obj_temp.kincore is None:
+                    st.error("No KinCore objects available for this kinase.", icon="⚠️")
+                else:
+                    st.markdown("### KinCore active structure\n")
+                    try:
+                        plot_spot = st.empty()
 
-                    # allow for annotations if present in the KinaseInfo object
-                    list_idx = [0] + [
-                        idx + 1
-                        for idx, i in enumerate(
-                            [
-                                "uniprot.phospho_sites",
-                                "KLIFS2UniProtIdx",
-                            ]
+                        # allow for annotations if present in the KinaseInfo object
+                        list_idx = [0] + [
+                            idx + 1
+                            for idx, i in enumerate(
+                                [
+                                    "uniprot.phospho_sites",
+                                    "KLIFS2UniProtIdx",
+                                ]
+                            )
+                            if rgetattr(obj_temp, i) is not None
+                        ]
+
+                        annotation = st.radio(  # noqa: F841
+                            "Select an annotation to render (select one):",
+                            options=[LIST_OPTIONS[i] for i in list_idx],
+                            captions=[LIST_CAPTIONS[i] for i in list_idx],
+                            index=0,
                         )
-                        if rgetattr(obj_temp, i) is not None
-                    ]
 
-                    annotation = st.radio(  # noqa: F841
-                        "Select an annotation to render (select one):",
-                        options=[LIST_OPTIONS[i] for i in list_idx],
-                        captions=[LIST_CAPTIONS[i] for i in list_idx],
-                        index=0,
-                    )
-
-                    with plot_spot:
-                        viz = StructureVisualizer(
-                            obj_kinase=obj_temp,
-                            dict_align=obj_alignment.dict_align,
-                            str_attr=annotation,
+                        with plot_spot:
+                            viz = StructureVisualizer(
+                                obj_kinase=obj_temp,
+                                dict_align=obj_alignment.dict_align,
+                                str_attr=annotation,
+                            )
+                            st.components.v1.html(
+                                viz.html, height=600, width=None, scrolling=False
+                            )
+                    except Exception as e:
+                        logger.exception(
+                            f"Error generating structure for {dashboard_state.kinase}: {e}",
                         )
-                        st.components.v1.html(viz.html, height=600)
-
-                except Exception as e:
-                    logger.exception(
-                        f"Error generating structure for {dashboard_state.kinase}: {e}",
-                    )
-                    if obj_temp.kincore is None:
-                        st.error(
-                            "No KinCore objects available for this kinase.", icon="⚠️"
-                        )
-                    else:
                         st.error("No structure available for this kinase.", icon="⚠️")
 
         with col2:
