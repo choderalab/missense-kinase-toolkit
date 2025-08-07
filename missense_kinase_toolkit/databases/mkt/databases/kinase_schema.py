@@ -8,10 +8,10 @@ from mkt.databases import hgnc, klifs, pfam, scrapers, uniprot
 from mkt.databases.aligners import ClustalOmegaAligner
 from mkt.databases.colors import map_aa_to_single_letter_code
 from mkt.databases.config import set_request_cache
-from mkt.databases.io_utils import get_repo_root
 from mkt.databases.kincore import align_kincore2uniprot, harmonize_kincore_fasta_cif
-from mkt.databases.utils import return_bool_at_index, rgetattr, rsetattr
+from mkt.databases.utils import return_bool_at_index
 from mkt.schema.constants import LIST_PFAM_KD
+from mkt.schema.io_utils import get_repo_root
 from mkt.schema.kinase_schema import (
     KLIFS,
     Family,
@@ -23,6 +23,7 @@ from mkt.schema.kinase_schema import (
     Pfam,
     UniProt,
 )
+from mkt.schema.utils import rgetattr, rsetattr
 from pydantic import ValidationError, model_validator
 from tqdm import tqdm
 from typing_extensions import Self
@@ -152,12 +153,9 @@ class KinaseInfoKinaseDomainGenerator(KinaseInfoKinaseDomain):
 
             # all non-None entries will have fastas
             fasta = self.kincore.fasta.seq
+            cif = self.extract_sequence_from_cif()
 
-            if self.kincore.cif is not None:
-
-                key_seq = "_entity_poly.pdbx_seq_one_letter_code"
-                cif = self.kincore.cif.cif[key_seq][0].replace("\n", "")
-
+            if cif is not None:
                 # KinCoreFASTA2CIF
                 dict_temp = align_kincore2uniprot(fasta, cif)
                 self.kincore.start = dict_temp["start"]

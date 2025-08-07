@@ -3,7 +3,7 @@ from os import path
 
 import pandas as pd
 from mkt.ml.datasets.finetune import FineTuneDataset
-from mkt.ml.utils import get_repo_root
+from mkt.schema.io_utils import get_repo_root
 
 logger = logging.getLogger(__name__)
 
