@@ -13,11 +13,12 @@ class TestSchema:
 
     def test_dict_kinase(self, caplog):
         """Test if the kinase dictionary is correctly deserialized."""
-        from mkt.schema import io_utils
+        from mkt.schema.io_utils import deserialize_kinase_dict
+
+        dict_kinase = deserialize_kinase_dict()
 
         caplog.set_level(logging.INFO)
 
-        dict_kinase = io_utils.deserialize_kinase_dict()
         assert len(dict_kinase) == 566
         assert (
             sum(["_" in i for i in dict_kinase.keys()]) == 28
@@ -202,7 +203,7 @@ class TestSchema:
 
     # TODO: downsample toml files to speed up test
     # TODO: add .tar.gz test for yaml/toml - currently only presumed to work
-    def test_serialization(self, caplog):
+    def test_serde(self):
         """Test if the kinase dictionary is correctly serialized and deserialized."""
         from mkt.schema import io_utils
 
@@ -236,3 +237,28 @@ class TestSchema:
                     assert dict_kinase[yaml_test] == dict_temp[yaml_test]
                 else:
                     assert dict_kinase == dict_temp
+
+    def test_utils(self):
+        """Test utility functions."""
+        import random
+
+        from mkt.schema import utils
+        from mkt.schema.io_utils import deserialize_kinase_dict
+
+        dict_kinase = deserialize_kinase_dict()
+
+        # test rgetattr
+        obj = dict_kinase["ABL1"]
+        assert utils.rgetattr(obj, attr="hgnc_name") == "ABL1"
+        assert utils.rgetattr(obj, attr="uniprot_id") == "P00519"
+        assert utils.rgetattr(obj, attr="non_existent") is None
+
+        # test rsetattr
+        utils.rsetattr(obj=obj, attr="hgnc_name", val="ABL2")
+        assert obj.hgnc_name == "ABL2"
+        utils.rsetattr(obj=obj, attr="kincore.fasta.seq", val=None)
+        assert obj.kincore.fasta.seq is None
+
+        random.seed(42)
+        uuid = utils.random_uuid()
+        assert str(uuid) == "a31c06bd-463e-4923-bc1a-adbde48b1697"
