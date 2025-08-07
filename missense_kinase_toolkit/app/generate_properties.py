@@ -2,8 +2,8 @@ import logging
 from dataclasses import dataclass
 
 import pandas as pd
-from mkt.databases.utils import rgetattr
 from mkt.schema.kinase_schema import KinaseInfo
+from mkt.schema.utils import rgetattr
 
 logger = logging.getLogger(__name__)
 
