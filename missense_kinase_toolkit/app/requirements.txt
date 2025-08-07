@@ -1,5 +1,5 @@
 git+https://github.com/choderalab/missense-kinase-toolkit.git#subdirectory=missense_kinase_toolkit/schema
 git+https://github.com/choderalab/missense-kinase-toolkit.git#subdirectory=missense_kinase_toolkit/databases
 py3dmol
-streamlit
-streamlit-bokeh
+streamlit==1.44.1
+streamlit-bokeh==3.7.1
