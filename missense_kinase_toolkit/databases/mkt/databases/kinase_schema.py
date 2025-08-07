@@ -8,10 +8,10 @@ from mkt.databases import hgnc, klifs, pfam, scrapers, uniprot
 from mkt.databases.aligners import ClustalOmegaAligner
 from mkt.databases.colors import map_aa_to_single_letter_code
 from mkt.databases.config import set_request_cache
-from mkt.databases.io_utils import get_repo_root
 from mkt.databases.kincore import align_kincore2uniprot, harmonize_kincore_fasta_cif
 from mkt.databases.utils import return_bool_at_index, rgetattr, rsetattr
 from mkt.schema.constants import LIST_PFAM_KD
+from mkt.schema.io_utils import get_repo_root
 from mkt.schema.kinase_schema import (
     KLIFS,
     Family,
