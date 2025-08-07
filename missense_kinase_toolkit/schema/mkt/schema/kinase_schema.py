@@ -312,12 +312,16 @@ class KinaseInfo(BaseModel):
         str | None
             The sequence from the CIF if available, otherwise None.
         """
+        key_seq = "_entity_poly.pdbx_seq_one_letter_code"
+
         try:
             if self.kincore is not None and self.kincore.cif is not None:
-                key_seq = "_entity_poly.pdbx_seq_one_letter_code"
                 return self.kincore.cif.cif[key_seq][0].replace("\n", "")
+            else:
+                logger.info(f"No CIF sequence for {self.hgnc_name}")
+                return None
         except Exception as e:
-            logger.info(f"No CIF sequence for {self.hgnc_name}: {e}")
+            logger.info(f"No Kincore entry for {self.hgnc_name}: {e}")
             return None
 
     def adjudicate_kd_sequence(self) -> str | None:
@@ -333,9 +337,10 @@ class KinaseInfo(BaseModel):
             if seq is not None:
                 return seq
             else:
+                # all non-None entries will have fastas
                 return self.kincore.fasta.seq
-        elif self.Pfam is not None:
-            return self.uniprot.canonical_seq[self.Pfam.start - 1 : self.Pfam.end]
+        elif self.pfam is not None:
+            return self.uniprot.canonical_seq[self.pfam.start - 1 : self.pfam.end]
         else:
             logger.info(f"No kinase domain sequence found for {self.hgnc_name}")
             return None
