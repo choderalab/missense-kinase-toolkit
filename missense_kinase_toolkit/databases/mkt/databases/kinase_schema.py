@@ -152,12 +152,9 @@ class KinaseInfoKinaseDomainGenerator(KinaseInfoKinaseDomain):
 
             # all non-None entries will have fastas
             fasta = self.kincore.fasta.seq
+            cif = self.extract_sequence_from_cif()
 
-            if self.kincore.cif is not None:
-
-                key_seq = "_entity_poly.pdbx_seq_one_letter_code"
-                cif = self.kincore.cif.cif[key_seq][0].replace("\n", "")
-
+            if cif is not None:
                 # KinCoreFASTA2CIF
                 dict_temp = align_kincore2uniprot(fasta, cif)
                 self.kincore.start = dict_temp["start"]
