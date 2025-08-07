@@ -24,7 +24,7 @@ dependencies = [
     "toml",
     "pyyaml",
     "tqdm",
-    "git",
+    "gitpython==3.1.43",
 ]
 
 [project.optional-dependencies]
