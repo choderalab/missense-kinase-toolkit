@@ -198,7 +198,9 @@ class StructureVisualizer:
         except KeyError:
             logger.error(f"{self.str_attr} not found in {self.dict_align.keys()}")
 
-        list_intersect = list(set(list_cif_idx).intersection(set(list_attr_idx)))
+        list_intersect = sorted(
+            list(set(list_cif_idx).intersection(set(list_attr_idx)))
+        )
 
         if self.str_attr == "KLIFS":
             # all KLIFS regions should fall within KinCore CIF region, but future-proofing

@@ -1,3 +1,4 @@
+import logging
 import os
 
 
@@ -10,10 +11,14 @@ class TestSchema:
 
         assert "mkt.schema" in sys.modules
 
-    def test_dict_kinase(self):
-        from mkt.schema import io_utils
+    def test_dict_kinase(self, caplog):
+        """Test if the kinase dictionary is correctly deserialized."""
+        from mkt.schema.io_utils import deserialize_kinase_dict
 
-        dict_kinase = io_utils.deserialize_kinase_dict()
+        dict_kinase = deserialize_kinase_dict()
+
+        caplog.set_level(logging.INFO)
+
         assert len(dict_kinase) == 566
         assert (
             sum(["_" in i for i in dict_kinase.keys()]) == 28
@@ -155,13 +160,51 @@ class TestSchema:
         assert min(obj_abl1.KLIFS2UniProtIdx.values()) == 246
         assert max(obj_abl1.KLIFS2UniProtIdx.values()) == 385
 
-        assert dict_kinase["ABL1"].adjudicate_group() == "TK"
-        assert dict_kinase["ABR"].adjudicate_group() == "Atypical"
-        assert dict_kinase["ANTXR1"].adjudicate_group() == "Atypical"
+        assert (
+            dict_kinase["ABL1"].extract_sequence_from_cif()
+            == "KWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVNAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQESSIS"
+        )
+
+        # test logger messages for CIF extraction failures
+        caplog.clear()
+        assert (
+            dict_kinase["BUB1B"].extract_sequence_from_cif() is None
+        )  # Kincore but no cif
+        assert "No CIF sequence for BUB1" in caplog.text
+
+        caplog.clear()
+        assert dict_kinase["ABR"].extract_sequence_from_cif() is None  # no Kincore
+        assert "No CIF sequence for ABR" in caplog.text
+
+        assert (
+            dict_kinase["ABL1"].adjudicate_kd_sequence()
+            == "KWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVNAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQESSIS"
+        )
+        assert (
+            dict_kinase["BUB1B"].adjudicate_kd_sequence()
+            == "YCIKREYLICEDYKLFWVAPRNSAELTVIKVSSQPVPWDFYINLKLKERLNEDFDHFCSCYQYQDGCIVWHQYINCFTLQDLLQHSEYITHEITVLIIYNLLTIVEMLHKAEIVHGDLSPRCLILRNRIHDPYDCNKNNQALKIVDFSYSVDLRVQLDVFTLSGFRTVQILEGQKILANCSSPYQVDLFGIADLAHLLLFKEHLQVFWDGSFWKLSQNISELKDGELWNKFFVRILNANDEATVSVLGELAAEMNG"
+        )
+        assert (
+            dict_kinase["MTOR"].adjudicate_kd_sequence()
+            == "VVEPYRKYPTLLEVLLNFLKTEQNQGTRREAIRVLGLLGALDPYKHKVNIGMIDQSRDASAVSLSESKSSQDSSDYSTSEMLVNMGNLPLDEFYPAVSMVALMRIFRDQSLSHHHTMVVQAITFIFKSLGLKCVQFLPQVMPTFLNVIRVCDGAIREFLFQQLGMLVSFVK"
+        )
+        caplog.clear()
+        assert dict_kinase["ABR"].adjudicate_kd_sequence() is None
+        assert "No kinase domain sequence found for ABR" in caplog.text
+
+        # do this last since changing the dict_kinase object
+        assert dict_kinase["ABL1"].adjudicate_group() == "TK"  # Kincore
+        assert dict_kinase["ABR"].adjudicate_group() == "Atypical"  # KinHub
+        assert dict_kinase["ANTXR1"].adjudicate_group() == "Atypical"  # KLIFS
+        dict_kinase["ANTXR1"].klifs = None
+        caplog.clear()
+        assert dict_kinase["ANTXR1"].adjudicate_group() is None  # None
+        assert "No group found for ANTXR1" in caplog.text
 
     # TODO: downsample toml files to speed up test
     # TODO: add .tar.gz test for yaml/toml - currently only presumed to work
-    def test_serialization(self, caplog):
+    def test_serde(self):
+        """Test if the kinase dictionary is correctly serialized and deserialized."""
         from mkt.schema import io_utils
 
         yaml_test = "CDK2"
@@ -194,3 +237,28 @@ class TestSchema:
                     assert dict_kinase[yaml_test] == dict_temp[yaml_test]
                 else:
                     assert dict_kinase == dict_temp
+
+    def test_utils(self):
+        """Test utility functions."""
+        import random
+
+        from mkt.schema import utils
+        from mkt.schema.io_utils import deserialize_kinase_dict
+
+        dict_kinase = deserialize_kinase_dict()
+
+        # test rgetattr
+        obj = dict_kinase["ABL1"]
+        assert utils.rgetattr(obj, attr="hgnc_name") == "ABL1"
+        assert utils.rgetattr(obj, attr="uniprot_id") == "P00519"
+        assert utils.rgetattr(obj, attr="non_existent") is None
+
+        # test rsetattr
+        utils.rsetattr(obj=obj, attr="hgnc_name", val="ABL2")
+        assert obj.hgnc_name == "ABL2"
+        utils.rsetattr(obj=obj, attr="kincore.fasta.seq", val=None)
+        assert obj.kincore.fasta.seq is None
+
+        random.seed(42)
+        uuid = utils.random_uuid()
+        assert str(uuid) == "a31c06bd-463e-4923-bc1a-adbde48b1697"

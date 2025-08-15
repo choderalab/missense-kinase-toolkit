@@ -3,25 +3,9 @@ import os
 import tarfile
 from io import BytesIO
 
+from mkt.schema.io_utils import get_repo_root
+
 logger = logging.getLogger(__name__)
-
-
-def get_repo_root():
-    """Get the root of the git repository.
-
-    Returns
-    -------
-    str
-        Path to the root of the git repository; if not found, return current directory
-    """
-    import git
-
-    try:
-        repo = git.Repo(".", search_parent_directories=True)
-        return repo.working_tree_dir
-    except git.InvalidGitRepositoryError:
-        print("Not a git repository; using current directory as root...")
-        return "."
 
 
 PATH_DATA = os.path.join(get_repo_root(), "data")

@@ -6,7 +6,7 @@ import os
 import shutil
 
 from mkt.databases.config import set_request_cache
-from mkt.databases.io_utils import create_tar_without_metadata, get_repo_root
+from mkt.databases.io_utils import create_tar_without_metadata
 from mkt.databases.kinase_schema import (
     combine_kinaseinfo,
     combine_kinaseinfo_kd,
@@ -15,7 +15,7 @@ from mkt.databases.kinase_schema import (
 )
 from mkt.databases.log_config import add_logging_flags, configure_logging
 from mkt.databases.plot import generate_kinase_info_plot
-from mkt.schema import io_utils
+from mkt.schema.io_utils import get_repo_root, serialize_kinase_dict
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ def main():
     dict_kinaseinfo = combine_kinaseinfo(dict_kinaseinfo_uniprot, dict_kinaseinfo_kd)
 
     # serialize the KinaseInfo objects to the objects directory
-    io_utils.serialize_kinase_dict(dict_kinaseinfo, str_path=path_objects)
+    serialize_kinase_dict(dict_kinaseinfo, str_path=path_objects)
 
     # create tar file without metadata one level from the objects directory
     create_tar_without_metadata(
