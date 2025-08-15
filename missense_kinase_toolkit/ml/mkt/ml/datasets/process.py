@@ -109,21 +109,12 @@ class ProcessDataset(ABC):
         )
         return df
 
-    # TODO: use cif first and then fallback to fasta
     def add_kincore_kd_column(self) -> pd.DataFrame:
         """Add Kincore KD column to the DataFrame."""
         df = self.df.copy()
         df["kincore_kd"] = df[self.col_kinase].apply(
-            lambda x: rgetattr(DICT_KINASE.get(x, None), "kincore.fasta.seq")
+            lambda x: DICT_KINASE.get(x, None).adjudicate_kd_sequence()
         )
-        # TODO: revise within mkt like adjudicate_group
-        # df["kincore_kd"] = df[self.col_kinase].apply(
-        #     lambda x: (
-        #         rgetattr(DICT_KINASE.get(x, None), "kincore.cif.seq")
-        #         if rgetattr(DICT_KINASE.get(x, None), "kincore.cif.seq") is not None
-        #         else rgetattr(DICT_KINASE.get(x, None), "kincore.fasta.seq")
-        #     )
-        # )
         return df
 
     def add_kinase_group_column(self) -> pd.DataFrame:
