@@ -116,6 +116,14 @@ class ProcessDataset(ABC):
         df["kincore_kd"] = df[self.col_kinase].apply(
             lambda x: rgetattr(DICT_KINASE.get(x, None), "kincore.fasta.seq")
         )
+        # TODO: revise within mkt like adjudicate_group
+        # df["kincore_kd"] = df[self.col_kinase].apply(
+        #     lambda x: (
+        #         rgetattr(DICT_KINASE.get(x, None), "kincore.cif.seq")
+        #         if rgetattr(DICT_KINASE.get(x, None), "kincore.cif.seq") is not None
+        #         else rgetattr(DICT_KINASE.get(x, None), "kincore.fasta.seq")
+        #     )
+        # )
         return df
 
     def add_kinase_group_column(self) -> pd.DataFrame:
