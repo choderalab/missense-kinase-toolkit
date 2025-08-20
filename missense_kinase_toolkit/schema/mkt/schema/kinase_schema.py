@@ -1,10 +1,10 @@
 import logging
 from enum import Enum
-from pydantic import BaseModel, ConfigDict, Field, constr, field_validator
-from strenum import StrEnum
 
 from mkt.schema.constants import LIST_FULL_KLIFS_REGION, LIST_KLIFS_REGION, LIST_PFAM_KD
 from mkt.schema.utils import rgetattr
+from pydantic import BaseModel, ConfigDict, Field, constr, field_validator
+from strenum import StrEnum
 
 logger = logging.getLogger(__name__)
 
@@ -345,10 +345,10 @@ class KinaseInfo(BaseModel):
         else:
             logger.info(f"No kinase domain sequence found for {self.hgnc_name}")
             return None
-            
+
     def adjudicate_group(self) -> str | None:
         """Adjudicate group based on available data.
-        
+
         Returns
         -------
         str | None
@@ -360,6 +360,6 @@ class KinaseInfo(BaseModel):
             group = rgetattr(self, attr)
             if group is not None:
                 return group
-        
+
         logger.info(f"No group found for {self.hgnc_name}")
         return None

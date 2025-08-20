@@ -14,7 +14,7 @@ class KinaseGroupSource(Enum):
     consensus = None
 
 
-#TODO: implement this in the future
+# TODO: implement this in the future
 # class KinaseKDSequenceSource(Enum):
 #     """Enum for kinase KD sequence sources."""
 
