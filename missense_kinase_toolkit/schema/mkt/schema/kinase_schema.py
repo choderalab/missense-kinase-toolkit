@@ -2,6 +2,7 @@ import logging
 from enum import Enum
 
 from mkt.schema.constants import LIST_FULL_KLIFS_REGION, LIST_KLIFS_REGION, LIST_PFAM_KD
+from mkt.schema.utils import rgetattr
 from pydantic import BaseModel, ConfigDict, Field, constr, field_validator
 from strenum import StrEnum
 
@@ -353,18 +354,12 @@ class KinaseInfo(BaseModel):
         str | None
             The group of the kinase if available, otherwise None.
         """
-        if self.kincore is not None:
-            group = self.kincore.fasta.group
+        list_attr = ["kincore.fasta.group", "kinhub.group", "klifs.group"]
+
+        for attr in list_attr:
+            group = rgetattr(self, attr)
             if group is not None:
                 return group
-        elif self.kinhub is not None:
-            group = self.kinhub.group
-            if group is not None:
-                return group
-        elif self.klifs is not None:
-            group = self.klifs.group
-            if group is not None:
-                return group
-        else:
-            logger.info(f"No group found for {self.hgnc_name}")
-            return None
+
+        logger.info(f"No group found for {self.hgnc_name}")
+        return None
