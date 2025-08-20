@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 import torch
 import torch.nn as nn
-from mkt.ml.utils import rgetattr
+from mkt.schema.utils import rgetattr
 from transformers import AutoModel
 
 
