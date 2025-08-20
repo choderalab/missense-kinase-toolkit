@@ -43,7 +43,7 @@ class PKIS2Config(DatasetConfig):
     )
     col_drug: str = "Smiles"
     col_kinase: str = "Kinase"
-    col_y: str = "Percent Displacement"
+    col_y: str = "% Inhibition"
 
 
 class DavisConfig(DatasetConfig):
@@ -70,7 +70,7 @@ class ProcessDataset(ABC):
 
         self.df = self.process()
         self.df = self.add_klifs_column()
-        self.df = self.add_kincore_kd_column()
+        self.df = self.add_kd_column()
         self.df = self.add_kinase_group_column()
         # TODO: better map Davis kinase names (e.g., mutant, phos, domains, etc.)
         # self.df = self.drop_na_rows()
@@ -104,17 +104,20 @@ class ProcessDataset(ABC):
     def add_klifs_column(self) -> pd.DataFrame:
         """Add KLIFS column to the DataFrame."""
         df = self.df.copy()
-        df["klifs"] = df[self.col_kinase].apply(
+        df["klifs_seq"] = df[self.col_kinase].apply(
             lambda x: rgetattr(DICT_KINASE.get(x, None), "klifs.pocket_seq")
         )
         return df
 
-    # TODO: use cif first and then fallback to fasta
-    def add_kincore_kd_column(self) -> pd.DataFrame:
-        """Add Kincore KD column to the DataFrame."""
+    def add_kd_column(self) -> pd.DataFrame:
+        """Add KD column to the DataFrame."""
         df = self.df.copy()
-        df["kincore_kd"] = df[self.col_kinase].apply(
-            lambda x: rgetattr(DICT_KINASE.get(x, None), "kincore.fasta.seq")
+        df["kd_seq"] = df[self.col_kinase].apply(
+            lambda x: (
+                DICT_KINASE.get(x, None).adjudicate_kd_sequence()
+                if DICT_KINASE.get(x, None)
+                else None
+            )
         )
         return df
 
