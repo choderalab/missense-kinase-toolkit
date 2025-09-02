@@ -6,11 +6,11 @@ on:
       - "main"
     paths:
       - "missense_kinase_toolkit/databases/**"
-  pull_request:
-    branches:
-      - "main"
-    paths:
-      - "missense_kinase_toolkit/databases/**"
+  # pull_request:
+  #   branches:
+  #     - "main"
+  #   paths:
+  #     - "missense_kinase_toolkit/databases/**"
   schedule:
     - cron: "0 0 * * 0"
 
