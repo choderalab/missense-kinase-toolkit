@@ -6,11 +6,11 @@ on:
       - "main"
     paths:
       - "missense_kinase_toolkit/schema/**"
-  pull_request:
-    branches:
-      - "main"
-    paths:
-      - "missense_kinase_toolkit/schema/**"
+  # pull_request:
+  #   branches:
+  #     - "main"
+  #   paths:
+  #     - "missense_kinase_toolkit/schema/**"
   schedule:
     - cron: "0 0 * * 0"
 
