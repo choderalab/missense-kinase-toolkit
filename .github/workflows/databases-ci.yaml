@@ -56,7 +56,8 @@ jobs:
             -v \
             --cov-report=xml \
             --color=yes  \
-            --cov=missense_kinase_toolkit/databases \
+            --cov=mkt.databases \
+            -F databases \
             missense_kinase_toolkit/databases/mkt/databases/tests/
 
       - name: Upload coverage reports to Codecov
