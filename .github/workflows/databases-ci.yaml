@@ -1,8 +1,6 @@
 name: databases-ci
 
 on:
-  # GitHub has started calling new repo's first branch "main" https://github.com/github/renaming
-  # The cookiecutter uses the "--initial-branch" flag when it runs git-init
   push:
     branches:
       - "main"
@@ -14,9 +12,6 @@ on:
     paths:
       - "missense_kinase_toolkit/databases/**"
   schedule:
-    # Weekly tests run on main by default:
-    #   Scheduled workflows run on the latest commit on the default or base branch.
-    #   (from https://help.github.com/en/actions/reference/events-that-trigger-workflows#scheduled-events-schedule)
     - cron: "0 0 * * 0"
 
 jobs:
@@ -38,19 +33,15 @@ jobs:
           df -h
           ulimit -a
 
-      # More info on options: https://github.com/marketplace/actions/provision-with-micromamba
-      # https://github.com/mamba-org/provision-with-micromamba#migration-to-setup-micromamba%60
       - uses: mamba-org/setup-micromamba@v1
         with:
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test
-          # conda-forge is the default channel now and does not need to be specified
           channels: conda-forge,defaults
           extra-specs: |
             python=${{ matrix.python-version }}
 
       - name: Install package
-        # conda setup requires this special shell
         shell: bash -l {0}
         run: |
           python -m pip install ./missense_kinase_toolkit/schema --no-deps
@@ -58,13 +49,9 @@ jobs:
           micromamba list
 
       - name: Run tests
-        # conda setup requires this special shell
         shell: bash -l {0}
         run: |
-          # run each package test suite; append to coverage file
-          # exit immediately if a command exits with a non-zero status
           set -e
-          # pytest -n auto --durations=10 -v --cov-report=xml --cov-report=term --color=yes \
           pytest \
             -v \
             --cov-report=xml \
@@ -73,12 +60,11 @@ jobs:
             missense_kinase_toolkit/databases/mkt/databases/tests/
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v4.0.1
+        uses: codecov/codecov-action@v5.4.3
         with:
           fail_ci_if_error: false # optional (default = false)
           file: ./coverage.xml
           flags: databases # optional
           name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
-          # https://github.com/codecov/codecov-action
           token: ${{ secrets.CODECOV_TOKEN }} # required
           verbose: true # optional (default = false)

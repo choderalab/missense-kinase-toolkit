@@ -92,8 +92,6 @@ class TestDatabases:
         assert out == "Error code: 400\n"
 
     def test_cbioportal(self):
-        import os
-
         from mkt.databases import cbioportal, config
 
         config.set_cbioportal_instance("www.cbioportal.org")
@@ -118,24 +116,23 @@ class TestDatabases:
 
         # test that Zehir cohort is available
         study = "msk_impact_2017"
-        list_studies = (
-            cbioportal_instance._cbioportal.Studies.getAllStudiesUsingGET().result()
-        )
-        list_study_ids = [study.studyId for study in list_studies]
-        assert study in list_study_ids
+        mutations_instance = cbioportal.Mutations(study_id=study)
+        assert mutations_instance.check_entity_id() is True
+        assert mutations_instance.get_entity_id() == study
+        assert mutations_instance._df.shape[0] == 78142
 
-        # test that the function to get all mutations by study works
-        df = cbioportal.Mutations(study).get_cbioportal_cohort_mutations()
-        assert df.shape[0] == 78142
+        # make sure save works - no longer saving to file
+        # import os
+        # mutations_instance = cbioportal.Mutations(study)
+        # mutations_instance.get_cbioportal_cohort_mutations(bool_save=True)
+        # assert os.path.isfile(f"{mutations_instance.study_id}_mutations.csv") is True
+        # os.remove(f"{mutations_instance.study_id}_mutations.csv")
 
-        # make sure save works
-        mutations_instance = cbioportal.Mutations(study)
-        mutations_instance.get_cbioportal_cohort_mutations(bool_save=True)
-        assert os.path.isfile(f"{mutations_instance.study_id}_mutations.csv") is True
-        os.remove(f"{mutations_instance.study_id}_mutations.csv")
-
-        assert mutations_instance.get_study_id() == study
-        assert mutations_instance._mutations is not None
+        panel = "IMPACT341"
+        panel_instance = cbioportal.GenePanel(panel_id=panel)
+        assert panel_instance.check_entity_id() is True
+        assert panel_instance._df.shape[0] == 341
+        assert panel_instance._df.shape[1] == 2
 
     def test_hgnc(self):
         from mkt.databases import hgnc
@@ -498,7 +495,8 @@ class TestDatabases:
         # test that the function to find Pfam domain for a given HGNC symbol and position works
         df_pfam = pfam.Pfam("P00519")._pfam
         assert df_pfam.shape[0] == 4
-        assert df_pfam.shape[1] == 18
+        # allow for 18 or 19 columns, depending on the version of the Pfam database
+        assert df_pfam.shape[1] == 18 or df_pfam.shape[1] == 19
         assert "uniprot" in df_pfam.columns
         assert "start" in df_pfam.columns
         assert "end" in df_pfam.columns
@@ -545,3 +543,40 @@ class TestDatabases:
         assert seq_obj.list_seq == [
             "MTSTGKDGGAQHAQYVGPYRLEKTLGKGQTGLVKLGVHCVTCQKVAIKIVNREKLSESVLMKVEREIAILKLIEHPHVLKLHDVYENKKYLYLVLEHVSGGELFDYLVKKGRLTPKEARKFFRQIISALDFCHSHSICHRDLKPENLLLDEKNNIRIADFGMASLQVGDSLLETSCGSPHYACPEVIRGEKYDGRKADVWSCGVILFALLVGALPFDDDNLRQLLEKVKRGVFHMPHFIPPDCQSLLRGMIEVDAARRLTLEHIQKHIWYIGGKNEPEPEQPIPRKVQIRSLPSLEDIDPDVLDSMHSLGCFRDRNKLLQDLLSEEENQEKMIYFLLLDRKERYPSQEDEDLPPRNEIDPPRKRVDSPMLNRHGKRRPERKSMEVLSVTDGGSPVPARRAIEMAQHGQRSRSISGASSGLSTSPLSSPRVTPHPSPRGSPLPTPKGTPVHTPKESPAGTPNPTPPSSPSVGGVPWRARLNSIKNSFLGSPRFHRRKLQVPTPEEMSNLTPESSPELAKKSWFGNFISLEKEEQIFVVIKDKPLSSIKADIVHAFLSIPSLSHSVISQTSFRAEYKATGGPAVFQKPVKFQVDITYTEGGEAQKENGIYSVTFTLLSGPSRRFKRVVETIQAQLLSTHDPPAAQHLSEPPPPAPGLSWGAGLKGQKVATSYESSL"
         ]
+
+    def test_chembl(self):
+        from mkt.databases import chembl
+
+        # drug present
+        drug = "erlotinib"
+        # ChEMBLMoleculeSearch
+        chembl_query = chembl.ChEMBLMoleculeSearch(id=drug)
+        set_id = set(chembl_query.get_chembl_id())
+        assert {
+            "CHEMBL1079742",
+            "CHEMBL3186743",
+            "CHEMBL5220042",
+            "CHEMBL5220676",
+            "CHEMBL553",
+        } == set_id
+        # ChEMBLMoleculeExact
+        assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() == ["CHEMBL553"]
+        # ChEMBLMoleculePreferred
+        assert chembl.ChEMBLMoleculePreferred(id=drug).get_chembl_id() == ["CHEMBL553"]
+
+        # drug not present
+        drug = "TESTTESTTEST"
+        assert chembl.ChEMBLMoleculeSearch(id=drug).get_chembl_id() is None
+        assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() is None
+        assert chembl.ChEMBLMoleculePreferred(id=drug).get_chembl_id() is None
+
+    def test_opentargets(self):
+        from mkt.databases import open_targets
+
+        # test that the function to get drug mechanism of action works
+        drug_moa = open_targets.OpenTargetsDrugMoA(chembl_id="CHEMBL1079742")
+        set_moa = drug_moa.get_moa()
+        assert set_moa == {"EGFR"}
+
+        test = open_targets.OpenTargetsDrugMoA(chembl_id="TEST")
+        assert test.get_moa() is None

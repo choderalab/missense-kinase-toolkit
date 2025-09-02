@@ -2,6 +2,7 @@ import logging
 from enum import Enum
 
 from mkt.schema.constants import LIST_FULL_KLIFS_REGION, LIST_KLIFS_REGION, LIST_PFAM_KD
+from mkt.schema.utils import rgetattr
 from pydantic import BaseModel, ConfigDict, Field, constr, field_validator
 from strenum import StrEnum
 
@@ -303,3 +304,62 @@ class KinaseInfo(BaseModel):
             return dict_temp
         else:
             return None
+
+    def extract_sequence_from_cif(self) -> str | None:
+        """Extract sequence from CIF if available.
+
+        Returns
+        -------
+        str | None
+            The sequence from the CIF if available, otherwise None.
+        """
+        key_seq = "_entity_poly.pdbx_seq_one_letter_code"
+
+        try:
+            if self.kincore is not None and self.kincore.cif is not None:
+                return self.kincore.cif.cif[key_seq][0].replace("\n", "")
+            else:
+                logger.info(f"No CIF sequence for {self.hgnc_name}")
+                return None
+        except Exception as e:
+            logger.info(f"No Kincore entry for {self.hgnc_name}: {e}")
+            return None
+
+    def adjudicate_kd_sequence(self) -> str | None:
+        """Adjudicate kinase domain sequence based on available data.
+
+        Returns
+        -------
+        str | None
+            The kinase domain sequence if available, otherwise None.
+        """
+        if self.kincore is not None:
+            seq = self.extract_sequence_from_cif()
+            if seq is not None:
+                return seq
+            else:
+                # all non-None entries will have fastas
+                return self.kincore.fasta.seq
+        elif self.pfam is not None:
+            return self.uniprot.canonical_seq[self.pfam.start - 1 : self.pfam.end]
+        else:
+            logger.info(f"No kinase domain sequence found for {self.hgnc_name}")
+            return None
+
+    def adjudicate_group(self) -> str | None:
+        """Adjudicate group based on available data.
+
+        Returns
+        -------
+        str | None
+            The group of the kinase if available, otherwise None.
+        """
+        list_attr = ["kincore.fasta.group", "kinhub.group", "klifs.group"]
+
+        for attr in list_attr:
+            group = rgetattr(self, attr)
+            if group is not None:
+                return group
+
+        logger.info(f"No group found for {self.hgnc_name}")
+        return None

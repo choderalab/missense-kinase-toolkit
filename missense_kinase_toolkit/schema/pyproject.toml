@@ -10,7 +10,7 @@ authors = [
 ]
 description = "Module in missense-kinase-toolkit for schema management"
 readme = "README.md"
-requires-python = ">=3.9,<3.12"
+requires-python = ">=3.9,<3.13"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -24,6 +24,7 @@ dependencies = [
     "toml",
     "pyyaml",
     "tqdm",
+    "gitpython==3.1.43",
 ]
 
 [project.optional-dependencies]

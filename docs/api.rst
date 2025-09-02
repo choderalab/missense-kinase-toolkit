@@ -1,9 +1,12 @@
 API Documentation
 =================
 
+This page contains API documentation for the missense-kinase-toolkit package.
+
 .. autosummary::
-   :toctree: autosummary
+   :toctree: generated
    :template: custom-module-template.rst
    :recursive:
 
-   missense_kinase_toolkit
+   mkt.schema
+   mkt.databases
