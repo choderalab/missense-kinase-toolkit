@@ -7,7 +7,7 @@ Welcome to missense-kinase-toolkit's documentation!
 =========================================================
 
 .. toctree::
-   :maxdepth: 6
+   :maxdepth: 3
    :caption: Contents:
 
    getting_started
