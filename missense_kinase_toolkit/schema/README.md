@@ -10,7 +10,9 @@ pip install git+https://github.com/choderalab/missense-kinase-toolkit.git#subdir
 To load the package data in the form of a dictionary where the kinase HGNC names are the keys and the `KinaseInfo` `Pydantic` models are the values use the following:
 ```
 from mkt.schema import io_utils
-dict_kinase = io_utils.deserialize_kinase_dict()
+
+# str_name ensures you don't import the dictionary if already in cache
+DICT_KINASE = io_utils.deserialize_kinase_dict(str_name="DICT_KINASE")
 ```
 
 The `KinaseInfo` object contains the following relevant fields:
