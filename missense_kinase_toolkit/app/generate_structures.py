@@ -30,6 +30,16 @@ LIST_KLIFS_STICK = [
 ]
 """list[int]: Zero indexed location of residues to highlight as stick"""
 
+# evolutionarily conserved residues in the KLIFS pocket
+# LIST_KLIFS_STICK = [
+#     3,
+#     5,
+#     8,
+#     68,
+#     80,
+# ]
+# """list[int]: Zero indexed location of residues to highlight as stick"""
+
 
 @dataclass
 class StructureVisualizer:
