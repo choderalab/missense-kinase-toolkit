@@ -56,7 +56,6 @@ jobs:
             --cov-report=xml \
             --color=yes  \
             --cov=mkt.schema \
-            -F schema \
             missense_kinase_toolkit/schema/mkt/schema/tests/
 
       - name: Upload coverage reports to Codecov
