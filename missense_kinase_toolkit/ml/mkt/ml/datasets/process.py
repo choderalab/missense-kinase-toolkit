@@ -7,18 +7,21 @@ from mkt.ml.constants import KinaseGroupSource
 from mkt.schema.io_utils import deserialize_kinase_dict, get_repo_root
 from mkt.schema.utils import rgetattr
 from pydantic import BaseModel, Field
+from rdkit import Chem
 
 logger = logging.getLogger(__name__)
 
 
-DICT_KINASE = deserialize_kinase_dict()
+DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE")
 
 
 class DatasetConfig(BaseModel):
     name: str
     """Name of the dataset."""
-    url: str | None
+    url_main: str | None
     """URL to the dataset file."""
+    url_supp: str | None
+    """URL to the supplementary dataset file."""
     col_drug: str
     """Column name for drug identifiers in the dataset."""
     col_kinase: str
@@ -29,6 +32,8 @@ class DatasetConfig(BaseModel):
     """Attribute to be used to group kinases. If None, no grouping is applied."""
     bool_save: bool = True
     """Whether to save the processed dataset to a CSV file."""
+    bool_isomeric: bool = False
+    """Whether to use isomeric SMILES for drug identifiers."""
 
     class Config:
         arbitrary_types_allowed = True
@@ -37,23 +42,21 @@ class DatasetConfig(BaseModel):
 class PKIS2Config(DatasetConfig):
     """Configuration for the PKIS2 dataset."""
 
-    name: str = "PKIS2"
-    url: str = (
-        "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv"
-    )
-    col_drug: str = "Smiles"
-    col_kinase: str = "Kinase"
-    col_y: str = "% Inhibition"
+    name = "PKIS2"
+    url_main = "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv"
+    col_drug = "Smiles"
+    col_kinase = "Kinase"
+    col_y = "% Inhibition"
 
 
 class DavisConfig(DatasetConfig):
     """Configuration for the Davis dataset."""
 
-    name: str = "DAVIS"
-    url: str | None = None  # URL will be set in the DavisDataset class
-    col_drug: str = "Drug"
-    col_kinase: str = "Target_ID"
-    col_y: str = "Y"
+    name = "Davis"
+    url_main = None  # URL will be set in the DavisDataset class
+    col_drug = "Drug"
+    col_kinase = "Target_ID"
+    col_y = "Y"
 
 
 class ProcessDataset(ABC):
@@ -76,6 +79,7 @@ class ProcessDataset(ABC):
         # self.df = self.drop_na_rows()
         self.df = self.standardize_colnames()
         self.df = self.add_source_column()
+        self.df = self.apply_smiles_standardization()
 
         if getattr(self, "bool_save", True):
             self.save_data2csv()
@@ -110,7 +114,7 @@ class ProcessDataset(ABC):
         return df
 
     def add_kd_column(self) -> pd.DataFrame:
-        """Add KD column to the DataFrame."""
+        """Add kinase domain column to the DataFrame."""
         df = self.df.copy()
         df["kd_seq"] = df[self.col_kinase].apply(
             lambda x: (
@@ -157,6 +161,24 @@ class ProcessDataset(ABC):
                 self.col_y: "y",
             },
         )
+        return df
+
+    def standardize_smiles(self, smiles: str) -> str:
+        """Standardize SMILES strings."""
+
+        if smiles is None or pd.isna(smiles):
+            return None
+
+        mol = Chem.MolFromSmiles(smiles)
+        if self.bool_isomeric:
+            return Chem.MolToSmiles(mol, isomericSmiles=True)
+        else:
+            return Chem.MolToSmiles(mol, isomericSmiles=False)
+
+    def apply_smiles_standardization(self) -> pd.DataFrame:
+        """Apply SMILES standardization to the DataFrame."""
+        df = self.df.copy()
+        df["smiles"] = df["smiles"].apply(self.standardize_smiles)
         return df
 
 

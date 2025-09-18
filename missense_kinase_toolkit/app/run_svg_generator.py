@@ -8,11 +8,11 @@ from mkt.databases.colors import DICT_COLORS
 from mkt.schema import io_utils
 from pymol_svg_generator import generate_simple_pymol_files
 
-dict_kinase = io_utils.deserialize_kinase_dict()
+DICT_KINASE = io_utils.deserialize_kinase_dict(str_name="DICT_KINASE")
 
 gene = "ABL1"
 
-obj_temp = dict_kinase[gene]
+obj_temp = DICT_KINASE[gene]
 
 obj_alignment = SequenceAlignment(
     obj_temp,
@@ -26,16 +26,16 @@ viz = StructureVisualizer(
 output_directory = "./pymol_output"
 pdb_file, script_file = generate_simple_pymol_files(viz, output_directory, gene)
 
-"""
+f"""
 Files generated:
-  PDB: ./pymol_output/ABL1_structure.pdb
-  Script: ./pymol_output/ABL1_pymol_script.py
+  PDB: ./pymol_output/{gene}_structure.pdb
+  Script: ./pymol_output/{gene}_pymol_script.py
 
 To run in PyMOL:
   1. Open PyMOL
   2. Navigate to ./pymol_output
-  3. Run: run ABL1_pymol_script.py
-  4. Save EPS: set ray_trace_mode, 3; png filename.eps, ray=1
+  3. Run: run {gene}_pymol_script.py
+  4. Save PNG: set ray_trace_mode, 3; png filename.png, ray=1, dpi=300
 """
 
 print("\n" + "=" * 60)

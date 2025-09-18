@@ -47,11 +47,11 @@ dependencies:
   - brotli-python=1.1.0=py312h30efb56_1
   - bzip2=1.0.8=h4bc722e_7
   - c-ares=1.32.3=h4bc722e_0
-  - ca-certificates=2025.4.26=hbd8a1cb_0
+  - ca-certificates=2025.8.3=hbd8a1cb_0
   - cached-property=1.5.2=hd8ed1ab_1
   - cached_property=1.5.2=pyha770c72_1
   - cairo=1.18.2=h5e7d6dc_0
-  - certifi=2025.4.26=pyhd8ed1ab_0
+  - certifi=2025.8.3=pyhd8ed1ab_0
   - cffi=1.16.0=py312hf06ca03_0
   - chardet=5.2.0=pyhd8ed1ab_3
   - charset-normalizer=3.3.2=pyhd8ed1ab_0
@@ -236,7 +236,7 @@ dependencies:
   - numpy=1.26.4=py312heda63a1_0
   - openjpeg=2.5.2=h488ebb8_0
   - openldap=2.6.9=he970967_0
-  - openssl=3.5.0=h7b32b05_1
+  - openssl=3.5.2=h26f9b46_0
   - orc=2.0.1=h17fec99_1
   - overrides=7.7.0=pyhd8ed1ab_1
   - pandas=2.2.2=py312h1d6d2e6_1
@@ -341,6 +341,7 @@ dependencies:
   - websocket-client=1.8.0=pyhd8ed1ab_1
   - wheel=0.43.0=pyhd8ed1ab_1
   - widgetsnbextension=4.0.13=pyhd8ed1ab_1
+  - xlrd=2.0.2=pyhd8ed1ab_0
   - xorg-kbproto=1.0.7=hb9d3cd8_1003
   - xorg-libice=1.1.2=hb9d3cd8_0
   - xorg-libsm=1.2.6=he73a12e_0
@@ -388,7 +389,8 @@ dependencies:
       - legacy-api-wrap==1.4.1
       - lxml==6.0.0
       - mccabe==0.7.0
-      - mkt-ml==0.1.0+268.g9503757
+      - mkt-ml==0.1.0+132.g1c0b347.dirty
+      - mkt-schema==0.1.0+280.g4bf6b47
       - more-itertools==10.7.0
       - mygene==3.2.2
       - mypy-extensions==1.0.0
@@ -401,8 +403,8 @@ dependencies:
       - platformdirs==4.3.6
       - pluggy==1.5.0
       - pycodestyle==2.11.1
-      - pydantic==2.11.7
-      - pydantic-core==2.33.2
+      - pydantic==2.10.3
+      - pydantic-core==2.27.1
       - pyflakes==3.2.0
       - pytdc==1.0.0
       - pytest==8.0.1
@@ -426,6 +428,7 @@ dependencies:
       - sphinxcontrib-serializinghtml==2.0.0
       - statsmodels==0.14.5
       - tiledbsoma==1.17.0
+      - toml==0.10.2
       - typing-inspection==0.4.1
       - wrapt==1.17.2
       - yapf==0.43.0
