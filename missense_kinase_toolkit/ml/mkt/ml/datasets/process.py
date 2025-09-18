@@ -3,11 +3,11 @@ from abc import ABC, abstractmethod
 from os import path
 
 import pandas as pd
-from rdkit import Chem
 from mkt.ml.constants import KinaseGroupSource
 from mkt.schema.io_utils import deserialize_kinase_dict, get_repo_root
 from mkt.schema.utils import rgetattr
 from pydantic import BaseModel, Field
+from rdkit import Chem
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +43,7 @@ class PKIS2Config(DatasetConfig):
     """Configuration for the PKIS2 dataset."""
 
     name = "PKIS2"
-    url_main = (
-        "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv"
-    )
+    url_main = "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv"
     col_drug = "Smiles"
     col_kinase = "Kinase"
     col_y = "% Inhibition"

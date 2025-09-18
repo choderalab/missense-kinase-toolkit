@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 _deserialization_cache = {}
 
+
 def get_repo_root():
     """Get the root of the git repository.
 
