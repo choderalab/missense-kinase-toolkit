@@ -14,6 +14,15 @@ class KinaseGroupSource(Enum):
     consensus = None
 
 
+# TODO: implement this in the future
+# class KinaseKDSequenceSource(Enum):
+#     """Enum for kinase KD sequence sources."""
+
+#     kincore = "kincore.fasta.kd_sequence"
+#     klifs = "klifs.kd_sequence"
+#     consensus = None
+
+
 class DataSet(Enum):
     """Enum for dataset names."""
 
