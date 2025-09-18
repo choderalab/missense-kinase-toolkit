@@ -14,6 +14,7 @@ class TestSchema:
     def test_dict_kinase(self, caplog):
         """Test if the kinase dictionary is correctly deserialized."""
         import copy
+
         from mkt.schema.io_utils import deserialize_kinase_dict
 
         DICT_KINASE = deserialize_kinase_dict()
