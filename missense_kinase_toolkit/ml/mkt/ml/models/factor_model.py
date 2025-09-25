@@ -1,14 +1,16 @@
 import torch
 import torch.nn as nn
 
+
 class LogisticTensorFactorModel(nn.Module):
     """A logistic tensor factor model for multi-dimensional data."""
+
     def __init__(
-        self, 
-        I: int, 
-        J: int, 
-        K: int, 
-        D: int = 100, 
+        self,
+        I: int,
+        J: int,
+        K: int,
+        D: int = 100,
         init_std: float = 0.1,
     ):
         """Initialize the LogisticTensorFactorModel.
@@ -26,7 +28,7 @@ class LogisticTensorFactorModel(nn.Module):
         init_std : float, optional
             Standard deviation for weight initialization, by default 0.1.
         """
-        super(LogisticTensorFactorModel, self).__init__()
+        super().__init__()
 
         self.I, self.J, self.K, self.D = I, J, K, D
 
@@ -50,18 +52,18 @@ class LogisticTensorFactorModel(nn.Module):
         if indices is not None:
             # compute for specific indices only (memory efficient)
             i_idx, j_idx, k_idx = indices[:, 0], indices[:, 1], indices[:, 2]
-            
+
             # get relevant rows from factor matrices
             w_selected = self.W[i_idx]  # (N, D)
-            v_selected = self.V[j_idx]  # (N, D)  
+            v_selected = self.V[j_idx]  # (N, D)
             u_selected = self.U[k_idx]  # (N, D)
-            
+
             # compute theta = sum_d w_id * v_jd * u_kd
             theta = torch.sum(w_selected * v_selected * u_selected, dim=1)  # (N,)
-            
+
         else:
-            theta = torch.einsum('id,jd,ke->ijk', self.W, self.V, self.U)
+            theta = torch.einsum("id,jd,ke->ijk", self.W, self.V, self.U)
 
         probs = torch.sigmoid(theta)
-        
+
         return probs
