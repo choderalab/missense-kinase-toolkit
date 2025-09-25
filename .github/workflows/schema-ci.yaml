@@ -6,11 +6,11 @@ on:
       - "main"
     paths:
       - "missense_kinase_toolkit/schema/**"
-  pull_request:
-    branches:
-      - "main"
-    paths:
-      - "missense_kinase_toolkit/schema/**"
+  # pull_request:
+  #   branches:
+  #     - "main"
+  #   paths:
+  #     - "missense_kinase_toolkit/schema/**"
   schedule:
     - cron: "0 0 * * 0"
 
@@ -55,7 +55,7 @@ jobs:
             -v \
             --cov-report=xml \
             --color=yes  \
-            --cov=missense_kinase_toolkit/schema \
+            --cov=mkt.schema \
             missense_kinase_toolkit/schema/mkt/schema/tests/
 
       - name: Upload coverage reports to Codecov

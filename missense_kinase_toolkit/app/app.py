@@ -8,10 +8,14 @@ from generate_properties import PropertyTables
 from generate_structures import StructureVisualizer
 from mkt.databases.colors import DICT_COLORS
 from mkt.databases.log_config import configure_logging
-from mkt.databases.utils import try_except_return_none_rgetattr
-from mkt.schema import io_utils
-from mkt.schema.io_utils import DICT_FUNCS
+from mkt.schema.io_utils import (
+    DICT_FUNCS,
+    deserialize_kinase_dict,
+    return_str_path_from_pkg_data,
+    untar_files_in_memory,
+)
 from mkt.schema.kinase_schema import KinaseInfo
+from mkt.schema.utils import rgetattr
 from streamlit_bokeh import streamlit_bokeh
 
 logger = logging.getLogger(__name__)
@@ -39,9 +43,9 @@ class Dashboard:
     @st.cache_resource
     def _load_data():
         """Load and cache the data - only load filenames and unload KinaseInfo objects separately."""
-        str_path = io_utils.return_str_path_from_pkg_data()
+        str_path = return_str_path_from_pkg_data()
 
-        list_kinases, _ = io_utils.untar_files_in_memory(str_path, bool_extract=False)
+        list_kinases, _ = untar_files_in_memory(str_path, bool_extract=False)
         list_kinases.sort()
 
         return list_kinases
@@ -124,7 +128,7 @@ class Dashboard:
 
         """
         # load KinaseInfo model
-        obj_temp = io_utils.deserialize_kinase_dict(list_ids=[dashboard_state.kinase])[
+        obj_temp = deserialize_kinase_dict(list_ids=[dashboard_state.kinase])[
             dashboard_state.kinase
         ]
         str_json = self.generate_json_file(obj_temp)
@@ -161,46 +165,45 @@ class Dashboard:
 
         with col1:
             with st.expander("Structure", expanded=True):
-                st.markdown("### KinCore active structure\n")
-                try:
-                    plot_spot = st.empty()
+                if obj_temp.kincore is None:
+                    st.error("No KinCore objects available for this kinase.", icon="⚠️")
+                else:
+                    st.markdown("### KinCore active structure\n")
+                    try:
+                        plot_spot = st.empty()
 
-                    # allow for annotations if present in the KinaseInfo object
-                    list_idx = [0] + [
-                        idx + 1
-                        for idx, i in enumerate(
-                            [
-                                "uniprot.phospho_sites",
-                                "KLIFS2UniProtIdx",
-                            ]
+                        # allow for annotations if present in the KinaseInfo object
+                        list_idx = [0] + [
+                            idx + 1
+                            for idx, i in enumerate(
+                                [
+                                    "uniprot.phospho_sites",
+                                    "KLIFS2UniProtIdx",
+                                ]
+                            )
+                            if rgetattr(obj_temp, i) is not None
+                        ]
+
+                        annotation = st.radio(  # noqa: F841
+                            "Select an annotation to render (select one):",
+                            options=[LIST_OPTIONS[i] for i in list_idx],
+                            captions=[LIST_CAPTIONS[i] for i in list_idx],
+                            index=0,
                         )
-                        if try_except_return_none_rgetattr(obj_temp, i) is not None
-                    ]
 
-                    annotation = st.radio(  # noqa: F841
-                        "Select an annotation to render (select one):",
-                        options=[LIST_OPTIONS[i] for i in list_idx],
-                        captions=[LIST_CAPTIONS[i] for i in list_idx],
-                        index=0,
-                    )
-
-                    with plot_spot:
-                        viz = StructureVisualizer(
-                            obj_kinase=obj_temp,
-                            dict_align=obj_alignment.dict_align,
-                            str_attr=annotation,
+                        with plot_spot:
+                            viz = StructureVisualizer(
+                                obj_kinase=obj_temp,
+                                dict_align=obj_alignment.dict_align,
+                                str_attr=annotation,
+                            )
+                            st.components.v1.html(
+                                viz.html, height=600, width=None, scrolling=False
+                            )
+                    except Exception as e:
+                        logger.exception(
+                            f"Error generating structure for {dashboard_state.kinase}: {e}",
                         )
-                        st.components.v1.html(viz.html, height=600)
-
-                except Exception as e:
-                    logger.exception(
-                        f"Error generating structure for {dashboard_state.kinase}: {e}",
-                    )
-                    if obj_temp.kincore is None:
-                        st.error(
-                            "No KinCore objects available for this kinase.", icon="⚠️"
-                        )
-                    else:
                         st.error("No structure available for this kinase.", icon="⚠️")
 
         with col2:

@@ -30,6 +30,16 @@ LIST_KLIFS_STICK = [
 ]
 """list[int]: Zero indexed location of residues to highlight as stick"""
 
+# evolutionarily conserved residues in the KLIFS pocket
+# LIST_KLIFS_STICK = [
+#     3,
+#     5,
+#     8,
+#     68,
+#     80,
+# ]
+# """list[int]: Zero indexed location of residues to highlight as stick"""
+
 
 @dataclass
 class StructureVisualizer:
@@ -198,7 +208,9 @@ class StructureVisualizer:
         except KeyError:
             logger.error(f"{self.str_attr} not found in {self.dict_align.keys()}")
 
-        list_intersect = list(set(list_cif_idx).intersection(set(list_attr_idx)))
+        list_intersect = sorted(
+            list(set(list_cif_idx).intersection(set(list_attr_idx)))
+        )
 
         if self.str_attr == "KLIFS":
             # all KLIFS regions should fall within KinCore CIF region, but future-proofing

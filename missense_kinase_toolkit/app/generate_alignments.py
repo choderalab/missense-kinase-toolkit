@@ -12,8 +12,8 @@ from bokeh.models import (
 from bokeh.models.glyphs import Rect, Text
 from bokeh.plotting import figure
 from mkt.databases.klifs import DICT_POCKET_KLIFS_REGIONS
-from mkt.databases.utils import try_except_return_none_rgetattr
 from mkt.schema.kinase_schema import KinaseInfo
+from mkt.schema.utils import rgetattr
 from pydantic.dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -166,7 +166,7 @@ class SequenceAlignment:
         """
         try:
             if isinstance(start_or_end, str):
-                output = try_except_return_none_rgetattr(self.obj_kinase, start_or_end)
+                output = rgetattr(self.obj_kinase, start_or_end)
             elif isinstance(start_or_end, int):
                 output = start_or_end
             elif callable(start_or_end):
@@ -201,7 +201,7 @@ class SequenceAlignment:
         }
 
         for key, value in DICT_ALIGNMENT.items():
-            seq = try_except_return_none_rgetattr(self.obj_kinase, value["seq"])
+            seq = rgetattr(self.obj_kinase, value["seq"])
 
             # KinCore CIF sequence needs to be extracted from dict and have linebreaks removed
             if key == "KinCore, CIF" and seq is not None:

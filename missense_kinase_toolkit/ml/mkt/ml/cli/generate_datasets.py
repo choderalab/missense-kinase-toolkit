@@ -7,7 +7,8 @@ import numpy as np
 import pandas as pd
 from mkt.ml.datasets.process import DavisDataset, PKIS2Dataset
 from mkt.ml.log_config import add_logging_flags, configure_logging
-from mkt.ml.utils import get_repo_root, random_uuid
+from mkt.schema.io_utils import get_repo_root
+from mkt.schema.utils import random_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +53,8 @@ def main():
         pkis2_dataset = PKIS2Dataset(bool_save=False)
         logger.info(
             "Initialized PKIS2Dataset successfully and saved.\n"
-            f"Number of kinases: {pkis2_dataset.df["kinase_name"].nunique():,}\n"
-            f"Number of compounds: {pkis2_dataset.df["smiles"].nunique():,}\n"
+            f"Number of kinases: {pkis2_dataset.df['kinase_name'].nunique():,}\n"
+            f"Number of compounds: {pkis2_dataset.df['smiles'].nunique():,}\n"
         )
     except Exception as e:
         logger.error(f"Failed to initialize PKIS2Dataset: {e}")
@@ -63,8 +64,8 @@ def main():
         davis_dataset = DavisDataset(bool_save=False)
         logger.info(
             "Initialized DavisDataset successfully and saved.\n"
-            f"Number of kinases: {davis_dataset.df["kinase_name"].nunique():,}\n"
-            f"Number of compounds: {davis_dataset.df["smiles"].nunique():,}\n"
+            f"Number of kinases: {davis_dataset.df['kinase_name'].nunique():,}\n"
+            f"Number of compounds: {davis_dataset.df['smiles'].nunique():,}\n"
         )
     except Exception as e:
         logger.error(f"Failed to process DavisDataset: {e}")
