@@ -3,6 +3,7 @@ import argparse
 # from mkt.ml.models.pooling import CombinedPoolingModel
 # from mkt.ml.trainer import create_dataloaders, train_model
 from mkt.ml.factory import ExperimentFactory
+from mkt.ml.trainer import create_dataloaders, train_model
 
 # from mkt.ml.datasets.pkis2 import PKIS2Dataset
 from mkt.ml.log_config import add_logging_flags, configure_logging
@@ -52,9 +53,6 @@ if __name__ == "__main__":
     main()
 
 
-from mkt.ml.factory import ExperimentFactory
-from mkt.ml.trainer import create_dataloaders, train_model
-
 experiment = ExperimentFactory(
     "/data1/tanseyw/projects/whitej/ki_llm_mxfactor/configs/pkis2_tk_pooling.yaml"
 )
@@ -80,18 +78,18 @@ trained_model, training_stats = train_model(
 
 
 # FROM ORIGINAL GENERATE DATASET SCRIPT #
-#!/usr/bin/env python
+# #!/usr/bin/env python
 
-from os import path
-from typing import Any
+# from os import path
+# from typing import Any
 
-import pandas as pd
-from mkt.databases import ncbi
-from mkt.databases.io_utils import get_repo_root
-from mkt.databases.utils import try_except_return_none_rgetattr
-from mkt.schema import io_utils
-from nf_rnaseq.variables import DICT_DATABASES
-from tqdm import tqdm
+# import pandas as pd
+# from mkt.databases import ncbi
+# from mkt.databases.io_utils import get_repo_root
+# from mkt.databases.utils import try_except_return_none_rgetattr
+# from mkt.schema import io_utils
+# from nf_rnaseq.variables import DICT_DATABASES
+# from tqdm import tqdm
 
 # Functions #
 
@@ -336,16 +334,16 @@ df_merge_narm.loc[
     df_merge_narm["UniProt_ID"].apply(lambda x: "_" in x), "UniProt_ID"
 ].apply(lambda x: x.split("_")[0]).value_counts()
 
-dict_kinase["RPS6KA4_1"].kincore.fasta
-dict_kinase["RPS6KA4_2"].kincore.fasta
+DICT_KINASE["RPS6KA4_1"].kincore.fasta
+DICT_KINASE["RPS6KA4_2"].kincore.fasta
 for i in set_uniprot_dup:
-    dict_kinase[i]
+    DICT_KINASE[i]
 
 
 df_merge_narm.loc[
     df_merge_narm["UniProt_ID"].isin(set_uniprot_dup), "sequence_full"
-].apply(lambda x: dict_kinase["RPS6KA4_1"].kincore.fasta.seq in x)
-dict_kinase["RPS6KA4_1"].kincore.fasta.seq
+].apply(lambda x: DICT_KINASE["RPS6KA4_1"].kincore.fasta.seq in x)
+DICT_KINASE["RPS6KA4_1"].kincore.fasta.seq
 df_merge["UniProt_ID"] == "O75676"
 
 set_ids = set(df_merge["UniProt_ID"].tolist())
