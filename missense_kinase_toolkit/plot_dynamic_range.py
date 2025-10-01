@@ -25,8 +25,8 @@ def convert_from_percentile(input, orig_max=10000, precision=3):
 
 
 def main():
-    col_davis_drug = "Drug"
-    col_davis_target = "Target_ID"
+    # col_davis_drug = "Drug"
+    # col_davis_target = "Target_ID"
     col_davis_y = "Y"
     col_davis_y_transformed = "Y_trans"
 
