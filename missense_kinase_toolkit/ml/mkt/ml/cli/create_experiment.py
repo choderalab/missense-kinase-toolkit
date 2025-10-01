@@ -1,4 +1,11 @@
 import argparse
+from os import path
+from typing import Any
+
+import pandas as pd
+from mkt.databases import ncbi
+from mkt.databases.io_utils import get_repo_root
+from mkt.databases.utils import try_except_return_none_rgetattr
 
 # from mkt.ml.models.pooling import CombinedPoolingModel
 # from mkt.ml.trainer import create_dataloaders, train_model
@@ -8,19 +15,13 @@ from mkt.ml.factory import ExperimentFactory
 from mkt.ml.log_config import add_logging_flags, configure_logging
 from mkt.ml.trainer import create_dataloaders, run_pipeline_with_wandb, train_model
 from mkt.ml.utils import set_seed
-
-# from mkt.ml.utils import return_device
-
-from os import path
-from typing import Any
-
-import pandas as pd
-from mkt.databases import ncbi
-from mkt.databases.io_utils import get_repo_root
-from mkt.databases.utils import try_except_return_none_rgetattr
 from mkt.schema import io_utils
 from nf_rnaseq.variables import DICT_DATABASES
 from tqdm import tqdm
+
+# from mkt.ml.utils import return_device
+
+
 
 
 def parse_args():
