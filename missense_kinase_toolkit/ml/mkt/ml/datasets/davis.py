@@ -7,15 +7,16 @@ from mkt.ml.utils import get_repo_root
 
 logger = logging.getLogger(__name__)
 
+
 def get_tdc_dti(source_name="DAVIS"):
     from tdc.multi_pred import DTI
 
-    data = DTI(name = source_name)
-    data_davis = DTI(name = 'DAVIS')
+    data = DTI(name=source_name)
+    data_davis = DTI(name="DAVIS")
     data_davis.get_data()
     data_davis.entity1_idx.unique().tolist()
 
-    data_kiba = DTI(name = 'KIBA')
+    data_kiba = DTI(name="KIBA")
 
     data_kiba.get_data()
 

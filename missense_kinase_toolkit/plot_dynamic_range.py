@@ -10,7 +10,6 @@ from tdc.multi_pred import DTI
 # from matplotlib_venn import venn2
 
 
-
 def convert_to_percentile(input, orig_max=10000):
     return (input / orig_max) * 100
 
