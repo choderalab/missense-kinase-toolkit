@@ -254,16 +254,16 @@ df_merge_narm.loc[
     df_merge_narm["UniProt_ID"].apply(lambda x: "_" in x), "UniProt_ID"
 ].apply(lambda x: x.split("_")[0]).value_counts()
 
-dict_kinase["RPS6KA4_1"].kincore.fasta
-dict_kinase["RPS6KA4_2"].kincore.fasta
+DICT_KINASE["RPS6KA4_1"].kincore.fasta
+DICT_KINASE["RPS6KA4_2"].kincore.fasta
 for i in set_uniprot_dup:
-    dict_kinase[i]
+    DICT_KINASE[i]
 
 
 df_merge_narm.loc[
     df_merge_narm["UniProt_ID"].isin(set_uniprot_dup), "sequence_full"
-].apply(lambda x: dict_kinase["RPS6KA4_1"].kincore.fasta.seq in x)
-dict_kinase["RPS6KA4_1"].kincore.fasta.seq
+].apply(lambda x: DICT_KINASE["RPS6KA4_1"].kincore.fasta.seq in x)
+DICT_KINASE["RPS6KA4_1"].kincore.fasta.seq
 df_merge["UniProt_ID"] == "O75676"
 
 set_ids = set(df_merge["UniProt_ID"].tolist())
