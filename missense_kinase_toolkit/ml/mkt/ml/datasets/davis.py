@@ -1,9 +1,4 @@
 import logging
-from os import path
-
-import pandas as pd
-from mkt.ml.datasets.finetune import FineTuneDataset
-from mkt.ml.utils import get_repo_root
 
 logger = logging.getLogger(__name__)
 
@@ -26,3 +21,5 @@ def get_tdc_dti(source_name="DAVIS"):
     len(data.entity1_idx.unique())
     data.entity2_idx.unique()
     split = data.get_split()
+
+    return split, data, data_davis, data_kiba
