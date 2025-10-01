@@ -558,6 +558,7 @@ class TestDatabases:
             "CHEMBL5220042",
             "CHEMBL5220676",
             "CHEMBL553",
+            "CHEMBL5965928",
         } == set_id
         # ChEMBLMoleculeExact
         assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() == ["CHEMBL553"]
