@@ -2,7 +2,6 @@
 
 import matplotlib
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mtick
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -35,13 +34,10 @@ def main():
     data_davis = DTI(name="DAVIS")
     data_davis.harmonize_affinities("mean")
     df_davis = data_davis.get_data()
-    df_davis_pivot = df_davis.pivot(
-        index=col_davis_drug, columns=col_davis_target, values=col_davis_y
-    )
+    # df_davis_pivot = df_davis.pivot(
+    #     index=col_davis_drug, columns=col_davis_target, values=col_davis_y
+    # )
     df_davis[col_davis_y_transformed] = convert_to_percentile(df_davis[col_davis_y])
-    temp = convert_from_percentile(
-        df_davis[col_davis_y_transformed], df_davis[col_davis_y]
-    )
 
     df_pkis2 = pd.read_csv(
         "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv"
