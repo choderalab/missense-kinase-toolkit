@@ -246,7 +246,7 @@ class TensorFactorPipeline(TensorFactorTrainer):
         # Check split sizes
         n_train = (~self.df[self.val_col]).sum()
         n_val = self.df[self.val_col].sum()
-        print(f"\nSplit sizes:")
+        print("\nSplit sizes:")
         print(f"  Train: {n_train} ({n_train/len(self.df)*100:.1f}%)")
         print(f"  Val:   {n_val} ({n_val/len(self.df)*100:.1f}%)")
 
@@ -257,10 +257,10 @@ class TensorFactorPipeline(TensorFactorTrainer):
         if overlap:
             print(f"  ⚠️  WARNING: {len(overlap)} samples in both train and val!")
         else:
-            print(f"  ✓ No overlap between train and val")
+            print("  ✓ No overlap between train and val")
 
         # Check model initialization
-        print(f"\nModel parameters:")
+        print("\nModel parameters:")
         for name, param in self.model.named_parameters():
             print(
                 f"  {name}: shape={param.shape}, mean={param.mean().item():.4f}, std={param.std().item():.4f}"
