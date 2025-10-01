@@ -22,8 +22,6 @@ from tqdm import tqdm
 # from mkt.ml.utils import return_device
 
 
-
-
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Arguments to run the trainer.")
