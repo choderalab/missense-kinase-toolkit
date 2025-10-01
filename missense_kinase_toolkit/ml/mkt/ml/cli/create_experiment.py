@@ -1,15 +1,16 @@
 import argparse
 
-# from mkt.ml.datasets.pkis2 import PKIS2Dataset
-from mkt.ml.log_config import add_logging_flags, configure_logging
-from mkt.ml.utils import set_seed
-
 # from mkt.ml.models.pooling import CombinedPoolingModel
 # from mkt.ml.trainer import create_dataloaders, train_model
 from mkt.ml.factory import ExperimentFactory
+
+# from mkt.ml.datasets.pkis2 import PKIS2Dataset
+from mkt.ml.log_config import add_logging_flags, configure_logging
 from mkt.ml.trainer import run_pipeline_with_wandb
+from mkt.ml.utils import set_seed
 
 # from mkt.ml.utils import return_device
+
 
 def parse_args():
     """Parse command line arguments."""
@@ -35,14 +36,14 @@ def main():
     configure_logging()
     set_seed()
 
-    dataset, model, dict_trainer_configs = ExperimentFactory(args.config)   
+    dataset, model, dict_trainer_configs = ExperimentFactory(args.config)
 
-    #TODO: if dataset dict, batch otherwise run
+    # TODO: if dataset dict, batch otherwise run
     # if isinstance(dataset.dataset_test, dict):
     run_pipeline_with_wandb(
-        model = model,
-        dataset_train = dataset.dataset_train,
-        dataset_test = dataset.dataset_test,
+        model=model,
+        dataset_train=dataset.dataset_train,
+        dataset_test=dataset.dataset_test,
         **dict_trainer_configs,
     )
 
@@ -51,14 +52,16 @@ if __name__ == "__main__":
     main()
 
 
-
-
 from mkt.ml.factory import ExperimentFactory
 from mkt.ml.trainer import create_dataloaders, train_model
 
-experiment = ExperimentFactory("/data1/tanseyw/projects/whitej/ki_llm_mxfactor/configs/pkis2_tk_pooling.yaml")
+experiment = ExperimentFactory(
+    "/data1/tanseyw/projects/whitej/ki_llm_mxfactor/configs/pkis2_tk_pooling.yaml"
+)
 dataset, model, dict_trainer_configs = experiment.build()
-train_dataloader, test_dataloader = create_dataloaders(dataset.dataset_train, dataset.dataset_test)
+train_dataloader, test_dataloader = create_dataloaders(
+    dataset.dataset_train, dataset.dataset_test
+)
 
 del dict_trainer_configs["model_name"]
 del dict_trainer_configs["batch_size"]
@@ -66,13 +69,13 @@ del dict_trainer_configs["entity_name"]
 del dict_trainer_configs["project_name"]
 
 trained_model, training_stats = train_model(
-    model=model, 
-    train_dataloader=train_dataloader, 
-    test_dataloader=test_dataloader, 
-    checkpoint_dir="checkpoint/test", 
-    plot_dir="checkpoint/test/plot", 
-    bool_wandb=False, 
-    **dict_trainer_configs
+    model=model,
+    train_dataloader=train_dataloader,
+    test_dataloader=test_dataloader,
+    checkpoint_dir="checkpoint/test",
+    plot_dir="checkpoint/test/plot",
+    bool_wandb=False,
+    **dict_trainer_configs,
 )
 
 
@@ -402,4 +405,3 @@ df_merge_narm_reconciled["kincore_group"] = list_kincore_group
 df_merge_narm_reconciled.to_csv(
     path.join(get_repo_root(), "data/pkis2_annotated.csv"), index=False
 )
-

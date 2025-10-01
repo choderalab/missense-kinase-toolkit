@@ -323,4 +323,3 @@ df_merge_narm_reconciled["kincore_group"] = list_kincore_group
 df_merge_narm_reconciled.to_csv(
     path.join(get_repo_root(), "data/pkis2_annotated.csv"), index=False
 )
-

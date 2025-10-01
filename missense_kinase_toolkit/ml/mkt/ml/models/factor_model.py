@@ -10,10 +10,17 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from mkt.ml.utils import set_seed
 
+
 class LogisticTensorFactorModel(nn.Module):
     """A logistic tensor factor model for multi-dimensional data."""
-    
-    def __init__(self, I, J, K, D, init_std=0.1):
+    def __init__(
+        self,
+        I: int,
+        J: int,
+        K: int,
+        D: int = 100,
+        init_std: float = 0.1,
+    ):
         """Initialize the LogisticTensorFactorModel.
 
         Parameters
@@ -30,7 +37,7 @@ class LogisticTensorFactorModel(nn.Module):
             Standard deviation for weight initialization, by default 0.1.
         """
         super().__init__()
-        
+
         self.I, self.J, self.K, self.D = I, J, K, D
         
         # initialize factor matrices
