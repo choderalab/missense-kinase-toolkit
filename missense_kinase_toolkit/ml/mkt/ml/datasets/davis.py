@@ -24,5 +24,4 @@ def get_tdc_dti(source_name="DAVIS"):
     data.entity2_name
     len(data.entity1_idx.unique())
     data.entity2_idx.unique()
-    data.
     split = data.get_split()
