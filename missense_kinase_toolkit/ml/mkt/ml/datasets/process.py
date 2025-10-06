@@ -53,7 +53,8 @@ class DavisConfig(DatasetConfig):
     """Configuration for the Davis dataset."""
 
     name = "Davis"
-    url_main = None  # URL will be set in the DavisDataset class
+    url_main = "https://raw.githubusercontent.com/choderalab/missense-kinase-toolkit/main/data/41587_2011_BFnbt1990_MOESM5_ESM.xls"
+    url_supp = "https://raw.githubusercontent.com/choderalab/missense-kinase-toolkit/main/data/41587_2011_BFnbt1990_MOESM4_ESM.xls"
     col_drug = "Drug"
     col_kinase = "Target_ID"
     col_y = "Y"
@@ -232,6 +233,10 @@ class DavisDataset(DavisConfig, ProcessDataset):
 
     def process(self) -> pd.DataFrame:
         """Process the Davis dataset."""
+        df = pd.read_excel(self.url_main, sheet_name=0)
+        df_supp = pd.read_excel(self.url_supp, sheet_name=0)
+
+
         from tdc.multi_pred import DTI
 
         data = DTI(name=self.name)
