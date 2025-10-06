@@ -15,9 +15,8 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath("../src"))
-
-import missense_kinase_toolkit
+import mkt.schema
+import mkt.databases
 
 
 # -- Project information -----------------------------------------------------
@@ -51,15 +50,78 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
     "sphinx.ext.extlinks",
+    "sphinx.ext.napoleon",
 ]
 
 autosummary_generate = True
+autosummary_mock_imports = []
+
+# Napoleon settings for NumPy-style docstrings
 napoleon_google_docstring = False
 napoleon_numpy_docstring = True
 napoleon_include_init_with_doc = True
-napolean_include_private_with_doc = True
+napoleon_include_private_with_doc = True
 napoleon_use_param = False
 napoleon_use_ivar = True
+napoleon_use_rtype = True
+
+# Autodoc settings
+autodoc_default_options = {
+    'members': True,
+    'undoc-members': True,
+    'show-inheritance': True,
+    'private-members': False,
+    'special-members': '__init__',
+    'inherited-members': False,  # Don't show inherited members by default
+}
+
+# Skip inherited methods from common base classes
+def skip_member(app, what, name, obj, skip, options):
+    """Skip inherited methods from standard libraries like Pydantic BaseModel."""
+    # Skip specific Pydantic BaseModel methods that clutter the docs
+    pydantic_methods = {
+        'construct', 'from_orm', 'parse_obj', 'parse_raw', 'parse_file',
+        'update_forward_refs', 'validate', 'copy', 'dict', 'json',
+        'schema', 'schema_json', 'fields', '__fields__', '__config__',
+        'model_construct', 'model_copy', 'model_dump', 'model_dump_json',
+        'model_fields', 'model_validate', 'model_validate_json'
+    }
+
+    # Skip common Python object methods that aren't useful in API docs
+    python_builtin_methods = {
+        '__dir__', '__format__', '__ge__', '__getattribute__', '__gt__',
+        '__init_subclass__', '__le__', '__lt__', '__ne__', '__new__',
+        '__reduce__', '__reduce_ex__', '__repr__', '__setattr__', '__sizeof__',
+        '__str__', '__subclasshook__', '__weakref__', '__delattr__',
+        '__hash__', '__class__'
+    }
+
+    # Skip internal Pydantic and Python attributes that clutter docs
+    internal_attributes = {
+        '__abstractmethods__', '__annotations__', '__dict__', '__doc__',
+        '__module__', '__slots__', '_abc_impl', '__fields_set__',
+        '__pydantic_fields_set__', '__pydantic_extra__', '__pydantic_private__',
+        '__class_vars__', '__private_attributes__', '__pydantic_complete__',
+        '__pydantic_computed_fields__', '__pydantic_core_schema__', '__pydantic_custom_init__',
+        '__pydantic_fields__', '__pydantic_generic_metadata__', '__pydantic_parent_namespace__',
+        '__pydantic_post_init__', '__pydantic_root_model__', '__signature__',
+        'model_computed_fields', 'model_config', 'model_extra', 'model_fields_set'
+    }
+
+    if name in pydantic_methods or name in python_builtin_methods or name in internal_attributes:
+        return True
+
+    # Also skip if the method is defined in a standard library module
+    if hasattr(obj, '__module__'):
+        module = getattr(obj, '__module__', '')
+        if module and (module.startswith('pydantic') or module.startswith('enum') or module == 'builtins'):
+            return True
+
+    return skip
+
+def setup(app):
+    """Sphinx extension setup."""
+    app.connect('autodoc-skip-member', skip_member)
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -183,7 +245,7 @@ texinfo_documents = [
         "missense-kinase-toolkit Documentation",
         author,
         "missense_kinase_toolkit",
-        "An ETL pipeline package to facilitate structure-based ML for human kinase property prediction",
+        "A Python package to generate sequence and structure-based representations for human kinase property prediction",
         "Miscellaneous",
     ),
 ]
@@ -192,7 +254,7 @@ texinfo_documents = [
 # -- Extension configuration -------------------------------------------------
 
 here = os.path.dirname(__file__)
-repo = os.path.join(here,  '../missense-kinase-toolkit')
+repo = os.path.join(here,  '..')
 
 # Ensure env.metadata[env.docname]['nbsphinx-link-target']
 # points relative to repo root:

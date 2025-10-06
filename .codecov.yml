@@ -5,10 +5,25 @@ coverage:
     project:
       default:
         threshold: 50%
+
+flags:
+  schema:
+    paths:
+      - missense_kinase_toolkit/schema
+    carryforward: true
+  databases:
+    paths:
+      - missense_kinase_toolkit/databases
+    carryforward: true
+
 comment:
-  layout: "header"
+  layout: "header, flags"
   require_changes: false
   branches: null
   behavior: default
-  flags: null
   paths: null
+  show_carryforward_flags: true
+
+ignore:
+      # NCBI currently down
+      - missense_kinase_toolkit/databases/mkt/databases/ncbi.py

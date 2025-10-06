@@ -6,7 +6,7 @@ channels:
   - defaults
 dependencies:
     # Base depends
-  - python
+  - python >=3.10,<3.12
   - pip
 
     # Testing
@@ -23,3 +23,12 @@ dependencies:
   - biopython
   - pydantic
   - GitPython
+  - importlib-resources
+
+    # schema
+  - gitpython
+  - pydantic
+  - strenum
+  - toml
+  - pyyaml
+  - tqdm
