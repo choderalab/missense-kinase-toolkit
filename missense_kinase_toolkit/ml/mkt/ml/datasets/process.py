@@ -236,7 +236,6 @@ class DavisDataset(DavisConfig, ProcessDataset):
         df = pd.read_excel(self.url_main, sheet_name=0)
         df_supp = pd.read_excel(self.url_supp, sheet_name=0)
 
-
         from tdc.multi_pred import DTI
 
         data = DTI(name=self.name)
