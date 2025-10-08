@@ -234,7 +234,7 @@ class DavisDataset(DavisConfig, ProcessDataset):
     def process(self) -> pd.DataFrame:
         """Process the Davis dataset."""
         df = pd.read_excel(self.url_main, sheet_name=0)
-        df_supp = pd.read_excel(self.url_supp, sheet_name=0)
+        # df_supp = pd.read_excel(self.url_supp, sheet_name=0)
 
         from tdc.multi_pred import DTI
 
