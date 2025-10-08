@@ -1,26 +1,30 @@
 from os import path
-import pandas as pd
-from tqdm import tqdm
 
+import pandas as pd
 from mkt.databases.chembl import return_chembl_id
 from mkt.schema.io_utils import get_repo_root
+from tqdm import tqdm
+
 
 def main():
 
-    df_supp = pd.read_excel(path.join(get_repo_root(), "data/41587_2011_BFnbt1990_MOESM4_ESM.xls"), sheet_name=0)
+    df_supp = pd.read_excel(
+        path.join(get_repo_root(), "data/41587_2011_BFnbt1990_MOESM4_ESM.xls"),
+        sheet_name=0,
+    )
 
     list_davis_drugs = list(
         map(
-            lambda x, y: x if str(y) == "nan" else y, 
-            df_supp["Compound Name"], 
-            df_supp["Alternative Name"]
+            lambda x, y: x if str(y) == "nan" else y,
+            df_supp["Compound Name"],
+            df_supp["Alternative Name"],
         )
     )
 
     dict_chembl_id = {drug: {"source": None, "ids": []} for drug in list_davis_drugs}
     for drug in tqdm(list_davis_drugs, desc="Querying drugs in ChEMBL"):
         drug_rev = drug.split(" (")[0]
-        
+
         chembl_id, source = return_chembl_id(drug_rev)
 
         dict_chembl_id[drug]["source"] = source
@@ -39,7 +43,6 @@ def main():
 
     dict_chembl_id_rev.update(DICT_MANUAL)
 
-    
 
 if __name__ == "__main__":
     main()
