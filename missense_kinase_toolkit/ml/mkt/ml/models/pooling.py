@@ -1,6 +1,5 @@
 import torch.nn as nn
-
-from missense_kinase_toolkit.ml.mkt.ml.models.base_model import AbstractTransformModel
+from mkt.ml.models.base_model import AbstractTransformModel
 
 
 class CombinedPoolingModel(AbstractTransformModel):
