@@ -195,7 +195,10 @@ class ChEMBLMolecule(ChEMBL):
                 elif "-" in preferred_name and "-" not in str_in:
                     return str_in
                 else:
-                    return preferred_name.title()
+                    if "-" in preferred_name:
+                        return preferred_name
+                    else:
+                        return preferred_name.title()
             return preferred_name.title()
         else:
             if str_in is not None:
