@@ -145,8 +145,8 @@ class ChEMBLMolecule(ChEMBL):
     """URL suffix for querying exact molecule match in ChEMBL."""
     params: dict = field(
         default_factory=lambda: {
-            "molecule_synonyms__molecule_synonym__iexact": "<ID>", 
-            "format": "json"
+            "molecule_synonyms__molecule_synonym__iexact": "<ID>",
+            "format": "json",
         }
     )
     """Parameters for the molecule API query."""
@@ -160,7 +160,9 @@ class ChEMBLMolecule(ChEMBL):
                 return None
             if len(self._json["molecules"]) > 1:
                 if self.verbose:
-                    logger.warning(f"Multiple molecules found for {self.id}. Returning the first one.")
+                    logger.warning(
+                        f"Multiple molecules found for {self.id}. Returning the first one."
+                    )
         else:
             if self.verbose:
                 logger.error(f"No molecules found in the response for {self.id}.")
@@ -169,19 +171,20 @@ class ChEMBLMolecule(ChEMBL):
     def return_smiles(self) -> str | None:
         """Return the SMILES string for the queried molecule."""
         self.check_molecules()
-        return self._json["molecules"][0].get("molecule_structures", {}).get("canonical_smiles", None)
+        return (
+            self._json["molecules"][0]
+            .get("molecule_structures", {})
+            .get("canonical_smiles", None)
+        )
 
     def return_preferred_name(self) -> str | None:
         """Return the preferred name for the queried molecule."""
         self.check_molecules()
         return self._json["molecules"][0].get("pref_name", None)
 
-    def adjudicate_preferred_name(
-        self, 
-        str_in: str | None = None
-    ) -> str:
+    def adjudicate_preferred_name(self, str_in: str | None = None) -> str:
         """Return the adjudicated preferred name for the queried molecule.
-        
+
         Parameters
         ----------
         str_in : str | None
@@ -207,5 +210,7 @@ class ChEMBLMolecule(ChEMBL):
             if str_in is not None:
                 return str_in.title()
             else:
-                logger.error(f"No preferred name found for {self.id}. Returning original ID.")
+                logger.error(
+                    f"No preferred name found for {self.id}. Returning original ID."
+                )
                 return self.id.upper()
