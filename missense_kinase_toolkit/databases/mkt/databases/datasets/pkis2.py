@@ -1,7 +1,7 @@
 import pandas as pd
 
 # drop values that cannot be matched to protein kinase sequence
-LIST_DROP = [
+LIST_KM_ATP_DROP = [
     "PI3-KINASE-ALPHA",  # lipid kinase
     "PI3-KINASE-DELTA",  # lipid kinase
     "PI3-KINASE-GAMMA",  # lipid kinase
@@ -14,7 +14,7 @@ LIST_DROP = [
 ]
 
 # dictionary of {string match : string replace} for exact matches
-DICT_EXACT = {
+DICT_KM_ATP_EXACT = {
     "ARK5": "NUAK1",
     "CK1": "CK1a",
     "CRAF": "RAF1",
@@ -28,7 +28,7 @@ DICT_EXACT = {
 }
 
 # dictionary of {string match : string replace} for partial matches
-DICT_PARTIAL = {
+DICT_KM_ATP_PARTIAL = {
     "AURORA": "AURK",
     "ALPHA": "A",
     "BETA": "B",
