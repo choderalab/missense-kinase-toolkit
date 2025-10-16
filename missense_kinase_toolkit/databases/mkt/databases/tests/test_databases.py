@@ -567,9 +567,9 @@ class TestDatabases:
 
         # drug not present
         drug = "TESTTESTTEST"
-        assert chembl.ChEMBLMoleculeSearch(id=drug).get_chembl_id() is None
-        assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() is None
-        assert chembl.ChEMBLMoleculePreferred(id=drug).get_chembl_id() is None
+        assert chembl.ChEMBLMoleculeSearch(id=drug).get_chembl_id() == []
+        assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() == []
+        assert chembl.ChEMBLMoleculePreferred(id=drug).get_chembl_id() == []
 
     def test_opentargets(self):
         from mkt.databases import open_targets
