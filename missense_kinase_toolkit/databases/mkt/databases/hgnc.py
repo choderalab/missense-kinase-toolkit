@@ -65,11 +65,10 @@ class HGNC:
         """
         if custom_field is not None:
             url = f"{self.url}/search/{custom_field}:{custom_term}"
+        elif self.hgnc is not None:
+            url = f"{self.url}/search/symbol:{self.hgnc}"
         else:
-            if self.hgnc is not None:
-                url = f"{self.url}/search/symbol:{self.hgnc}"
-            else:
-                url = f"{self.url}/search/ensembl_gene_id:{self.ensembl}"
+            url = f"{self.url}/search/ensembl_gene_id:{self.ensembl}"
 
         res = requests_wrapper.get_cached_session().get(
             url, headers={"Accept": "application/json"}
@@ -90,7 +89,14 @@ class HGNC:
                     )
                 self.hgnc = list_hgnc_gene_name[0]
             elif len(list_hgnc_gene_name) == 0:
-                logger.warning(f"No gene names found for {self.hgnc}")
+                if custom_field is not None:
+                    logger.warning(
+                        f"{custom_term} not found using {custom_field} field."
+                    )
+                elif self.hgnc is not None:
+                    logger.warning(f"No gene names found for {self.hgnc}")
+                else:
+                    logger.warning(f"No gene names found for {self.ensembl}")
             else:
                 logger.warning(f"Multiple gene names found: {list_hgnc_gene_name}.")
         else:
@@ -151,8 +157,8 @@ class HGNC:
 
         else:
             print(
-                "No HGNC gene symbol provided; cannot fetch gene information \
-                    from HGNC API with Ensembl gene ID {self.ensembl}"
+                "No HGNC gene symbol provided; cannot fetch gene information "
+                f"from HGNC API with Ensembl gene ID {self.ensembl}"
             )
             dict_out = None
 
