@@ -346,6 +346,44 @@ class KinaseInfo(BaseModel):
             logger.info(f"No kinase domain sequence found for {self.hgnc_name}")
             return None
 
+    def adjudicate_kd_start(self) -> int | None:
+        """Adjudicate kinase domain start based on available data.
+
+        Returns
+        -------
+        int | None
+            The start of the kinase domain if available, otherwise None.
+        """
+        if self.kincore is not None:
+            start = rgetattr(self, "kincore.cif.start") or rgetattr(
+                self, "kincore.fasta.start"
+            )
+            return start
+        elif self.pfam is not None:
+            return self.pfam.start
+        else:
+            logger.info(f"No kinase domain sequence start found for {self.hgnc_name}")
+            return None
+
+    def adjudicate_kd_end(self) -> int | None:
+        """Adjudicate kinase domain end based on available data.
+
+        Returns
+        -------
+        int | None
+            The end of the kinase domain if available, otherwise None.
+        """
+        if self.kincore is not None:
+            end = rgetattr(self, "kincore.cif.end") or rgetattr(
+                self, "kincore.fasta.end"
+            )
+            return end
+        elif self.pfam is not None:
+            return self.pfam.end
+        else:
+            logger.info(f"No kinase domain sequence end found for {self.hgnc_name}")
+            return None
+
     def adjudicate_group(self) -> str | None:
         """Adjudicate group based on available data.
 
