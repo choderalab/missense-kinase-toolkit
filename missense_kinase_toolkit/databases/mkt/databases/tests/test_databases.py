@@ -532,7 +532,6 @@ class TestDatabases:
         assert temp_obj._protvar_score[0]["amPathogenicity"] == 0.4217
         assert temp_obj._protvar_score[0]["amClass"] == "AMBIGUOUS"
 
-    @pytest.mark.skip(reason="NCBI is currently down")
     def test_ncbi(self):
         from mkt.databases import ncbi
 
