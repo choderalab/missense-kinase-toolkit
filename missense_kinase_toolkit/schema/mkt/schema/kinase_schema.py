@@ -401,3 +401,20 @@ class KinaseInfo(BaseModel):
 
         logger.info(f"No group found for {self.hgnc_name}")
         return None
+
+    def is_lipid_kinase(self) -> bool:
+        """Return boolean if a lipid kinase.
+
+        Returns
+        -------
+        bool
+            Whether or not is a lipid kinase
+        """
+        str_hgnc = self.hgnc_name.split("_")[0]
+
+        if str_hgnc.startswith("PI") and not (
+            str_hgnc.startswith("PIM") or str_hgnc.startswith("PIN")
+        ):
+            return True
+        else:
+            return False
