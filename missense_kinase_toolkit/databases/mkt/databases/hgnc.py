@@ -21,7 +21,7 @@ class HGNC:
         input_symbol_or_id : str
             Gene symbol or Ensembl gene ID
         input_is_hgnc_symbol : bool
-            If True, input_symbol_or_id is a gene symbol, otherwise it is an Ensembl gene ID
+            If True, input_symbol_or_id is a gene symbol, otherwise it is an Ensembl gene ID; defaults to True
 
         Attributes
         ----------
