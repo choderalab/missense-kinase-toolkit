@@ -56,6 +56,8 @@ class ProteinNCBI(RESTAPIClient):
         FASTA_PROTEIN ┃ FASTA_GENE_FLANK ┃ FASTA_CDS ┃ FASTA_5P_UTR ┃ FASTA_3P_UTR."""
     headers: str = "{'Accept': 'application/zip'}"
     """Header for the API request."""
+    str_fasta: str | None = None
+    """FASTA string downloaded from NCBI."""
     list_headers: list[str | None] = field(default_factory=list)
     """List of FASTA headers."""
     list_seq: list[str | None] = field(default_factory=list)
@@ -85,32 +87,67 @@ class ProteinNCBI(RESTAPIClient):
             else:
                 self.url_query += f"include_annotation_type={self.annotation}"
 
+    @staticmethod
+    def process_fasta(str_fasta: str) -> tuple[list[str], list[str]]:
+        """Process downloaded FASTA file or string into headers and sequences.
+
+        Parameters:
+        -----------
+        str_fasta : str
+            FASTA string to process.
+
+        Returns:
+        --------
+        tuple[list[str], list[str]]
+            Lists of FASTA headers and sequences.
+        """
+        fastas = SeqIO.parse(StringIO(str_fasta), "fasta")
+        list_fasta = [(fasta.description, str(fasta.seq)) for fasta in fastas]
+        list_header = [fasta[0] for fasta in list_fasta]
+        list_seq = [fasta[1] for fasta in list_fasta]
+        return list_header, list_seq
+
     def query_api(self) -> dict:
         res = requests_wrapper.get_cached_session().get(
             self.url_query,
             headers=ast.literal_eval(self.headers),
         )
+        try:
+            if res.ok:
+                zip_ref = ZipFile(BytesIO(res.content))
+                info_list = zip_ref.infolist()
+                list_ext = [
+                    os.path.splitext(file_info.filename)[1] for file_info in info_list
+                ]
+                list_idx = [idx for idx, i in enumerate(list_ext) if i == ".faa"]
 
-        if res.ok:
-            zip_ref = ZipFile(BytesIO(res.content))
-            info_list = zip_ref.infolist()
-            list_ext = [
-                os.path.splitext(file_info.filename)[1] for file_info in info_list
-            ]
-            list_idx = [idx for idx, i in enumerate(list_ext) if i == ".faa"]
+                if len(list_idx) == 0:
+                    logging.error(
+                        f"Failed to download any FASTA files using following query: {self.url_query}."
+                    )
 
-            if len(list_idx) == 0:
+                for idx in list_idx:
+                    str_fasta = zip_ref.open(info_list[idx]).read().decode()
+                    list_header, list_seq = self.process_fasta(str_fasta)
+                    self.list_headers.extend(list_header)
+                    self.list_seq.extend(list_seq)
+            else:
                 logging.error(
-                    f"Failed to download any FASTA files using following query: {self.url_query}."
+                    f"Status code {res.status_code} using following query: {self.url_query}."
                 )
-
-            for idx in list_idx:
-                str_fasta = zip_ref.open(info_list[idx]).read().decode()
-                fastas = SeqIO.parse(StringIO(str_fasta), "fasta")
-                list_fasta = [(fasta.description, str(fasta.seq)) for fasta in fastas]
-                self.list_headers.extend([fasta[0] for fasta in list_fasta])
-                self.list_seq.extend([fasta[1] for fasta in list_fasta])
-        else:
-            logging.error(
-                f"Status code {res.status_code} using following query: {self.url_query}."
-            )
+        except Exception as e:
+            if self.str_fasta is None:
+                logging.error(
+                    f"Failed to download FASTA file for accession {self.accession}."
+                )
+                logging.error(e)
+            else:
+                try:
+                    list_header, list_seq = self.process_fasta(self.str_fasta)
+                    self.list_headers.extend(list_header)
+                    self.list_seq.extend(list_seq)
+                except Exception as e2:
+                    logging.error(
+                        f"Failed to process FASTA string for accession {self.accession}."
+                    )
+                    logging.error(e2)
