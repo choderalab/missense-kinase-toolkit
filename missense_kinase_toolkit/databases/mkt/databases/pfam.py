@@ -8,7 +8,22 @@ logger = logging.getLogger(__name__)
 
 
 class Pfam:
-    """Class to interact with the Pfam API."""
+    """Class to interact with the Pfam API.
+
+    Parameters
+    ----------
+    uniprot_id : str
+        UniProt ID to query Pfam API for.
+
+    Attributes
+    ----------
+    url : str
+        Pfam API URL.
+    uniprot_id : str
+        UniProt ID to query Pfam API for.
+    _pfam : pd.DataFrame | None
+        DataFrame with Pfam domain information if request is successful, None if response is empty or
+    """
 
     def __init__(
         self,
