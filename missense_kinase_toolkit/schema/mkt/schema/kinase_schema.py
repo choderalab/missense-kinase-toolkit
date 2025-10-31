@@ -305,8 +305,13 @@ class KinaseInfo(BaseModel):
         else:
             return None
 
-    def extract_sequence_from_cif(self) -> str | None:
+    def extract_sequence_from_cif(self, bool_verbose: bool = False) -> str | None:
         """Extract sequence from CIF if available.
+
+        Parameters
+        ----------
+        bool_verbose : bool, optional
+            Whether to log verbose messages, by default False.
 
         Returns
         -------
@@ -319,14 +324,21 @@ class KinaseInfo(BaseModel):
             if self.kincore is not None and self.kincore.cif is not None:
                 return self.kincore.cif.cif[key_seq][0].replace("\n", "")
             else:
-                logger.info(f"No CIF sequence for {self.hgnc_name}")
+                if bool_verbose:
+                    logger.info(f"No CIF sequence for {self.hgnc_name}")
                 return None
         except Exception as e:
-            logger.info(f"No Kincore entry for {self.hgnc_name}: {e}")
+            if bool_verbose:
+                logger.info(f"No Kincore entry for {self.hgnc_name}: {e}")
             return None
 
-    def adjudicate_kd_sequence(self) -> str | None:
+    def adjudicate_kd_sequence(self, bool_verbose: bool = False) -> str | None:
         """Adjudicate kinase domain sequence based on available data.
+
+        Parameters
+        ----------
+        bool_verbose : bool, optional
+            Whether to log verbose messages, by default False.
 
         Returns
         -------
@@ -334,7 +346,7 @@ class KinaseInfo(BaseModel):
             The kinase domain sequence if available, otherwise None.
         """
         if self.kincore is not None:
-            seq = self.extract_sequence_from_cif()
+            seq = self.extract_sequence_from_cif(bool_verbose=bool_verbose)
             if seq is not None:
                 return seq
             else:
@@ -343,11 +355,17 @@ class KinaseInfo(BaseModel):
         elif self.pfam is not None:
             return self.uniprot.canonical_seq[self.pfam.start - 1 : self.pfam.end]
         else:
-            logger.info(f"No kinase domain sequence found for {self.hgnc_name}")
+            if bool_verbose:
+                logger.info(f"No kinase domain sequence found for {self.hgnc_name}")
             return None
 
-    def adjudicate_kd_start(self) -> int | None:
+    def adjudicate_kd_start(self, bool_verbose: bool = False) -> int | None:
         """Adjudicate kinase domain start based on available data.
+
+        Parameters
+        ----------
+        bool_verbose : bool, optional
+            Whether to log verbose messages, by default False.
 
         Returns
         -------
@@ -362,11 +380,19 @@ class KinaseInfo(BaseModel):
         elif self.pfam is not None:
             return self.pfam.start
         else:
-            logger.info(f"No kinase domain sequence start found for {self.hgnc_name}")
+            if bool_verbose:
+                logger.info(
+                    f"No kinase domain sequence start found for {self.hgnc_name}"
+                )
             return None
 
-    def adjudicate_kd_end(self) -> int | None:
+    def adjudicate_kd_end(self, bool_verbose: bool = False) -> int | None:
         """Adjudicate kinase domain end based on available data.
+
+        Parameters
+        ----------
+        bool_verbose : bool, optional
+            Whether to log verbose messages, by default False.
 
         Returns
         -------
@@ -381,11 +407,17 @@ class KinaseInfo(BaseModel):
         elif self.pfam is not None:
             return self.pfam.end
         else:
-            logger.info(f"No kinase domain sequence end found for {self.hgnc_name}")
+            if bool_verbose:
+                logger.info(f"No kinase domain sequence end found for {self.hgnc_name}")
             return None
 
-    def adjudicate_group(self) -> str | None:
+    def adjudicate_group(self, bool_verbose: bool = False) -> str | None:
         """Adjudicate group based on available data.
+
+        Parameters
+        ----------
+        bool_verbose : bool, optional
+            Whether to log verbose messages, by default False.
 
         Returns
         -------
@@ -399,7 +431,8 @@ class KinaseInfo(BaseModel):
             if group is not None:
                 return group
 
-        logger.info(f"No group found for {self.hgnc_name}")
+        if bool_verbose:
+            logger.info(f"No group found for {self.hgnc_name}")
         return None
 
     def is_lipid_kinase(self) -> bool:
