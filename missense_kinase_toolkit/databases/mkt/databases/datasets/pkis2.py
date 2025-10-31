@@ -1,4 +1,60 @@
 import pandas as pd
+from mkt.databases.datasets.process import (  # disambiguate_kinase_ids,; check_multimatch_str,
+    DatasetConfig,
+    ProcessDataset,
+)
+
+
+class PKIS2Config(DatasetConfig):
+    """Configuration for the PKIS2 dataset."""
+
+    name: str = "PKIS2"
+    url_main: str = (
+        "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv"
+    )
+    url_supp_kinase: str = (
+        "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/DiscoverX_489_Kinase_Assay_Construct_Information.csv"
+    )
+    col_drug: str = "Smiles"
+    col_kinase: str = "Kinase"
+    col_y: str = "% Inhibition"
+
+
+class PKIS2Dataset(PKIS2Config, ProcessDataset):
+    """PKIS2 dataset processing class."""
+
+    def __init__(self, **kwargs):
+        """Initialize PKIS2 dataset."""
+        super().__init__(**kwargs)
+
+        config_dict = PKIS2Config().model_dump()
+        config_dict.update(kwargs)
+
+        ProcessDataset.__init__(self, **config_dict)
+
+    def process(self) -> pd.DataFrame:
+        """Process the PKIS2 dataset."""
+        df = pd.read_csv(self.url_main)
+
+        # first 7 columns are metadata, rest are kinase targets
+        df_pivot = df.iloc[:, 7:]
+
+        df_pivot.index = df[self.col_drug]
+
+        df_melt = df_pivot.reset_index().melt(
+            id_vars=self.col_drug,
+            var_name=self.col_kinase,
+            value_name=self.col_y,
+        )
+
+        return df_melt
+
+    def add_source_column(self) -> pd.DataFrame:
+        """Add a PKIS2 name column to the DataFrame."""
+        df = self.df.copy()
+        df["source"] = self.name
+        return df
+
 
 # drop values that cannot be matched to protein kinase sequence
 LIST_KM_ATP_DROP = [

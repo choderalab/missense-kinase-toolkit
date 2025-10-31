@@ -111,6 +111,12 @@ class DiscoverXInfo(BaseModel):
     list_refseq2uniprot: list[int | None] | None = None
     """list[int | None]: List mapping RefSeq sequence indices to UniProt sequence indices
         length must match the length of the RefSeq sequence and entries correspond to UniProt."""
+    bool_has_kd: bool | None = None
+    """bool | None: Whether the kinase has a kinase domain defined in DICT_KINASE (True), \
+        not defined (False), or key not in DICT_KINASE (None)."""
+    bool_has_klifs: bool | None = None
+    """bool | None: Whether the kinase has KLIFS residues defined in DICT_KINASE (True), \
+        not defined (False), or key not in DICT_KINASE (None)."""
     bool_mutations_in_kd_region: bool | None = None
     """bool | None: Whether all mutations fall within the kinase domain (True), \
         outside (False), or no mutations/kinase domain/DICT_KINASE (None)."""
@@ -291,10 +297,21 @@ class DiscoverXInfo(BaseModel):
         return data
 
     def model_post_init(self, __context: any) -> None:
+        """Post-initialization processing to populate additional fields."""
+
+        # map between RefSeq and UniProt sequences
         self.list_refseq2uniprot, self.list_uniprot2refseq = (
             self.return_refseq2uniprot_mapping()
         )
 
+        # check if kinase has defined kinase domain or KLIFS residues
+        if self.key in DICT_KINASE:
+            self.bool_has_kd = (
+                DICT_KINASE[self.key].adjudicate_kd_sequence() is not None
+            )
+            self.bool_has_klifs = DICT_KINASE[self.key].KLIFS2UniProtIdx is not None
+
+        # process mutations if not wild-type
         if not self.bool_wt:
             (
                 str_refseq_mut,
@@ -390,9 +407,7 @@ class DiscoverXInfo(BaseModel):
 
         return list_idx_refseq2uniprot, list_idx_uniprot2refseq
 
-    def extract_region_indices(
-        self, bool_kd: bool = True
-    ) -> tuple[int | None, int | None]:
+    def extract_region_indices(self, bool_kd: bool = True) -> tuple[int, int]:
         """Extract kinase domain or KLIFS region indices from DICT_KINASE.
 
         Parameters:
@@ -402,36 +417,18 @@ class DiscoverXInfo(BaseModel):
 
         Returns:
         --------
-        tuple[int | None, int | None]
+        tuple[int, int]
             Tuple of (start index, end index).
         """
-        if self.key is not None:
-            if bool_kd:
-                idx_start = DICT_KINASE[self.key].adjudicate_kd_start()
-                idx_end = DICT_KINASE[self.key].adjudicate_kd_end()
-                if pd.isna(idx_start) or pd.isna(idx_end):
-                    logger.warning(
-                        f"Kinase domain boundaries not available for {self.discoverx_gene_symbol} "
-                        f"({self.key}) in DICT_KINASE."
-                    )
-                    return None, None
-                else:
-                    return idx_start, idx_end
-            else:
-                list_klifs_refseq = self.convert_uniprot2refseq_klifs_residues()
-                if list_klifs_refseq is None:
-                    logger.warning(
-                        f"KLIFS region not available for {self.discoverx_gene_symbol} "
-                        f"({self.key}) in DICT_KINASE."
-                    )
-                    return None, None
-                else:
-                    idx_start = min([v for v in list_klifs_refseq if v is not None])
-                    idx_end = max([v for v in list_klifs_refseq if v is not None])
-                    return idx_start, idx_end
-        # not present in DICT_KINASE (only PIKFYVE)
+        if bool_kd:
+            idx_start = DICT_KINASE[self.key].adjudicate_kd_start()
+            idx_end = DICT_KINASE[self.key].adjudicate_kd_end()
+            return idx_start, idx_end
         else:
-            return None, None
+            list_klifs_refseq = self.convert_uniprot2refseq_klifs_residues()
+            idx_start = min([v for v in list_klifs_refseq if v is not None])
+            idx_end = max([v for v in list_klifs_refseq if v is not None])
+            return idx_start, idx_end
 
     def check_region_of_mutation(
         self,
@@ -439,7 +436,7 @@ class DiscoverXInfo(BaseModel):
         idx_end: int | None,
         list_codons: int | list[int],
         bool_kd: bool = True,
-    ) -> bool | None:
+    ) -> bool:
         """Check if mutation falls within kinase domain or KLIFS region.
 
         Parameters:
@@ -455,24 +452,21 @@ class DiscoverXInfo(BaseModel):
 
         Returns:
         --------
-        bool | None
+        bool
             Updated bool indicating if mutation falls within region.
         """
-        if not pd.isna(idx_start) and not pd.isna(idx_end):
-            list_bool = [idx_start <= i <= idx_end for i in list_codons]
-            if all(list_bool):
-                return True
-            else:
-                region = "adjudicated kinase domain" if bool_kd else "KLIFS region"
-                for idx, bool_val in zip(list_codons, list_bool):
-                    if not bool_val:
-                        logger.info(
-                            f"Mutation at {idx} in {self.discoverx_gene_symbol} "
-                            f"falls outside {region} range {idx_start}-{idx_end}."
-                        )
-                return False
+        list_bool = [idx_start <= i <= idx_end for i in list_codons]
+        if all(list_bool):
+            return True
         else:
-            return None
+            region = "adjudicated kinase domain" if bool_kd else "KLIFS region"
+            for idx, bool_val in zip(list_codons, list_bool):
+                if not bool_val:
+                    logger.info(
+                        f"Mutation at {idx} in {self.discoverx_gene_symbol} "
+                        f"falls outside {region} range {idx_start}-{idx_end}."
+                    )
+            return False
 
     def convert_uniprot2refseq_klifs_residues(self) -> list[int] | None:
         """Convert KLIFS residues from UniProt to RefSeq indices.
@@ -483,26 +477,20 @@ class DiscoverXInfo(BaseModel):
 
         Returns:
         --------
-        list[int] | None
-            List of RefSeq indices corresponding to KLIFS residues, or None if not available.
+        list[int | None]
+            List of RefSeq indices corresponding to KLIFS residues or None if not available.
         """
-        if self.key is not None:
-            KLIFS2UniProtIdx = DICT_KINASE[self.key].KLIFS2UniProtIdx
-            if KLIFS2UniProtIdx is not None:
-                list_klifs_uniprot = list(KLIFS2UniProtIdx.values())
-                list_klifs_refseq = [
-                    (
-                        self.list_uniprot2refseq.index(v)
-                        if (v in self.list_uniprot2refseq and v is not None)
-                        else None
-                    )
-                    for v in list_klifs_uniprot
-                ]
-                return list_klifs_refseq
-            else:
-                return None
-        else:
-            return None
+        KLIFS2UniProtIdx = DICT_KINASE[self.key].KLIFS2UniProtIdx
+        list_klifs_uniprot = list(KLIFS2UniProtIdx.values())
+        list_klifs_refseq = [
+            (
+                self.list_uniprot2refseq.index(v)
+                if (v in self.list_uniprot2refseq and v is not None)
+                else None
+            )
+            for v in list_klifs_uniprot
+        ]
+        return list_klifs_refseq
 
     def convert_refseq2uniprot_mutations(
         self,
@@ -628,24 +616,29 @@ class DiscoverXInfo(BaseModel):
                     dict_seq[key_seq] = str_replace
 
         # check if all mutations are within KD/KLIFS region or KLIFS residues
+        bool_kd_region, bool_klifs_region, bool_klifs_residue = None, None, None
         if len(list_idx) > 0:
             # check kinase domain
             # TODO: technically these should be converted from uniprot2refseq indices,
             # waiting because currently need to handle mapping out of construct
-            idx_kd_start, idx_kd_end = self.extract_region_indices(bool_kd=True)
-            bool_kd_region = self.check_region_of_mutation(
-                idx_kd_start, idx_kd_end, list_idx, bool_kd=True
-            )
+            if self.bool_has_kd:
+                idx_kd_start, idx_kd_end = self.extract_region_indices(bool_kd=True)
+                bool_kd_region = self.check_region_of_mutation(
+                    idx_kd_start, idx_kd_end, list_idx, bool_kd=True
+                )
 
-            # check KLIFS region
-            idx_klifs_start, idx_klifs_end = self.extract_region_indices(bool_kd=False)
-            bool_klifs_region = self.check_region_of_mutation(
-                idx_klifs_start, idx_klifs_end, list_idx, bool_kd=False
-            )
-
-            # check KLIFS residues
-            list_klifs_refseq = self.convert_uniprot2refseq_klifs_residues()
-            bool_klifs_residue = all([i in list_klifs_refseq for i in list_idx])
+            # check KLIFS region/residues
+            if self.bool_has_klifs:
+                # check KLIFS region
+                idx_klifs_start, idx_klifs_end = self.extract_region_indices(
+                    bool_kd=False
+                )
+                bool_klifs_region = self.check_region_of_mutation(
+                    idx_klifs_start, idx_klifs_end, list_idx, bool_kd=False
+                )
+                # check KLIFS residues
+                list_klifs_refseq = self.convert_uniprot2refseq_klifs_residues()
+                bool_klifs_residue = all([i in list_klifs_refseq for i in list_idx])
 
         return (
             dict_seq["refseq_full"],
@@ -654,6 +647,24 @@ class DiscoverXInfo(BaseModel):
             bool_klifs_region,
             bool_klifs_residue,
         )
+
+    def generate_construct_dictionary(self) -> dict:
+        """Generate dictionary representation of the DiscoverXInfo object.
+
+        Returns:
+        --------
+        dict
+            Dictionary of length == construct where keys are RefSeq indices and values are properties
+                (e.g., KD start/end, KLIFS residues).
+        """
+        # dict_temp = DICT_KINASE
+
+        if self.idx_start is None or self.idx_end is None:
+            logger.info(
+                f"Cannot generate construct dictionary for {self.discoverx_gene_symbol} "
+                f"as construct boundaries are not defined."
+            )
+        # list_construct_idx = list(range(self.idx_start, self.idx_end + 1))
 
 
 @dataclass
