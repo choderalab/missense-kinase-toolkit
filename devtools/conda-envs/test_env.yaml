@@ -32,5 +32,6 @@ dependencies:
   - toml
   - pyyaml
   - tqdm
-  # - pip:
-  #   - git+https://github.com/tansey-lab/nf-rnaseq
+
+  - pip:
+    - git+https://github.com/tansey-lab/nf-rnaseq
