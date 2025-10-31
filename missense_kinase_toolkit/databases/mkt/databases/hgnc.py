@@ -45,6 +45,7 @@ class HGNC:
         self,
         custom_field: str | None = None,
         custom_term: str | None = None,
+        bool_verbose: bool = False,
     ) -> list[str] | None:
         """Get gene name from HGNC REST API using either a gene symbol or an Ensembl gene ID.
 
@@ -56,6 +57,8 @@ class HGNC:
             See https://www.genenames.org/help/rest/ under "searchableFields" for options
         custom_term : str | None
             Optional: custom term to search for in the HGNC REST API
+        bool_verbose : bool, optional
+            Whether to log verbose messages, by default False.
 
         Returns
         -------
@@ -79,26 +82,31 @@ class HGNC:
                 res, "symbol"
             )
             if len(list_hgnc_gene_name) == 1:
-                if self.hgnc is not None:
+                if self.hgnc is not None and bool_verbose:
                     logger.warning(
-                        f"Gene name found for {self.hgnc}: {list_hgnc_gene_name[0]}. Overwriting HGNC gene name..."
+                        f"Gene name found for {self.hgnc}: {list_hgnc_gene_name[0]}. "
+                        "Overwriting HGNC gene name..."
                     )
                 else:
-                    logger.warning(
-                        f"Gene name found for {self.ensembl}: {list_hgnc_gene_name[0]}. Adding HGNC gene name..."
-                    )
+                    if bool_verbose:
+                        logger.warning(
+                            f"Gene name found for {self.ensembl}: "
+                            f"{list_hgnc_gene_name[0]}. Adding HGNC gene name..."
+                        )
                 self.hgnc = list_hgnc_gene_name[0]
             elif len(list_hgnc_gene_name) == 0:
-                if custom_field is not None:
-                    logger.warning(
-                        f"{custom_term} not found using {custom_field} field."
-                    )
-                elif self.hgnc is not None:
-                    logger.warning(f"No gene names found for {self.hgnc}")
-                else:
-                    logger.warning(f"No gene names found for {self.ensembl}")
+                if bool_verbose:
+                    if custom_field is not None:
+                        logger.warning(
+                            f"{custom_term} not found using {custom_field} field."
+                        )
+                    elif self.hgnc is not None:
+                        logger.warning(f"No gene names found for {self.hgnc}")
+                    else:
+                        logger.warning(f"No gene names found for {self.ensembl}")
             else:
-                logger.warning(f"Multiple gene names found: {list_hgnc_gene_name}.")
+                if bool_verbose:
+                    logger.warning(f"Multiple gene names found: {list_hgnc_gene_name}.")
         else:
             list_hgnc_gene_name = None
             utils_requests.print_status_code_if_res_not_ok(res)
@@ -108,6 +116,7 @@ class HGNC:
     def maybe_get_info_from_hgnc_fetch(
         self,
         list_to_extract: list[str] | None = None,
+        bool_verbose: bool = False,
     ) -> dict | None:
         """Get gene information for a given HGNC gene name from gene symbol report using HGNC REST API.
 
@@ -117,6 +126,8 @@ class HGNC:
             HGNC gene symbol
         list_to_extract : list[str] | None
             List of fields to extract from the response; if None, defaults to ["locus_type"]
+        bool_verbose : bool, optional
+            Whether to log verbose messages, by default False.
 
         Returns
         -------
@@ -156,10 +167,11 @@ class HGNC:
             dict_out = dict(zip(list_to_extract, list_out))
 
         else:
-            print(
-                "No HGNC gene symbol provided; cannot fetch gene information "
-                f"from HGNC API with Ensembl gene ID {self.ensembl}"
-            )
+            if bool_verbose:
+                logger.warning(
+                    "No HGNC gene symbol provided; cannot fetch gene information "
+                    f"from HGNC API with Ensembl gene ID {self.ensembl}"
+                )
             dict_out = None
 
         return dict_out
