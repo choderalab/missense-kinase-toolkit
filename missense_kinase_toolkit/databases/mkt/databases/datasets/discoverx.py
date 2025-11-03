@@ -2,12 +2,18 @@ import logging
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
+from itertools import chain
 
 import numpy as np
 import pandas as pd
 from mkt.databases import hgnc
 from mkt.databases.aligners import BL2UniProtAligner
-from mkt.databases.klifs import LIST_KLIFS_REGION
+from mkt.databases.klifs import (
+    DICT_POCKET_KLIFS_REGIONS,
+    LIST_INTER_REGIONS,
+    LIST_INTRA_REGIONS,
+    LIST_KLIFS_REGION,
+)
 from mkt.databases.ncbi import ProteinNCBI
 from mkt.databases.uniprot import UniProtFASTA, query_uniprotbulk_api
 from mkt.schema.io_utils import deserialize_kinase_dict
@@ -23,11 +29,11 @@ tqdm.pandas()
 DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE")
 DICT_KINASE_REV = {v.uniprot_id: v for v in DICT_KINASE.values()}
 
-
 DICT_DAVIS_DROP = {
     "DiscoverX Gene Symbol": [
         "-phosphorylated",  # no way to handle phosphorylated residues yet
         "-cyclin",  # no way to handle cyclin proteins yet
+        "-autoinhibited",  # no way to handle autoinhibited proteins
         "ALK(1151Tins)",  # insertion at III:18 - not sure how to handle KLIFS
     ],
     "Species": [
@@ -130,6 +136,13 @@ class DiscoverXInfo(BaseModel):
         outside (False), or no mutations/KLIFS residue/DICT_KINASE (None)."""
     dict_refseq_indices: dict[int, str | None] | None = None
     """dict[int, str | None]: Dictionary with 'start' and 'stop' indices for RefSeq sequence."""
+    KLIFS2RefSeqIdx: dict[int, int] | None = None
+    """dict[int, int] | None: Dictionary mapping KLIFS residue numbers to RefSeq indices."""
+    KLIFS2RefSeqSeq: dict[str, str] | None = None
+    """dict[str, str] | None: Dictionary mapping KLIFS region names (including intra/inter) to RefSeq sequences."""
+    dict_construct_sequences: dict[str, str | None] | None = None
+    """dict[str, str | None] | None: Dictionary with keys as region names and values as sequences or None."""
+    # really shouldn't play with this unless you know what you're doing
     bool_offset: bool = True
     """bool: Whether to use 1-based indexing (True) or 0-based indexing (False). Default is True."""
 
@@ -312,7 +325,6 @@ class DiscoverXInfo(BaseModel):
                 DICT_KINASE[self.key].adjudicate_kd_sequence() is not None
             )
             self.bool_has_klifs = DICT_KINASE[self.key].KLIFS2UniProtIdx is not None
-            self.dict_refseq_indices = self.generate_construct_dictionary()
 
         # process mutations if not wild-type
         if not self.bool_wt:
@@ -328,6 +340,22 @@ class DiscoverXInfo(BaseModel):
             self.bool_mutations_in_kd_region = bool_kd_region
             self.bool_mutations_in_klifs_region = bool_klifs_region
             self.bool_mutations_in_klifs_residues = bool_klifs_residues
+
+        # do this after mutation processing
+        if self.key in DICT_KINASE:
+            self.dict_refseq_indices = self.generate_construct_dictionary()
+
+        # bool_has_klifs not enough since AKT1/2/3 no construct boundaries but has KLIFS
+        if self.dict_refseq_indices is not None and self.bool_has_klifs:
+            try:
+                self.KLIFS2RefSeqIdx = self.generate_KLIFS2RefSeqIdx()
+            except Exception as e:
+                logger.info(
+                    f"{self.discoverx_gene_symbol} - could not generate KLIFS2RefSeqIdx: {e}"
+                )
+            self.KLIFS2RefSeqSeq = self.generate_alignment_dict_including_gaps()
+
+        self.dict_construct_sequences = self.generate_construct_sequence_dict()
 
     # TODO: mutation validation @model_validator(mode="after") for str_mut instead of str_wt
 
@@ -731,13 +759,15 @@ class DiscoverXInfo(BaseModel):
                     if str_refseq != str_klifs
                 ]
                 str_mismatch = "\n".join(list_mismatch)
-                logger.warning(
-                    f"{self.discoverx_gene_symbol}/{self.key} "
-                    "contains RefSeq to canonical KLIFS mismatches\n"
-                    f"RefSeq:  {str_refseq_klifs}\n"
-                    f"UniProt: {str_klifs_orig}\n"
-                    f"{str_mismatch}"
-                )
+                # imperfect because this flag is if *all* mutations are in KLIFS residues
+                if not self.bool_mutations_in_klifs_residues:
+                    logger.warning(
+                        f"{self.discoverx_gene_symbol}/{self.key} "
+                        "contains RefSeq to canonical KLIFS mismatches\n"
+                        f"RefSeq:  {str_refseq_klifs}\n"
+                        f"UniProt: {str_klifs_orig}\n"
+                        f"{str_mismatch}"
+                    )
             list_construct_klifs = [
                 (
                     list(LIST_KLIFS_REGION)[list_klifs_uniprot2refseq.index(i)]
@@ -814,6 +844,415 @@ class DiscoverXInfo(BaseModel):
                     )
 
         return dict_idx
+
+    def generate_KLIFS2RefSeqIdx(self) -> dict[str, int | None]:
+        """Generate mapping from KLIFS residue numbers to RefSeq indices."""
+        list_keys = list(self.dict_refseq_indices.keys())
+        list_values = list(self.dict_refseq_indices.values())
+
+        dict_out = dict.fromkeys(LIST_KLIFS_REGION, None)
+        for region in LIST_KLIFS_REGION:
+            if region in list_values:
+                dict_out[region] = list_keys[list_values.index(region)]
+
+        return dict_out
+
+    def generate_klifs_region_seq_list_from_dict_idx(self) -> dict[str, str | None]:
+        """Generate mapping from RefSeq indices to KLIFS residue numbers."""
+        list_region = list(DICT_POCKET_KLIFS_REGIONS.keys())
+        list_idx_temp = [
+            [v for k, v in self.KLIFS2RefSeqIdx.items() if k.split(":")[0] == i]
+            for i in list_region
+        ]
+        list_klifs_seq = [
+            "".join(
+                [
+                    self.seq_refseq[self.return_index(i)] if i is not None else "-"
+                    for i in j
+                ]
+            )
+            for j in list_idx_temp
+        ]
+        return list_klifs_seq
+
+    def get_inter_region(self) -> dict[str, str | None]:
+        """Get inter-region sequences."""
+
+        list_region = list(DICT_POCKET_KLIFS_REGIONS.keys())
+        dict_start_end = {
+            list_region[self.return_index(i)]: list_region[i]
+            for i in range(1, len(list_region) - 1)
+        }
+        dict_cols = {
+            key: list(i for i in LIST_KLIFS_REGION if i.split(":")[0] == key)
+            for key in list_region
+        }
+
+        list_inter = []
+        for key1, val1 in dict_start_end.items():
+            keys_start, keys_end = dict_cols[key1], dict_cols[val1]
+
+            start = [
+                val for key, val in self.KLIFS2RefSeqIdx.items() if key in keys_start
+            ]
+            if all(v is None for v in start):
+                max_start = None
+            else:
+                max_start = np.nanmax(np.array(start, dtype=float)) + 1
+
+            end = [val for key, val in self.KLIFS2RefSeqIdx.items() if key in keys_end]
+            if all(v is None for v in end):
+                min_end = None
+            else:
+                min_end = np.nanmin(np.array(end, dtype=float))
+
+            list_inter.append((max_start, min_end))
+
+        dict_inter = dict(
+            zip([f"{key}:{val}" for key, val in dict_start_end.items()], list_inter)
+        )
+
+        dict_fasta = {i: {} for i in LIST_INTER_REGIONS}
+        for region in LIST_INTER_REGIONS:
+            start, end = dict_inter[region][0], dict_inter[region][1]
+            if start is not None and end is not None:
+                if end - start == 0:
+                    dict_fasta[region] = None
+                else:
+                    dict_fasta[region] = self.seq_refseq[
+                        self.return_index(int(start)) : self.return_index(int(end))
+                    ]
+            else:
+                dict_fasta[region] = None
+
+        return dict_fasta
+
+    def recursive_idx_search(
+        self,
+        idx: int,
+        in_dict: dict[str, int],
+        decreasing: bool,
+    ):
+        """Recursively search for index in dictionary.
+
+        Parameters
+        ----------
+        idx : int
+            Index to start search
+        in_dict : dict[str, int]
+            Dictionary to search
+        decreasing : bool
+            If True, search in decreasing order; if False, search in increasing order
+
+        Returns
+        -------
+        idx : int
+            Index in dictionary
+
+        """
+        if idx == 0:
+            return "NONE"
+        list_keys = list(in_dict.keys())
+        if in_dict[list_keys[idx]] is None:
+            if decreasing:
+                idx = self.recursive_idx_search(idx - 1, in_dict, True)
+            else:
+                idx = self.recursive_idx_search(idx + 1, in_dict, False)
+        return idx
+
+    def find_intra_gaps(
+        self,
+        dict_in: dict[str, int],
+        bool_bl: bool = True,
+    ) -> tuple[int, str] | None:
+        """Find intra-pocket gaps in KLIFS pocket region.
+
+        Parameters
+        ----------
+        dict_in : dict[str, int]
+            Dictionary of KLIFS regions and their corresponding indices
+        bool_bl : bool
+            If True, find intra-region gaps for b.l region; if False, find intra-region gaps for linker region
+
+        Returns
+        -------
+        tuple[str, str] | None
+            Tuple of intra-region gaps
+
+        """
+        if bool_bl:
+            region, idx_in, idx_out = "b.l", 1, 2
+        else:
+            region, idx_in, idx_out = "linker", 0, 1
+
+        list_keys = list(dict_in.keys())
+        list_idx = [idx for idx, i in enumerate(dict_in.keys()) if region in i]
+
+        # ATR and CAMKK1 have inter hinge:linker region
+        start = list_idx[idx_in]
+        end = list_idx[idx_out]
+
+        if dict_in[list_keys[start]] is None:
+            start = self.recursive_idx_search(start - 1, dict_in, True)
+        if dict_in[list_keys[end]] is None:
+            end = self.recursive_idx_search(end + 1, dict_in, False)
+
+        # STK40 has no b.l region or preceding
+        if start == "NONE":
+            return None
+
+        return (dict_in[list_keys[start]], dict_in[list_keys[end]])
+
+    def return_intra_gap_substr(self, bl_bool) -> str | None:
+        """Return intra-region gap substring.
+
+        Parameters
+        ----------
+        bl_bool : bool
+            If True, find intra-region gaps for b.l region; if False, find intra-region gaps for linker region
+
+        Returns
+        -------
+        str | None
+            Intra-region gap substring
+
+        """
+        tuple_idx = self.find_intra_gaps(self.KLIFS2RefSeqIdx, bl_bool)
+        if tuple_idx is None:
+            return None
+        else:
+            start, end = tuple_idx[0], tuple_idx[1]
+            if end - start == 1:
+                return None
+            else:
+                return self.seq_refseq[start : end - 1]
+
+    def get_intra_region(self):
+        """Get intra-region sequences."""
+        list_seq = []
+        for region in LIST_INTRA_REGIONS:
+            if region.split("_")[0] == "b.l":
+                list_seq.append(self.return_intra_gap_substr(True))
+            else:
+                list_seq.append(self.return_intra_gap_substr(False))
+        return dict(zip(LIST_INTRA_REGIONS, list_seq))
+
+    def generate_alignment_dict_including_gaps(self):
+        """Return fully aligned KLIFS pocket."""
+        list_region = list(DICT_POCKET_KLIFS_REGIONS.keys())
+
+        # inter region
+        dict_inter = self.get_inter_region()
+
+        list_inter_regions = list(dict_inter.keys())
+        list_idx_inter = list(
+            chain(
+                *[
+                    list(
+                        idx for idx, j in enumerate(list_region) if j == i.split(":")[0]
+                    )
+                    for i in list_inter_regions
+                ]
+            )
+        )
+
+        list_region_combo = list(list_region)
+        i = 0
+        for idx, val in zip(list_idx_inter, list_inter_regions):
+            list_region_combo.insert(idx + i + 1, val)
+            i += 1
+
+        # intra region
+        dict_intra = self.get_intra_region()
+
+        idx = list_region_combo.index("b.l")
+        list_region_combo[idx : idx + 1] = "b.l_1", "b.l_intra", "b.l_2"
+
+        idx = list_region_combo.index("linker")
+        list_region_combo[idx : idx + 1] = "linker_1", "linker_intra", "linker_2"
+
+        dict_full_klifs_region = {region: None for region in list_region_combo}
+
+        list_klifs_seq = self.generate_klifs_region_seq_list_from_dict_idx()
+        dict_actual = dict(zip(list_region, list_klifs_seq))
+        # for region in list_region_combo:KL
+        for region, seq in dict_actual.items():
+            if region == "b.l":
+                dict_full_klifs_region["b.l_1"] = seq[0:2]
+                dict_full_klifs_region["b.l_2"] = seq[2:]
+                pass
+            elif region == "linker":
+                dict_full_klifs_region["linker_1"] = seq[0:1]
+                dict_full_klifs_region["linker_2"] = seq[1:]
+            else:
+                dict_full_klifs_region[region] = seq
+
+        for region, seq in dict_inter.items():
+            dict_full_klifs_region[region] = seq
+
+        for region, seq in dict_intra.items():
+            dict_full_klifs_region[region] = seq
+
+        return dict_full_klifs_region
+
+    def get_boundaries_in_key(self, bool_klifs: bool = True) -> tuple[int, int]:
+        """Get start and end indices of kinase domain or KLIFS region in dict_refseq_indices.
+
+        bool_klifs : bool
+            If True, get KLIFS region boundaries;
+                if False, get kinase domain boundaries; default is True.
+
+        Returns:
+        --------
+        tuple[int, int]
+            Tuple of (start index, end index) within dict_refseq_indices.
+        """
+        list_values = list(self.dict_refseq_indices.values())
+
+        if bool_klifs:
+            idx_key_start = list_values.index("I:1")
+            idx_key_end = list_values.index("a.l:85")
+        else:
+            idx_key_start = list_values.index("kd_start")
+            idx_key_end = list_values.index("kd_end")
+
+        return idx_key_start, idx_key_end
+
+    def generate_construct_sequence_dict(self) -> dict[str, str | None] | None:
+        """Generate dictionary of construct regions and their sequences.
+
+        Returns:
+        --------
+        dict[str, str | None]
+            Dictionary with keys as region names and values as sequences or None.
+                - KLIFS + KD: kd_pre, kd_start, klifs, kd_end, kd_post
+                - KD only: kd_pre, kd, kd_post
+                - KLIFS only: construct_pre, klifs, construct_post
+                - Neither: construct
+        """
+        # no boundary constructs for AKT1/2/3
+        if self.idx_start is None or self.idx_stop is None:
+            logger.info(
+                "Cannot generate construct sequence dictionary for "
+                f"{self.discoverx_gene_symbol} as construct boundaries are not defined."
+            )
+            return None
+
+        dict_temp = {}
+        # don't need if no KLIFS or KD but PIKFYVE will throw an error otherwise
+        if self.dict_refseq_indices is not None:
+            list_keys = list(self.dict_refseq_indices.keys())
+        if self.bool_has_kd:
+            # KD, KLIFS: kd_pre, kd_start, klifs, kd_end, kd_post
+            if self.bool_has_klifs:
+                idx_klifs_key_start, idx_klifs_key_end = self.get_boundaries_in_key()
+                idx_kd_key_start, idx_kd_key_end = self.get_boundaries_in_key(
+                    bool_klifs=False
+                )
+
+                # if kd_start is start of sequence, no kd_pre
+                if list_keys[idx_kd_key_start] == 1:
+                    dict_temp["kd_pre"] = None
+                else:
+                    idx_start = self.return_index(list_keys[0])
+                    idx_stop = self.return_index(list_keys[idx_kd_key_start])
+                    dict_temp["kd_pre"] = self.seq_refseq[idx_start:idx_stop]
+
+                # kd_start
+                idx_start = self.return_index(list_keys[idx_kd_key_start])
+                idx_stop = self.return_index(list_keys[idx_klifs_key_start])
+                dict_temp["kd_start"] = self.seq_refseq[idx_start:idx_stop]
+
+                # add KLIFS region
+                dict_temp.update(self.KLIFS2RefSeqSeq)
+
+                # kd_end
+                idx_start = self.return_index(list_keys[idx_klifs_key_end + 1])
+                idx_stop = self.return_index(list_keys[idx_kd_key_end])
+
+                # if kd_end is end of sequence, no kd_post
+                if list_keys[idx_kd_key_end] == max(list_keys):
+                    dict_temp["kd_end"] = self.seq_refseq[idx_start : idx_stop + 1]
+                    dict_temp["kd_post"] = None
+                else:
+                    dict_temp["kd_end"] = self.seq_refseq[idx_start:idx_stop]
+                    idx_start = self.return_index(list_keys[idx_kd_key_end])
+                    idx_stop = list_keys[-1]
+                    dict_temp["kd_post"] = self.seq_refseq[idx_start:idx_stop]
+
+            # KD, no KLIFS: KD_pre, KD, KD_post
+            else:
+                idx_kd_key_start, idx_kd_key_end = self.get_boundaries_in_key(
+                    bool_klifs=False
+                )
+
+                # if kd_start is start of sequence, no kd_pre
+                if list_keys[idx_kd_key_start] == min(list_keys):
+                    dict_temp["kd_pre"] = None
+                else:
+                    idx_start = self.return_index(list_keys[0])
+                    idx_stop = self.return_index(list_keys[idx_kd_key_start])
+                    dict_temp["kd_pre"] = self.seq_refseq[idx_start:idx_stop]
+
+                idx_start = idx_stop
+                idx_stop = self.return_index(list_keys[idx_kd_key_end])
+                dict_temp["kd"] = self.seq_refseq[idx_start:idx_stop]
+
+                # if kd_end is end of sequence, no kd_post
+                if list_keys[idx_kd_key_end] == max(list_keys):
+                    dict_temp["kd_post"] = None
+                else:
+                    idx_start = self.return_index(list_keys[idx_kd_key_end])
+                    idx_stop = list_keys[-1]
+                    dict_temp["kd_post"] = self.seq_refseq[idx_start:idx_stop]
+
+        else:
+            # no KD, KLIFS: construct_pre, klifs, construct_post
+            if self.bool_has_klifs:
+                idx_klifs_key_start, idx_klifs_key_end = self.get_boundaries_in_key()
+
+                # if klifs_start is start of sequence, no construct_pre
+                if list_keys[idx_klifs_key_start] == min(list_keys):
+                    dict_temp["construct_pre"] = None
+                else:
+                    idx_start = self.return_index(list_keys[0])
+                    idx_stop = self.return_index(list_keys[idx_klifs_key_start])
+                    dict_temp["construct_pre"] = self.seq_refseq[idx_start:idx_stop]
+
+                # add KLIFS region
+                dict_temp.update(self.KLIFS2RefSeqSeq)
+
+                # if kd_end is end of sequence, no kd_post
+                if list_keys[idx_klifs_key_end] == max(list_keys):
+                    dict_temp["construct_post"] = None
+                else:
+                    idx_start = self.return_index(list_keys[idx_klifs_key_end + 1])
+                    idx_stop = list_keys[-1]
+                    dict_temp["construct_post"] = self.seq_refseq[idx_start:idx_stop]
+
+            # no KD, no KLIFS: construct only
+            else:
+                idx_start = self.return_index(self.idx_start)
+                idx_stop = self.idx_stop
+                dict_temp["construct"] = self.seq_refseq[idx_start:idx_stop]
+
+        # sanity check - constructed sequence matches expected sequence from RefSeq
+        # remove gaps for comparison - present in KLIFS but want to retain for deletions
+        str_check1 = "".join([v for v in dict_temp.values() if v is not None])
+        if self.list_deletion_mutations is None:
+            str_check1 = str_check1.replace("-", "")
+        str_check2 = self.seq_refseq[self.return_index(self.idx_start) : self.idx_stop]
+        try:
+            assert str_check1 == str_check2
+        except AssertionError:
+            print(
+                f"AssertionError: Construct sequence for {self.discoverx_gene_symbol} "
+                "does not match expected sequence from RefSeq.\n"
+                f"Has KD: {self.bool_has_kd}, Has KLIFS: {self.bool_has_klifs}"
+                f"\nConstructed: {str_check1}\nExpected:   {str_check2}"
+            )
+
+        return dict_temp
 
 
 @dataclass
