@@ -1,11 +1,13 @@
 import logging
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 from mkt.databases import hgnc
 from mkt.databases.aligners import BL2UniProtAligner
+from mkt.databases.klifs import LIST_KLIFS_REGION
 from mkt.databases.ncbi import ProteinNCBI
 from mkt.databases.uniprot import UniProtFASTA, query_uniprotbulk_api
 from mkt.schema.io_utils import deserialize_kinase_dict
@@ -86,11 +88,11 @@ class DiscoverXInfo(BaseModel):
     """str | None: UniProt accession of the kinase."""
     str_start: SeqStartStop | None  # AKT1, AKT2, and AKT3 have None start/stop
     """SeqStartStop: Amino acid at the start of the construct."""
-    int_start: int | None  # AKT1, AKT2, and AKT3 have None start/stop
+    idx_start: int | None  # AKT1, AKT2, and AKT3 have None start/stop
     """int: Position of the start of the construct in the RefSeq sequence."""
     str_stop: SeqStartStop | None  # AKT1, AKT2, and AKT3 have None start/stop
     """SeqStartStop: Amino acid at the stop of the construct."""
-    int_stop: int | None  # AKT1, AKT2, and AKT3 have None start/stop
+    idx_stop: int | None  # AKT1, AKT2, and AKT3 have None start/stop
     """int: Position of the stop of the construct in the RefSeq sequence."""
     seq_refseq: SequenceDEL | None
     """SequenceDEL: RefSeq sequence with deletions allowed."""
@@ -126,8 +128,8 @@ class DiscoverXInfo(BaseModel):
     bool_mutations_in_klifs_residues: bool | None = None
     """bool | None: Whether all mutations fall within a KLIFS residue (True), \
         outside (False), or no mutations/KLIFS residue/DICT_KINASE (None)."""
-    # dict_refseq_indices: dict[int, str | None] = Field(default_factory=dict, initialize=False)
-    # """dict[int, str | None]: Dictionary with 'start' and 'stop' indices for RefSeq sequence."""
+    dict_refseq_indices: dict[int, str | None] | None = None
+    """dict[int, str | None]: Dictionary with 'start' and 'stop' indices for RefSeq sequence."""
     bool_offset: bool = True
     """bool: Whether to use 1-based indexing (True) or 0-based indexing (False). Default is True."""
 
@@ -310,6 +312,7 @@ class DiscoverXInfo(BaseModel):
                 DICT_KINASE[self.key].adjudicate_kd_sequence() is not None
             )
             self.bool_has_klifs = DICT_KINASE[self.key].KLIFS2UniProtIdx is not None
+            self.dict_refseq_indices = self.generate_construct_dictionary()
 
         # process mutations if not wild-type
         if not self.bool_wt:
@@ -480,12 +483,11 @@ class DiscoverXInfo(BaseModel):
         list[int | None]
             List of RefSeq indices corresponding to KLIFS residues or None if not available.
         """
-        KLIFS2UniProtIdx = DICT_KINASE[self.key].KLIFS2UniProtIdx
-        list_klifs_uniprot = list(KLIFS2UniProtIdx.values())
+        list_klifs_uniprot = list(DICT_KINASE[self.key].KLIFS2UniProtIdx.values())
         list_klifs_refseq = [
             (
-                self.list_uniprot2refseq.index(v)
-                if (v in self.list_uniprot2refseq and v is not None)
+                self.list_refseq2uniprot.index(v) + (1 if self.bool_offset else 0)
+                if (v in self.list_refseq2uniprot and v is not None)
                 else None
             )
             for v in list_klifs_uniprot
@@ -648,23 +650,170 @@ class DiscoverXInfo(BaseModel):
             bool_klifs_residue,
         )
 
-    def generate_construct_dictionary(self) -> dict:
+    def find_closest_mapping(
+        self,
+        idx_in: int,
+        iter_idx: Iterable | None = None,
+        bool_refseq2uniprot: bool = True,
+    ) -> int | None:
+        """Find closest mapping index if direct mapping is not available.
+
+        Parameters:
+        -----------
+        idx_in : int
+            Input index to map.
+        iter_idx : Iterable | None
+            Iterable of valid indices to consider for mapping; default is None.
+        bool_refseq2uniprot : bool
+            Whether to map from RefSeq to UniProt (True) or UniProt to RefSeq (False); default is True.
+
+        Returns:
+        --------
+        int | None
+            Closest mapping index or None if no mapping found.
+        """
+        if bool_refseq2uniprot:
+            list_mapping = self.list_refseq2uniprot
+        else:
+            list_mapping = self.list_uniprot2refseq
+
+        list_diffs = [(abs(idx_in - v), v) for v in list_mapping if v is not None]
+        list_diffs.sort(key=lambda x: x[0])
+
+        if len(list_diffs) == 0:
+            return None
+        else:
+            closest_idx = list_diffs[0][1]
+            # if iter_idx provided, make sure closest mapping is in iter_idx
+            if (iter_idx is not None) and (closest_idx not in iter_idx):
+                for diffs in list_diffs:
+                    idx_temp = list_mapping.index(diffs[1]) + 1 * self.bool_offset
+                    if idx_temp in iter_idx:
+                        return idx_temp
+            else:
+                return closest_idx
+
+    def generate_construct_dictionary(self) -> dict | None:
         """Generate dictionary representation of the DiscoverXInfo object.
 
         Returns:
         --------
-        dict
+        dict | None
             Dictionary of length == construct where keys are RefSeq indices and values are properties
                 (e.g., KD start/end, KLIFS residues).
         """
-        # dict_temp = DICT_KINASE
+        dict_temp = DICT_KINASE[self.key]
 
-        if self.idx_start is None or self.idx_end is None:
+        if self.idx_start is None or self.idx_stop is None:
             logger.info(
                 f"Cannot generate construct dictionary for {self.discoverx_gene_symbol} "
-                f"as construct boundaries are not defined."
+                "as construct boundaries are not defined."
             )
-        # list_construct_idx = list(range(self.idx_start, self.idx_end + 1))
+            return None
+        else:
+            list_construct_idx = list(range(self.idx_start, self.idx_stop + 1))
+
+        if self.bool_has_klifs:
+            str_klifs_orig = dict_temp.klifs.pocket_seq
+            list_klifs_uniprot2refseq = self.convert_uniprot2refseq_klifs_residues()
+            str_refseq_klifs = "".join(
+                [
+                    self.seq_refseq[self.return_index(i)] if i is not None else "-"
+                    for i in list_klifs_uniprot2refseq
+                ]
+            )
+            if str_refseq_klifs != str_klifs_orig:
+                list_mismatch = [
+                    f"{idx:<{5}}:\t{str_refseq:>{5}} (RefSeq) {str_klifs:>{5}} (KLIFS)"
+                    for idx, str_refseq, str_klifs in zip(
+                        LIST_KLIFS_REGION, str_refseq_klifs, str_klifs_orig
+                    )
+                    if str_refseq != str_klifs
+                ]
+                str_mismatch = "\n".join(list_mismatch)
+                logger.warning(
+                    f"{self.discoverx_gene_symbol}/{self.key} "
+                    "contains RefSeq to canonical KLIFS mismatches\n"
+                    f"RefSeq:  {str_refseq_klifs}\n"
+                    f"UniProt: {str_klifs_orig}\n"
+                    f"{str_mismatch}"
+                )
+            list_construct_klifs = [
+                (
+                    list(LIST_KLIFS_REGION)[list_klifs_uniprot2refseq.index(i)]
+                    if i in list_klifs_uniprot2refseq
+                    else None
+                )
+                for i in list_construct_idx
+            ]
+        else:
+            list_construct_klifs = [None for _ in list_construct_idx]
+
+        dict_idx = dict(zip(list_construct_idx, list_construct_klifs))
+        if self.bool_has_kd:
+            idx_kd_start, idx_kd_end = (
+                dict_temp.adjudicate_kd_start(),
+                dict_temp.adjudicate_kd_end(),
+            )
+            for region, idx_uniprot in zip(
+                ["kd_start", "kd_end"], [idx_kd_start, idx_kd_end]
+            ):
+
+                # exception handling for missing mapping from UniProt to RefSeq in construct
+                try:
+                    idx_refseq = (
+                        self.list_refseq2uniprot.index(idx_uniprot)
+                        + 1 * self.bool_offset
+                    )
+                except ValueError:
+                    logger.warning(
+                        f"UniProt codon {idx_uniprot:,} (KD {region.split('_')[1]}) "
+                        f"has no RefSeq analog in construct for {self.discoverx_gene_symbol} "
+                        f"({self.idx_start:,}-{self.idx_stop:,}). Using closest mapping instead."
+                    )
+                    # find closest mapping instead
+                    idx_refseq = self.find_closest_mapping(
+                        idx_in=idx_uniprot, iter_idx=dict_idx, bool_refseq2uniprot=True
+                    )
+
+                # if adjudicated KD start/end is outside construct boundaries
+                if idx_refseq not in dict_idx:
+                    dist_aa = (
+                        (self.idx_start - idx_refseq)
+                        if region.endswith("start")
+                        else (idx_refseq - self.idx_stop)
+                    )
+                    # only MTOR crosses threshold, where KD adjudication comes from Pfam is wrong
+                    if dist_aa >= 10 and self.discoverx_gene_symbol != "MTOR":
+                        logger.warning(
+                            f"Codon {idx_refseq:,} (KD {region.split('_')[1]}) "
+                            f"not present in construct for {self.discoverx_gene_symbol} "
+                            f"({self.idx_start:,}-{self.idx_stop:,})"
+                        )
+                    else:
+                        idx_refseq = (
+                            self.idx_start
+                            if region.endswith("start")
+                            else self.idx_stop
+                        )
+
+                # make sure not overwriting KLIFS info
+                try:
+                    assert dict_idx[idx_refseq] is None
+                    dict_idx[idx_refseq] = region
+                except AssertionError:
+                    logger.error(
+                        f"AssertionError: {self.discoverx_gene_symbol} KD {region.split('_')[1]} at "
+                        f"codon {idx_refseq:,} is annotated as {dict_idx[idx_refseq]}"
+                    )
+                except KeyError:
+                    logger.error(
+                        f"KeyError: {self.discoverx_gene_symbol} KD "
+                        f"{region.split('_')[1]}  at codon {idx_refseq:,} is outside "
+                        f"construct range ({self.idx_start:,}-{self.idx_stop:,})"
+                    )
+
+        return dict_idx
 
 
 @dataclass
@@ -907,9 +1056,9 @@ class DiscoverXInfoGenerator:
                 list_missense_mutations=dict_mut.get("missense", None),
                 list_deletion_mutations=dict_mut.get("deletion", None),
                 str_start=str_start,
-                int_start=int_start,
+                idx_start=int_start,
                 str_stop=str_stop,
-                int_stop=int_stop,
+                idx_stop=int_stop,
                 seq_refseq=str_refseq,
                 seq_uniprot=str_uniprot,
                 bool_offset=self.bool_offset,
