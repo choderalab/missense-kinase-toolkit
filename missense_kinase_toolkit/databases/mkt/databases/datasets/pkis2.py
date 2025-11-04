@@ -1,5 +1,5 @@
 import pandas as pd
-from mkt.databases.datasets.process import (  # disambiguate_kinase_ids,; check_multimatch_str,
+from mkt.databases.datasets.process import (
     DatasetConfig,
     ProcessDataset,
 )
@@ -12,11 +12,10 @@ class PKIS2Config(DatasetConfig):
     url_main: str = (
         "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/journal.pone.0181585.s004.csv"
     )
-    url_supp_kinase: str = (
-        "https://raw.githubusercontent.com/openkinome/kinoml/refs/heads/master/kinoml/data/kinomescan/DiscoverX_489_Kinase_Assay_Construct_Information.csv"
-    )
-    col_drug: str = "Smiles"
-    col_kinase: str = "Kinase"
+    col_drug_input: str = "Smiles"
+    # no conventional names supplied - can try ChemBL later
+    col_drug_name: str | None = None
+    col_kinase_name: str = "Kinase"
     col_y: str = "% Inhibition"
 
 
@@ -39,11 +38,11 @@ class PKIS2Dataset(PKIS2Config, ProcessDataset):
         # first 7 columns are metadata, rest are kinase targets
         df_pivot = df.iloc[:, 7:]
 
-        df_pivot.index = df[self.col_drug]
+        df_pivot.index = df[self.col_drug_input]
 
         df_melt = df_pivot.reset_index().melt(
-            id_vars=self.col_drug,
-            var_name=self.col_kinase,
+            id_vars=self.col_drug_input,
+            var_name=self.col_kinase_name,
             value_name=self.col_y,
         )
 

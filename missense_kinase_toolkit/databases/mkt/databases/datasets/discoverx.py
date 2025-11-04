@@ -1431,7 +1431,7 @@ class DiscoverXInfoGenerator:
 
         # add full RefSeq sequences
         self.df["refseq_full"] = self.df["Accession Number"].progress_apply(
-            lambda x: ProteinNCBI(accession=x.strip()).list_seq[0]
+            lambda x: ProteinNCBI(accession=x.strip()).list_seq[0],
         )
 
         # add canonical uniprot sequences
