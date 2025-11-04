@@ -14,13 +14,15 @@ class KinaseGroupSource(Enum):
     consensus = None
 
 
-# TODO: implement this in the future
-# class KinaseKDSequenceSource(Enum):
-#     """Enum for kinase KD sequence sources."""
+class KinaseInputType(Enum):
+    """Enum for kinase input types."""
 
-#     kincore = "kincore.fasta.kd_sequence"
-#     klifs = "klifs.kd_sequence"
-#     consensus = None
+    # mkt.databases.dataset.process.ProcessDataset.add_construct_unaligned()
+    construct_unaligned = "seq_construct_unaligned"
+    # rest should match mkt.databases.dataset.process.DICT_PROCESS_STRATEGIES
+    kd_klifs_aligned = "seq_kd_klifs_aligned"
+    klifs_region_aligned = "seq_klifs_region_aligned"
+    klifs_residues_only = "seq_klifs_residues_only" 
 
 
 class DataSet(Enum):
