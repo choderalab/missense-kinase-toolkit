@@ -3,7 +3,13 @@ from dataclasses import dataclass
 from os import path
 
 import yaml
-from mkt.ml.constants import DataSet, DrugModel, KinaseModel, ModelType
+from mkt.ml.constants import (
+    DataSet,
+    DrugModel,
+    KinaseInputType,
+    KinaseModel,
+    ModelType,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +74,9 @@ class ExperimentFactory:
             model_kinase_short = self.config["data"]["configs"]["model_kinase"]
             self.config["data"]["configs"]["model_kinase"] = getattr(
                 KinaseModel, self.config["data"]["configs"]["model_kinase"]
+            ).value
+            self.config["data"]["configs"]["col_kinase"] = getattr(
+                KinaseInputType, self.config["data"]["configs"]["col_kinase"]
             ).value
 
             dataset_class = getattr(DataSet, self.config["data"]["type"])
