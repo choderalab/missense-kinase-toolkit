@@ -1,11 +1,17 @@
 import ast
 import logging
+import time
+from copy import deepcopy
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
+import requests
 from mkt.databases import requests_wrapper, utils_requests
 from mkt.databases.api_schema import RESTAPIClient
 from mkt.schema.kinase_schema import SwissProtPattern, TrEMBLPattern
+from nf_rnaseq import variables  # noqa
+from nf_rnaseq.uniprot import UniProtGET  # noqa
 
 logger = logging.getLogger(__name__)
 
@@ -229,3 +235,151 @@ class UniProtJSON(UniProt, RESTAPIClient):
             return dict_out
         else:
             DICT_PHOSPHO_EMPTY
+
+
+@dataclass
+class UniProtRefSeqProteinGET(UniProtGET):
+    """Class to interact with UniProt API bulk download for list of RefSeqProtein identifiers via GET."""
+
+    def check_if_job_ready(self):
+        """Check if the job is ready and add json if so."""
+        i = 0
+        while True:
+            response = requests.get(self.url_query)
+            self.check_response(response)
+            j = response.json()
+            if "results" in j or "failedIds" in j:
+                self.json = self.concatenate_json_batches()
+                # Log summary instead of full JSON
+                num_results = len(self.json.get("results", []))
+                num_failed = len(self.json.get("failedIds", []))
+                num_suggested = len(self.json.get("suggestedIds", []))
+                logger.info(
+                    f"\nJob {self.jobId} complete:\n"
+                    f"{self.term_in} to {self.term_out} mapping returned: "
+                    f"{num_results} results, "
+                    f"{num_failed} failed, "
+                    f"{num_suggested} suggested"
+                )
+                return True
+            else:
+                i += 1
+                if i >= 10:
+                    raise Exception(f"{self.jobId}: {j['jobStatus']}")
+                else:
+                    time.sleep(self.polling_interval)
+
+    def concatenate_json_batches(self):
+        """Concatenate json from batches and return as dictionary."""
+        list_results, list_suggestedIds = [], []
+        # failedIds occur on each page so need to use a set instead of list
+        set_failedIds = set()
+        for batch in self.get_batch():
+            batch_json = batch.json()
+            if "results" in batch_json:
+                list_results.extend(batch_json["results"])
+            if "failedIds" in batch_json:
+                set_failedIds.update(batch_json["failedIds"])
+            # this is new
+            if "suggestedIds" in batch_json:
+                list_suggestedIds.extend(batch_json["suggestedIds"])
+
+        # deduplicate suggestedIds
+        set_suggestedIds = {f"{i['from']};{i['to']}" for i in list_suggestedIds}
+        list_suggestedIds = [
+            {"from": i.split(";")[0], "to": i.split(";")[1]} for i in set_suggestedIds
+        ]
+
+        dict_temp = {
+            "results": list_results,
+            "failedIds": list(set_failedIds),
+            "suggestedIds": list_suggestedIds,
+        }
+        return dict_temp
+
+    def maybe_get_gene_names(self):
+        """Get list of gene names from UniProt ID and add as list_gene_names attr."""
+        list_identifier = []
+        list_gene_names = []
+
+        str_results = "results"
+        if str_results in self.json:
+            list_results = self.json[str_results]
+            list_identifier.extend([i["from"] for i in list_results])
+            list_gene_names.extend([i["to"]["primaryAccession"] for i in list_results])
+
+        str_failedIds = "failedIds"
+        if str_failedIds in self.json:
+            list_failed = self.json[str_failedIds]
+            list_identifier.extend(list_failed)
+            list_gene_names.extend(list(np.repeat(np.nan, len(list_failed))))
+
+        str_suggestedIds = "suggestedIds"
+        if str_suggestedIds in self.json:
+            list_suggested = [i["from"] for i in self.json[str_suggestedIds]]
+            list_identifier.extend(list_suggested)
+            list_gene_names_temp = [i["to"] for i in self.json[str_suggestedIds]]
+            list_gene_names.extend(list_gene_names_temp)
+
+        df = pd.DataFrame({"in": list_identifier, "out": list_gene_names})
+        df_agg = df.groupby("in", sort=False).agg(set).reset_index()
+        df_agg["out"] = df_agg["out"].apply(lambda x: list(x))
+
+        list_check = [i for i in self.list_identifier if i in df_agg["in"].tolist()]
+        assert len(list_check) == len(self.list_identifier)
+
+        self.list_identifier = df["in"].tolist()
+        self.list_gene_names = df["out"].tolist()
+        self.df = df_agg
+
+
+def query_uniprotbulk_api(
+    input_ids: str,
+    term_in: str = "RefSeq_Protein",
+    term_out: str = "UniProtKB",
+    database: str = "UniProtBULK",
+) -> pd.DataFrame:
+    """Query UniProt bulk download API for list of RefSeq Protein identifiers and return DataFrame.
+
+    Parameters:
+    -----------
+    inputs_ids : str
+        Comma-separated string of RefSeq Protein identifiers to query UniProt API for.
+    term_in : str
+        Term to query UniProt API for. Default is "RefSeq_Protein".
+    term_out : str
+        Term to retrieve from UniProt API. Default is "UniProtKB".
+    database : str
+        Database to query UniProt API for. Default is "UniProtBULK".
+
+    Returns:
+    --------
+    pd.DataFrame
+        DataFrame with UniProt mapping results.
+    """
+    DICT_DATABASES = deepcopy(variables.DICT_DATABASES)
+    for k1, v1 in DICT_DATABASES.items():
+        if k1 == database:
+            for v2 in v1.values():
+                v2["term_in"] = term_in
+                v2["term_out"] = term_out
+
+    dict_post = DICT_DATABASES[database]["POST"]
+    post_obj = dict_post["api_object"](
+        identifier=input_ids,
+        term_in=dict_post["term_in"],
+        term_out=dict_post["term_out"],
+        url_base=dict_post["url_base"],
+    )
+
+    dict_get = DICT_DATABASES[database]["GET"]
+    api_obj = UniProtRefSeqProteinGET(
+        identifier=input_ids,
+        term_in=dict_get["term_in"],
+        term_out=dict_get["term_out"],
+        url_base=dict_get["url_base"],
+        headers=dict_get["headers"],
+        jobId=post_obj.jobId,
+    )
+
+    return api_obj.df.copy()

@@ -169,6 +169,7 @@ class KinaseInfoGenerator(KinaseInfo):
     """Pydantic model for kinase information."""
 
     bool_offset: bool = True
+    """bool: Whether to use 1-based indexing (True) or 0-based indexing (False). Default is True."""
 
     def standardize_offset(self, idx_in: int) -> int:
         """Standardize offset where necessary.
