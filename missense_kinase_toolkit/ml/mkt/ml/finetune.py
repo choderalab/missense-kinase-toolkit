@@ -95,8 +95,14 @@ class FineTuneDataset(ABC):
                 logger.info(
                     f"Filtered to wild-type samples only. Remaining samples: {len(df):,}"
                 )
-            
-            df = df.dropna(subset=[self.col_kinase, self.col_drug]).reset_index(drop=True)
+
+            df = df.dropna(subset=[self.col_kinase, self.col_drug]).reset_index(
+                drop=True
+            )
+            logger.info(
+                "Filtered to samples with both kinase and drug sequences. "
+                f"Remaining samples: {len(df):,}"
+            )
 
             return df
 
@@ -230,8 +236,9 @@ class FineTuneDataset(ABC):
         max_smiles_length = max([len(i) for i in dict_smiles_token.values()]) + 2
 
         dict_kinase_token = {
-            x: self.tokenizer_kinase.tokenize(x) \
-            for x in self.df[self.col_kinase].unique() if x is not None
+            x: self.tokenizer_kinase.tokenize(x)
+            for x in self.df[self.col_kinase].unique()
+            if x is not None
         }
         max_kinase_length = max([len(i) for i in dict_kinase_token.values()]) + 2
 
