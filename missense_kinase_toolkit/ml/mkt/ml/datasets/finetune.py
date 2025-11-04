@@ -23,13 +23,16 @@ class FineTuneDataset(ABC):
     col_labels: str
     """Column name for labels values in the dataset."""
     col_kinase: str
-    """Column name for kinase identifiers in the dataset."""
+    """Column name for kinase inputs (AA sequence) in the dataset."""
     col_drug: str
-    """Column name for drug identifiers in the dataset."""
+    """Column name for drug inputs (SMILES representation) in the dataset."""
     model_drug: str
     """Pre-trained model name for drug sequences; default is DeepChem/ChemBERTa-77M-MTR."""
     model_kinase: str
     """Pre-trained model name for kinase sequences; default is facebook/esm2_t6_8M_UR50D."""
+    bool_wt: bool = True
+    """Whether to include only wild-type samples (True) or wild-type 
+        and mutant samples (False) in the dataset; default is True."""
     k_folds: int | None = None
     """Number of folds for cross-validation. If None, splits are applied via prepare_splits."""
     fold_idx: int | None = None
