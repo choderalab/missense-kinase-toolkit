@@ -51,6 +51,7 @@ test = ["pytest==8.0.1", "pytest-runner==6.0.1"]
 [project.scripts]
 generate_kinaseinfo_objects = "mkt.databases.cli.generate_kinaseinfo_objects:main"
 extract_cbioportal_missense_kinases = "mkt.databases.cli.extract_cbioportal_missense_kinases:main"
+generate_dataset_csv_files = "mkt.databases.cli.generate_dataset_csv_files:main"
 
 [project.urls]
 "Homepage" = "https://github.com/choderalab/missense-kinase-toolkit"
