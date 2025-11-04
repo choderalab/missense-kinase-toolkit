@@ -52,19 +52,27 @@ class ChEMBL(RESTAPIClient):
         """Update the parameters for the API query."""
         self.params.update(kwargs)
 
-    def get_chembl_id(self) -> str | None:
-        """Get the ChEMBL ID for the queried molecule."""
+    def check_molecules(self) -> str | None:
+        """Check that a single molecule is returned for the query."""
         if self._json is not None and "molecules" in self._json:
             if len(self._json["molecules"]) == 0:
                 if self.verbose:
                     logger.error(f"No molecules found in the response for {self.id}.")
                 return None
-            else:
-                return [i["molecule_chembl_id"] for i in self._json["molecules"]]
+            if len(self._json["molecules"]) > 1:
+                if self.verbose:
+                    logger.warning(
+                        f"Multiple molecules found for {self.id}. Returning the first one."
+                    )
         else:
             if self.verbose:
-                logger.error(f"No ChEMBL ID found in the response for {self.id}.")
+                logger.error(f"No molecules found in the response for {self.id}.")
             return None
+
+    def get_chembl_id(self) -> str | None:
+        """Get the ChEMBL ID for the queried molecule."""
+        self.check_molecules()
+        return [i["molecule_chembl_id"] for i in self._json["molecules"]]
 
 
 @dataclass
@@ -145,43 +153,29 @@ class ChEMBLMolecule(ChEMBL):
     """URL suffix for querying exact molecule match in ChEMBL."""
     params: dict = field(
         default_factory=lambda: {
-            "molecule_synonyms__molecule_synonym__iexact": "<ID>", 
-            "format": "json"
+            "molecule_chembl_id": "<ID>",
+            "format": "json",
         }
     )
     """Parameters for the molecule API query."""
 
-    def check_molecules(self) -> str | None:
-        """Return the SMILES string for the queried molecule."""
-        if self._json is not None and "molecules" in self._json:
-            if len(self._json["molecules"]) == 0:
-                if self.verbose:
-                    logger.error(f"No molecules found in the response for {self.id}.")
-                return None
-            if len(self._json["molecules"]) > 1:
-                if self.verbose:
-                    logger.warning(f"Multiple molecules found for {self.id}. Returning the first one.")
-        else:
-            if self.verbose:
-                logger.error(f"No molecules found in the response for {self.id}.")
-            return None
-
     def return_smiles(self) -> str | None:
         """Return the SMILES string for the queried molecule."""
         self.check_molecules()
-        return self._json["molecules"][0].get("molecule_structures", {}).get("canonical_smiles", None)
+        return (
+            self._json["molecules"][0]
+            .get("molecule_structures", {})
+            .get("canonical_smiles", None)
+        )
 
     def return_preferred_name(self) -> str | None:
         """Return the preferred name for the queried molecule."""
         self.check_molecules()
         return self._json["molecules"][0].get("pref_name", None)
 
-    def adjudicate_preferred_name(
-        self, 
-        str_in: str | None = None
-    ) -> str:
+    def adjudicate_preferred_name(self, str_in: str | None = None) -> str:
         """Return the adjudicated preferred name for the queried molecule.
-        
+
         Parameters
         ----------
         str_in : str | None
@@ -201,11 +195,16 @@ class ChEMBLMolecule(ChEMBL):
                 elif "-" in preferred_name and "-" not in str_in:
                     return str_in
                 else:
-                    return preferred_name.title()
+                    if "-" in preferred_name:
+                        return preferred_name
+                    else:
+                        return preferred_name.title()
             return preferred_name.title()
         else:
             if str_in is not None:
                 return str_in.title()
             else:
-                logger.error(f"No preferred name found for {self.id}. Returning original ID.")
+                logger.error(
+                    f"No preferred name found for {self.id}. Returning original ID."
+                )
                 return self.id.upper()
