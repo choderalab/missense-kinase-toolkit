@@ -1,17 +1,8 @@
 from enum import Enum
 
-from mkt.ml.datasets.pkis2 import PKIS2CrossValidation, PKIS2KinaseSplit
+from mkt.ml.datasets.finetune import CrossValidation, KinaseSplit
 from mkt.ml.models.pooling import CombinedPoolingModel
 from strenum import StrEnum
-
-
-class KinaseGroupSource(Enum):
-    """Enum for kinase groups."""
-
-    kincore = "kincore.fasta.group"
-    kinhub = "kinhub.group"
-    klifs = "klifs.group"
-    consensus = None
 
 
 class KinaseInputType(Enum):
@@ -22,14 +13,14 @@ class KinaseInputType(Enum):
     # rest should match mkt.databases.dataset.process.DICT_PROCESS_STRATEGIES
     kd_klifs_aligned = "seq_kd_klifs_aligned"
     klifs_region_aligned = "seq_klifs_region_aligned"
-    klifs_residues_only = "seq_klifs_residues_only" 
+    klifs_residues_only = "seq_klifs_residues_only"
 
 
 class DataSet(Enum):
     """Enum for dataset names."""
 
-    PKIS2_Kinase_Split = PKIS2KinaseSplit
-    PKIS2_CV_Split = PKIS2CrossValidation
+    Kinase_Split = KinaseSplit
+    CV_Split = CrossValidation
 
 
 class ModelType(Enum):
