@@ -95,6 +95,8 @@ class FineTuneDataset(ABC):
                 logger.info(
                     f"Filtered to wild-type samples only. Remaining samples: {len(df):,}"
                 )
+            
+            df = df.dropna(subset=[self.col_kinase, self.col_drug]).reset_index(drop=True)
 
             return df
 
@@ -222,27 +224,18 @@ class FineTuneDataset(ABC):
         int: Maximum length of sequences
         """
         # add 2 for special tokens like [CLS] and [SEP]
-        max_smiles_length = (
-            max(
-                [
-                    len(self.tokenizer_drug.tokenize(x))
-                    for x in self.df[self.col_drug].unique()
-                ]
-            )
-            + 2
-        )
+        dict_smiles_token = {
+            x: self.tokenizer_drug.tokenize(x) for x in self.df[self.col_drug].unique()
+        }
+        max_smiles_length = max([len(i) for i in dict_smiles_token.values()]) + 2
 
-        max_klifs_length = (
-            max(
-                [
-                    len(self.tokenizer_kinase.tokenize(x))
-                    for x in self.df[self.col_kinase].unique()
-                ]
-            )
-            + 2
-        )
+        dict_kinase_token = {
+            x: self.tokenizer_kinase.tokenize(x) \
+            for x in self.df[self.col_kinase].unique() if x is not None
+        }
+        max_kinase_length = max([len(i) for i in dict_kinase_token.values()]) + 2
 
-        return max_smiles_length, max_klifs_length
+        return max_smiles_length, max_kinase_length
 
     def tokenize_and_combine(
         self,
