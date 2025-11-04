@@ -10,13 +10,13 @@ logger = logging.getLogger(__name__)
 
 DICT_PKIS2_KWARGS = {
     "base": {
-        "filepath": path.join(get_repo_root(), "data/pkis_data.csv"),
-        "col_labels": "percent_displacement",
-        "col_kinase": "klifs",
-        "col_drug": "Smiles",
+        "filepath": path.join(get_repo_root(), "data/pkis2_data_processed.csv"),
+        "col_labels": "y",
+        "col_kinase": "seq_construct_unaligned",
+        "col_drug": "smiles",
     },
     "kinase_split": {
-        "col_kinase_split": "kincore_group",
+        "col_kinase_split": "group_consensus",
         "list_kinase_split": ["TK", "TKL"],
     },
     "cross_validation": {
