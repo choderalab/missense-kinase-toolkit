@@ -5,7 +5,7 @@ from mkt.ml.models.pooling import CombinedPoolingModel
 from strenum import StrEnum
 
 
-class KinaseInputType(Enum):
+class KinaseInputType(StrEnum):
     """Enum for kinase input types."""
 
     # mkt.databases.dataset.process.ProcessDataset.add_construct_unaligned()
