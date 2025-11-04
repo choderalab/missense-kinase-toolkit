@@ -178,6 +178,7 @@ def main():
         os.makedirs(out_dir, exist_ok=True)
         logger.info(f"Output directory: {out_dir}...")
         os.chdir(out_dir)
+        os.system(f"cp {args.config} {out_dir}/config.yaml")
 
         run_pipeline_with_wandb(
             model=model,
