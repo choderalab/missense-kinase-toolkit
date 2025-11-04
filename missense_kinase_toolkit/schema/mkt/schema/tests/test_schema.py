@@ -176,12 +176,14 @@ class TestSchema:
         # test logger messages for CIF extraction failures
         caplog.clear()
         assert (
-            DICT_KINASE["BUB1B"].extract_sequence_from_cif() is None
+            DICT_KINASE["BUB1B"].extract_sequence_from_cif(bool_verbose=True) is None
         )  # Kincore but no cif
         assert "No CIF sequence for BUB1" in caplog.text
 
         caplog.clear()
-        assert DICT_KINASE["ABR"].extract_sequence_from_cif() is None  # no Kincore
+        assert (
+            DICT_KINASE["ABR"].extract_sequence_from_cif(bool_verbose=True) is None
+        )  # no Kincore
         assert "No CIF sequence for ABR" in caplog.text
 
         assert (
@@ -197,7 +199,7 @@ class TestSchema:
             == "VVEPYRKYPTLLEVLLNFLKTEQNQGTRREAIRVLGLLGALDPYKHKVNIGMIDQSRDASAVSLSESKSSQDSSDYSTSEMLVNMGNLPLDEFYPAVSMVALMRIFRDQSLSHHHTMVVQAITFIFKSLGLKCVQFLPQVMPTFLNVIRVCDGAIREFLFQQLGMLVSFVK"
         )
         caplog.clear()
-        assert DICT_KINASE["ABR"].adjudicate_kd_sequence() is None
+        assert DICT_KINASE["ABR"].adjudicate_kd_sequence(bool_verbose=True) is None
         assert "No kinase domain sequence found for ABR" in caplog.text
 
         # do this last since changing the DICT_KINASE object
@@ -206,7 +208,7 @@ class TestSchema:
         assert DICT_KINASE["ANTXR1"].adjudicate_group() == "Atypical"  # KLIFS
         DICT_KINASE["ANTXR1"].klifs = None
         caplog.clear()
-        assert DICT_KINASE["ANTXR1"].adjudicate_group() is None  # None
+        assert DICT_KINASE["ANTXR1"].adjudicate_group(bool_verbose=True) is None  # None
         assert "No group found for ANTXR1" in caplog.text
 
     # TODO: downsample toml files to speed up test
