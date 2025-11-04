@@ -1,6 +1,6 @@
 from enum import Enum
 
-from mkt.ml.datasets.finetune import CrossValidation, KinaseSplit
+from mkt.ml.finetune import CrossValidation, KinaseSplit
 from mkt.ml.models.pooling import CombinedPoolingModel
 from strenum import StrEnum
 
