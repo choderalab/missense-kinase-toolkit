@@ -1,4 +1,4 @@
-missense-kinase-toolkit (mkt)
+missense-kinase-toolkit (`mkt`)
 ==============================
 [//]: # (Badges)
 [![DOI](https://zenodo.org/badge/758694808.svg)](https://zenodo.org/doi/10.5281/zenodo.11495030)

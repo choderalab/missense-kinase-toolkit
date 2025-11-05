@@ -249,10 +249,10 @@ def return_kinase_dict(bool_hgnc: bool = True) -> dict[str, object]:
     """
     from mkt.schema import io_utils
 
-    dict_kinase = io_utils.deserialize_kinase_dict()
+    DICT_KINASE = io_utils.deserialize_kinase_dict(str_name="DICT_KINASE")
 
     # use HGNC IDs as keys if bool_hgnc is True, else use UniProt IDs
     if not bool_hgnc:
-        dict_kinase = {v.uniprot_id: v for v in dict_kinase.values()}
+        DICT_KINASE = {v.uniprot_id: v for v in DICT_KINASE.values()}
 
-    return dict_kinase
+    return DICT_KINASE

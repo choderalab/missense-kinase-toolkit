@@ -18,6 +18,9 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 
+_deserialization_cache = {}
+
+
 def get_repo_root():
     """Get the root of the git repository.
 
@@ -305,6 +308,7 @@ def deserialize_kinase_dict(
     str_path: str | None = None,
     bool_remove: bool = True,
     list_ids: list[str] | None = None,
+    str_name: str | None = None,
 ) -> dict[str, BaseModel]:
     """Deserialize KinaseInfo object from files.
 
@@ -320,12 +324,18 @@ def deserialize_kinase_dict(
         If True, remove the files after deserialization, by default True.
     list_ids : list[str] | None, optional
         List of IDs to filter the files if reading from memory, by default None.
+    str_name : str | None, optional
+        Name of a variable in the global scope that contains the kinase dictionary to prevent reloading, by default None.
 
     Returns
     -------
     dict[str, KinaseInfo]
         Dictionary of KinaseInfo objects.
     """
+    if str_name is not None and str_name in _deserialization_cache:
+        logger.info(f"Loading KinaseInfo object from variable {str_name}...")
+        return _deserialization_cache[str_name]
+
     if suffix not in DICT_FUNCS:
         logger.error(
             f"Serialization type ({suffix}) not supported; must be json, yaml, or toml."
@@ -374,5 +384,8 @@ def deserialize_kinase_dict(
             clean_files_and_delete_directory(list_file)
 
     dict_import = {key: dict_import[key] for key in sorted(dict_import.keys())}
+
+    if str_name is not None:
+        _deserialization_cache[str_name] = dict_import
 
     return dict_import

@@ -69,11 +69,12 @@ class TestDatabases:
 
     def test_utils_requests(self, capsys):
         import requests
-        from mkt.databases import uniprot, utils_requests
+        from mkt.databases import utils_requests
+        from mkt.databases.uniprot import UniProtFASTA
 
         # conform with SwissProt ID pattern
         uniprot_id = "L91119"
-        uniprot.UniProtFASTA(uniprot_id)
+        UniProtFASTA(uniprot_id)
         out, _ = capsys.readouterr()
         assert out == f"Error code: 400 (Bad request)\nUniProt ID: {uniprot_id}\n\n"
 
@@ -172,16 +173,17 @@ class TestDatabases:
     def test_kincore_klifs(self):
         from itertools import chain
 
-        from mkt.databases import klifs, uniprot
+        from mkt.databases import klifs
         from mkt.databases.kincore import (
             align_kincore2uniprot,
             extract_pk_cif_files_as_list,
             harmonize_kincore_fasta_cif,
         )
+        from mkt.databases.uniprot import UniProtFASTA
 
         # test KinCore
         uniprot_id = "P00533"
-        egfr_uniprot = uniprot.UniProtFASTA(uniprot_id)
+        egfr_uniprot = UniProtFASTA(uniprot_id)
         dict_kincore = harmonize_kincore_fasta_cif()
 
         # make sure the number of non-None cif files is correct
@@ -227,7 +229,7 @@ class TestDatabases:
             assert dict_egfr["species"] == "Human"
             assert dict_egfr["uniprot"] == "P00533"
 
-            egfr_uniprot = uniprot.UniProtFASTA(dict_egfr["uniprot"])
+            egfr_uniprot = UniProtFASTA(dict_egfr["uniprot"])
 
             # check KLIFS pocket alignment to UniProt sequence
             egfr_pocket = klifs.KLIFSPocket(
@@ -481,9 +483,9 @@ class TestDatabases:
         )
 
     def test_uniprot(self):
-        from mkt.databases import uniprot
+        from mkt.databases.uniprot import UniProtFASTA
 
-        abl1 = uniprot.UniProtFASTA("P00519")
+        abl1 = UniProtFASTA("P00519")
         assert (
             abl1._sequence
             == "MLEICLKLVGCKSKKGLSSSSSCYLEEALQRPVASDFEPQGLSEAARWNSKENLLAGPSENDPNLFVALYDFVASGDNTLSITKGEKLRVLGYNHNGEWCEAQTKNGQGWVPSNYITPVNSLEKHSWYHGPVSRNAAEYLLSSGINGSFLVRESESSPGQRSISLRYEGRVYHYRINTASDGKLYVSSESRFNTLAELVHHHSTVADGLITTLHYPAPKRNKPTVYGVSPNYDKWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVNAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQESSISDEVEKELGKQGVRGAVSTLLQAPELPTKTRTSRRAAEHRDTTDVPEMPHSKGQGESDPLDHEPAVSPLLPRKERGPPEGGLNEDERLLPKDKKTNLFSALIKKKKKTAPTPPKRSSSFREMDGQPERRGAGEEEGRDISNGALAFTPLDTADPAKSPKPSNGAGVPNGALRESGGSGFRSPHLWKKSSTLTSSRLATGEEEGGGSSSKRFLRSCSASCVPHGAKDTEWRSVTLPRDLQSTGRQFDSSTFGGHKSEKPALPRKRAGENRSDQVTRGTVTPPPRLVKKNEEAADEVFKDIMESSPGSSPPNLTPKPLRRQVTVAPASGLPHKEEAGKGSALGTPAAAEPVTPTSKAGSGAPGGTSKGPAEESRVRRHKHSSESPGRDKGKLSRLKPAPPPPPAASAGKAGGKPSQSPSQEAAGEAVLGAKTKATSLVDAVNSDAAKPSQPGEGLKKPVLPATPKPQSAKPSGTPISPAPVPSTLPSASSALAGDQPSSTAFIPLISTRVSLRKTRQPPERIASGAITKGVVLDSTEALCLAISRNSEQMASHSAVLEAGKNLYTFCVSYVDSIQQMRNKFAFREAINKLENNLRELQICPATAGSGPAATQDFSKLLSSVKEISDIVQR"  # noqa E501
@@ -532,7 +534,6 @@ class TestDatabases:
         assert temp_obj._protvar_score[0]["amPathogenicity"] == 0.4217
         assert temp_obj._protvar_score[0]["amClass"] == "AMBIGUOUS"
 
-    @pytest.mark.skip(reason="NCBI is currently down")
     def test_ncbi(self):
         from mkt.databases import ncbi
 
@@ -558,6 +559,7 @@ class TestDatabases:
             "CHEMBL5220042",
             "CHEMBL5220676",
             "CHEMBL553",
+            "CHEMBL5965928",
         } == set_id
         # ChEMBLMoleculeExact
         assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() == ["CHEMBL553"]
@@ -566,9 +568,9 @@ class TestDatabases:
 
         # drug not present
         drug = "TESTTESTTEST"
-        assert chembl.ChEMBLMoleculeSearch(id=drug).get_chembl_id() is None
-        assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() is None
-        assert chembl.ChEMBLMoleculePreferred(id=drug).get_chembl_id() is None
+        assert chembl.ChEMBLMoleculeSearch(id=drug).get_chembl_id() == []
+        assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() == []
+        assert chembl.ChEMBLMoleculePreferred(id=drug).get_chembl_id() == []
 
     def test_opentargets(self):
         from mkt.databases import open_targets
