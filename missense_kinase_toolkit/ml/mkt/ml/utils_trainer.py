@@ -160,6 +160,7 @@ def batch_submit_folds(
     now = datetime.now()
     inner_dir = os.path.join(outer_dir, now.strftime("%Y-%m-%d_%H-%M-%S"))
     os.makedirs(inner_dir)
+    os.system(f"cp {config_path} {inner_dir}/config.yaml")
 
     job_ids = {}
     for fold in range(folds):
