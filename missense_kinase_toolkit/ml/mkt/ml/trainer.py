@@ -208,8 +208,8 @@ def create_prediction_plot(
         [min(labels), max(labels)],
         "r--",
     )
-    plt.xlabel("True standardized percent_displacement")
-    plt.ylabel("Predicted standardized percent_displacement")
+    plt.xlabel("True standardized label")
+    plt.ylabel("Predicted standardized label")
     plt.title(subplot_title)
 
     # Generate a different filename based on context
@@ -307,8 +307,8 @@ def create_prediction_heatmap(
         label="Perfect prediction",
     )
 
-    ax.set_xlabel("True standardized percent_displacement")
-    ax.set_ylabel("Predicted standardized percent_displacement")
+    ax.set_xlabel("True standardized label")
+    ax.set_ylabel("Predicted standardized label")
     ax.set_title(subplot_title)
     ax.legend()
 
@@ -1053,8 +1053,8 @@ def evaluate_model_with_wandb(
         [min(all_labels_original), max(all_labels_original)],
         "r--",
     )
-    plt.xlabel("True percent_displacement")
-    plt.ylabel("Predicted percent_displacement")
+    plt.xlabel("True label")
+    plt.ylabel("Predicted label")
     plt.title("Predictions vs. Actual Values (Test Set)")
 
     plot_path = os.path.join(plot_dir, "test_prediction_scatter.png")
@@ -1091,8 +1091,8 @@ def evaluate_model_with_wandb(
         linewidth=2,
         label="Perfect prediction",
     )
-    ax.set_xlabel("True percent_displacement")
-    ax.set_ylabel("Predicted percent_displacement")
+    ax.set_xlabel("True label")
+    ax.set_ylabel("Predicted label")
     ax.set_title("Predictions vs. Actual Values (Test Set - Heatmap)")
     ax.legend()
 
