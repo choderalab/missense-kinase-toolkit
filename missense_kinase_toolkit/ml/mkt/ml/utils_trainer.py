@@ -12,7 +12,7 @@ def create_slurm_script(
     config_path: str,
     script_dir: str,
     job_name: str = "cv_trainer",
-    partition: str = "componc_gpu",
+    partition: str = "componc_gpu_batch",
     nodes: int = 1,
     ntasks: int = 1,
     mem_per_cpu: str = "64G",
