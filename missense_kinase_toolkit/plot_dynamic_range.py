@@ -52,6 +52,12 @@ def main():
     na_pkis2 = sum(df_pkis2_melt["Percent Inhibition"] == 0) / df_pkis2_melt.shape[0]
 
     fig, ax1 = plt.subplots()
+    plt.gcf().set_size_inches(11, 6)
+    # increase font size everywhere by 40% and decrease space between title, subtitle, and plot
+    matplotlib.rcParams.update({"font.size": 14})
+    matplotlib.rcParams.update({"axes.titlesize": 16, "axes.labelsize": 14})
+    matplotlib.rcParams.update({"figure.titlesize": 20})
+
     alpha = 0.25
     sns.histplot(
         data=df_pkis2_melt,
@@ -73,13 +79,18 @@ def main():
         alpha=alpha,
         label=f"Davis (n={df_davis.shape[0]:,})",
     )
+    # this axis label remains small - how do I conform to the font sizes above?
+    ax1.xaxis.label.set_size(16)
+    ax1.yaxis.label.set_size(16)
+    ax1.tick_params(axis="x", labelsize=14)
+    ax1.tick_params(axis="y", labelsize=14)
     ax1.set_xlabel(r"1-% inhibition (PKIS2)", color="blue")
     ax1.axvline(x=99, color="red", linestyle="--")
     ax1.text(
         x=0.5,
-        y=1.2,
+        y=1.25,
         s="Comparing dynamic assay ranges",
-        fontsize=12,
+        fontsize=20,
         weight="bold",
         ha="center",
         va="bottom",
@@ -87,9 +98,9 @@ def main():
     )
     ax1.text(
         x=0.5,
-        y=1.15,
+        y=1.16,
         s=f"No binding detected: " f"{na_davis:.1%} Davis, " f"{na_pkis2:.1%} PKIS2",
-        fontsize=8,
+        fontsize=16,
         alpha=0.75,
         ha="center",
         va="bottom",
@@ -107,7 +118,7 @@ def main():
     plt.legend(loc="upper left")
     plt.xlim(0, 100)
     plt.tight_layout()
-    plt.savefig("DiscoverX_Dynamic_Range_Hist.svg")
+    plt.savefig("DiscoverX_Dynamic_Range_Hist.svg", dpi=300, bbox_inches="tight")
     plt.clf()
 
     # set_pkis_kin = set(df_pkis2_pivot.columns.str.upper())
