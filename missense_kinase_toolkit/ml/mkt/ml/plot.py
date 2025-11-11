@@ -213,7 +213,9 @@ def plot_scatter_grid(
     )
     axes[0].set_xlabel(col1, fontsize=12)
     axes[0].set_ylabel(col2, fontsize=12)
-    axes[0].set_title(f"KMeans Clustering (k={n_clusters})", fontsize=14, fontweight="bold")
+    axes[0].set_title(
+        f"KMeans Clustering (k={n_clusters})", fontsize=14, fontweight="bold"
+    )
 
     # Create plots for each property
     for i, (prop, count) in enumerate(dict_property.items()):
@@ -269,7 +271,12 @@ def plot_scatter_grid(
     # )
     # bold font
 
-    fig.suptitle(f"{method} of Kinase Embeddings by {title_print}", fontsize=24, fontweight="bold", y=0.98)
+    fig.suptitle(
+        f"{method} of Kinase Embeddings by {title_print}",
+        fontsize=24,
+        fontweight="bold",
+        y=0.98,
+    )
 
     method_print = "".join(ch.lower() for ch in method if ch.isalnum())
     filepathname = path.join(path_out, f"{method_print}_{col}_grid.svg")
