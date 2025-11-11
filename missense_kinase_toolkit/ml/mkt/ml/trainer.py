@@ -5,6 +5,7 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -207,8 +208,8 @@ def create_prediction_plot(
         [min(labels), max(labels)],
         "r--",
     )
-    plt.xlabel("True standardized percent_displacement")
-    plt.ylabel("Predicted standardized percent_displacement")
+    plt.xlabel("True standardized label")
+    plt.ylabel("Predicted standardized label")
     plt.title(subplot_title)
 
     # Generate a different filename based on context
@@ -225,6 +226,220 @@ def create_prediction_plot(
     plt.close()
 
     return plot_path
+
+
+def create_prediction_heatmap(
+    labels: list,
+    preds: list,
+    title: str,
+    plot_dir: str,
+    epoch: int | None = None,
+    step: int | None = None,
+    bins: int = 50,
+) -> str:
+    """Create a 2D histogram heatmap of predictions vs actual values using imshow.
+
+    Parameters
+    ----------
+    labels : list
+        True values
+    preds : list
+        Predicted values
+    title : str
+        Plot title
+    plot_dir : str
+        Directory to save the plot
+    epoch : int, optional
+        Current epoch
+    step : int, optional
+        Current step
+    bins : int, optional
+        Number of bins for the 2D histogram (default: 50)
+
+    Returns
+    -------
+    str
+        Path to saved plot
+    """
+    subplot_title = title
+    if epoch is not None:
+        subplot_title += f" (Epoch {epoch+1}"
+        if step is not None:
+            subplot_title += f", Step {step}"
+        subplot_title += ")"
+
+    # Convert to numpy arrays
+    labels_arr = np.array(labels).flatten()
+    preds_arr = np.array(preds).flatten()
+
+    # Create 2D histogram
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    # Determine the range for both axes
+    min_val = min(labels_arr.min(), preds_arr.min())
+    max_val = max(labels_arr.max(), preds_arr.max())
+
+    # Create 2D histogram
+    hist, xedges, yedges = np.histogram2d(
+        labels_arr, preds_arr, bins=bins, range=[[min_val, max_val], [min_val, max_val]]
+    )
+
+    # Plot using imshow
+    im = ax.imshow(
+        hist.T,
+        origin="lower",
+        extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]],
+        aspect="auto",
+        cmap="viridis",
+        interpolation="nearest",
+    )
+
+    # Add colorbar
+    cbar = plt.colorbar(im, ax=ax)
+    cbar.set_label("Count", rotation=270, labelpad=20)
+
+    # Add diagonal line (perfect predictions)
+    ax.plot(
+        [min_val, max_val],
+        [min_val, max_val],
+        "r--",
+        linewidth=2,
+        label="Perfect prediction",
+    )
+
+    ax.set_xlabel("True standardized label")
+    ax.set_ylabel("Predicted standardized label")
+    ax.set_title(subplot_title)
+    ax.legend()
+
+    # Generate a different filename based on context
+    if step is not None:
+        plot_filename = f"val_predictions_heatmap_step_{step}.png"
+    elif epoch is not None:
+        plot_filename = f"val_predictions_heatmap_epoch_{epoch+1}.png"
+    else:
+        plot_filename = "val_predictions_heatmap.png"
+
+    plot_path = os.path.join(plot_dir, plot_filename)
+
+    plt.savefig(plot_path, dpi=150, bbox_inches="tight")
+    plt.close()
+
+    return plot_path
+
+
+def save_metrics_to_csv(
+    metrics: dict,
+    save_dir: str,
+    prefix: str,
+    epoch: int | None = None,
+    step: int | None = None,
+) -> str:
+    """Save performance metrics to CSV file.
+
+    Parameters
+    ----------
+    metrics : dict
+        Dictionary containing metrics (loss, mse, rmse, mae, r2)
+    save_dir : str
+        Directory to save the CSV file
+    prefix : str
+        Prefix for the filename (e.g., 'val', 'test', 'train')
+    epoch : int, optional
+        Current epoch
+    step : int, optional
+        Current step
+
+    Returns
+    -------
+    str
+        Path to saved CSV file
+    """
+    # Create metrics dictionary for CSV
+    csv_data = {
+        "loss": [metrics.get("loss", np.nan)],
+        "mse": [metrics.get("mse", np.nan)],
+        "rmse": [metrics.get("rmse", np.nan)],
+        "mae": [metrics.get("mae", np.nan)],
+        "r2": [metrics.get("r2", np.nan)],
+    }
+
+    if epoch is not None:
+        csv_data["epoch"] = [epoch + 1]
+    if step is not None:
+        csv_data["step"] = [step]
+
+    df = pd.DataFrame(csv_data)
+
+    # Generate filename based on context
+    if step is not None:
+        csv_filename = f"{prefix}_metrics_step_{step}.csv"
+    elif epoch is not None:
+        csv_filename = f"{prefix}_metrics_epoch_{epoch+1}.csv"
+    else:
+        csv_filename = f"{prefix}_metrics.csv"
+
+    csv_path = os.path.join(save_dir, csv_filename)
+    df.to_csv(csv_path, index=False)
+
+    return csv_path
+
+
+def save_predictions_to_csv(
+    labels: list,
+    preds: list,
+    save_dir: str,
+    prefix: str,
+    epoch: int | None = None,
+    step: int | None = None,
+) -> str:
+    """Save predictions and labels to CSV file.
+
+    Parameters
+    ----------
+    labels : list
+        True values
+    preds : list
+        Predicted values
+    save_dir : str
+        Directory to save the CSV file
+    prefix : str
+        Prefix for the filename (e.g., 'val', 'test', 'train')
+    epoch : int, optional
+        Current epoch
+    step : int, optional
+        Current step
+
+    Returns
+    -------
+    str
+        Path to saved CSV file
+    """
+    # Flatten arrays if needed
+    labels_flat = np.array(labels).flatten()
+    preds_flat = np.array(preds).flatten()
+
+    df = pd.DataFrame(
+        {
+            "true_value": labels_flat,
+            "predicted_value": preds_flat,
+            "error": preds_flat - labels_flat,
+            "absolute_error": np.abs(preds_flat - labels_flat),
+        }
+    )
+
+    # Generate filename based on context
+    if step is not None:
+        csv_filename = f"{prefix}_predictions_step_{step}.csv"
+    elif epoch is not None:
+        csv_filename = f"{prefix}_predictions_epoch_{epoch+1}.csv"
+    else:
+        csv_filename = f"{prefix}_predictions.csv"
+
+    csv_path = os.path.join(save_dir, csv_filename)
+    df.to_csv(csv_path, index=False)
+
+    return csv_path
 
 
 def train_model(
@@ -406,6 +621,23 @@ def train_model(
                 # evaluate model
                 val_metrics = evaluate_model(model, test_dataloader, criterion, device)
 
+                # save metrics to CSV
+                save_metrics_to_csv(
+                    val_metrics,
+                    plot_dir,
+                    prefix="val_step",
+                    step=global_step,
+                )
+
+                # save predictions to CSV
+                save_predictions_to_csv(
+                    val_metrics["labels"],
+                    val_metrics["predictions"],
+                    plot_dir,
+                    prefix="val_step",
+                    step=global_step,
+                )
+
                 # log metrics to wandb with custom step
                 step_metrics = {
                     "val_step": global_step,
@@ -417,7 +649,7 @@ def train_model(
                 }
                 wandb.log(step_metrics)
 
-                # plot and log predictions
+                # plot and log predictions (scatter plot)
                 plot_path = create_prediction_plot(
                     val_metrics["labels"],
                     val_metrics["predictions"],
@@ -426,11 +658,21 @@ def train_model(
                     step=global_step,
                 )
 
-                # log plot to wandb with custom step
+                # create and log heatmap
+                heatmap_path = create_prediction_heatmap(
+                    val_metrics["labels"],
+                    val_metrics["predictions"],
+                    "Predictions vs. Actual Values (Heatmap)",
+                    plot_dir,
+                    step=global_step,
+                )
+
+                # log both plots to wandb with custom step
                 wandb.log(
                     {
                         "val_step": global_step,
-                        "val_step/predictions": wandb.Image(plot_path),
+                        "val_step/predictions_scatter": wandb.Image(plot_path),
+                        "val_step/predictions_heatmap": wandb.Image(heatmap_path),
                     }
                 )
 
@@ -512,6 +754,23 @@ def train_model(
 
         # handle wandb-specific operations
         if bool_wandb:
+            # save metrics to CSV
+            save_metrics_to_csv(
+                val_metrics,
+                plot_dir,
+                prefix="val_epoch",
+                epoch=epoch,
+            )
+
+            # save predictions to CSV
+            save_predictions_to_csv(
+                all_labels,
+                all_preds,
+                plot_dir,
+                prefix="val_epoch",
+                epoch=epoch,
+            )
+
             # create metrics dictionary for wandb with custom epoch step
             epoch_metrics = {
                 "epoch": epoch,
@@ -525,7 +784,7 @@ def train_model(
             # log metrics to wandb
             wandb.log(epoch_metrics)
 
-            # create and log validation prediction plot
+            # create and log validation prediction plot (scatter)
             plot_path = create_prediction_plot(
                 all_labels,
                 all_preds,
@@ -534,8 +793,23 @@ def train_model(
                 epoch=epoch,
             )
 
-            # log plot to wandb with custom epoch step
-            wandb.log({"epoch": epoch, "val/predictions": wandb.Image(plot_path)})
+            # create and log validation prediction heatmap
+            heatmap_path = create_prediction_heatmap(
+                all_labels,
+                all_preds,
+                "Predictions vs. Actual Values (Heatmap)",
+                plot_dir,
+                epoch=epoch,
+            )
+
+            # log plots to wandb with custom epoch step
+            wandb.log(
+                {
+                    "epoch": epoch,
+                    "val/predictions_scatter": wandb.Image(plot_path),
+                    "val/predictions_heatmap": wandb.Image(heatmap_path),
+                }
+            )
 
             # plot loss over time (epoch-based)
             plt.figure(figsize=(12, 6))
@@ -714,6 +988,19 @@ def evaluate_model_with_wandb(
     mae_std = mean_absolute_error(all_labels, all_preds)
     r2_std = r2_score(all_labels, all_preds)
 
+    # Save standardized metrics to CSV
+    std_metrics = {
+        "loss": np.nan,  # not calculated in this function
+        "mse": mse_std,
+        "rmse": rmse_std,
+        "mae": mae_std,
+        "r2": r2_std,
+    }
+    save_metrics_to_csv(std_metrics, plot_dir, prefix="test_standardized")
+
+    # Save standardized predictions to CSV
+    save_predictions_to_csv(all_labels, all_preds, plot_dir, prefix="test_standardized")
+
     # Log standardized metrics
     wandb.log(
         {
@@ -734,6 +1021,21 @@ def evaluate_model_with_wandb(
     mae = mean_absolute_error(all_labels_original, all_preds_original)
     r2 = r2_score(all_labels_original, all_preds_original)
 
+    # Save original scale metrics to CSV
+    original_metrics = {
+        "loss": np.nan,  # not calculated in this function
+        "mse": mse,
+        "rmse": rmse,
+        "mae": mae,
+        "r2": r2,
+    }
+    save_metrics_to_csv(original_metrics, plot_dir, prefix="test_original")
+
+    # Save original scale predictions to CSV
+    save_predictions_to_csv(
+        all_labels_original, all_preds_original, plot_dir, prefix="test_original"
+    )
+
     # Log original scale metrics
     wandb.log({"test/mse": mse, "test/rmse": rmse, "test/mae": mae, "test/r2": r2})
 
@@ -743,7 +1045,7 @@ def evaluate_model_with_wandb(
     logger.info(f"MAE: {mae:.4f}")
     logger.info(f"R^2: {r2:.4f}")
 
-    # Plot predictions vs. actual values
+    # Plot predictions vs. actual values (scatter)
     plt.figure(figsize=(10, 6))
     plt.scatter(all_labels_original, all_preds_original, alpha=0.5)
     plt.plot(
@@ -751,16 +1053,60 @@ def evaluate_model_with_wandb(
         [min(all_labels_original), max(all_labels_original)],
         "r--",
     )
-    plt.xlabel("True percent_displacement")
-    plt.ylabel("Predicted percent_displacement")
+    plt.xlabel("True label")
+    plt.ylabel("Predicted label")
     plt.title("Predictions vs. Actual Values (Test Set)")
 
     plot_path = os.path.join(plot_dir, "test_prediction_scatter.png")
     plt.savefig(plot_path)
     plt.close()
 
-    # Log plot to wandb
-    wandb.log({"test/predictions": wandb.Image(plot_path)})
+    # Create heatmap for test predictions (original scale)
+    labels_arr = all_labels_original.flatten()
+    preds_arr = all_preds_original.flatten()
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    min_val = min(labels_arr.min(), preds_arr.min())
+    max_val = max(labels_arr.max(), preds_arr.max())
+
+    hist, xedges, yedges = np.histogram2d(
+        labels_arr, preds_arr, bins=50, range=[[min_val, max_val], [min_val, max_val]]
+    )
+
+    im = ax.imshow(
+        hist.T,
+        origin="lower",
+        extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]],
+        aspect="auto",
+        cmap="viridis",
+        interpolation="nearest",
+    )
+
+    cbar = plt.colorbar(im, ax=ax)
+    cbar.set_label("Count", rotation=270, labelpad=20)
+    ax.plot(
+        [min_val, max_val],
+        [min_val, max_val],
+        "r--",
+        linewidth=2,
+        label="Perfect prediction",
+    )
+    ax.set_xlabel("True label")
+    ax.set_ylabel("Predicted label")
+    ax.set_title("Predictions vs. Actual Values (Test Set - Heatmap)")
+    ax.legend()
+
+    heatmap_path = os.path.join(plot_dir, "test_prediction_heatmap.png")
+    plt.savefig(heatmap_path, dpi=150, bbox_inches="tight")
+    plt.close()
+
+    # Log plots to wandb
+    wandb.log(
+        {
+            "test/predictions_scatter": wandb.Image(plot_path),
+            "test/predictions_heatmap": wandb.Image(heatmap_path),
+        }
+    )
 
     # Create and log error distribution histogram
     errors = all_preds_original.flatten() - all_labels_original.flatten()
