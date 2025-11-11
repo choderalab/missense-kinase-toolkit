@@ -199,9 +199,19 @@ def plot_ridgeline(df, output_path):
 
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.1)  # Make room for shared x-axis label
-    plt.savefig(output_path, format="svg", bbox_inches="tight", dpi=300)
+
+    # Save both SVG and PNG formats
+    svg_path = (
+        output_path.replace(".png", ".svg")
+        if output_path.endswith(".png")
+        else output_path
+    )
+    png_path = svg_path.replace(".svg", ".png")
+
+    plt.savefig(svg_path, format="svg", bbox_inches="tight", dpi=300)
+    plt.savefig(png_path, format="png", bbox_inches="tight", dpi=300)
     plt.close()
-    logger.info(f"Ridgeline plot saved to {output_path}")
+    logger.info(f"Ridgeline plot saved to {svg_path} and {png_path}")
 
 
 def plot_stacked_barchart(df, output_path):
@@ -352,9 +362,19 @@ def plot_stacked_barchart(df, output_path):
 
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.2)  # Increase bottom margin from 0.15 to 0.2
-    plt.savefig(output_path, format="svg", bbox_inches="tight", dpi=300)
+
+    # Save both SVG and PNG formats
+    svg_path = (
+        output_path.replace(".png", ".svg")
+        if output_path.endswith(".png")
+        else output_path
+    )
+    png_path = svg_path.replace(".svg", ".png")
+
+    plt.savefig(svg_path, format="svg", bbox_inches="tight", dpi=300)
+    plt.savefig(png_path, format="png", bbox_inches="tight", dpi=300)
     plt.close()
-    logger.info(f"Stacked bar chart saved to {output_path}")
+    logger.info(f"Stacked bar chart saved to {svg_path} and {png_path}")
 
 
 def plot_venn_diagram(df, output_path, source_name):
@@ -437,9 +457,19 @@ def plot_venn_diagram(df, output_path, source_name):
     ax.set_title(f"{source_name} Kinase Coverage", fontsize=22, fontweight="bold")
 
     plt.tight_layout()
-    plt.savefig(output_path, format="svg", bbox_inches="tight", dpi=300)
+
+    # Save both SVG and PNG formats
+    svg_path = (
+        output_path.replace(".png", ".svg")
+        if output_path.endswith(".png")
+        else output_path
+    )
+    png_path = svg_path.replace(".svg", ".png")
+
+    plt.savefig(svg_path, format="svg", bbox_inches="tight", dpi=300)
+    plt.savefig(png_path, format="png", bbox_inches="tight", dpi=300)
     plt.close()
-    logger.info(f"Venn diagram saved to {output_path}")
+    logger.info(f"Venn diagram saved to {svg_path} and {png_path}")
 
 
 def plot_metrics_boxplot(df, output_path):
@@ -660,9 +690,19 @@ def plot_metrics_boxplot(df, output_path):
         axes[idx].set_ylabel("")
 
     plt.tight_layout()
-    plt.savefig(output_path, format="svg", bbox_inches="tight", dpi=300)
+
+    # Save both SVG and PNG formats
+    svg_path = (
+        output_path.replace(".png", ".svg")
+        if output_path.endswith(".png")
+        else output_path
+    )
+    png_path = svg_path.replace(".svg", ".png")
+
+    plt.savefig(svg_path, format="svg", bbox_inches="tight", dpi=300)
+    plt.savefig(png_path, format="png", bbox_inches="tight", dpi=300)
     plt.close()
-    logger.info(f"Metrics boxplot saved to {output_path}")
+    logger.info(f"Metrics boxplot saved to {svg_path} and {png_path}")
 
 
 def main():
