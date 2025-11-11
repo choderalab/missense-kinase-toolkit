@@ -60,6 +60,8 @@ def create_slurm_script(
     fold_name = f"fold_{fold_number + 1}"
 
     # create a script filename
+    os.makedirs(script_dir, exist_ok=True)
+    script_dir = os.path.abspath(script_dir)
     script_path = os.path.join(script_dir, f"train_{fold_name}.sh")
 
     # build the SLURM script content
@@ -88,8 +90,12 @@ def create_slurm_script(
     # change to the script fold directory for the purposes of checkpointing/plotting
     content.append(f"\ncd {script_dir}")
 
+    # set PyTorch memory allocator to reduce fragmentation - no apparent downside
+    content.append("\n# set PyTorch memory allocator to reduce fragmentation")
+    content.append("export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True")
+
     # add the training command with fold argument
-    content.append("\n# Run the training script")
+    content.append("\n# run the training script")
     content.append(f"run_trainer --config {config_path} --fold {fold_number}")
 
     # Write the script to file
