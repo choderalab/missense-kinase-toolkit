@@ -77,6 +77,145 @@ def generate_venn_diagram_dict(df_in: pd.DataFrame):
     return dict_out
 
 
+def convert_to_percentile(input, orig_max=10):
+    """Convert Kd values to percentile scale."""
+    return (input / orig_max) * 100
+
+
+def convert_from_percentile(input, orig_max=10, precision=3):
+    """Convert percentile values back to Kd scale."""
+    if precision is not None:
+        try:
+            return round((input / 100) * orig_max, precision)
+        except TypeError:
+            return [np.round(i, precision) for i in (input / 100) * orig_max]
+    else:
+        return (input / 100) * max(orig_max)
+
+
+def plot_dynamic_range(df_davis, df_pkis2, output_path):
+    """Create a histogram comparing dynamic assay ranges between Davis and PKIS2.
+
+    Parameters:
+    -----------
+    df_davis : pd.DataFrame
+        DataFrame with 'y' column containing Kd values
+    df_pkis2 : pd.DataFrame
+        DataFrame with 'y' column containing percent inhibition values
+    output_path : str
+        Path to save the plot files (will save both SVG and PNG)
+    """
+    import matplotlib
+    import matplotlib.ticker
+
+    # ensure vector output - disable rasterization
+    matplotlib.rcParams["svg.fonttype"] = "none"
+    matplotlib.rcParams["pdf.fonttype"] = 42
+
+    # process Davis data
+    col_davis_y = "y"
+    col_davis_y_transformed = "y_trans"
+    df_davis = df_davis.copy()
+    df_davis[col_davis_y] = 10 ** (-df_davis[col_davis_y])
+    df_davis[col_davis_y_transformed] = convert_to_percentile(df_davis[col_davis_y])
+
+    # process PKIS2 data
+    df_pkis2 = df_pkis2.copy()
+    df_pkis2["1-Percent Inhibition"] = 100 - df_pkis2["y"]
+
+    # Calculate no binding percentages
+    na_davis = (
+        sum(df_davis[col_davis_y] == df_davis[col_davis_y].max()) / df_davis.shape[0]
+    )
+    na_pkis2 = sum(df_pkis2["y"] == 0) / df_pkis2.shape[0]
+
+    _, ax1 = plt.subplots()
+    plt.gcf().set_size_inches(11, 6)
+    matplotlib.rcParams.update({"font.size": 14})
+    matplotlib.rcParams.update({"axes.titlesize": 16, "axes.labelsize": 14})
+    matplotlib.rcParams.update({"figure.titlesize": 20})
+
+    alpha = 0.25
+
+    sns.histplot(
+        data=df_pkis2,
+        x="1-Percent Inhibition",
+        ax=ax1,
+        bins=100,
+        log=True,
+        color="blue",
+        alpha=alpha,
+        label=f"PKIS2 (n={df_pkis2.shape[0]:,})",
+    )
+
+    sns.histplot(
+        data=df_davis,
+        x=col_davis_y_transformed,
+        ax=ax1,
+        bins=100,
+        log=True,
+        color="green",
+        alpha=alpha,
+        label=f"Davis (n={df_davis.shape[0]:,})",
+    )
+
+    ax1.xaxis.label.set_size(16)
+    ax1.yaxis.label.set_size(16)
+    ax1.tick_params(axis="x", labelsize=14)
+    ax1.tick_params(axis="y", labelsize=14)
+    ax1.set_xlabel(r"1-% inhibition (PKIS2)", color="blue")
+    ax1.axvline(x=99, color="red", linestyle="--")
+
+    ax1.text(
+        x=0.5,
+        y=1.25,
+        s="Comparing dynamic assay ranges",
+        fontsize=20,
+        weight="bold",
+        ha="center",
+        va="bottom",
+        transform=ax1.transAxes,
+    )
+
+    ax1.text(
+        x=0.5,
+        y=1.16,
+        s=f"No binding detected: " f"{na_davis:.1%} Davis, " f"{na_pkis2:.1%} PKIS2",
+        fontsize=16,
+        alpha=0.75,
+        ha="center",
+        va="bottom",
+        transform=ax1.transAxes,
+    )
+
+    ax1.get_xaxis().set_major_formatter(lambda x, p: format(x / 100, ".0%"))
+    ax2 = ax1.secondary_xaxis(
+        "top", functions=(convert_from_percentile, convert_to_percentile)
+    )
+    ax2.get_xaxis().set_major_formatter(
+        matplotlib.ticker.FuncFormatter(lambda x, p: format(int(x), ","))
+    )
+    # micromolar rather than nanomolar below
+    ax2.set_xlabel(r"$K_{d}$ (µM) (Davis)", color="green")
+    plt.ylabel(r"$log_{10}$(count)")
+    plt.legend(loc="upper left")
+    plt.xlim(0, 100)
+    plt.tight_layout()
+
+    # Save both SVG and PNG formats
+    svg_path = (
+        output_path.replace(".png", ".svg")
+        if output_path.endswith(".png")
+        else output_path
+    )
+    png_path = svg_path.replace(".svg", ".png")
+
+    plt.savefig(svg_path, format="svg", bbox_inches="tight", dpi=300)
+    plt.savefig(png_path, format="png", bbox_inches="tight", dpi=300)
+    plt.close()
+    logger.info(f"Dynamic range plot saved to {svg_path} and {png_path}")
+
+
 def plot_ridgeline(df, output_path):
     """Create a ridgeline plot showing distribution of fraction_construct by family.
 
@@ -731,7 +870,12 @@ def main():
     df_stack = pd.concat([df_davis_stack, df_pkis2_stack], axis=0)
 
     # Create output directory if it doesn't exist
-    output_dir = path.join(get_repo_root(), "data")
+    output_dir = path.join(get_repo_root(), "images")
+    if not path.exists(output_dir):
+        import os
+
+        os.makedirs(output_dir)
+        logger.info(f"Created output directory: {output_dir}")
 
     # Generate and save plots
     ridgeline_path = path.join(output_dir, "ridgeline_plot.svg")
@@ -739,6 +883,10 @@ def main():
 
     stacked_path = path.join(output_dir, "stacked_barchart.svg")
     plot_stacked_barchart(df_stack, stacked_path)
+
+    # Generate dynamic range comparison plot
+    dynamic_range_path = path.join(output_dir, "dynamic_range_histogram.svg")
+    plot_dynamic_range(df_davis, df_pkis2, dynamic_range_path)
 
     # Load metrics data and generate boxplot
     metrics_path = path.join(get_repo_root(), "data/2025_val_stable_metrics.csv")
