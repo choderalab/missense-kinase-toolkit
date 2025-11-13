@@ -18,6 +18,31 @@ from mkt.schema.io_utils import get_repo_root
 logger = logging.getLogger(__name__)
 
 
+def save_plot(output_path: str, plot_type: str = "plot") -> None:
+    """Save the current matplotlib figure in both SVG and PNG formats.
+
+    Parameters:
+    -----------
+    output_path : str
+        Path to save the plot files. If it ends with .png, will be converted to .svg.
+        Otherwise assumed to be .svg already.
+    plot_type : str
+        Description of the plot type for logging purposes (e.g., "Dynamic range plot")
+    """
+    # ensure we have .svg as the base extension
+    svg_path = (
+        output_path.replace(".png", ".svg")
+        if output_path.endswith(".png")
+        else output_path
+    )
+    png_path = svg_path.replace(".svg", ".png")
+
+    plt.savefig(svg_path, format="svg", bbox_inches="tight", dpi=300)
+    plt.savefig(png_path, format="png", bbox_inches="tight", dpi=300)
+    plt.close()
+    logger.info(f"{plot_type} saved to {svg_path} and {png_path}")
+
+
 def get_family_colors():
     """Define a consistent color palette for kinase families.
 
@@ -121,9 +146,10 @@ def plot_dynamic_range(df_davis, df_pkis2, output_path) -> None:
     import matplotlib.ticker
 
     # ensure vector output - disable rasterization
-    matplotlib.rcParams["svg.fonttype"] = "none"
-    matplotlib.rcParams["pdf.fonttype"] = 42
-    matplotlib.rcParams["text.usetex"] = False  # Don't use LaTeX rendering
+    # use 'path' to convert text to paths for consistent rendering across all SVG viewers
+    matplotlib.rcParams["svg.fonttype"] = "path"  # convert text to paths in SVG
+    matplotlib.rcParams["pdf.fonttype"] = 42  # TrueType fonts for PDF
+    matplotlib.rcParams["text.usetex"] = False  # don't use LaTeX rendering
 
     # process Davis data
     col_davis_y = "y"
@@ -209,25 +235,15 @@ def plot_dynamic_range(df_davis, df_pkis2, output_path) -> None:
         matplotlib.ticker.FuncFormatter(lambda x, p: format(int(x), ","))
     )
     ax2.xaxis.label.set_size(16)
-    # Use mathtext for subscript and micro symbol
-    ax2.set_xlabel(r"$\mathregular{K_d}$ ($\mu$M) (Davis)", color="green", fontsize=16)
-    ax1.set_ylabel(r"$\mathregular{log_{10}}$(count)", fontsize=16)
+    # use consistent font rendering with proper mathtext embedding
+    # this ensures subscripts render correctly in both PNG and SVG
+    ax2.set_xlabel(r"$K_{\mathrm{d}}$ ($\mu$M) (Davis)", color="green", fontsize=16)
+    ax1.set_ylabel(r"$\mathrm{log_{10}}$(count)", fontsize=16)
     plt.legend(loc="upper left")
     plt.xlim(0, 100)
     plt.tight_layout()
 
-    # save both SVG and PNG formats
-    svg_path = (
-        output_path.replace(".png", ".svg")
-        if output_path.endswith(".png")
-        else output_path
-    )
-    png_path = svg_path.replace(".svg", ".png")
-
-    plt.savefig(svg_path, format="svg", bbox_inches="tight", dpi=300)
-    plt.savefig(png_path, format="png", bbox_inches="tight", dpi=300)
-    plt.close()
-    logger.info(f"Dynamic range plot saved to {svg_path} and {png_path}")
+    save_plot(output_path, "Dynamic range plot")
 
 
 def plot_ridgeline(df, output_path) -> None:
@@ -244,7 +260,7 @@ def plot_ridgeline(df, output_path) -> None:
     from scipy import stats
 
     # ensure vector output - disable rasterization
-    matplotlib.rcParams["svg.fonttype"] = "none"  # Keep fonts as text, not paths
+    matplotlib.rcParams["svg.fonttype"] = "path"  # Convert text to paths in SVG
     matplotlib.rcParams["pdf.fonttype"] = 42  # TrueType fonts
 
     # remove rows with None values
@@ -352,18 +368,7 @@ def plot_ridgeline(df, output_path) -> None:
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.1)  # Make room for shared x-axis label
 
-    # Save both SVG and PNG formats
-    svg_path = (
-        output_path.replace(".png", ".svg")
-        if output_path.endswith(".png")
-        else output_path
-    )
-    png_path = svg_path.replace(".svg", ".png")
-
-    plt.savefig(svg_path, format="svg", bbox_inches="tight", dpi=300)
-    plt.savefig(png_path, format="png", bbox_inches="tight", dpi=300)
-    plt.close()
-    logger.info(f"Ridgeline plot saved to {svg_path} and {png_path}")
+    save_plot(output_path, "Ridgeline plot")
 
 
 def plot_stacked_barchart(df, output_path) -> None:
@@ -379,7 +384,7 @@ def plot_stacked_barchart(df, output_path) -> None:
     import matplotlib
 
     # ensure vector output - disable rasterization
-    matplotlib.rcParams["svg.fonttype"] = "none"  # Keep fonts as text, not paths
+    matplotlib.rcParams["svg.fonttype"] = "path"  # Convert text to paths in SVG
     matplotlib.rcParams["pdf.fonttype"] = 42  # TrueType fonts
 
     # remove rows with None values
@@ -514,18 +519,7 @@ def plot_stacked_barchart(df, output_path) -> None:
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.2)
 
-    # save both SVG and PNG formats
-    svg_path = (
-        output_path.replace(".png", ".svg")
-        if output_path.endswith(".png")
-        else output_path
-    )
-    png_path = svg_path.replace(".svg", ".png")
-
-    plt.savefig(svg_path, format="svg", bbox_inches="tight", dpi=300)
-    plt.savefig(png_path, format="png", bbox_inches="tight", dpi=300)
-    plt.close()
-    logger.info(f"Stacked bar chart saved to {svg_path} and {png_path}")
+    save_plot(output_path, "Stacked bar chart")
 
 
 def plot_venn_diagram(df, output_path, source_name) -> None:
@@ -544,8 +538,8 @@ def plot_venn_diagram(df, output_path, source_name) -> None:
     from matplotlib_venn import venn3
 
     # ensure vector output - disable rasterization
-    matplotlib.rcParams["svg.fonttype"] = "none"
-    matplotlib.rcParams["pdf.fonttype"] = 42
+    matplotlib.rcParams["svg.fonttype"] = "path"  # Convert text to paths in SVG
+    matplotlib.rcParams["pdf.fonttype"] = 42  # TrueType fonts
 
     # generate the Venn diagram dictionary
     venn_dict = generate_venn_diagram_dict(df)
@@ -609,18 +603,7 @@ def plot_venn_diagram(df, output_path, source_name) -> None:
 
     plt.tight_layout()
 
-    # save both SVG and PNG formats
-    svg_path = (
-        output_path.replace(".png", ".svg")
-        if output_path.endswith(".png")
-        else output_path
-    )
-    png_path = svg_path.replace(".svg", ".png")
-
-    plt.savefig(svg_path, format="svg", bbox_inches="tight", dpi=300)
-    plt.savefig(png_path, format="png", bbox_inches="tight", dpi=300)
-    plt.close()
-    logger.info(f"Venn diagram saved to {svg_path} and {png_path}")
+    save_plot(output_path, "Venn diagram")
 
 
 def plot_metrics_boxplot(df, output_path) -> None:
@@ -636,8 +619,8 @@ def plot_metrics_boxplot(df, output_path) -> None:
     import matplotlib
 
     # ensure vector output - disable rasterization
-    matplotlib.rcParams["svg.fonttype"] = "none"
-    matplotlib.rcParams["pdf.fonttype"] = 42
+    matplotlib.rcParams["svg.fonttype"] = "path"  # Convert text to paths in SVG
+    matplotlib.rcParams["pdf.fonttype"] = 42  # TrueType fonts
 
     # define colors for each col_kinase (RGB converted to 0-1 scale)
     col_kinase_colors = {
@@ -844,18 +827,7 @@ def plot_metrics_boxplot(df, output_path) -> None:
 
     plt.tight_layout()
 
-    # save both SVG and PNG formats
-    svg_path = (
-        output_path.replace(".png", ".svg")
-        if output_path.endswith(".png")
-        else output_path
-    )
-    png_path = svg_path.replace(".svg", ".png")
-
-    plt.savefig(svg_path, format="svg", bbox_inches="tight", dpi=300)
-    plt.savefig(png_path, format="png", bbox_inches="tight", dpi=300)
-    plt.close()
-    logger.info(f"Metrics boxplot saved to {svg_path} and {png_path}")
+    save_plot(output_path, "Metrics boxplot")
 
 
 def main():
