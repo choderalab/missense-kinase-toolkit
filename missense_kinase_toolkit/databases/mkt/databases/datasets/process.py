@@ -432,3 +432,79 @@ class ProcessDataset(ABC):
         )
 
         return df
+
+
+def generate_ridgeline_df(df_in: pd.DataFrame, source: str):
+    list_ids = df_in["kinase_name"].unique()
+
+    list_frac_refseq = [
+        (
+            (DICT_DISCOVERX[x].idx_stop - DICT_DISCOVERX[x].idx_start + 1)
+            / len(DICT_DISCOVERX[x].seq_refseq)
+            if DICT_DISCOVERX[x].dict_construct_sequences is not None
+            else None
+        )
+        for x in list_ids
+    ]
+
+    list_family = [
+        (
+            (
+                "Lipid"
+                if DICT_KINASE[DICT_DISCOVERX[x].key].is_lipid_kinase()
+                else DICT_KINASE[DICT_DISCOVERX[x].key].adjudicate_group()
+            )
+            if DICT_DISCOVERX[x].key is not None
+            else None
+        )
+        for x in list_ids
+    ]
+
+    df_out = pd.DataFrame(
+        {
+            "kinase_name": list_ids,
+            "family": list_family,
+            "fraction_construct": list_frac_refseq,
+        }
+    )
+
+    df_out["source"] = source
+
+    return df_out
+
+
+def generate_stacked_barchart_df(df_in: pd.DataFrame, source: str):
+    list_ids = df_in["kinase_name"].unique()
+
+    list_bool_uniprot2refseq = [
+        DICT_DISCOVERX[x].seq_refseq == DICT_DISCOVERX[x].seq_uniprot for x in list_ids
+    ]
+
+    list_family = [
+        (
+            (
+                "Lipid"
+                if DICT_KINASE[DICT_DISCOVERX[x].key].is_lipid_kinase()
+                else DICT_KINASE[DICT_DISCOVERX[x].key].adjudicate_group()
+            )
+            if DICT_DISCOVERX[x].key is not None
+            else None
+        )
+        for x in list_ids
+    ]
+
+    df_temp = pd.DataFrame(
+        {
+            "kinase_name": list_ids,
+            "bool_uniprot2refseq": list_bool_uniprot2refseq,
+            "family": list_family,
+        }
+    )
+
+    df_out = pd.DataFrame(
+        df_temp[["family", "bool_uniprot2refseq"]].value_counts()
+    ).reset_index()
+
+    df_out["source"] = source
+
+    return df_out
