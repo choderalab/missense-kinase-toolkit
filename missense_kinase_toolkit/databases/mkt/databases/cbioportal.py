@@ -490,7 +490,8 @@ class KinaseMissenseMutations(Mutations):
         }
         # replace any mismatched gene names in the dictionary
         for cbio_name, mkt_name in self.dict_replace.items():
-            dict_kinase_cbio[cbio_name] = dict_kinase_cbio.pop(mkt_name)
+            if cbio_name in dict_kinase_cbio:
+                dict_kinase_cbio[cbio_name] = dict_kinase_cbio.pop(mkt_name)
         # BRD4 and STK19 don't have KLIFS - if want to remove them, uncomment below
         # dict_kinase_cbio = {
         #     k: v for k, v in dict_kinase_cbio.items()

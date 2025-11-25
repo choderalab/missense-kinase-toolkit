@@ -492,39 +492,48 @@ class TestDatabases:
         )
 
     def test_pfam(self):
+        import requests
         from mkt.databases import pfam
 
         # test that the function to find Pfam domain for a given HGNC symbol and position works
-        df_pfam = pfam.Pfam("P00519")._pfam
-        assert df_pfam.shape[0] == 4
-        # allow for 18 or 19 columns, depending on the version of the Pfam database
-        assert df_pfam.shape[1] == 18 or df_pfam.shape[1] == 19
-        assert "uniprot" in df_pfam.columns
-        assert "start" in df_pfam.columns
-        assert "end" in df_pfam.columns
-        assert "name" in df_pfam.columns
-        assert (
-            df_pfam.loc[
-                df_pfam["name"] == "Protein tyrosine and serine/threonine kinase",
-                "start",
-            ].values[0]
-            == 242
-        )
-        assert (
-            df_pfam.loc[
-                df_pfam["name"] == "Protein tyrosine and serine/threonine kinase", "end"
-            ].values[0]
-            == 492
-        )
-        assert (
-            pfam.find_pfam_domain(
-                input_id="p00519",
-                input_position=350,
-                df_ref=df_pfam,
-                col_ref_id="uniprot",
+        try:
+            df_pfam = pfam.Pfam("P00519")._pfam
+            assert df_pfam.shape[0] == 4
+            # allow for 18 or 19 columns, depending on the version of the Pfam database
+            assert df_pfam.shape[1] == 18 or df_pfam.shape[1] == 19
+            assert "uniprot" in df_pfam.columns
+            assert "start" in df_pfam.columns
+            assert "end" in df_pfam.columns
+            assert "name" in df_pfam.columns
+            assert (
+                df_pfam.loc[
+                    df_pfam["name"] == "Protein tyrosine and serine/threonine kinase",
+                    "start",
+                ].values[0]
+                == 242
             )
-            == "Protein tyrosine and serine/threonine kinase"
-        )
+            assert (
+                df_pfam.loc[
+                    df_pfam["name"] == "Protein tyrosine and serine/threonine kinase",
+                    "end",
+                ].values[0]
+                == 492
+            )
+            assert (
+                pfam.find_pfam_domain(
+                    input_id="p00519",
+                    input_position=350,
+                    df_ref=df_pfam,
+                    col_ref_id="uniprot",
+                )
+                == "Protein tyrosine and serine/threonine kinase"
+            )
+        except requests.exceptions.RetryError as e:
+            # Allow test to pass if API returns 500 errors (common in CI environments)
+            if "500 error responses" in str(e):
+                pytest.skip("Pfam API returned 500 errors - skipping test")
+            else:
+                raise
 
     def test_protvar(self):
         from mkt.databases.protvar import ProtvarScore
@@ -535,15 +544,23 @@ class TestDatabases:
         assert temp_obj._protvar_score[0]["amClass"] == "AMBIGUOUS"
 
     def test_ncbi(self):
+        import requests
         from mkt.databases import ncbi
 
-        seq_obj = ncbi.ProteinNCBI(accession="EAX02438.1")
-        assert seq_obj.list_headers == [
-            "EAX02438.1 BR serine/threonine kinase 2, isoform CRA_c [Homo sapiens]"
-        ]
-        assert seq_obj.list_seq == [
-            "MTSTGKDGGAQHAQYVGPYRLEKTLGKGQTGLVKLGVHCVTCQKVAIKIVNREKLSESVLMKVEREIAILKLIEHPHVLKLHDVYENKKYLYLVLEHVSGGELFDYLVKKGRLTPKEARKFFRQIISALDFCHSHSICHRDLKPENLLLDEKNNIRIADFGMASLQVGDSLLETSCGSPHYACPEVIRGEKYDGRKADVWSCGVILFALLVGALPFDDDNLRQLLEKVKRGVFHMPHFIPPDCQSLLRGMIEVDAARRLTLEHIQKHIWYIGGKNEPEPEQPIPRKVQIRSLPSLEDIDPDVLDSMHSLGCFRDRNKLLQDLLSEEENQEKMIYFLLLDRKERYPSQEDEDLPPRNEIDPPRKRVDSPMLNRHGKRRPERKSMEVLSVTDGGSPVPARRAIEMAQHGQRSRSISGASSGLSTSPLSSPRVTPHPSPRGSPLPTPKGTPVHTPKESPAGTPNPTPPSSPSVGGVPWRARLNSIKNSFLGSPRFHRRKLQVPTPEEMSNLTPESSPELAKKSWFGNFISLEKEEQIFVVIKDKPLSSIKADIVHAFLSIPSLSHSVISQTSFRAEYKATGGPAVFQKPVKFQVDITYTEGGEAQKENGIYSVTFTLLSGPSRRFKRVVETIQAQLLSTHDPPAAQHLSEPPPPAPGLSWGAGLKGQKVATSYESSL"
-        ]
+        try:
+            seq_obj = ncbi.ProteinNCBI(accession="EAX02438.1")
+            assert seq_obj.list_headers == [
+                "EAX02438.1 BR serine/threonine kinase 2, isoform CRA_c [Homo sapiens]"
+            ]
+            assert seq_obj.list_seq == [
+                "MTSTGKDGGAQHAQYVGPYRLEKTLGKGQTGLVKLGVHCVTCQKVAIKIVNREKLSESVLMKVEREIAILKLIEHPHVLKLHDVYENKKYLYLVLEHVSGGELFDYLVKKGRLTPKEARKFFRQIISALDFCHSHSICHRDLKPENLLLDEKNNIRIADFGMASLQVGDSLLETSCGSPHYACPEVIRGEKYDGRKADVWSCGVILFALLVGALPFDDDNLRQLLEKVKRGVFHMPHFIPPDCQSLLRGMIEVDAARRLTLEHIQKHIWYIGGKNEPEPEQPIPRKVQIRSLPSLEDIDPDVLDSMHSLGCFRDRNKLLQDLLSEEENQEKMIYFLLLDRKERYPSQEDEDLPPRNEIDPPRKRVDSPMLNRHGKRRPERKSMEVLSVTDGGSPVPARRAIEMAQHGQRSRSISGASSGLSTSPLSSPRVTPHPSPRGSPLPTPKGTPVHTPKESPAGTPNPTPPSSPSVGGVPWRARLNSIKNSFLGSPRFHRRKLQVPTPEEMSNLTPESSPELAKKSWFGNFISLEKEEQIFVVIKDKPLSSIKADIVHAFLSIPSLSHSVISQTSFRAEYKATGGPAVFQKPVKFQVDITYTEGGEAQKENGIYSVTFTLLSGPSRRFKRVVETIQAQLLSTHDPPAAQHLSEPPPPAPGLSWGAGLKGQKVATSYESSL"
+            ]
+        except requests.exceptions.RetryError as e:
+            # Allow test to pass if API returns 500 errors (common in CI environments)
+            if "500 error responses" in str(e):
+                pytest.skip("NCBI API returned 500 errors - skipping test")
+            else:
+                raise
 
     def test_chembl(self):
         from mkt.databases import chembl
