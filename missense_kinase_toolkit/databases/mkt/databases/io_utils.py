@@ -193,7 +193,7 @@ def get_repo_root():
         return repo.working_tree_dir
     except git.InvalidGitRepositoryError:
         logger.info("Not a git repository; using current directory as root...")
-        return "."
+        return os.getcwd()
 
 
 def create_tar_without_metadata(
