@@ -143,7 +143,7 @@ def plot_scatter_grid(
     df_input: pd.DataFrame,
     kmeans: KMeans,
     method: str,
-    col: str = "group",
+    col: str = "group_consensus",
     bool_iterable: bool = True,
     n_cutoff: int = 5,
     n_cols: int = 5,
@@ -163,7 +163,7 @@ def plot_scatter_grid(
         Fitted KMeans object with labels_ attribute
     method : str
         Method used for dimensionality reduction for labeling puroposes
-    col : str, default="group"
+    col : str, default="group_consensus"
         Column name in df_annot to use for filtering
     bool_iterable : bool, default=True
         Whether the column is an iterable (e.g., group) or not
@@ -211,9 +211,11 @@ def plot_scatter_grid(
         cmap=cmap,
         alpha=0.5,
     )
-    axes[0].set_xlabel(col1)
-    axes[0].set_ylabel(col2)
-    axes[0].set_title(f"KMeans Clustering (k={n_clusters})")
+    axes[0].set_xlabel(col1, fontsize=12)
+    axes[0].set_ylabel(col2, fontsize=12)
+    axes[0].set_title(
+        f"KMeans Clustering (k={n_clusters})", fontsize=14, fontweight="bold"
+    )
 
     # Create plots for each property
     for i, (prop, count) in enumerate(dict_property.items()):
@@ -252,9 +254,9 @@ def plot_scatter_grid(
                         ),  # Only add label in first plot
                     )
 
-            ax.set_xlabel(col1)
-            ax.set_ylabel(col2)
-            ax.set_title(f"{prop} (n={count})")
+            ax.set_xlabel(col1, fontsize=12)
+            ax.set_ylabel(col2, fontsize=12)
+            ax.set_title(f"{prop} (n={count})", fontsize=14, fontweight="bold")
 
     # Hide any unused subplots
     for j in range(
@@ -263,12 +265,20 @@ def plot_scatter_grid(
         axes[j].axis("off")
 
     # Add overall title with additional top padding
-    title_print = "".join(
-        ch.upper() if idx == 0 else ch.lower() for idx, ch in enumerate(col)
+    title_print = col.replace("_", " ").title()
+    # title_print = "".join(
+    #     ch.replace.upper() if idx == 0 else ch.lower() for idx, ch in enumerate(col)
+    # )
+    # bold font
+
+    fig.suptitle(
+        f"{method} of Kinase Embeddings by {title_print}",
+        fontsize=24,
+        fontweight="bold",
+        y=0.98,
     )
-    fig.suptitle(f"{method} of Kinase Embeddings by {title_print}", fontsize=16, y=0.98)
 
     method_print = "".join(ch.lower() for ch in method if ch.isalnum())
-    filepathname = path.join(path_out, f"{method_print}_{col}_grid.png")
+    filepathname = path.join(path_out, f"{method_print}_{col}_grid.svg")
     plt.savefig(filepathname, dpi=300, bbox_inches="tight")
     plt.close()

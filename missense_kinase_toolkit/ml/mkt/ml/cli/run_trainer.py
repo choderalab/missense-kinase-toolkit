@@ -47,8 +47,8 @@ def parse_args():
     parser.add_argument(
         "--partition",
         type=str,
-        default="componc_gpu",
-        help="SLURM partition to use (default: componc_gpu).",
+        default="componc_gpu_batch",
+        help="SLURM partition to use (default: componc_gpu_batch).",
     )
 
     parser.add_argument(
@@ -178,6 +178,7 @@ def main():
         os.makedirs(out_dir, exist_ok=True)
         logger.info(f"Output directory: {out_dir}...")
         os.chdir(out_dir)
+        os.system(f"cp {args.config} {out_dir}/config.yaml")
 
         run_pipeline_with_wandb(
             model=model,
