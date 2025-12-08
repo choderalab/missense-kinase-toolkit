@@ -40,10 +40,12 @@ class cBioPortal(APIKeySwaggerClient):
         """Post-initialization to set up cBioPortal API client."""
         self.instance = get_cbioportal_instance()
         self.url = f"https://{self.instance}/api/v2/api-docs"
-        self._cbioportal = self.query_api()
-        if self._cbioportal is None:
-            logger.error(
-                f"Failed to initialize cBioPortal API client for instance {self.instance}"
+        try:
+            self._cbioportal = self.query_api()
+        except Exception as e:
+            logger.warning(
+                f"Error initializing cBioPortal API client: {e}\n"
+                "Can still load data from CSV files if pathfile(s) provided."
             )
 
     def maybe_get_token(self):
@@ -96,7 +98,7 @@ class cBioPortalQuery(cBioPortal):
         """Post-initialization to check study ID in instance and query API data."""
         super().__post_init__()
         if not self.check_entity_id():
-            logger.error(
+            logger.warning(
                 f"Study {self.get_entity_id()} not found in cBioPortal instance {self.instance}"
             )
         if self.pathfile is not None:
@@ -144,23 +146,37 @@ class cBioPortalQuery(cBioPortal):
         """
         ...
 
-    def load_from_csv(self) -> pd.DataFrame | None:
+    def load_from_csv(
+        self,
+        str_path: str | None = None,
+    ) -> pd.DataFrame | None:
         """Load DataFrame from CSV file.
+
+        Parameters
+        ----------
+        str_path : str | None
+            Path to CSV file; if None, use self.pathfile
 
         Returns
         -------
         pd.DataFrame | None
             DataFrame loaded from CSV file if successful, otherwise None
         """
-        if self.pathfile is not None and os.path.exists(self.pathfile):
+        if str_path is not None:
+            path_to_use = str_path
+        else:
+            path_to_use = self.pathfile
+            logger.info(f"Loading DataFrame from CSV file: {path_to_use}.")
+
+        if path_to_use is not None and os.path.exists(path_to_use):
             try:
-                df = pd.read_csv(self.pathfile)
+                df = pd.read_csv(path_to_use)
                 return df
             except Exception as e:
-                logger.error(f"Error loading DataFrame from {self.pathfile}: {e}")
+                logger.error(f"Error loading DataFrame from {path_to_use}: {e}")
                 return None
         else:
-            logger.error(f"Path {self.pathfile} does not exist or is not specified.")
+            logger.error(f"Path {path_to_use} does not exist or is not specified.")
             return None
 
     def regenerate_dataframe(self) -> pd.DataFrame | None:
@@ -286,9 +302,13 @@ class StudyData(cBioPortalQuery):
         bool
             True if the study ID is valid, False otherwise
         """
-        studies = self._cbioportal.Studies.getAllStudiesUsingGET().result()
-        study_ids = [study.studyId for study in studies]
-        return self.study_id in study_ids
+        try:
+            studies = self._cbioportal.Studies.getAllStudiesUsingGET().result()
+            study_ids = [study.studyId for study in studies]
+            return self.study_id in study_ids
+        except Exception as e:
+            logger.warning(f"Error checking study ID {self.study_id}: {e}")
+            return False
 
 
 @dataclass
@@ -330,22 +350,28 @@ class KinaseMissenseMutations(Mutations):
     """Dictionary mapping cBioPortal to MKT HGNC gene names for mismatches; default is {"STK19": "WHR1"}."""
     str_blosom: str = "BLOSUM80"
     """BLOSUM matrix to use for mutation analysis; default is "BLOSUM80"."""
+    pathfile_filter: str | None = None
+    """Path to CSV file for filtered kinase missense mutations; default is None."""
     _df_filter: pd.DataFrame | None = field(init=False, default=None)
     """DataFrame of kinase missense mutations; None if DataFrame could not be created (post-init)."""
 
     def __post_init__(self):
         super().__post_init__()
-        if self.pathfile is not None:
+        if self.pathfile_filter is not None:
+            str_temp = "loaded"
             logger.info(
-                f"Loading filtered DataFrame from {self.pathfile} for study {self.study_id}."
+                f"Loading filtered DataFrame from CSV file: {self.pathfile_filter}."
             )
-            self._df_filter = self._df.copy()
+            self._df_filter = self.load_from_csv(str_path=self.pathfile_filter)
         else:
+            str_temp = "generated"
             self._df_filter = self.get_kinase_missense_mutations()
-            if self._df_filter is None:
-                logger.error(
-                    f"DataFrame for kinase missense mutations in study {self.study_id} could not be created."
-                )
+
+        if self._df_filter is None:
+            logger.error(
+                "DataFrame for kinase missense mutations in study "
+                f"{self.study_id} could not be {str_temp}."
+            )
 
     def filter_single_aa_missense_mutations(
         self,
@@ -461,7 +487,6 @@ class KinaseMissenseMutations(Mutations):
             DataFrame of kinase mutations if successful, otherwise None
 
         """
-        # dict_in = return_kinase_dict()
 
         col_hgnc = self.return_adjusted_colname("hugoGeneSymbol")
 
