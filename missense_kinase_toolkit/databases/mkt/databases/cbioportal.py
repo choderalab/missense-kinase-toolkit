@@ -347,7 +347,7 @@ class KinaseMissenseMutations(Mutations):
     """Class to get kinase mutations from a cBioPortal study."""
 
     dict_replace: dict[str, str] = field(default_factory=lambda: {"STK19": "WHR1"})
-    """Dictionary mapping cBioPortal to MKT HGNC gene names for mismatches; default is {"STK19": "WHR1"}."""
+    """Dictionary mapping cBioPortal to mkt gene names for mismatches; default is {"STK19": "WHR1"}."""
     str_blosom: str = "BLOSUM80"
     """BLOSUM matrix to use for mutation analysis; default is "BLOSUM80"."""
     pathfile_filter: str | None = None
@@ -513,10 +513,12 @@ class KinaseMissenseMutations(Mutations):
             for k, v in DICT_KINASE.items()
             if v.uniprot_id.split("_")[0] in dict_hgnc2uniprot_kin.values()
         }
+
         # replace any mismatched gene names in the dictionary
         for cbio_name, mkt_name in self.dict_replace.items():
-            if cbio_name in dict_kinase_cbio:
+            if mkt_name in dict_kinase_cbio:
                 dict_kinase_cbio[cbio_name] = dict_kinase_cbio.pop(mkt_name)
+
         # BRD4 and STK19 don't have KLIFS - if want to remove them, uncomment below
         # dict_kinase_cbio = {
         #     k: v for k, v in dict_kinase_cbio.items()
