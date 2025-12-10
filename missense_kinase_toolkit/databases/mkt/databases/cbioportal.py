@@ -99,7 +99,8 @@ class cBioPortalQuery(cBioPortal):
         super().__post_init__()
         if not self.check_entity_id():
             logger.warning(
-                f"Study {self.get_entity_id()} not found in cBioPortal instance {self.instance}"
+                f"Study {self.get_entity_id()} not found "
+                f"in cBioPortal instance {self.instance}"
             )
         if self.pathfile is not None:
             try:
@@ -588,7 +589,7 @@ class KinaseMissenseMutations(Mutations):
         str_errors = "\n".join(set_kinase_mismatch)
         logger.error(
             "HGNC gene names of kinases with mismatches between "
-            f"cBioPortal and canonical Uniprot sequences:\n {str_errors}"
+            f"cBioPortal and canonical Uniprot sequences:\n{str_errors}"
         )
         df_filtered = df.loc[
             ~df["gene_hugoGeneSymbol"].isin(set_kinase_mismatch), :
