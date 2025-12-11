@@ -5,7 +5,6 @@ from io import StringIO
 from tempfile import NamedTemporaryFile
 from typing import Any
 
-import py3Dmol
 from Bio.PDB import MMCIFParser
 from Bio.PDB.mmcifio import MMCIFIO
 from Bio.PDB.PDBIO import PDBIO
@@ -30,16 +29,6 @@ LIST_KLIFS_STICK = [
 ]
 """list[int]: Zero indexed location of residues to highlight as stick"""
 
-# evolutionarily conserved residues in the KLIFS pocket
-# LIST_KLIFS_STICK = [
-#     3,
-#     5,
-#     8,
-#     68,
-#     80,
-# ]
-# """list[int]: Zero indexed location of residues to highlight as stick"""
-
 
 @dataclass
 class StructureVisualizer:
@@ -51,12 +40,6 @@ class StructureVisualizer:
     """Dict with keys DICT_ALIGNMENT containing seq and a list of colors per residue."""
     str_attr: str | None = None
     """Attribute to be highlighted in the structure."""
-    bool_show: bool = False
-    """Whether to show the structure in the viewer or return HTML."""
-    dict_dims: dict[str, int] = field(
-        default_factory=lambda: {"width": 600, "height": 600}
-    )
-    """Dimensions for the py3Dmol viewer."""
     dict_style: dict[str, str] = field(
         default_factory=lambda: {
             "None": "cartoon",
@@ -277,46 +260,3 @@ class StructureVisualizer:
         }
 
         return dict_style
-
-    def visualize_structure(self) -> str | None:
-        """Visualize the structure using py3Dmol.
-
-        Returns
-        -------
-        str
-            HTML representation of the py3Dmol viewer or None if self.bool_show=True.
-
-        """
-        view = py3Dmol.view(**self.dict_dims)
-
-        view.addModel(self.pdb_text, "pdb")
-
-        if self.str_attr is None:
-            str_attr = str(self.str_attr)
-            view.setStyle(self._return_style_dict(str_attr))
-        else:
-            list_highlight, dict_color, dict_style = self._generate_highlight_idx()
-            for i in self.residues:
-                res_no = i.get_id()[1]
-                # set lowlight background
-                view.setStyle(
-                    {"resi": str(res_no)},
-                    self._return_style_dict("lowlight"),
-                )
-                # add highlights for the selected attribute
-                if res_no in list_highlight:
-                    # KLIFS uses KLIFS pocket colors
-                    view.addStyle(
-                        {"resi": str(res_no)},
-                        self._return_style_dict(
-                            str_key=self.str_attr,
-                            str_color=dict_color[res_no],
-                            str_style=dict_style[res_no],
-                        ),
-                    )
-
-        view.zoomTo()
-        if self.bool_show:
-            view.show()
-        else:
-            return view._make_html()

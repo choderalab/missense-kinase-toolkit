@@ -461,8 +461,9 @@ class KinaseMissenseMutations(Mutations):
                 dict_hgnc2uniprot[hgnc_name] = uniprot_id
             except Exception as e:
                 list_err.append(f"{hgnc_name}: {e}")
-        str_errors = "\n".join(list_err)
-        logger.error(f"Errors retrieving HGNC gene names:\n{str_errors}")
+        if len(list_err) > 0:
+            str_errors = "\n".join(list_err)
+            logger.error(f"Errors retrieving HGNC gene names:\n{str_errors}")
 
         # replace any HGNC gene names in the dictionary
         for cbio_name, mkt_name in self.dict_replace.items():
@@ -586,11 +587,12 @@ class KinaseMissenseMutations(Mutations):
 
         # TODO: check non-mismatches for list_set_kinase_mismatch gene_hugoGeneSymbol
         set_kinase_mismatch = {i.split("_")[1] for i in list_mismatch + list_err}
-        str_errors = "\n".join(set_kinase_mismatch)
-        logger.error(
-            "HGNC gene names of kinases with mismatches between "
-            f"cBioPortal and canonical Uniprot sequences:\n{str_errors}"
-        )
+        if len(set_kinase_mismatch) > 0:
+            str_errors = "\n".join(set_kinase_mismatch)
+            logger.error(
+                "HGNC gene names of kinases with mismatches between "
+                f"cBioPortal and canonical Uniprot sequences:\n{str_errors}"
+            )
         df_filtered = df.loc[
             ~df["gene_hugoGeneSymbol"].isin(set_kinase_mismatch), :
         ].reset_index(drop=True)
