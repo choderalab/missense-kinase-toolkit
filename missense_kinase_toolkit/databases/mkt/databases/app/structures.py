@@ -73,7 +73,6 @@ class StructureVisualizer:
         self.structure = self.convert_mmcifdict2structure()
         self.pdb_text = self.convert_structure2string()
         self.residues = self.structure.get_residues()
-        self.html = self.visualize_structure()
 
     @staticmethod
     def _parse_pdb_line(line: str) -> dict[str, Any] | None:
