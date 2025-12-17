@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class SequenceAlignmentVisualizer(SequenceAlignment):
+class SequenceAlignmentGenerator(SequenceAlignment):
     """Class to generate sequence alignment plots using Bokeh."""
 
     font_size: int = 9
@@ -167,7 +167,7 @@ class SequenceAlignmentVisualizer(SequenceAlignment):
 
 
 @dataclass
-class StructureVisualizerVisualizer(StructureVisualizer):
+class StructureVisualizerGenerator(StructureVisualizer):
     """Class to generate structure visualizations for kinase structures."""
 
     bool_show: bool = False
