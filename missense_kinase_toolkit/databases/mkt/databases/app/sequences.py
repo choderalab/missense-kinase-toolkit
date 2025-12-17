@@ -71,9 +71,6 @@ class SequenceAlignment:
             self.list_ids = self.list_ids[::-1]
             self.list_colors = self.list_colors[::-1]
 
-        # generate plot to render
-        self.plot = self.generate_plot()
-
     @staticmethod
     def _map_single_alignment(
         idx_start: int,
