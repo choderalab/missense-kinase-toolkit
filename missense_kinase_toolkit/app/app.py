@@ -15,7 +15,7 @@ from mkt.schema.io_utils import (
 from mkt.schema.kinase_schema import KinaseInfo
 from mkt.schema.utils import rgetattr
 from streamlit_bokeh import streamlit_bokeh
-from visualizers import SequenceAlignmentVisualizer, StructureVisualizer
+from visualizers import SequenceAlignmentVisualizer, StructureVisualizerVisualizer
 
 logger = logging.getLogger(__name__)
 
@@ -191,7 +191,7 @@ class Dashboard:
                         )
 
                         with plot_spot:
-                            viz = StructureVisualizer(
+                            viz = StructureVisualizerVisualizer(
                                 obj_kinase=obj_temp,
                                 dict_align=obj_alignment.dict_align,
                                 str_attr=annotation,
