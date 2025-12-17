@@ -1,14 +1,9 @@
 import os
 
-try:
-    import webcolors
-
-    WEBCOLORS_AVAILABLE = True
-except ImportError:
-    WEBCOLORS_AVAILABLE = False
+import webcolors
 
 
-class SimplePyMOLGenerator:
+class PyMOLGenerator:
     """Generate PDB file with embedded color/style info and standalone PyMOL script."""
 
     def __init__(self, structure_visualizer):
@@ -25,12 +20,7 @@ class SimplePyMOLGenerator:
         if color.startswith("#"):
             return color
 
-        # Try webcolors first
-        if WEBCOLORS_AVAILABLE:
-            try:
-                return webcolors.name_to_hex(color)
-            except ValueError:
-                pass
+        webcolors.name_to_hex(color)
 
         # Fallback color mapping
         color_map = {
@@ -270,48 +260,49 @@ class SimplePyMOLGenerator:
 
         return output_path
 
+    def save_pymol_files(self, output_dir: str):
+        """
+        Generate PDB file and PyMOL script for manual PyMOL execution.
 
-def generate_simple_pymol_files(viz_obj, output_dir: str, base_name: str = None):
-    """
-    Generate PDB file and PyMOL script for manual PyMOL execution.
+        Parameters
+        ----------
+        output_dir : str
+            Directory to save files
 
-    Parameters
-    ----------
-    viz_obj : StructureVisualizer
-        Existing StructureVisualizer object
-    output_dir : str
-        Directory to save files
-    base_name : str, optional
-        Base name for files (default: gene name)
+        Returns
+        -------
+        tuple
+            Paths to (pdb_file, pymol_script)
+        """
+        os.makedirs(output_dir, exist_ok=True)
 
-    Returns
-    -------
-    tuple
-        Paths to (pdb_file, pymol_script)
-    """
-    if base_name is None:
-        base_name = viz_obj.obj_kinase.hgnc_name
+        pdb_path = os.path.join(output_dir, f"{self.gene_name}_structure.pdb")
+        script_path = os.path.join(output_dir, f"{self.gene_name}_pymol_script.py")
 
-    # Ensure output directory exists
-    os.makedirs(output_dir, exist_ok=True)
+        self.generate_annotated_pdb(pdb_path)
+        self.generate_pymol_script(pdb_path, script_path)
 
-    # Generate files
-    generator = SimplePyMOLGenerator(viz_obj)
+        f"""
+        Files generated:
+        PDB: {os.path.join(output_dir, f"{self.gene_name}_structure.pdb")}
+        Script: {os.path.join(output_dir, f"{self.gene_name}_pymol_script.py")}
 
-    pdb_path = os.path.join(output_dir, f"{base_name}_structure.pdb")
-    script_path = os.path.join(output_dir, f"{base_name}_pymol_script.py")
+        To run in PyMOL:
+        1. Open PyMOL
+        2. Navigate to {output_dir}
+        3. Run: run {self.gene_name}_pymol_script.py
+        4. Save PNG: set ray_trace_mode, 3; png filename.png, ray=1, dpi=300
+        """
 
-    generator.generate_annotated_pdb(pdb_path)
-    generator.generate_pymol_script(pdb_path, script_path)
-
-    print("Files generated:")
-    print(f"  PDB: {pdb_path}")
-    print(f"  Script: {script_path}")
-    print("")
-    print("To run in PyMOL:")
-    print("  1. Open PyMOL")
-    print(f"  2. Navigate to {output_dir}")
-    print(f"  3. Run: run {os.path.basename(script_path)}")
-    print("  4. Save PNG: set ray_trace_mode, 3; png your_filename.png, ray=1, dpi=300")
-
-    return pdb_path, script_path
+        print("\n" + "=" * 60)
+        print("MANUAL PYMOL INSTRUCTIONS:")
+        print("=" * 60)
+        print("1. Open PyMOL GUI or command line")
+        print("2. Change to the output directory:")
+        print(f"   cd {os.path.abspath(output_dir)}")
+        print("3. Run the script:")
+        print(f"   run {os.path.basename(script_path)}")
+        print("4. To save as high-res PNG:")
+        print("   set ray_trace_mode, <mode>")
+        print("   png <your_filename>.png, ray=1, dpi=300")
+        print("=" * 60)
