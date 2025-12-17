@@ -178,7 +178,7 @@ class StructureVisualizerGenerator(StructureVisualizer):
     """Dimensions for the py3Dmol viewer."""
 
     def __post_init__(self):
-        super().__init__(self.obj_kinase, self.str_attr)
+        super().__post_init__()
         self.html = self.visualize_structure()
 
     def visualize_structure(self) -> str | None:
