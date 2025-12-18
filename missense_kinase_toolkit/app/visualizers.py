@@ -167,10 +167,21 @@ class SequenceAlignmentGenerator(SequenceAlignment):
         return p1
 
 
+DICT_VIZ_OPACITY = {
+    "None": 1.0,
+    "KLIFS": 1.0,
+    "Phosphosites": 1.0,
+    "lowlight": 0.5,
+}
+"""dict[str, float]: Opacity for the py3Dmol viewer."""
+
+
 @dataclass
 class StructureVisualizerGenerator(StructureVisualizer):
     """Class to generate structure visualizations for kinase structures."""
 
+    dict_opacity: dict[str, float] = field(default_factory=lambda: DICT_VIZ_OPACITY)
+    """Opacity for the py3Dmol viewer."""
     bool_show: bool = False
     """Whether to show the structure in the viewer or return HTML."""
     dict_dims: dict[str, int] = field(
