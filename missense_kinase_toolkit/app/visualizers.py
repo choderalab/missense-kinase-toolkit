@@ -1,6 +1,7 @@
 import logging
 from dataclasses import dataclass, field
 from itertools import chain
+from typing import Any
 
 import numpy as np
 import py3Dmol
@@ -180,6 +181,48 @@ class StructureVisualizerGenerator(StructureVisualizer):
     def __post_init__(self):
         super().__post_init__()
         self.html = self.visualize_structure()
+
+    def _return_style_dict(
+        self,
+        str_key,
+        str_color: str | None = None,
+        str_style: str | None = None,
+        float_opacity: float | None = None,
+    ) -> dict[str, Any]:
+        """Return the style dictionary for the given key.
+
+        Parameters
+        ----------
+        str_key : str
+            Key for the style dictionary.
+        str_color : str, optional
+            Color for the style dictionary, by default None.
+        str_style : str, optional
+            Style for the style dictionary, by default None.
+        float_opacity : float, optional
+            Opacity for the style dictionary, by default None.
+
+        Returns
+        -------
+        dict[str, Any]
+            Style dictionary for the given key.
+
+        """
+        if str_color is None:
+            str_color = self.dict_color[str_key]
+        if str_style is None:
+            str_style = self.dict_style[str_key]
+        if float_opacity is None:
+            float_opacity = self.dict_opacity[str_key]
+
+        dict_style = {
+            str_style: {
+                "color": str_color,
+                "opacity": float_opacity,
+            }
+        }
+
+        return dict_style
 
     def visualize_structure(self) -> str | None:
         """Visualize the structure using py3Dmol.
