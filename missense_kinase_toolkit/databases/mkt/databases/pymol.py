@@ -9,6 +9,42 @@ from mkt.databases.app.structures import StructureVisualizer
 logger = logging.getLogger(__name__)
 
 
+DICT_FILENAME_DEFAULTS = {
+    "file_pdb": "structure.pdb",
+    "file_script": "pymol_script.py",
+    "file_txt": "instructions.txt",
+}
+"""dict: Default filenames for PDB, script, and instructions."""
+
+DICT_COLOR_MAP = {
+    "cyan": "#00FFFF",
+    "magenta": "#FF00FF",
+    "yellow": "#FFFF00",
+    "red": "#FF0000",
+    "green": "#00FF00",
+    "blue": "#0000FF",
+    "orange": "#FFA500",
+    "purple": "#800080",
+    "pink": "#FFC0CB",
+    "brown": "#A52A2A",
+    "gray": "#808080",
+    "grey": "#808080",
+    "darkred": "#8B0000",
+    "darkgreen": "#006400",
+    "darkblue": "#00008B",
+    "darkorange": "#FF8C00",
+    "darkviolet": "#9400D3",
+    "white": "#FFFFFF",
+    "black": "#000000",
+    "lightblue": "#ADD8E6",
+    "lightgreen": "#90EE90",
+}
+"""dict: Fallback color name to hex mapping."""
+
+LIST_KLIFS_STICK_POSITIONS = [3, 5, 8, 68, 80]
+"""list[int]: Zero-index positions in KLIFS sequence for stick representation."""
+
+
 @dataclass
 class PyMOLGenerator:
     """Generate PDB file with embedded color/style info and standalone PyMOL script."""
@@ -17,23 +53,15 @@ class PyMOLGenerator:
     """StructureVisualizer object with loaded structure and annotations."""
     gene_name: str = field(init=False)
     """Gene name of the structure."""
-    dict_filenames: dict = field(
-        default_factory=lambda: {
-            "file_pdb": "structure.pdb",
-            "file_script": "pymol_script.py",
-            "file_txt": "instructions.txt",
-        }
-    )
+    dict_filenames: dict = field(default_factory=lambda: dict)
     """Dictionary of filenames for PDB, script, and instructions."""
-    KLIFS_STICK_POSITIONS: list[int] = field(default_factory=lambda: [3, 5, 8, 68, 80])
-    """List of zero-indexed positions in KLIFS sequence for stick representation."""
 
     def __post_init__(self):
         self.gene_name = self.viz.obj_kinase.hgnc_name
 
         # rename files with gene name
         self.dict_filenames = {
-            k: f"{self.gene_name}_{v}" for k, v in self.dict_filenames.items()
+            k: f"{self.gene_name}_{v}" for k, v in DICT_FILENAME_DEFAULTS.items()
         }
 
     def _convert_color_to_hex(self, color: str) -> str:
@@ -44,33 +72,8 @@ class PyMOLGenerator:
 
         webcolors.name_to_hex(color)
 
-        # fallback color mapping
-        color_map = {
-            "cyan": "#00FFFF",
-            "magenta": "#FF00FF",
-            "yellow": "#FFFF00",
-            "red": "#FF0000",
-            "green": "#00FF00",
-            "blue": "#0000FF",
-            "orange": "#FFA500",
-            "purple": "#800080",
-            "pink": "#FFC0CB",
-            "brown": "#A52A2A",
-            "gray": "#808080",
-            "grey": "#808080",
-            "darkred": "#8B0000",
-            "darkgreen": "#006400",
-            "darkblue": "#00008B",
-            "darkorange": "#FF8C00",
-            "darkviolet": "#9400D3",
-            "white": "#FFFFFF",
-            "black": "#000000",
-            "lightblue": "#ADD8E6",
-            "lightgreen": "#90EE90",
-        }
-
         # default to gray if not found
-        return color_map.get(color.lower(), "#808080")
+        return DICT_COLOR_MAP.get(color.lower(), "#808080")
 
     def _get_color_and_style_mapping(self) -> tuple[dict[int, str], list[int]]:
         """Generate residue-to-color mapping and stick residue list."""
@@ -108,7 +111,7 @@ class PyMOLGenerator:
                         # convert to zero-indexed
                         klifs_pos -= 1
 
-                        if klifs_pos in self.KLIFS_STICK_POSITIONS:
+                        if klifs_pos in LIST_KLIFS_STICK_POSITIONS:
                             stick_residues.append(cif_residue_count)
 
         return color_mapping, stick_residues
