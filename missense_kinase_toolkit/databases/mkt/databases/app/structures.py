@@ -16,18 +16,41 @@ logger = logging.getLogger(__name__)
 
 
 LIST_KLIFS_STICK = [
-    45,
+    45,  # hinge region
     46,
-    47,  # hinge region
-    67,
+    47,
+    67,  # HRD motif
     68,
-    69,  # HRD motif
-    79,
+    69,
+    79,  # xDFG motif
     80,
     81,
-    82,  # xDFG motif
+    82,
 ]
 """list[int]: Zero indexed location of residues to highlight as stick"""
+
+DICT_VIZ_STYLE = {
+    "None": "cartoon",
+    "KLIFS": "cartoon",
+    "Phosphosites": "stick",
+    "lowlight": "cartoon",
+}
+"""dict[str, str]: Style for the py3Dmol viewer."""
+
+DICT_VIZ_COLOR = {
+    "None": "spectrum",
+    "Phosphosites": "red",
+    "lowlight": "gray",
+}
+"""dict[str, str]: Color scheme for the py3Dmol viewer."""
+
+DICT_VIZ_OPACITY = {
+    "None": 1.0,
+    "KLIFS": 1.0,
+    "Phosphosites": 1.0,
+    "lowlight": 0.5,
+}
+"""dict[str, float]: Opacity for the py3Dmol viewer."""
 
 
 @dataclass
@@ -40,32 +63,14 @@ class StructureVisualizer:
     """Dict with keys DICT_ALIGNMENT containing seq and a list of colors per residue."""
     str_attr: str | None = None
     """Attribute to be highlighted in the structure."""
-    dict_style: dict[str, str] = field(
-        default_factory=lambda: {
-            "None": "cartoon",
-            "KLIFS": "cartoon",
-            "Phosphosites": "stick",
-            "lowlight": "cartoon",
-        }
-    )
+    dict_style: dict[str, str] = field(default_factory=lambda: DICT_VIZ_STYLE)
     """Style for the py3Dmol viewer."""
-    dict_color: dict[str, str] = field(
-        default_factory=lambda: {
-            "None": "spectrum",
-            "Phosphosites": "red",
-            "lowlight": "gray",
-        }
-    )
+    dict_color: dict[str, str] = field(default_factory=lambda: DICT_VIZ_COLOR)
     """Color scheme for the py3Dmol viewer."""
-    dict_opacity: dict[str, float] = field(
-        default_factory=lambda: {
-            "None": 1.0,
-            "KLIFS": 1.0,
-            "Phosphosites": 1.0,
-            "lowlight": 0.5,
-        }
-    )
+    dict_opacity: dict[str, float] = field(default_factory=lambda: DICT_VIZ_OPACITY)
     """Opacity for the py3Dmol viewer."""
+    dict_mutations: dict[int, float] | None = None
+    """Dictionary of mutations indices with corresponding normalized counts."""
 
     def __post_init__(self):
         if self.str_attr == "None":
@@ -202,14 +207,14 @@ class StructureVisualizer:
             list_idx_stick = self._index_stick_region()
             list_style = [
                 "stick" if idx in list_idx_stick and idx in list_idx_keep else "cartoon"
-                for idx, i in enumerate(list_attr_idx)
+                for idx, _ in enumerate(list_attr_idx)
             ]
             list_color = [
                 self.dict_align[self.str_attr]["list_colors"][i] for i in list_intersect
             ]
         else:
-            list_style = [self.dict_style[self.str_attr] for i in list_intersect]
-            list_color = [self.dict_color[self.str_attr] for i in list_intersect]
+            list_style = [self.dict_style[self.str_attr] for _ in list_intersect]
+            list_color = [self.dict_color[self.str_attr] for _ in list_intersect]
 
         # +1 for 1-based indexing
         list_intersect = [i + 1 for i in list_intersect]
