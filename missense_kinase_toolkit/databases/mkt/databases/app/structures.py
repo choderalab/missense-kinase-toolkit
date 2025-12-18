@@ -33,6 +33,7 @@ DICT_VIZ_STYLE = {
     "None": "cartoon",
     "KLIFS": "cartoon",
     "Phosphosites": "stick",
+    "Mutations": "cartoon",
     "lowlight": "cartoon",
 }
 """dict[str, str]: Style for the py3Dmol viewer."""
@@ -40,6 +41,7 @@ DICT_VIZ_STYLE = {
 DICT_VIZ_COLOR = {
     "None": "spectrum",
     "Phosphosites": "red",
+    "Mutations": "red",
     "lowlight": "gray",
 }
 """dict[str, str]: Color scheme for the py3Dmol viewer."""
@@ -189,11 +191,17 @@ class StructureVisualizer:
         str_seq_cif = self.dict_align["KinCore, CIF"]["str_seq"]
         list_cif_idx = [idx for idx, i in enumerate(str_seq_cif) if i != "-"]
 
-        try:
-            str_seq_attr = self.dict_align[self.str_attr]["str_seq"]
-            list_attr_idx = [idx for idx, i in enumerate(str_seq_attr) if i != "-"]
-        except KeyError:
-            logger.error(f"{self.str_attr} not found in {self.dict_align.keys()}")
+        if not self.dict_mutations:
+            try:
+                str_seq_attr = self.dict_align[self.str_attr]["str_seq"]
+                list_attr_idx = [idx for idx, i in enumerate(str_seq_attr) if i != "-"]
+            except KeyError:
+                logger.error(f"{self.str_attr} not found in {self.dict_align.keys()}")
+        else:
+            list_attr_idx = [i - 1 for i in self.dict_mutations.keys()]
+            assert all(
+                i in list_cif_idx for i in list_attr_idx
+            ), "Some mutation indices are not present in the KinCore CIF sequence."
 
         list_intersect = sorted(
             list(set(list_cif_idx).intersection(set(list_attr_idx)))
@@ -222,45 +230,3 @@ class StructureVisualizer:
         dict_style = dict(zip(list_intersect, list_style))
 
         return list_intersect, dict_color, dict_style
-
-    def _return_style_dict(
-        self,
-        str_key,
-        str_color: str | None = None,
-        str_style: str | None = None,
-        float_opacity: float | None = None,
-    ) -> dict[str, Any]:
-        """Return the style dictionary for the given key.
-
-        Parameters
-        ----------
-        str_key : str
-            Key for the style dictionary.
-        str_color : str, optional
-            Color for the style dictionary, by default None.
-        str_style : str, optional
-            Style for the style dictionary, by default None.
-        float_opacity : float, optional
-            Opacity for the style dictionary, by default None.
-
-        Returns
-        -------
-        dict[str, Any]
-            Style dictionary for the given key.
-
-        """
-        if str_color is None:
-            str_color = self.dict_color[str_key]
-        if str_style is None:
-            str_style = self.dict_style[str_key]
-        if float_opacity is None:
-            float_opacity = self.dict_opacity[str_key]
-
-        dict_style = {
-            str_style: {
-                "color": str_color,
-                "opacity": float_opacity,
-            }
-        }
-
-        return dict_style
