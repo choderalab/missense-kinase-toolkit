@@ -37,11 +37,10 @@ def generate_sequence_and_structure_viewers(
     DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE")
     obj_temp = DICT_KINASE[str_kinase]
 
-    # Initialize kwargs dictionaries if None
     sequence_kwargs = sequence_kwargs or {}
-    structure_kwargs = structure_kwargs or {}
-
     obj_align = SequenceAlignment(obj_temp, dict_colors, **sequence_kwargs)
+
+    structure_kwargs = structure_kwargs or {}
     obj_viz = StructureVisualizer(
         obj_kinase=obj_temp,
         dict_align=obj_align.dict_align,
