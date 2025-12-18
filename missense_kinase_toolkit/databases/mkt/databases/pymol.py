@@ -65,7 +65,18 @@ class PyMOLGenerator:
         }
 
     def _convert_color_to_hex(self, color: str) -> str:
-        """Convert named color to hex, with fallback options."""
+        """Convert named color to hex, with fallback options.
+
+        Parameters
+        ----------
+        color : str
+            Color name or hex string.
+
+        Returns
+        -------
+        str
+            Hex color string.
+        """
         # if already hex, return as-is
         if color.startswith("#"):
             return color
@@ -76,7 +87,13 @@ class PyMOLGenerator:
         return DICT_COLOR_MAP.get(color.lower(), "#808080")
 
     def _get_color_and_style_mapping(self) -> tuple[dict[int, str], list[int]]:
-        """Generate residue-to-color mapping and stick residue list."""
+        """Generate residue-to-color mapping and stick residue list.
+
+        Returns
+        -------
+        tuple[dict[int, str], list[int]]
+            Dictionary mapping residue numbers to hex colors and list of stick residue numbers.
+        """
         color_mapping = {}
         stick_residues = []
 
@@ -117,11 +134,33 @@ class PyMOLGenerator:
         return color_mapping, stick_residues
 
     def return_filepath_dict(self, output_dir: str) -> dict[str, str]:
-        """Return dictionary of filenames with paths."""
+        """Return dictionary of filenames with paths.
+
+        Parameters
+        ----------
+        output_dir : str
+            Directory where files are saved.
+
+        Returns
+        -------
+        dict[str, str]
+            Dictionary mapping file types to full file paths.
+        """
         return {k: os.path.join(output_dir, v) for k, v in self.dict_filenames.items()}
 
     def generate_annotated_pdb(self, output_path: str) -> str:
-        """Generate PDB file with renumbered residues and color/style annotations."""
+        """Generate PDB file with renumbered residues and color/style annotations.
+
+        Parameters
+        ----------
+        output_path : str
+            Path to save the annotated PDB file.
+
+        Returns
+        -------
+        str
+            Path to the saved annotated PDB file.
+        """
         color_mapping, stick_residues = self._get_color_and_style_mapping()
 
         pdb_lines = self.viz.pdb_text.split("\n")
@@ -207,7 +246,20 @@ class PyMOLGenerator:
         return output_path
 
     def generate_pymol_script(self, pdb_path: str, output_path: str) -> str:
-        """Generate PyMOL script that reads annotations from PDB and applies styling."""
+        """Generate PyMOL script that reads annotations from PDB and applies styling.
+
+        Parameters
+        ----------
+        pdb_path : str
+            Path to the annotated PDB file.
+        output_path : str
+            Path to save the PyMOL script.
+
+        Returns
+        -------
+        str
+            Path to the saved PyMOL script.
+        """
 
         script_lines = [
             f"# PyMOL script for {self.gene_name} structure visualization",
@@ -291,7 +343,7 @@ class PyMOLGenerator:
 
         return output_path
 
-    def generate_instructions(self, output_dir: str):
+    def generate_instructions(self, output_dir: str) -> str:
         """
         Generate instructions for manual PyMOL execution.
 
@@ -299,6 +351,11 @@ class PyMOLGenerator:
         ----------
         output_dir : str
             Directory where files are saved
+
+        Returns
+        -------
+        str
+            Instructions text
         """
         dict_filepaths = self.return_filepath_dict(output_dir)
 
@@ -334,11 +391,6 @@ class PyMOLGenerator:
         ----------
         output_dir : str
             Directory to save files
-
-        Returns
-        -------
-        tuple
-            Paths to (pdb_file, pymol_script)
         """
         os.makedirs(output_dir, exist_ok=True)
 
