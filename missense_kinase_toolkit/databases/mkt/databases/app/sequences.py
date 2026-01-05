@@ -156,7 +156,7 @@ class SequenceAlignment:
             elif callable(start_or_end):
                 output = start_or_end(str_seq)
             else:
-                logger.error(
+                logger.info(
                     f"Start or end value {start_or_end} "
                     "is not a string, int, or callable "
                     "and cannot be parsed. Returning None..."
