@@ -315,7 +315,7 @@ class PyMOLGenerator:
             "",
             "print(f'Found {len(color_mapping)} residues with colors')",
             "print(f'Found {len(stick_residues)} stick residues')",
-            "print('Color mapping:', dict(list(color_mapping.items())[:5]))  # Show first 5",
+            "print('Color mapping (first 5 residues):', dict(list(color_mapping.items())[:5]))  # Show first 5",
             "print('Stick residues:', stick_residues)",
             "",
             "# Set initial cartoon style with gray background",
