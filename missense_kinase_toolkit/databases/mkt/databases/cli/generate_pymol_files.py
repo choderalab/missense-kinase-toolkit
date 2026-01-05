@@ -75,9 +75,9 @@ def main():
     args = get_parser().parse_args()
 
     if args.verbose == "DEBUG":
-        configure_logging(True)
+        configure_logging(verbose=True)
     else:
-        configure_logging(False)
+        configure_logging(verbose=False)
 
     gene = args.gene
     str_attr = args.strAttr
