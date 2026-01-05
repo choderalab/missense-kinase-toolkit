@@ -21,7 +21,7 @@ DICT_COLOR_MAP = {
     "magenta": "#FF00FF",
     "yellow": "#FFFF00",
     "red": "#FF0000",
-    "green": "#00FF00",
+    "green": "#008000",
     "blue": "#0000FF",
     "orange": "#FFA500",
     "purple": "#800080",
@@ -38,10 +38,12 @@ DICT_COLOR_MAP = {
     "black": "#000000",
     "lightblue": "#ADD8E6",
     "lightgreen": "#90EE90",
+    "khaki": "#F0E68C",  # CSS3 standard khaki
+    "cornflowerblue": "#6495ED",  # CSS3 standard cornflowerblue
 }
-"""dict: Fallback color name to hex mapping."""
+"""dict: Fallback color name to hex mapping (CSS3 standard colors)."""
 
-LIST_KLIFS_STICK_POSITIONS = [3, 5, 8, 68, 80]
+LIST_KLIFS_STICK_POSITIONS_CONSERVED = [3, 5, 8, 68, 80]
 """list[int]: Zero-index positions in KLIFS sequence for stick representation."""
 
 
@@ -61,7 +63,8 @@ class PyMOLGenerator:
 
         # rename files with gene name
         self.dict_filenames = {
-            k: f"{self.gene_name}_{v}" for k, v in DICT_FILENAME_DEFAULTS.items()
+            k: f"{self.gene_name}_{self.viz.str_attr.lower()}_{v}"
+            for k, v in DICT_FILENAME_DEFAULTS.items()
         }
 
     def _convert_color_to_hex(self, color: str) -> str:
@@ -81,13 +84,18 @@ class PyMOLGenerator:
         if color.startswith("#"):
             return color
 
-        webcolors.name_to_hex(color)
-
-        # default to gray if not found
-        return DICT_COLOR_MAP.get(color.lower(), "#808080")
+        # try webcolors library first (uses CSS3 standard colors)
+        try:
+            return webcolors.name_to_hex(color)
+        except ValueError:
+            # fallback to custom mapping if webcolors doesn't recognize it
+            return DICT_COLOR_MAP.get(color.lower(), "#808080")
 
     def _get_color_and_style_mapping(self) -> tuple[dict[int, str], list[int]]:
         """Generate residue-to-color mapping and stick residue list.
+
+        Uses the existing _generate_highlight_idx() logic from StructureVisualizer
+        to ensure consistency between py3Dmol and PyMOL visualizations.
 
         Returns
         -------
@@ -97,39 +105,52 @@ class PyMOLGenerator:
         color_mapping = {}
         stick_residues = []
 
-        if not (self.viz.str_attr and self.viz.str_attr in self.viz.dict_align):
+        # Early return if no attribute specified
+        if not self.viz.str_attr:
             return color_mapping, stick_residues
 
-        # get sequences and colors
+        # Check if attribute exists (except for Mutations which uses dict_mutations)
+        if self.viz.str_attr != "Mutations":
+            if self.viz.str_attr not in self.viz.dict_align:
+                return color_mapping, stick_residues
+
+        # use the existing _generate_highlight_idx from StructureVisualizer
+        # this method returns:
+        # - list_highlight: 1-based indices in alignment space (0-indexed alignment + 1)
+        # - dict_color: mapping from alignment index to color (name or hex)
+        # - dict_style: mapping from alignment index to style ("stick" or "cartoon")
+        list_highlight_align, dict_color_align, dict_style_align = (
+            self.viz._generate_highlight_idx()
+        )
+
+        # convert alignment indices to PDB residue numbers
+        # the PDB is renumbered sequentially (1, 2, 3, ...) counting only non-gap CIF residues
+        # we need to map from alignment index (0-based + 1) to PDB residue count
+
         str_seq_cif = self.viz.dict_align["KinCore, CIF"]["str_seq"]
-        str_seq_attr = self.viz.dict_align[self.viz.str_attr]["str_seq"]
-        list_colors_attr = self.viz.dict_align[self.viz.str_attr]["list_colors"]
 
-        # map colors to residue positions
-        cif_residue_count = 0
-        for idx, (cif_res, attr_res) in enumerate(zip(str_seq_cif, str_seq_attr)):
+        # create mapping: alignment_index (0-based) -> PDB_residue_number (1-based sequential)
+        alignment_to_pdb = {}
+        pdb_residue_count = 0
+        for align_idx, cif_res in enumerate(str_seq_cif):
             if cif_res != "-":
-                cif_residue_count += 1
-                if attr_res != "-":
-                    color = list_colors_attr[idx]
-                    hex_color = self._convert_color_to_hex(color)
-                    color_mapping[cif_residue_count] = hex_color
+                pdb_residue_count += 1
+                alignment_to_pdb[align_idx + 1] = (
+                    pdb_residue_count  # +1 because _generate_highlight_idx returns 1-based
+                )
 
-                    # check if this should be a stick residue (for KLIFS)
-                    if self.viz.str_attr == "KLIFS":
-                        # find position in KLIFS sequence (excluding gaps)
-                        klifs_pos = 0
-                        for i in range(idx + 1):
-                            if (
-                                self.viz.dict_align[self.viz.str_attr]["str_seq"][i]
-                                != "-"
-                            ):
-                                klifs_pos += 1
-                        # convert to zero-indexed
-                        klifs_pos -= 1
+        # convert colors to hex and identify stick residues
+        for align_idx in list_highlight_align:
+            if align_idx in alignment_to_pdb:
+                pdb_res_num = alignment_to_pdb[align_idx]
+                color = dict_color_align[align_idx]
+                hex_color = self._convert_color_to_hex(color)
+                color_mapping[pdb_res_num] = hex_color
 
-                        if klifs_pos in LIST_KLIFS_STICK_POSITIONS:
-                            stick_residues.append(cif_residue_count)
+                # Check if this should be a stick residue
+                style = dict_style_align[align_idx]
+                if style == "stick":
+                    stick_residues.append(pdb_res_num)
 
         return color_mapping, stick_residues
 
@@ -178,9 +199,9 @@ class PyMOLGenerator:
 
         original_residues.sort()
         print(
-            f"Debug: Found original residue range: {min(original_residues)} to {max(original_residues)}"
+            f"DEBUG: Found original residue range: {min(original_residues)} to {max(original_residues)}"
         )
-        print(f"Debug: Total residues: {len(original_residues)}")
+        print(f"DEBUG: Total residues: {len(original_residues)}")
 
         # create mapping from original residue numbers to sequential (1, 2, 3...)
         old_to_new = {old_res: idx + 1 for idx, old_res in enumerate(original_residues)}
@@ -240,8 +261,8 @@ class PyMOLGenerator:
         with open(output_path, "w") as f:
             f.write("\n".join(annotated_lines))
 
-        print(f"Debug: Color mapping contains {len(color_mapping)} residues")
-        print(f"Debug: Stick residues: {stick_residues}")
+        print(f"DEBUG: Color mapping contains {len(color_mapping)} residues")
+        print(f"DEBUG: Stick residues: {stick_residues}")
 
         return output_path
 
@@ -372,7 +393,7 @@ class PyMOLGenerator:
         2. Change to the output directory
            cd {os.path.abspath(output_dir)}
         3. Run the script:
-           run {self.gene_name}_pymol_script.py
+           run {os.path.basename(dict_filepaths["file_script"])}
         4. To save as high-res PNG:
            set ray_trace_mode, <mode>
            png <your_filename>.png, ray=1, dpi=300
