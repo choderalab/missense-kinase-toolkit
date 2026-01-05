@@ -173,6 +173,7 @@ DICT_VIZ_OPACITY = {
     "None": 1.0,
     "KLIFS": 1.0,
     "Phosphosites": 1.0,
+    "Mutations": 0.9,
     "lowlight": 0.5,
 }
 """dict[str, float]: Opacity for the py3Dmol viewer."""
