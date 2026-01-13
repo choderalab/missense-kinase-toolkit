@@ -1,14 +1,12 @@
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import MDAnalysis as mda
 import numpy as np
 import pandas as pd
 import prolif as plf
-from rdkit import Chem
-from rdkit.Chem import rdMolAlign
 
 warnings.filterwarnings("ignore")
 
