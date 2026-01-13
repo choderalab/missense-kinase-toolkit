@@ -1,6 +1,7 @@
 import logging
 from dataclasses import dataclass, field
 from itertools import chain
+from typing import Any
 
 import numpy as np
 import py3Dmol
@@ -61,12 +62,12 @@ class SequenceAlignmentGenerator(SequenceAlignment):
         else:
             viewlen = N
 
-        # Determine which sequences consist of only '-' characters
+        # determine which sequences consist of only '-' characters
         empty_sequences = [all(c == "-" for c in seq) for seq in self.list_sequences]
 
-        # Create a dictionary to map y-axis labels to their colors
+        # create a dictionary to map y-axis labels to their colors
         y_label_colors = {}
-        for i, (id_label, is_empty) in enumerate(zip(self.list_ids, empty_sequences)):
+        for i, (_, is_empty) in enumerate(zip(self.list_ids, empty_sequences)):
             y_label_colors[i] = "#DC143C" if is_empty else "black"
 
         # sequence text view with ability to scroll along x axis
@@ -109,8 +110,8 @@ class SequenceAlignmentGenerator(SequenceAlignment):
 
         p1.xaxis.ticker = FixedTicker(ticks=list(range(1, N + 1)))
 
-        # Add KLIFS pocket labels as custom labels
-        # Create KLIFS position mapping for the formatter
+        # add KLIFS pocket labels as custom labels
+        # create KLIFS position mapping for the formatter
         klifs_mapping = {}
         if (
             hasattr(self.obj_kinase, "KLIFS2UniProtIdx")
@@ -122,7 +123,7 @@ class SequenceAlignmentGenerator(SequenceAlignment):
                 if pos is not None
             }
 
-        # Custom formatter that includes KLIFS labels
+        # custom formatter that includes KLIFS labels
         formatter_code = f"""
         var klifs_map = {klifs_mapping};
         var base_label = String(tick);
@@ -134,25 +135,27 @@ class SequenceAlignmentGenerator(SequenceAlignment):
 
         p1.xaxis.formatter = CustomJSTickFormatter(code=formatter_code)
 
-        p1.xaxis.major_label_orientation = np.pi / 2  # Rotate labels 90 degrees
-        p1.xaxis.major_label_standoff = 2  # Add some space between axis and labels
+        # rotate labels 90 degrees
+        p1.xaxis.major_label_orientation = np.pi / 2
+        # add some space between axis and labels
+        p1.xaxis.major_label_standoff = 2
         p1.xaxis.axis_label = "Residue Position"
 
-        # Remove default y-axis labels
-        p1.yaxis.major_label_text_font_size = "0pt"  # Hide the default labels
+        # hide the default y-axis labels
+        p1.yaxis.major_label_text_font_size = "0pt"
 
-        # Add custom colored labels
+        # add custom colored labels
         for i, label in enumerate(self.list_ids):
             color = "#DC143C" if empty_sequences[i] else "black"
             custom_label = Label(
-                x=0,  # Position at the y-axis
-                y=i,  # The y position corresponds to the sequence index
+                x=0,  # position at the y-axis
+                y=i,  # y position corresponds to the sequence index
                 text=label,
                 text_color=color,
                 text_font_size="9pt",
                 text_font_style="bold",
                 text_align="right",
-                x_offset=-10,  # Offset to position it near the axis
+                x_offset=-10,  # offset to position it near the axis
             )
             p1.add_layout(custom_label)
 
@@ -166,10 +169,22 @@ class SequenceAlignmentGenerator(SequenceAlignment):
         return p1
 
 
+DICT_VIZ_OPACITY = {
+    "None": 1.0,
+    "KLIFS": 1.0,
+    "Phosphosites": 1.0,
+    "Mutations": 0.9,
+    "lowlight": 0.5,
+}
+"""dict[str, float]: Opacity for the py3Dmol viewer."""
+
+
 @dataclass
 class StructureVisualizerGenerator(StructureVisualizer):
     """Class to generate structure visualizations for kinase structures."""
 
+    dict_opacity: dict[str, float] = field(default_factory=lambda: DICT_VIZ_OPACITY)
+    """Opacity for the py3Dmol viewer."""
     bool_show: bool = False
     """Whether to show the structure in the viewer or return HTML."""
     dict_dims: dict[str, int] = field(
@@ -180,6 +195,48 @@ class StructureVisualizerGenerator(StructureVisualizer):
     def __post_init__(self):
         super().__post_init__()
         self.html = self.visualize_structure()
+
+    def _return_style_dict(
+        self,
+        str_key,
+        str_color: str | None = None,
+        str_style: str | None = None,
+        float_opacity: float | None = None,
+    ) -> dict[str, Any]:
+        """Return the style dictionary for the given key.
+
+        Parameters
+        ----------
+        str_key : str
+            Key for the style dictionary.
+        str_color : str, optional
+            Color for the style dictionary, by default None.
+        str_style : str, optional
+            Style for the style dictionary, by default None.
+        float_opacity : float, optional
+            Opacity for the style dictionary, by default None.
+
+        Returns
+        -------
+        dict[str, Any]
+            Style dictionary for the given key.
+
+        """
+        if str_color is None:
+            str_color = self.dict_color[str_key]
+        if str_style is None:
+            str_style = self.dict_style[str_key]
+        if float_opacity is None:
+            float_opacity = self.dict_opacity[str_key]
+
+        dict_style = {
+            str_style: {
+                "color": str_color,
+                "opacity": float_opacity,
+            }
+        }
+
+        return dict_style
 
     def visualize_structure(self) -> str | None:
         """Visualize the structure using py3Dmol.
