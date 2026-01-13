@@ -93,6 +93,7 @@ class cBioPortalQuery(cBioPortal):
     _data: list | None = field(init=False, default=None)
     """List of cBioPortal sub-API queries; None if ID not found (post-init)."""
     _df: pd.DataFrame | None = field(init=False, default=None)
+    """DataFrame of cBioPortal data; None if DataFrame could not be created (post-init)."""
 
     def __post_init__(self):
         """Post-initialization to check study ID in instance and query API data."""
