@@ -87,6 +87,7 @@ celerybeat-schedule
 .venv
 venv/
 ENV/
+VE/
 
 # Spyder project settings
 .spyderproject
@@ -189,3 +190,6 @@ $RECYCLE.BIN/
 # data_cache/
 *params.json
 *.sqlite
+
+# don't save images generated during analysis
+images/

@@ -71,9 +71,6 @@ class SequenceAlignment:
             self.list_ids = self.list_ids[::-1]
             self.list_colors = self.list_colors[::-1]
 
-        # generate plot to render
-        self.plot = self.generate_plot()
-
     @staticmethod
     def _map_single_alignment(
         idx_start: int,
@@ -159,7 +156,7 @@ class SequenceAlignment:
             elif callable(start_or_end):
                 output = start_or_end(str_seq)
             else:
-                logger.error(
+                logger.info(
                     f"Start or end value {start_or_end} "
                     "is not a string, int, or callable "
                     "and cannot be parsed. Returning None..."
