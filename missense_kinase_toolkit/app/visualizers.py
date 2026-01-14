@@ -28,6 +28,10 @@ class SequenceAlignmentGenerator(SequenceAlignment):
     plot_width: int = 1200
     """Width of the plot."""
 
+    def __post_init__(self):
+        super().__post_init__()
+        self.plot = self.generate_plot()
+
     def generate_plot(self) -> None:
         """Generate sequence alignment plot adapted from https://dmnfarrell.github.io/bioinformatics/bokeh-sequence-aligner."""
 
