@@ -1,47 +1,30 @@
 import json
 import logging
+from dataclasses import dataclass, field
 
 import pandas as pd
 from mkt.databases import requests_wrapper, utils_requests
+from mkt.databases.api_schema import RESTAPIClient
 
 logger = logging.getLogger(__name__)
 
 
-class Pfam:
-    """Class to interact with the Pfam API.
+@dataclass
+class Pfam(RESTAPIClient):
+    """Class to interact with the Pfam API."""
 
-    Parameters
-    ----------
-    uniprot_id : str
-        UniProt ID to query Pfam API for.
+    uniprot_id: str
+    """UniProt ID to query Pfam API."""
+    url: str = "https://www.ebi.ac.uk/interpro/api/entry/pfam/protein/UniProt/"
+    """Pfam API URL."""
+    _pfam: pd.DataFrame | None = field(init=False, default=None)
+    """DataFrame with Pfam domain information if request is successful, None if response is empty or request fails."""
 
-    Attributes
-    ----------
-    url : str
-        Pfam API URL.
-    uniprot_id : str
-        UniProt ID to query Pfam API for.
-    _pfam : pd.DataFrame | None
-        DataFrame with Pfam domain information if request is successful, None if response is empty or
-    """
+    def __post_init__(self):
+        """Post-initialization to query Pfam API."""
+        self._pfam = self.query_api()
 
-    def __init__(
-        self,
-        uniprot_id: str,
-    ) -> None:
-        """Initialize Pfam Class object.
-
-        Attributes
-        ----------
-        url : str
-            Pfam API URL
-
-        """
-        self.url = "https://www.ebi.ac.uk/interpro/api/entry/pfam/protein/UniProt/"
-        self.uniprot_id = uniprot_id
-        self._pfam = self.query_pfam_api()
-
-    def query_pfam_api(self):
+    def query_api(self):
         """Queries Pfam API for UniProt ID as DataFrame object.
 
         Returns

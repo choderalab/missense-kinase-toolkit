@@ -380,8 +380,7 @@ class PyMOLGenerator:
         """
         dict_filepaths = self.return_filepath_dict(output_dir)
 
-        instructions = textwrap.dedent(
-            f"""\
+        instructions = f"""\
         Files generated:
         PDB: {dict_filepaths["file_pdb"]}
         Script: {dict_filepaths["file_script"]}
@@ -398,7 +397,8 @@ class PyMOLGenerator:
            set ray_trace_mode, <mode>
            png <your_filename>.png, ray=1, dpi=300
         """
-        )
+        instructions = textwrap.dedent(instructions)
+
         with open(dict_filepaths["file_txt"], "w") as f:
             f.write(instructions)
 
