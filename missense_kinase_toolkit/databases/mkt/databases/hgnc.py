@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 
 import requests
 from mkt.databases import requests_wrapper, utils_requests
@@ -6,40 +7,25 @@ from mkt.databases import requests_wrapper, utils_requests
 logger = logging.getLogger(__name__)
 
 
+@dataclass
 class HGNC:
     """Class to interact with the HGNC API."""
 
-    def __init__(
-        self,
-        input_symbol_or_id: str,
-        input_is_hgnc_symbol: bool = True,
-    ) -> None:
-        """Initialize HGNC Class object.
+    input_symbol_or_id: str
+    """Gene symbol or Ensembl gene ID."""
+    input_is_hgnc_symbol: bool = True
+    """If True, input_symbol_or_id is a gene symbol, otherwise it is an Ensembl gene ID."""
+    url: str = "https://rest.genenames.org"
+    """HGNC API URL."""
 
-        Parameters
-        ----------
-        input_symbol_or_id : str
-            Gene symbol or Ensembl gene ID
-        input_is_hgnc_symbol : bool
-            If True, input_symbol_or_id is a gene symbol, otherwise it is an Ensembl gene ID; defaults to True
-
-        Attributes
-        ----------
-        url : str
-            HGNC API URL
-        hgnc : str | None
-            HGNC gene symbol
-        ensembl : str | None
-            Ensembl gene ID
-
-        """
-        self.url = "https://rest.genenames.org"
-        if input_is_hgnc_symbol:
-            self.hgnc = input_symbol_or_id
+    def __post_init__(self):
+        """Post-initialization to set HGNC gene symbol or Ensembl gene ID."""
+        if self.input_is_hgnc_symbol:
+            self.hgnc = self.input_symbol_or_id
             self.ensembl = None
         else:
             self.hgnc = None
-            self.ensembl = input_symbol_or_id
+            self.ensembl = self.input_symbol_or_id
 
     def maybe_get_symbol_from_hgnc_search(
         self,
