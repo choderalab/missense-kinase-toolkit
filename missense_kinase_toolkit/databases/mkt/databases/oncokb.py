@@ -91,6 +91,14 @@ class OncoKB(APIKeyRESTAPIClient, ABC):
             return None
 
 
+class OncoKBInfo(OncoKB):
+    """OncoKB API client for OncoKB information."""
+
+    def update_url(self):
+        """Update the URL for the OncoKB API query based on the gene name."""
+        self.url_query = f"{self.url}/info"
+
+
 @dataclass
 class OncoKBProteinChange(OncoKB):
     """OncoKB API client for protein changes."""
