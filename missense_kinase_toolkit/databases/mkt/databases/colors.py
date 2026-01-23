@@ -329,24 +329,6 @@ DICT_COLORS = {
     - DICT_ANNOTATION: Dictionary mapping amino acid groups to color if one exists
 """
 
-DICT_KINASE_GROUP_COLORS = {
-    "AGC": "#1f77b4",  # Blue
-    "Atypical": "#7f7f7f",  # Grey
-    "CAMK": "#ff7f0e",  # Orange
-    "CK1": "#2ca02c",  # Green
-    "CMGC": "#d62728",  # Red
-    "NEK": "#ff6347",  # Coral
-    "Other": "#9467bd",  # Purple
-    "RGC": "#8c564b",  # Brown
-    "STE": "#e377c2",  # Pink
-    "TK": "#17becf",  # Cyan
-    "TKL": "#bcbd22",  # Olive/Yellow-green
-}
-"""dict[str, str]: Dictionary mapping kinase groups to colors.
-Keys are kinase group names, and values are hex color codes.
-This dictionary can be used to look up colors for kinase groups in visualizations.
-"""
-
 DICT_BIOCHEM_PROP_COLORS = {
     "Charge": "#1f77b4",
     "Volume": "#ff7f0e",

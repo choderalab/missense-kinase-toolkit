@@ -174,3 +174,22 @@ LIST_KLIFS_REGION = list(
     )
 )
 """list[str]: List of string of all KLIFS pocket regions in format region:idx."""
+
+DICT_KINASE_GROUP_COLORS = {
+    "AGC": "#5B8DBE",  # Muted steel blue
+    "Atypical": "#7A7A7A",  # Medium grey (kept similar)
+    "CAMK": "#D4A574",  # Muted tan/sand
+    "CK1": "#8B7355",  # Muted brown (replaces green)
+    "CMGC": "#C17B7B",  # Muted rose/mauve (replaces red)
+    "NEK": "#E5A672",  # Muted peach
+    "Other": "#9B8AB8",  # Muted lavender
+    "RGC": "#A67C52",  # Muted terracotta
+    "STE": "#D39EB7",  # Muted dusty pink
+    "TK": "#6BAFB8",  # Muted teal
+    "TKL": "#B8AE6E",  # Muted gold/khaki
+    "Lipid": "#8B6F84",  # Muted plum
+}
+"""dict[str, str]: Dictionary mapping kinase groups to colors.
+Keys are kinase group names, and values are hex color codes.
+This dictionary can be used to look up colors for kinase groups in visualizations.
+"""
