@@ -341,6 +341,7 @@ DICT_KINASE_GROUP_COLORS = {
     "STE": "#e377c2",  # Pink
     "TK": "#17becf",  # Cyan
     "TKL": "#bcbd22",  # Olive/Yellow-green
+    "Lipid": "#7b4173",  # Dark Magenta
 }
 """dict[str, str]: Dictionary mapping kinase groups to colors.
 Keys are kinase group names, and values are hex color codes.
