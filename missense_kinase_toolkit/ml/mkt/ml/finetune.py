@@ -23,13 +23,16 @@ class FineTuneDataset(ABC):
     col_labels: str
     """Column name for labels values in the dataset."""
     col_kinase: str
-    """Column name for kinase identifiers in the dataset."""
+    """Column name for kinase inputs (AA sequence) in the dataset."""
     col_drug: str
-    """Column name for drug identifiers in the dataset."""
+    """Column name for drug inputs (SMILES representation) in the dataset."""
     model_drug: str
     """Pre-trained model name for drug sequences; default is DeepChem/ChemBERTa-77M-MTR."""
     model_kinase: str
     """Pre-trained model name for kinase sequences; default is facebook/esm2_t6_8M_UR50D."""
+    bool_wt: bool = True
+    """Whether to include only wild-type samples (True) or wild-type
+        and mutant samples (False) in the dataset; default is True."""
     k_folds: int | None = None
     """Number of folds for cross-validation. If None, splits are applied via prepare_splits."""
     fold_idx: int | None = None
@@ -84,6 +87,23 @@ class FineTuneDataset(ABC):
         """Load dataset from CSV file."""
         if self.check_filepath():
             df = pd.read_csv(self.filepath)
+
+            if self.bool_wt:
+                df = df.loc[df["is_wt"].apply(lambda x: x is True), :].reset_index(
+                    drop=True
+                )
+                logger.info(
+                    f"Filtered to wild-type samples only. Remaining samples: {len(df):,}"
+                )
+
+            df = df.dropna(subset=[self.col_kinase, self.col_drug]).reset_index(
+                drop=True
+            )
+            logger.info(
+                "Filtered to samples with both kinase and drug sequences. "
+                f"Remaining samples: {len(df):,}"
+            )
+
             return df
 
     def create_cv_folds(self) -> dict:
@@ -210,27 +230,19 @@ class FineTuneDataset(ABC):
         int: Maximum length of sequences
         """
         # add 2 for special tokens like [CLS] and [SEP]
-        max_smiles_length = (
-            max(
-                [
-                    len(self.tokenizer_drug.tokenize(x))
-                    for x in self.df[self.col_drug].unique()
-                ]
-            )
-            + 2
-        )
+        dict_smiles_token = {
+            x: self.tokenizer_drug.tokenize(x) for x in self.df[self.col_drug].unique()
+        }
+        max_smiles_length = max([len(i) for i in dict_smiles_token.values()]) + 2
 
-        max_klifs_length = (
-            max(
-                [
-                    len(self.tokenizer_kinase.tokenize(x))
-                    for x in self.df[self.col_kinase].unique()
-                ]
-            )
-            + 2
-        )
+        dict_kinase_token = {
+            x: self.tokenizer_kinase.tokenize(x)
+            for x in self.df[self.col_kinase].unique()
+            if x is not None
+        }
+        max_kinase_length = max([len(i) for i in dict_kinase_token.values()]) + 2
 
-        return max_smiles_length, max_klifs_length
+        return max_smiles_length, max_kinase_length
 
     def tokenize_and_combine(
         self,
@@ -274,3 +286,129 @@ class FineTuneDataset(ABC):
         }
 
         return result
+
+
+DICT_KWARGS = {
+    "base": {
+        # this is variable
+        # "filepath": path.join(get_repo_root(), "data/pkis2_data_processed.csv"),
+        "col_labels": "y",
+        # this is variable
+        # "col_kinase": "seq_construct_unaligned",
+        "col_drug": "smiles",
+    },
+    "kinase_split": {
+        "col_kinase_split": "group_consensus",
+        "list_kinase_split": ["TK", "TKL"],
+    },
+    "cross_validation": {
+        "k_folds": 5,
+        "fold_idx": None,
+        "seed": 42,
+    },
+}
+
+
+class KinaseSplit(FineTuneDataset):
+    """Dataset kinase split.
+
+    Parameters
+    ----------
+    col_kinase_split : str
+        Column name for kinase groups in the dataset.
+    list_kinase_split : list[str] | None
+        List of kinase groups to use for testing. If None, no split is applied.
+
+    """
+
+    # FineTuneDataset arguments
+    filepath: str | None = None
+    col_labels: str | None = None
+    col_kinase: str | None = None
+    col_drug: str | None = None
+
+    # kinase split arguments
+    col_kinase_split: str = None
+    list_kinase_split: list[str] | None = None
+
+    def __init__(self, **kwargs):
+        """Initialize the KinaseSplit dataset."""
+        dict_kwargs = DICT_KWARGS["base"] | DICT_KWARGS["kinase_split"]
+        for key, value in dict_kwargs.items():
+            if key not in kwargs:
+                kwargs[key] = value
+
+        super().__init__(**kwargs)
+
+    def prepare_splits(self) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """Split dataset based on kincore_group values.
+
+        Returns:
+        --------
+        df_train, df_test: pd.DataFrame
+            Training and testing DataFrames
+        """
+        # Make sure the column exists in the dataframe
+        if self.col_kinase_split not in self.df.columns:
+            logger.error(f"Column '{self.col_kinase_split}' not found in the dataset")
+            raise ValueError(
+                f"Column '{self.col_kinase_split}' not found in the dataset"
+            )
+
+        # Make sure list_kinase_split is not None
+        if self.list_kinase_split is None:
+            logger.warning("list_kinase_split is None. Using the entire dataset.")
+            return self.df, self.df
+
+        idx_test = self.df[self.col_kinase_split].apply(
+            lambda x: x in self.list_kinase_split
+        )
+
+        df_train, df_test = (
+            self.df.loc[~idx_test, :].copy(),
+            self.df.loc[idx_test, :].copy(),
+        )
+
+        logger.info(
+            f"Training set size: {len(df_train)}\n"
+            f"Test set size: {len(df_test)}\n"
+            f"Test kinase groups: {self.list_kinase_split}\n"
+        )
+
+        return df_train, df_test
+
+
+class CrossValidation(FineTuneDataset):
+    """Dataset cross-validation split."""
+
+    # FineTuneDataset arguments
+    filepath: str | None = None
+    col_labels: str | None = None
+    col_kinase: str | None = None
+    col_drug: str | None = None
+
+    # kinase split arguments
+    k_folds: int | None = None
+    fold_idx: int | None = None
+    seed: int | None = None
+
+    def __init__(self, **kwargs):
+        """Initialize the CrossValidation dataset."""
+        dict_kwargs = DICT_KWARGS["base"] | DICT_KWARGS["cross_validation"]
+        for key, value in dict_kwargs.items():
+            if key not in kwargs:
+                kwargs[key] = value
+
+        super().__init__(**kwargs)
+
+    def prepare_splits(self) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """Split dataset based on kincore_group values.
+
+        Returns:
+        --------
+        df_train, df_test: pd.DataFrame
+            Training and testing DataFrames
+        """
+        raise NotImplementedError(
+            "This method is not implemented. Please use the KinaseSplit class to split in Kinase Group."
+        )
