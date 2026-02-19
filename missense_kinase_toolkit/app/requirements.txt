@@ -1,5 +1,6 @@
 git+https://github.com/choderalab/missense-kinase-toolkit.git#subdirectory=missense_kinase_toolkit/schema
 git+https://github.com/choderalab/missense-kinase-toolkit.git#subdirectory=missense_kinase_toolkit/databases
+git+https://github.com/tansey-lab/nf-rnaseq
 py3dmol
 streamlit==1.44.1
 streamlit-bokeh==3.7.1

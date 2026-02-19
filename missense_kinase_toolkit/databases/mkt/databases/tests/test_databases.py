@@ -69,11 +69,12 @@ class TestDatabases:
 
     def test_utils_requests(self, capsys):
         import requests
-        from mkt.databases import uniprot, utils_requests
+        from mkt.databases import utils_requests
+        from mkt.databases.uniprot import UniProtFASTA
 
         # conform with SwissProt ID pattern
         uniprot_id = "L91119"
-        uniprot.UniProtFASTA(uniprot_id)
+        UniProtFASTA(uniprot_id)
         out, _ = capsys.readouterr()
         assert out == f"Error code: 400 (Bad request)\nUniProt ID: {uniprot_id}\n\n"
 
@@ -172,16 +173,17 @@ class TestDatabases:
     def test_kincore_klifs(self):
         from itertools import chain
 
-        from mkt.databases import klifs, uniprot
+        from mkt.databases import klifs
         from mkt.databases.kincore import (
             align_kincore2uniprot,
             extract_pk_cif_files_as_list,
             harmonize_kincore_fasta_cif,
         )
+        from mkt.databases.uniprot import UniProtFASTA
 
         # test KinCore
         uniprot_id = "P00533"
-        egfr_uniprot = uniprot.UniProtFASTA(uniprot_id)
+        egfr_uniprot = UniProtFASTA(uniprot_id)
         dict_kincore = harmonize_kincore_fasta_cif()
 
         # make sure the number of non-None cif files is correct
@@ -227,7 +229,7 @@ class TestDatabases:
             assert dict_egfr["species"] == "Human"
             assert dict_egfr["uniprot"] == "P00533"
 
-            egfr_uniprot = uniprot.UniProtFASTA(dict_egfr["uniprot"])
+            egfr_uniprot = UniProtFASTA(dict_egfr["uniprot"])
 
             # check KLIFS pocket alignment to UniProt sequence
             egfr_pocket = klifs.KLIFSPocket(
@@ -481,48 +483,57 @@ class TestDatabases:
         )
 
     def test_uniprot(self):
-        from mkt.databases import uniprot
+        from mkt.databases.uniprot import UniProtFASTA
 
-        abl1 = uniprot.UniProtFASTA("P00519")
+        abl1 = UniProtFASTA("P00519")
         assert (
             abl1._sequence
             == "MLEICLKLVGCKSKKGLSSSSSCYLEEALQRPVASDFEPQGLSEAARWNSKENLLAGPSENDPNLFVALYDFVASGDNTLSITKGEKLRVLGYNHNGEWCEAQTKNGQGWVPSNYITPVNSLEKHSWYHGPVSRNAAEYLLSSGINGSFLVRESESSPGQRSISLRYEGRVYHYRINTASDGKLYVSSESRFNTLAELVHHHSTVADGLITTLHYPAPKRNKPTVYGVSPNYDKWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVNAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQESSISDEVEKELGKQGVRGAVSTLLQAPELPTKTRTSRRAAEHRDTTDVPEMPHSKGQGESDPLDHEPAVSPLLPRKERGPPEGGLNEDERLLPKDKKTNLFSALIKKKKKTAPTPPKRSSSFREMDGQPERRGAGEEEGRDISNGALAFTPLDTADPAKSPKPSNGAGVPNGALRESGGSGFRSPHLWKKSSTLTSSRLATGEEEGGGSSSKRFLRSCSASCVPHGAKDTEWRSVTLPRDLQSTGRQFDSSTFGGHKSEKPALPRKRAGENRSDQVTRGTVTPPPRLVKKNEEAADEVFKDIMESSPGSSPPNLTPKPLRRQVTVAPASGLPHKEEAGKGSALGTPAAAEPVTPTSKAGSGAPGGTSKGPAEESRVRRHKHSSESPGRDKGKLSRLKPAPPPPPAASAGKAGGKPSQSPSQEAAGEAVLGAKTKATSLVDAVNSDAAKPSQPGEGLKKPVLPATPKPQSAKPSGTPISPAPVPSTLPSASSALAGDQPSSTAFIPLISTRVSLRKTRQPPERIASGAITKGVVLDSTEALCLAISRNSEQMASHSAVLEAGKNLYTFCVSYVDSIQQMRNKFAFREAINKLENNLRELQICPATAGSGPAATQDFSKLLSSVKEISDIVQR"  # noqa E501
         )
 
     def test_pfam(self):
+        import requests
         from mkt.databases import pfam
 
         # test that the function to find Pfam domain for a given HGNC symbol and position works
-        df_pfam = pfam.Pfam("P00519")._pfam
-        assert df_pfam.shape[0] == 4
-        # allow for 18 or 19 columns, depending on the version of the Pfam database
-        assert df_pfam.shape[1] == 18 or df_pfam.shape[1] == 19
-        assert "uniprot" in df_pfam.columns
-        assert "start" in df_pfam.columns
-        assert "end" in df_pfam.columns
-        assert "name" in df_pfam.columns
-        assert (
-            df_pfam.loc[
-                df_pfam["name"] == "Protein tyrosine and serine/threonine kinase",
-                "start",
-            ].values[0]
-            == 242
-        )
-        assert (
-            df_pfam.loc[
-                df_pfam["name"] == "Protein tyrosine and serine/threonine kinase", "end"
-            ].values[0]
-            == 492
-        )
-        assert (
-            pfam.find_pfam_domain(
-                input_id="p00519",
-                input_position=350,
-                df_ref=df_pfam,
-                col_ref_id="uniprot",
+        try:
+            df_pfam = pfam.Pfam("P00519")._pfam
+            assert df_pfam.shape[0] == 4
+            # allow for 18 or 19 columns, depending on the version of the Pfam database
+            assert df_pfam.shape[1] == 18 or df_pfam.shape[1] == 19
+            assert "uniprot" in df_pfam.columns
+            assert "start" in df_pfam.columns
+            assert "end" in df_pfam.columns
+            assert "name" in df_pfam.columns
+            assert (
+                df_pfam.loc[
+                    df_pfam["name"] == "Protein tyrosine and serine/threonine kinase",
+                    "start",
+                ].values[0]
+                == 242
             )
-            == "Protein tyrosine and serine/threonine kinase"
-        )
+            assert (
+                df_pfam.loc[
+                    df_pfam["name"] == "Protein tyrosine and serine/threonine kinase",
+                    "end",
+                ].values[0]
+                == 492
+            )
+            assert (
+                pfam.find_pfam_domain(
+                    input_id="p00519",
+                    input_position=350,
+                    df_ref=df_pfam,
+                    col_ref_id="uniprot",
+                )
+                == "Protein tyrosine and serine/threonine kinase"
+            )
+        except requests.exceptions.RetryError as e:
+            # Allow test to pass if API returns 500 errors (common in CI environments)
+            if "500 error responses" in str(e):
+                pytest.skip("Pfam API returned 500 errors - skipping test")
+            else:
+                raise
 
     def test_protvar(self):
         from mkt.databases.protvar import ProtvarScore
@@ -532,17 +543,24 @@ class TestDatabases:
         assert temp_obj._protvar_score[0]["amPathogenicity"] == 0.4217
         assert temp_obj._protvar_score[0]["amClass"] == "AMBIGUOUS"
 
-    @pytest.mark.skip(reason="NCBI is currently down")
     def test_ncbi(self):
+        import requests
         from mkt.databases import ncbi
 
-        seq_obj = ncbi.ProteinNCBI(accession="EAX02438.1")
-        assert seq_obj.list_headers == [
-            "EAX02438.1 BR serine/threonine kinase 2, isoform CRA_c [Homo sapiens]"
-        ]
-        assert seq_obj.list_seq == [
-            "MTSTGKDGGAQHAQYVGPYRLEKTLGKGQTGLVKLGVHCVTCQKVAIKIVNREKLSESVLMKVEREIAILKLIEHPHVLKLHDVYENKKYLYLVLEHVSGGELFDYLVKKGRLTPKEARKFFRQIISALDFCHSHSICHRDLKPENLLLDEKNNIRIADFGMASLQVGDSLLETSCGSPHYACPEVIRGEKYDGRKADVWSCGVILFALLVGALPFDDDNLRQLLEKVKRGVFHMPHFIPPDCQSLLRGMIEVDAARRLTLEHIQKHIWYIGGKNEPEPEQPIPRKVQIRSLPSLEDIDPDVLDSMHSLGCFRDRNKLLQDLLSEEENQEKMIYFLLLDRKERYPSQEDEDLPPRNEIDPPRKRVDSPMLNRHGKRRPERKSMEVLSVTDGGSPVPARRAIEMAQHGQRSRSISGASSGLSTSPLSSPRVTPHPSPRGSPLPTPKGTPVHTPKESPAGTPNPTPPSSPSVGGVPWRARLNSIKNSFLGSPRFHRRKLQVPTPEEMSNLTPESSPELAKKSWFGNFISLEKEEQIFVVIKDKPLSSIKADIVHAFLSIPSLSHSVISQTSFRAEYKATGGPAVFQKPVKFQVDITYTEGGEAQKENGIYSVTFTLLSGPSRRFKRVVETIQAQLLSTHDPPAAQHLSEPPPPAPGLSWGAGLKGQKVATSYESSL"
-        ]
+        try:
+            seq_obj = ncbi.ProteinNCBI(accession="EAX02438.1")
+            assert seq_obj.list_headers == [
+                "EAX02438.1 BR serine/threonine kinase 2, isoform CRA_c [Homo sapiens]"
+            ]
+            assert seq_obj.list_seq == [
+                "MTSTGKDGGAQHAQYVGPYRLEKTLGKGQTGLVKLGVHCVTCQKVAIKIVNREKLSESVLMKVEREIAILKLIEHPHVLKLHDVYENKKYLYLVLEHVSGGELFDYLVKKGRLTPKEARKFFRQIISALDFCHSHSICHRDLKPENLLLDEKNNIRIADFGMASLQVGDSLLETSCGSPHYACPEVIRGEKYDGRKADVWSCGVILFALLVGALPFDDDNLRQLLEKVKRGVFHMPHFIPPDCQSLLRGMIEVDAARRLTLEHIQKHIWYIGGKNEPEPEQPIPRKVQIRSLPSLEDIDPDVLDSMHSLGCFRDRNKLLQDLLSEEENQEKMIYFLLLDRKERYPSQEDEDLPPRNEIDPPRKRVDSPMLNRHGKRRPERKSMEVLSVTDGGSPVPARRAIEMAQHGQRSRSISGASSGLSTSPLSSPRVTPHPSPRGSPLPTPKGTPVHTPKESPAGTPNPTPPSSPSVGGVPWRARLNSIKNSFLGSPRFHRRKLQVPTPEEMSNLTPESSPELAKKSWFGNFISLEKEEQIFVVIKDKPLSSIKADIVHAFLSIPSLSHSVISQTSFRAEYKATGGPAVFQKPVKFQVDITYTEGGEAQKENGIYSVTFTLLSGPSRRFKRVVETIQAQLLSTHDPPAAQHLSEPPPPAPGLSWGAGLKGQKVATSYESSL"
+            ]
+        except requests.exceptions.RetryError as e:
+            # Allow test to pass if API returns 500 errors (common in CI environments)
+            if "500 error responses" in str(e):
+                pytest.skip("NCBI API returned 500 errors - skipping test")
+            else:
+                raise
 
     def test_chembl(self):
         from mkt.databases import chembl
@@ -558,6 +576,7 @@ class TestDatabases:
             "CHEMBL5220042",
             "CHEMBL5220676",
             "CHEMBL553",
+            "CHEMBL5965928",
         } == set_id
         # ChEMBLMoleculeExact
         assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() == ["CHEMBL553"]
@@ -566,9 +585,9 @@ class TestDatabases:
 
         # drug not present
         drug = "TESTTESTTEST"
-        assert chembl.ChEMBLMoleculeSearch(id=drug).get_chembl_id() is None
-        assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() is None
-        assert chembl.ChEMBLMoleculePreferred(id=drug).get_chembl_id() is None
+        assert chembl.ChEMBLMoleculeSearch(id=drug).get_chembl_id() == []
+        assert chembl.ChEMBLMoleculeExact(id=drug).get_chembl_id() == []
+        assert chembl.ChEMBLMoleculePreferred(id=drug).get_chembl_id() == []
 
     def test_opentargets(self):
         from mkt.databases import open_targets

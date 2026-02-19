@@ -13,51 +13,59 @@ class TestSchema:
 
     def test_dict_kinase(self, caplog):
         """Test if the kinase dictionary is correctly deserialized."""
+        import copy
+
         from mkt.schema.io_utils import deserialize_kinase_dict
 
-        dict_kinase = deserialize_kinase_dict()
+        DICT_KINASE = deserialize_kinase_dict()
+        DICT_KINASE_COPY = copy.deepcopy(DICT_KINASE)
+
+        # check that deserializing again gives the same object
+        # (i.e. from cache, not re-reading the file)
+        DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE")
+        assert DICT_KINASE == DICT_KINASE_COPY
 
         caplog.set_level(logging.INFO)
 
-        assert len(dict_kinase) == 566
+        assert len(DICT_KINASE) == 566
         assert (
-            sum(["_" in i for i in dict_kinase.keys()]) == 28
+            sum(["_" in i for i in DICT_KINASE.keys()]) == 28
         )  # 14 proteins with multiple KDs
 
         # missing data
         n_klifs = len(
-            [i.hgnc_name for i in dict_kinase.values() if i.klifs is not None]
+            [i.hgnc_name for i in DICT_KINASE.values() if i.klifs is not None]
         )
         assert n_klifs == 555
 
         n_pocket = len(
             [
                 i.hgnc_name
-                for i in dict_kinase.values()
+                for i in DICT_KINASE.values()
                 if i.klifs is not None and i.klifs.pocket_seq is not None
             ]
         )
         assert n_pocket == 519
 
         n_kincore = len(
-            [i.hgnc_name for i in dict_kinase.values() if i.kincore is not None]
+            [i.hgnc_name for i in DICT_KINASE.values() if i.kincore is not None]
         )
         assert n_kincore == 492
 
-        n_pfam = len([i.hgnc_name for i in dict_kinase.values() if i.pfam is not None])
+        n_pfam = len([i.hgnc_name for i in DICT_KINASE.values() if i.pfam is not None])
         assert n_pfam == 490
 
         n_klif2uniprot = len(
             [
                 i.hgnc_name
-                for i in dict_kinase.values()
+                for i in DICT_KINASE.values()
                 if i.KLIFS2UniProtIdx is not None
             ]
         )
         assert n_klif2uniprot == 519
 
         # check ABL1 entries
-        obj_abl1 = dict_kinase["ABL1"]
+        obj_abl1 = DICT_KINASE["ABL1"]
 
         assert obj_abl1.hgnc_name == "ABL1"
 
@@ -161,44 +169,46 @@ class TestSchema:
         assert max(obj_abl1.KLIFS2UniProtIdx.values()) == 385
 
         assert (
-            dict_kinase["ABL1"].extract_sequence_from_cif()
+            DICT_KINASE["ABL1"].extract_sequence_from_cif()
             == "KWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVNAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQESSIS"
         )
 
         # test logger messages for CIF extraction failures
         caplog.clear()
         assert (
-            dict_kinase["BUB1B"].extract_sequence_from_cif() is None
+            DICT_KINASE["BUB1B"].extract_sequence_from_cif(bool_verbose=True) is None
         )  # Kincore but no cif
         assert "No CIF sequence for BUB1" in caplog.text
 
         caplog.clear()
-        assert dict_kinase["ABR"].extract_sequence_from_cif() is None  # no Kincore
+        assert (
+            DICT_KINASE["ABR"].extract_sequence_from_cif(bool_verbose=True) is None
+        )  # no Kincore
         assert "No CIF sequence for ABR" in caplog.text
 
         assert (
-            dict_kinase["ABL1"].adjudicate_kd_sequence()
+            DICT_KINASE["ABL1"].adjudicate_kd_sequence()
             == "KWEMERTDITMKHKLGGGQYGEVYEGVWKKYSLTVAVKTLKEDTMEVEEFLKEAAVMKEIKHPNLVQLLGVCTREPPFYIITEFMTYGNLLDYLRECNRQEVNAVVLLYMATQISSAMEYLEKKNFIHRDLAARNCLVGENHLVKVADFGLSRLMTGDTYTAHAGAKFPIKWTAPESLAYNKFSIKSDVWAFGVLLWEIATYGMSPYPGIDLSQVYELLEKDYRMERPEGCPEKVYELMRACWQWNPSDRPSFAEIHQAFETMFQESSIS"
         )
         assert (
-            dict_kinase["BUB1B"].adjudicate_kd_sequence()
+            DICT_KINASE["BUB1B"].adjudicate_kd_sequence()
             == "YCIKREYLICEDYKLFWVAPRNSAELTVIKVSSQPVPWDFYINLKLKERLNEDFDHFCSCYQYQDGCIVWHQYINCFTLQDLLQHSEYITHEITVLIIYNLLTIVEMLHKAEIVHGDLSPRCLILRNRIHDPYDCNKNNQALKIVDFSYSVDLRVQLDVFTLSGFRTVQILEGQKILANCSSPYQVDLFGIADLAHLLLFKEHLQVFWDGSFWKLSQNISELKDGELWNKFFVRILNANDEATVSVLGELAAEMNG"
         )
         assert (
-            dict_kinase["MTOR"].adjudicate_kd_sequence()
+            DICT_KINASE["MTOR"].adjudicate_kd_sequence()
             == "VVEPYRKYPTLLEVLLNFLKTEQNQGTRREAIRVLGLLGALDPYKHKVNIGMIDQSRDASAVSLSESKSSQDSSDYSTSEMLVNMGNLPLDEFYPAVSMVALMRIFRDQSLSHHHTMVVQAITFIFKSLGLKCVQFLPQVMPTFLNVIRVCDGAIREFLFQQLGMLVSFVK"
         )
         caplog.clear()
-        assert dict_kinase["ABR"].adjudicate_kd_sequence() is None
+        assert DICT_KINASE["ABR"].adjudicate_kd_sequence(bool_verbose=True) is None
         assert "No kinase domain sequence found for ABR" in caplog.text
 
-        # do this last since changing the dict_kinase object
-        assert dict_kinase["ABL1"].adjudicate_group() == "TK"  # Kincore
-        assert dict_kinase["ABR"].adjudicate_group() == "Atypical"  # KinHub
-        assert dict_kinase["ANTXR1"].adjudicate_group() == "Atypical"  # KLIFS
-        dict_kinase["ANTXR1"].klifs = None
+        # do this last since changing the DICT_KINASE object
+        assert DICT_KINASE["ABL1"].adjudicate_group() == "TK"  # Kincore
+        assert DICT_KINASE["ABR"].adjudicate_group() == "Atypical"  # KinHub
+        assert DICT_KINASE["ANTXR1"].adjudicate_group() == "Atypical"  # KLIFS
+        DICT_KINASE["ANTXR1"].klifs = None
         caplog.clear()
-        assert dict_kinase["ANTXR1"].adjudicate_group() is None  # None
+        assert DICT_KINASE["ANTXR1"].adjudicate_group(bool_verbose=True) is None  # None
         assert "No group found for ANTXR1" in caplog.text
 
     # TODO: downsample toml files to speed up test
@@ -209,7 +219,7 @@ class TestSchema:
 
         yaml_test = "CDK2"
 
-        dict_kinase = io_utils.deserialize_kinase_dict()
+        DICT_KINASE = io_utils.deserialize_kinase_dict(str_name="DICT_KINASE")
 
         for suffix in io_utils.DICT_FUNCS.keys():
             print(f"Format: {suffix}")
@@ -217,13 +227,13 @@ class TestSchema:
                 # only check a single entry given time
                 # ~4 hours to check all (done on 4/4/25)
                 io_utils.serialize_kinase_dict(
-                    {yaml_test: dict_kinase[yaml_test]},
+                    {yaml_test: DICT_KINASE[yaml_test]},
                     suffix=suffix,
                     str_path=f"./{suffix}",
                 )
             else:
                 io_utils.serialize_kinase_dict(
-                    dict_kinase,
+                    DICT_KINASE,
                     suffix=suffix,
                     str_path=f"./{suffix}",
                 )
@@ -234,9 +244,9 @@ class TestSchema:
                     suffix=suffix, str_path=f"./{suffix}"
                 )
                 if suffix == "yaml":
-                    assert dict_kinase[yaml_test] == dict_temp[yaml_test]
+                    assert DICT_KINASE[yaml_test] == dict_temp[yaml_test]
                 else:
-                    assert dict_kinase == dict_temp
+                    assert DICT_KINASE == dict_temp
 
     def test_utils(self):
         """Test utility functions."""
@@ -245,10 +255,10 @@ class TestSchema:
         from mkt.schema import utils
         from mkt.schema.io_utils import deserialize_kinase_dict
 
-        dict_kinase = deserialize_kinase_dict()
+        DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE")
 
         # test rgetattr
-        obj = dict_kinase["ABL1"]
+        obj = DICT_KINASE["ABL1"]
         assert utils.rgetattr(obj, attr="hgnc_name") == "ABL1"
         assert utils.rgetattr(obj, attr="uniprot_id") == "P00519"
         assert utils.rgetattr(obj, attr="non_existent") is None

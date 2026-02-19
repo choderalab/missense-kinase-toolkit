@@ -3,9 +3,7 @@ from dataclasses import dataclass
 
 import streamlit as st
 from constants import DICT_RESOURCE_URLS, LIST_CAPTIONS, LIST_OPTIONS
-from generate_alignments import SequenceAlignment
-from generate_properties import PropertyTables
-from generate_structures import StructureVisualizer
+from mkt.databases.app.properties import PropertyTables
 from mkt.databases.colors import DICT_COLORS
 from mkt.databases.log_config import configure_logging
 from mkt.schema.io_utils import (
@@ -17,6 +15,7 @@ from mkt.schema.io_utils import (
 from mkt.schema.kinase_schema import KinaseInfo
 from mkt.schema.utils import rgetattr
 from streamlit_bokeh import streamlit_bokeh
+from visualizers import SequenceAlignmentGenerator, StructureVisualizerGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +149,7 @@ class Dashboard:
                 "Crimson y-axis labels indicate the absense of a sequence for the chosen kinase in the database queried.\n"
             )
 
-            obj_alignment = SequenceAlignment(
+            obj_alignment = SequenceAlignmentGenerator(
                 obj_temp,
                 DICT_COLORS[dashboard_state.palette]["DICT_COLORS"],
             )
@@ -192,7 +191,7 @@ class Dashboard:
                         )
 
                         with plot_spot:
-                            viz = StructureVisualizer(
+                            viz = StructureVisualizerGenerator(
                                 obj_kinase=obj_temp,
                                 dict_align=obj_alignment.dict_align,
                                 str_attr=annotation,

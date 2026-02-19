@@ -23,7 +23,7 @@ class PropertyTables:
 
     def __post_init__(self):
         """Post-initialization method to extract properties."""
-        self.extract_properties()
+        self.assign_properties()
 
     def convert_property2dataframe(
         self,
@@ -51,21 +51,30 @@ class PropertyTables:
         """
         try:
             obj_temp = rgetattr(self.obj_kinase, str_attr)
+
             dict_temp = obj_temp.__dict__
+
+            # drop or keep specified attributes
             if list_drop is not None:
                 for str_drop in list_drop:
                     del dict_temp[str_drop]
+
+            # keep only specified attributes
             if list_keep is not None:
                 dict_temp = {k: dict_temp[k] for k in list_keep if k in dict_temp}
+
+            # convert to dataframe
             df_temp = pd.DataFrame.from_dict(dict_temp, orient="index")
             df_temp.index = df_temp.index.map(lambda x: x.replace("_", " ").upper())
             df_temp.columns = ["Property"]
+
             return df_temp
+
         except Exception as e:
             logger.error(f"Error converting properties to dataframe: {e}")
             return None
 
-    def extract_properties(self):
+    def assign_properties(self):
         """Extract the properties from the KinaseInfo object.
 
         Returns
@@ -73,7 +82,6 @@ class PropertyTables:
         None
             The properties are extracted and stored in the class.
         """
-
         self.df_kinhub = self.convert_property2dataframe("kinhub")
 
         self.df_klifs = self.convert_property2dataframe(

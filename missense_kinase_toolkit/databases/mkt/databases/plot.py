@@ -11,6 +11,10 @@ from pydantic.dataclasses import dataclass
 from upsetplot import from_contents, plot
 
 
+# from mkt.schema.io_utils import deserialize_kinase_dict
+# from mkt.databases.plot import generate_kinase_info_plot
+# DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE")
+# generate_kinase_info_plot(DICT_KINASE, "/Users/jessicawhite/Library/CloudStorage/OneDrive-Personal/PhD/Chodera/missense-kinase-toolkit/images")
 def generate_kinase_info_plot(
     dict_in: dict[str, Any],
     path_save: str,
@@ -38,10 +42,77 @@ def generate_kinase_info_plot(
     ]
     dict_contents = dict(zip(list_proper, list_contents))
 
+    # define colors for each database
+    dict_colors = {
+        "UniProt": "#00FF00",
+        "Pfam": "#00FFFF",
+        "KinCore": "#FF00FF",
+        "KLIFS": "#FFA500",
+        "KinHub": "#000000",
+    }
+
     # generate figure
     contents = from_contents(dict_contents)
-    fig = plt.figure(figsize=(12, 6))
-    plot(contents, fig=fig, element_size=None)
+    fig = plt.figure(figsize=(8, 4))
+    upset_plot = plot(
+        contents,
+        fig=fig,
+        element_size=None,
+        sort_by="cardinality",
+        sort_categories_by=None,
+    )
+
+    # add percentage labels to intersection bars
+    total = len(dict_in)
+    ax_intersections = upset_plot["intersections"]
+    # set y-axis to log scale
+    ax_intersections.set_yscale("log")
+    # update y-axis label to indicate log scale
+    ax_intersections.set_ylabel("log₁₀(Intersection Size)")
+    # remove gridlines from intersection plot
+    ax_intersections.grid(False)
+    # get the bar heights from the plot patches and apply colors
+    for patch in ax_intersections.patches:
+        height = patch.get_height()
+        percentage = (height / total) * 100
+        # for log scale, multiply by a factor instead of adding
+        label_y_pos = height * 1.15
+        ax_intersections.text(
+            patch.get_x() + patch.get_width() / 2,
+            label_y_pos,
+            f"{percentage:.1f}%",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+        )
+
+    # add total counts to category bars on the left and apply colors
+    ax_totals = upset_plot["totals"]
+    # remove gridlines from totals plot
+    ax_totals.grid(False)
+    y_tick_labels = [label.get_text() for label in ax_totals.get_yticklabels()]
+    for i, patch in enumerate(ax_totals.patches):
+        width = patch.get_width()
+        # center the text vertically within the bar
+        y_pos = patch.get_y() + patch.get_height() * 0.5
+        # apply color to bar
+        label = y_tick_labels[i]
+        if label in dict_colors:
+            patch.set_facecolor(dict_colors[label])
+        # add count label with white color for KinHub (black bar)
+        label_color = "#FFFFFF" if label == "KinHub" else "#000000"
+        ax_totals.text(
+            width,
+            y_pos,
+            f" {int(width)}",
+            ha="left",
+            va="center_baseline",
+            fontsize=8,
+            color=label_color,
+        )
+        # apply color to tick label
+        ax_totals.get_yticklabels()[i].set_color(dict_colors.get(label, "#000000"))
+
     plt.savefig(path.join(path_save, "upset_plot.pdf"), bbox_inches="tight")
 
 

@@ -18,5 +18,6 @@ Load these KinaseInfo objects using the following code after installing the `mkt
 ```
 from mkt.schema import io_utils
 
-dict_kinase = io_utils.deserialize_kinase_dict()
+# str_name ensures you don't import the dictionary if already in cache
+DICT_KINASE = io_utils.deserialize_kinase_dict(str_name="DICT_KINASE")
 ```
