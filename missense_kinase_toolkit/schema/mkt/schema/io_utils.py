@@ -309,6 +309,7 @@ def deserialize_kinase_dict(
     bool_remove: bool = True,
     list_ids: list[str] | None = None,
     str_name: str | None = None,
+    bool_verbose: bool = True,
 ) -> dict[str, BaseModel]:
     """Deserialize KinaseInfo object from files.
 
@@ -333,7 +334,8 @@ def deserialize_kinase_dict(
         Dictionary of KinaseInfo objects.
     """
     if str_name is not None and str_name in _deserialization_cache:
-        logger.info(f"Loading KinaseInfo object from variable {str_name}...")
+        if bool_verbose:
+            logger.info(f"Loading KinaseInfo object from variable {str_name}...")
         return _deserialization_cache[str_name]
 
     if suffix not in DICT_FUNCS:
