@@ -332,10 +332,10 @@ class Mutations(StudyData):
 
         """
         try:
-            # TODO: add incremental error handling beyond missing study
-            muts = self._cbioportal.Mutations.getMutationsInMolecularProfileBySampleListIdUsingGET(
+            # use POST endpoint since GET now requires entrezGeneId
+            muts = self._cbioportal.Mutations.fetchMutationsInMolecularProfileUsingPOST(
                 molecularProfileId=f"{self.study_id}_mutations",
-                sampleListId=f"{self.study_id}_all",
+                mutationFilter={"sampleListId": f"{self.study_id}_all"},
                 projection="DETAILED",
             ).result()
         except Exception as e:
