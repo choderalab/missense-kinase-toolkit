@@ -43,16 +43,13 @@ DICT_COLOR_MAP = {
 }
 """dict: Fallback color name to hex mapping (CSS3 standard colors)."""
 
-LIST_KLIFS_STICK_POSITIONS_CONSERVED = [3, 5, 8, 68, 80]
-"""list[int]: Zero-index positions in KLIFS sequence for stick representation."""
-
 
 @dataclass
 class PyMOLGenerator:
     """Generate PDB file with embedded color/style info and standalone PyMOL script."""
 
     viz: StructureVisualizer
-    """StructureVisualizer object with loaded structure and annotations."""
+    """StructureVisualizer object with loaded structure and config."""
     gene_name: str = field(init=False)
     """Gene name of the structure."""
     dict_filenames: dict = field(default_factory=lambda: dict)
@@ -61,9 +58,10 @@ class PyMOLGenerator:
     def __post_init__(self):
         self.gene_name = self.viz.obj_kinase.hgnc_name
 
-        # rename files with gene name
+        # rename files with gene name and attribute
+        str_attr = self.viz.config.str_attr
         self.dict_filenames = {
-            k: f"{self.gene_name}_{self.viz.str_attr.lower()}_{v}"
+            k: f"{self.gene_name}_{str_attr.lower()}_{v}"
             for k, v in DICT_FILENAME_DEFAULTS.items()
         }
 
@@ -91,53 +89,43 @@ class PyMOLGenerator:
             # fallback to custom mapping if webcolors doesn't recognize it
             return DICT_COLOR_MAP.get(color.lower(), "#808080")
 
-    def _get_color_and_style_mapping(self) -> tuple[dict[int, str], list[int]]:
-        """Generate residue-to-color mapping and stick residue list.
+    def _get_color_and_style_mapping(
+        self,
+    ) -> tuple[dict[int, str], list[int], dict[int, str]]:
+        """Generate residue-to-color mapping, stick residue list, and label mapping.
 
-        Uses the existing _generate_highlight_idx() logic from StructureVisualizer
-        to ensure consistency between py3Dmol and PyMOL visualizations.
+        Uses the get_highlight_data() from StructureVisualizer which gets
+        data from the config.
 
         Returns
         -------
-        tuple[dict[int, str], list[int]]
-            Dictionary mapping residue numbers to hex colors and list of stick residue numbers.
+        tuple[dict[int, str], list[int], dict[int, str]]
+            Dictionary mapping residue numbers to hex colors,
+            list of stick residue numbers,
+            dictionary mapping residue numbers to label strings.
         """
         color_mapping = {}
         stick_residues = []
+        label_mapping = {}
 
-        # Early return if no attribute specified
-        if not self.viz.str_attr:
-            return color_mapping, stick_residues
-
-        # Check if attribute exists (except for Mutations which uses dict_mutations)
-        if self.viz.str_attr != "Mutations":
-            if self.viz.str_attr not in self.viz.dict_align:
-                return color_mapping, stick_residues
-
-        # use the existing _generate_highlight_idx from StructureVisualizer
-        # this method returns:
-        # - list_highlight: 1-based indices in alignment space (0-indexed alignment + 1)
-        # - dict_color: mapping from alignment index to color (name or hex)
-        # - dict_style: mapping from alignment index to style ("stick" or "cartoon")
-        list_highlight_align, dict_color_align, dict_style_align = (
-            self.viz._generate_highlight_idx()
+        # Get highlight data from visualizer (which gets it from config)
+        # list_highlight is already 1-indexed
+        list_highlight_align, dict_color_align, dict_style_align, dict_label_align = (
+            self.viz.get_highlight_data()
         )
 
-        # convert alignment indices to PDB residue numbers
-        # the PDB is renumbered sequentially (1, 2, 3, ...) counting only non-gap CIF residues
-        # we need to map from alignment index (0-based + 1) to PDB residue count
+        # Access dict_align through the config's seq_align
+        str_seq_cif = self.viz.config.seq_align.dict_align["KinCore, CIF"]["str_seq"]
 
-        str_seq_cif = self.viz.dict_align["KinCore, CIF"]["str_seq"]
-
-        # create mapping: alignment_index (0-based) -> PDB_residue_number (1-based sequential)
+        # create mapping: alignment_index (1-based) -> PDB_residue_number (1-based sequential)
+        # The PDB is renumbered sequentially (1, 2, 3, ...) counting only non-gap CIF residues
         alignment_to_pdb = {}
         pdb_residue_count = 0
         for align_idx, cif_res in enumerate(str_seq_cif):
             if cif_res != "-":
                 pdb_residue_count += 1
-                alignment_to_pdb[align_idx + 1] = (
-                    pdb_residue_count  # +1 because _generate_highlight_idx returns 1-based
-                )
+                # list_highlight from config is already 1-indexed
+                alignment_to_pdb[align_idx + 1] = pdb_residue_count
 
         # convert colors to hex and identify stick residues
         for align_idx in list_highlight_align:
@@ -152,7 +140,12 @@ class PyMOLGenerator:
                 if style == "stick":
                     stick_residues.append(pdb_res_num)
 
-        return color_mapping, stick_residues
+                # Check for label
+                label = dict_label_align.get(align_idx)
+                if label is not None:
+                    label_mapping[pdb_res_num] = label
+
+        return color_mapping, stick_residues, label_mapping
 
     def return_filepath_dict(self, output_dir: str) -> dict[str, str]:
         """Return dictionary of filenames with paths.
@@ -182,7 +175,9 @@ class PyMOLGenerator:
         str
             Path to the saved annotated PDB file.
         """
-        color_mapping, stick_residues = self._get_color_and_style_mapping()
+        color_mapping, stick_residues, label_mapping = (
+            self._get_color_and_style_mapping()
+        )
 
         pdb_lines = self.viz.pdb_text.split("\n")
 
@@ -198,10 +193,10 @@ class PyMOLGenerator:
                     continue
 
         original_residues.sort()
-        print(
-            f"DEBUG: Found original residue range: {min(original_residues)} to {max(original_residues)}"
+        logger.debug(
+            f"Found original residue range: {min(original_residues)} to {max(original_residues)}"
         )
-        print(f"DEBUG: Total residues: {len(original_residues)}")
+        logger.debug(f"Total residues: {len(original_residues)}")
 
         # create mapping from original residue numbers to sequential (1, 2, 3...)
         old_to_new = {old_res: idx + 1 for idx, old_res in enumerate(original_residues)}
@@ -222,10 +217,11 @@ class PyMOLGenerator:
                 renumbered_lines.append(line)
 
         # prepare annotated lines with header
+        str_attr = self.viz.config.str_attr
         annotated_lines = [
             "REMARK   1 GENERATED FOR PYMOL VISUALIZATION",
             f"REMARK   1 GENE: {self.gene_name}",
-            f"REMARK   1 ATTRIBUTE: {self.viz.str_attr or 'None'}",
+            f"REMARK   1 ATTRIBUTE: {str_attr}",
             f"REMARK   1 RESIDUES RENUMBERED: {min(original_residues)}-{max(original_residues)} -> 1-{len(original_residues)}",
             "REMARK   1 ",
             "REMARK   2 COLOR MAPPING (residue_number:hex_color):",
@@ -254,6 +250,15 @@ class PyMOLGenerator:
 
         annotated_lines.append("REMARK   4 ")
 
+        # add label mapping as remarks
+        annotated_lines.append("REMARK   5 RESIDUE LABELS:")
+        if label_mapping:
+            for res_num, label_text in label_mapping.items():
+                annotated_lines.append(f"REMARK   5 {res_num}:{label_text}")
+        else:
+            annotated_lines.append("REMARK   5 NONE")
+        annotated_lines.append("REMARK   5 ")
+
         # add renumbered PDB content
         annotated_lines.extend(renumbered_lines)
 
@@ -261,8 +266,8 @@ class PyMOLGenerator:
         with open(output_path, "w") as f:
             f.write("\n".join(annotated_lines))
 
-        print(f"DEBUG: Color mapping contains {len(color_mapping)} residues")
-        print(f"DEBUG: Stick residues: {stick_residues}")
+        logger.debug(f"Color mapping contains {len(color_mapping)} residues")
+        logger.debug(f"Stick residues: {stick_residues}")
 
         return output_path
 
@@ -290,6 +295,7 @@ class PyMOLGenerator:
             "def parse_pdb_remarks(pdb_file):",
             "    color_mapping = {}",
             "    stick_residues = []",
+            "    label_mapping = {}",
             "    with open(pdb_file, 'r') as f:",
             "        for line in f:",
             "            if line.startswith('REMARK   2 ') and ':' in line:",
@@ -305,18 +311,31 @@ class PyMOLGenerator:
             "                        stick_residues = [int(x.strip()) for x in residues_str.split(',')]",
             "                    except ValueError:",
             "                        pass",
-            "    return color_mapping, stick_residues",
+            "            elif line.startswith('REMARK   5 ') and ':' in line:",
+            "                content = line.replace('REMARK   5 ', '').strip()",
+            "                if content and content != 'NONE' and content != 'RESIDUE LABELS:':",
+            "                    # format: res_num:label_text",
+            "                    parts = content.split(':', 1)",
+            "                    if len(parts) == 2:",
+            "                        try:",
+            "                            res_num = int(parts[0])",
+            "                            label_mapping[res_num] = parts[1]",
+            "                        except ValueError:",
+            "                            pass",
+            "    return color_mapping, stick_residues, label_mapping",
             "",
             "# Load structure",
             f"cmd.load('{os.path.basename(pdb_path)}', '{self.gene_name}')",
             "",
             "# Parse color data from PDB remarks",
-            f"color_mapping, stick_residues = parse_pdb_remarks('{os.path.basename(pdb_path)}')",
+            f"color_mapping, stick_residues, label_mapping = parse_pdb_remarks('{os.path.basename(pdb_path)}')",
             "",
             "print(f'Found {len(color_mapping)} residues with colors')",
             "print(f'Found {len(stick_residues)} stick residues')",
+            "print(f'Found {len(label_mapping)} residue labels')",
             "print('Color mapping (first 5 residues):', dict(list(color_mapping.items())[:5]))  # Show first 5",
             "print('Stick residues:', stick_residues)",
+            "print('Labels:', label_mapping)",
             "",
             "# Set initial cartoon style with gray background",
             f"cmd.show_as('cartoon', '{self.gene_name}')",
@@ -348,6 +367,14 @@ class PyMOLGenerator:
             "    cmd.set('stick_radius', 0.3, f'resi {stick_selection}')",
             "    print(f'Applied sticks to: resi {stick_selection}')",
             "",
+            "# Apply residue labels",
+            "if label_mapping:",
+            "    cmd.set('label_color', 'black')",
+            "    cmd.set('label_size', 14)",
+            "    for res_num, label_text in label_mapping.items():",
+            "        cmd.label(f'resi {res_num} and name CA', f'\"{label_text}\"')",
+            "    print(f'Applied labels to {len(label_mapping)} residues')",
+            "",
             "# Final setup",
             "cmd.bg_color('white')",
             "",
@@ -365,8 +392,7 @@ class PyMOLGenerator:
         return output_path
 
     def generate_instructions(self, output_dir: str) -> str:
-        """
-        Generate instructions for manual PyMOL execution.
+        """Generate instructions for manual PyMOL execution.
 
         Parameters
         ----------
@@ -388,7 +414,7 @@ class PyMOLGenerator:
 
         {"=" * 60}
         MANUAL PYMOL INSTRUCTIONS:
-        1. 1. Open PyMOL GUI or command line
+        1. Open PyMOL GUI or command line
         2. Change to the output directory
            cd {os.path.abspath(output_dir)}
         3. Run the script:
@@ -405,8 +431,7 @@ class PyMOLGenerator:
         return instructions
 
     def save_pymol_files(self, output_dir: str):
-        """
-        Generate PDB file and PyMOL script for manual PyMOL execution.
+        """Generate PDB file and PyMOL script for manual PyMOL execution.
 
         Parameters
         ----------
