@@ -1,133 +1,133 @@
 #!/usr/bin/env python3
+"""CLI for generating PyMOL visualization files for kinase structures."""
 
-import argparse
-import json
-from os import path
+from pathlib import Path
+from typing import Annotated, Optional
 
-from mkt.databases.app.utils import generate_sequence_and_structure_viewers
+import typer
+from mkt.databases.app.schema import StandardConfig, StandardConfigChoice
+from mkt.databases.app.sequences import SequenceAlignment
+from mkt.databases.app.utils import create_structure_visualizer
 from mkt.databases.colors import DICT_COLORS
-from mkt.databases.log_config import add_logging_flags, configure_logging
+from mkt.databases.log_config import configure_logging
 from mkt.databases.pymol import PyMOLGenerator
 from mkt.schema.io_utils import get_repo_root
 
-LIST_ATTR_OPTIONS = ["KLIFS", "Phosphosites", "Mutations"]
-"""list[str]: List of attribute options for highlighting in the structure.
-
-- KLIFS: Highlight KLIFS pocket regions with region-specific colors and stick representation for key residues
-- Phosphosites: Highlight phosphorylation sites with red color and stick representation
-- Mutations: Highlight mutations with gradient coloring based on mutation counts
-"""
+app = typer.Typer(
+    help="Generate PyMOL files for kinase structure visualization.",
+    no_args_is_help=True,
+)
 
 
-def get_parser():
-    parser = argparse.ArgumentParser(
-        description="Generate PyMOL files for kinase structure visualization."
-    )
-
-    parser.add_argument(
-        "--gene",
-        type=str,
-        required=False,
-        default="ABL1",
-        help="Gene name of the kinase to visualize (default: ABL1)",
-    )
-
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        required=False,
-        help="Output directory for PyMOL files (default if not used: <repo_root>/images/pymol_output/<gene>)",
-    )
-
-    parser.add_argument(
-        "--strAttr",
-        type=str,
-        default=None,
-        help=(
-            "Attribute to highlight in the structure (options: "
-            f"{', '.join(LIST_ATTR_OPTIONS)}; default: None)"
+@app.command()
+def main(
+    gene: Annotated[
+        str,
+        typer.Option(
+            "--gene",
+            "-g",
+            help="Gene name of the kinase to visualize.",
         ),
-        choices=LIST_ATTR_OPTIONS,
-    )
-
-    parser.add_argument(
-        "--jsonMutations",
-        type=str,
-        required=False,
-        help="JSON file of mutations to highlight in the structure (default: None)",
-    )
-
-    parser.add_argument(
-        "--boolKLIFSConserved",
-        action="store_false",
-        help=(
-            "If set, use conserved KLIFS pocket residues for stick representation; "
-            "if not set (default), use manually curated KLIFS pocket residues."
+    ] = "ABL1",
+    config_type: Annotated[
+        StandardConfigChoice,
+        typer.Option(
+            "--config",
+            "-c",
+            help="Configuration type for structure highlighting.",
+            case_sensitive=False,
         ),
-    )
+    ] = StandardConfigChoice.KLIFS_IMPORTANT,
+    output_dir: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="Output directory for PyMOL files. Default: <repo_root>/images/pymol_output/<gene>/<config>",
+        ),
+    ] = None,
+    json_mutations: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--json-mutations",
+            "-j",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            readable=True,
+            resolve_path=True,
+            help="JSON file of mutations to highlight (required for MUTATIONS_* configs).",
+        ),
+    ] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose",
+            "-v",
+            help="Enable verbose (DEBUG) logging.",
+        ),
+    ] = False,
+) -> None:
+    """Generate PyMOL visualization files for kinase structures.
 
-    parser = add_logging_flags(parser)
+    Examples:
+        # Generate KLIFS pocket visualization for ABL1
+        generate_pymol_files --gene ABL1 --config KLIFS_IMPORTANT
 
-    return parser
+        # Generate phosphosite visualization
+        generate_pymol_files --gene EGFR --config PHOSPHOSITES
 
+        # Generate mutation visualization (requires JSON file)
+        generate_pymol_files --gene ABL1 --config MUTATIONS_KLIFS --json-mutations mutations.json
 
-def main():
-    args = get_parser().parse_args()
+        # Generate group-averaged mutations
+        generate_pymol_files --gene ABL1 --config MUTATIONS_GROUP --json-mutations mutations.json
+    """
+    configure_logging(verbose=verbose)
 
-    if args.verbose == "DEBUG":
-        configure_logging(verbose=True)
-    else:
-        configure_logging(verbose=False)
+    # validate that mutations file is provided for MUTATIONS_* configs
+    config_name = config_type.value
+    if config_name.startswith("MUTATIONS") and json_mutations is None:
+        raise typer.BadParameter(
+            f"--json-mutations is required when using {config_name} config.",
+            param_hint="--json-mutations",
+        )
 
-    gene = args.gene
-    str_attr = args.strAttr
-    filepath_json = args.jsonMutations
-
-    structure_kwargs = {}
-    if str_attr == "Mutations":
-        # make sure mutations are provided
-        if not args.jsonMutations:
-            raise ValueError(
-                "Mutations file must be provided in "
-                "--jsonMutations when --strAttr is 'Mutations'."
-            )
-        else:
-            if not path.exists(filepath_json):
-                raise FileNotFoundError(f"Mutations file {filepath_json} not found.")
-            # load mutations from JSON string
-            with open(filepath_json) as f:
-                dict_mutations = json.load(f)
-                dict_mutations = {
-                    k1: {int(k2): float(v2) for k2, v2 in v1.items()}
-                    for k1, v1 in dict_mutations.items()
-                }
-
-            # add mutations to structure kwargs
-            if gene in dict_mutations:
-                structure_kwargs["dict_mutations"] = dict_mutations[gene]
-            else:
-                raise ValueError(
-                    f"No mutations found for gene {gene} in provided JSON file."
-                )
-
-    # add flag for KLIFS conserved residues
-    structure_kwargs["bool_klifs_manual"] = args.boolKLIFSConserved
-
-    _, obj_viz = generate_sequence_and_structure_viewers(
+    # create sequence alignment
+    seq_align = SequenceAlignment(
         str_kinase=gene,
-        dict_colors=DICT_COLORS["ALPHABET_PROJECT"]["DICT_COLORS"],
-        str_attr=str_attr,
-        structure_kwargs=structure_kwargs,
+        # this is for sequence viewer, not PyMOL colors
+        dict_color=DICT_COLORS["ALPHABET_PROJECT"]["DICT_COLORS"],
     )
 
-    pymol_generator = PyMOLGenerator(viz=obj_viz)
-    str_subdirs = path.join("images", "pymol_output", gene, str_attr.lower())
-    if args.output_dir:
-        out_dir = path.join(args.output_dir, str_subdirs)
+    # Get the config class from StandardConfig enum
+    config_class = StandardConfig[config_name].value
+
+    # prepare config kwargs
+    config_kwargs: dict = {}
+    if config_name.startswith("MUTATIONS"):
+        config_kwargs["str_filepath_json"] = str(json_mutations)
+
+    # create structure visualizer using the config
+    viz = create_structure_visualizer(
+        seq_align=seq_align,
+        config_class=config_class,
+        config_kwargs=config_kwargs,
+    )
+
+    # generate PyMOL files
+    pymol_generator = PyMOLGenerator(viz=viz)
+
+    str_subdirs = Path("images") / "pymol_output" / gene / config_name.lower()
+    if output_dir:
+        out_dir = output_dir / str_subdirs
     else:
-        out_dir = path.join(get_repo_root(), str_subdirs)
-    pymol_generator.save_pymol_files(out_dir)
+        out_dir = Path(get_repo_root()) / str_subdirs
+
+    pymol_generator.save_pymol_files(str(out_dir))
+
+    typer.echo(f"PyMOL files generated in: {out_dir}")
 
 
 if __name__ == "__main__":
-    main()
+    app()
