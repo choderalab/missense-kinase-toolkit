@@ -21,6 +21,7 @@ dependencies:
   - beautifulsoup4
   - numpy
   - biopython
+  - matplotlib
   - pydantic
   - GitPython
   - importlib-resources
