@@ -12,6 +12,7 @@ import git
 import toml
 import yaml
 from mkt.schema import kinase_schema
+from mkt.schema.config import get_output_dir
 from pydantic import BaseModel
 from tqdm import tqdm
 
@@ -391,3 +392,67 @@ def deserialize_kinase_dict(
         _deserialization_cache[str_name] = dict_import
 
     return dict_import
+
+
+def save_plot(
+    fig,
+    output_filename: str,
+    plot_type: str = "Plot",
+    bool_force_local: bool = True,
+    bool_image_subdir=True,
+    output_path: str | None = None,
+    **kwargs,
+) -> None:
+    """Save the current matplotlib figure in both SVG and PNG formats.
+
+    Parameters:
+    -----------
+    fig : matplotlib.figure.Figure
+        The figure object to save.
+    output_filename : str
+        Name of the output file to save the plot. If it ends with .png, will be converted to .svg.
+        Otherwise assumed to be .svg already.
+    plot_type : str
+        Description of the plot type for logging purposes (e.g., "Dynamic range plot")
+    bool_force_local : bool
+        If True, forces saving to the local dir (repo root or cwd) regardless of env var; default is True.
+    bool_image_subdir : bool
+        If True, saves images to a subdirectory named "images" within the output path; default is True.
+    output_path : str | None
+        Optional path to save the plot. If None, saves to the current working directory.
+    **kwargs
+        Additional keyword arguments to pass to plt.savefig (e.g., {"dpi": 300}). Default is empty dict.
+    """
+    import matplotlib.pyplot as plt
+
+    # remove extension if provided
+    output_filename = os.path.splitext(output_filename)[0]
+
+    # get_repo_root() > output_path > get_output_dir()
+    if bool_force_local:
+        if output_path is not None:
+            logger.info(
+                "bool_force_local is True, so ignoring provided output_path "
+                f"{output_path} and saving to local directory instead."
+            )
+        output_path = get_repo_root()
+    elif output_path is None:
+        output_path = get_output_dir()
+
+    # set default savefig parameters
+    savefig_params = {"bbox_inches": "tight"}
+    # update with any user-provided kwargs
+    savefig_params.update(kwargs)
+
+    for suffix in ["svg", "png"]:
+        if bool_image_subdir:
+            file_path = os.path.join(
+                output_path, "images", f"{output_filename}.{suffix}"
+            )
+        else:
+            file_path = os.path.join(output_path, f"{output_filename}.{suffix}")
+
+        fig.savefig(file_path, format=suffix, **savefig_params)
+        logger.info(f"{plot_type} saved to {file_path}")
+
+    plt.close(fig)
