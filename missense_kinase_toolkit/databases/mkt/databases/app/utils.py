@@ -79,39 +79,3 @@ def convert_color_to_hex(color: str) -> str:
     except ValueError:
         logger.warning(f"Color '{color}' not recognized, defaulting to gray")
         return "#808080"
-
-
-def interpolate_color(
-    norm_value: float, start_color_hex: str, end_color_hex: str
-) -> str:
-    """Interpolate between two colors based on normalized value.
-
-    Parameters
-    ----------
-    norm_value : float
-        Normalized value between 0 and 1.
-    start_color_hex : str
-        Starting color in hex format (e.g., "#FFFFFF").
-    end_color_hex : str
-        Ending color in hex format (e.g., "#FF0000").
-
-    Returns
-    -------
-    str
-        Interpolated color in hex format.
-    """
-    # convert hex to RGB
-    start_r = int(start_color_hex[1:3], 16)
-    start_g = int(start_color_hex[3:5], 16)
-    start_b = int(start_color_hex[5:7], 16)
-
-    end_r = int(end_color_hex[1:3], 16)
-    end_g = int(end_color_hex[3:5], 16)
-    end_b = int(end_color_hex[5:7], 16)
-
-    # interpolate
-    interp_r = int(start_r + (end_r - start_r) * norm_value)
-    interp_g = int(start_g + (end_g - start_g) * norm_value)
-    interp_b = int(start_b + (end_b - start_b) * norm_value)
-
-    return f"#{interp_r:02x}{interp_g:02x}{interp_b:02x}"
