@@ -93,6 +93,10 @@ def main(
             param_hint="--json-mutations",
         )
 
+    # e.g., "klifs" or "phosphosites"
+    str_final_subdir = config_name.lower().split("_")[0]
+    str_attr = "_".join(config_name.lower().split("_")[1:])
+
     # create sequence alignment
     seq_align = SequenceAlignment(
         str_kinase=gene,
@@ -116,9 +120,9 @@ def main(
     )
 
     # generate PyMOL files
-    pymol_generator = PyMOLGenerator(viz=viz)
+    pymol_generator = PyMOLGenerator(viz=viz, str_attr=str_attr)
 
-    str_subdirs = Path("images") / "pymol_output" / gene / config_name.lower()
+    str_subdirs = Path("images") / "pymol_output" / gene / str_final_subdir
     if output_dir:
         out_dir = output_dir / str_subdirs
     else:
