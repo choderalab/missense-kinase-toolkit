@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from mkt.databases.app.sequences import SequenceAlignment
-from mkt.databases.app.utils import interpolate_color
+from mkt.databases.colors import DICT_QUARTILE_HEATMAP_COLORMAP, percentile_colormap
 
 logger = logging.getLogger(__name__)
 
@@ -631,45 +631,9 @@ class MutationsConfig(StructureConfig):
         else:
             list_style = ["cartoon" for _ in list_idx]
 
-        # quartile-based coloring: interpolate between distinct color stops
-        # Q1: yellow→orange, Q2: orange→red, Q3: red→dark red, Q4: dark red→deep red
-        color_stops = {
-            1: ("#FFD700", "#FF8C00"),  # yellow → orange
-            2: ("#FF8C00", "#FF0000"),  # orange → red
-            3: ("#FF0000", "#8B0000"),  # red → dark red
-            4: ("#8B0000", "#4B0000"),  # dark red → deep red
-        }
-
-        # calculate quartile boundaries from non-zero values
-        non_zero_counts = sorted([c for c in list_norm_count if c > 0])
-        if non_zero_counts:
-            n = len(non_zero_counts)
-            q1 = non_zero_counts[max(0, n // 4 - 1)]
-            q2 = non_zero_counts[max(0, n // 2 - 1)]
-            q3 = non_zero_counts[max(0, 3 * n // 4 - 1)]
-        else:
-            q1, q2, q3 = 0.25, 0.5, 0.75
-
-        list_color = []
-        for norm_count in list_norm_count:
-            if norm_count == 0:
-                list_color.append("lightgray")
-            else:
-                # determine quartile and position within it
-                if norm_count <= q1:
-                    quartile, q_min, q_max = 1, 0, q1
-                elif norm_count <= q2:
-                    quartile, q_min, q_max = 2, q1, q2
-                elif norm_count <= q3:
-                    quartile, q_min, q_max = 3, q2, q3
-                else:
-                    quartile, q_min, q_max = 4, q3, 1.0
-
-                # interpolate position within quartile (0 to 1)
-                t = (norm_count - q_min) / (q_max - q_min) if q_max > q_min else 0.5
-
-                start_hex, end_hex = color_stops[quartile]
-                list_color.append(interpolate_color(t, start_hex, end_hex))
+        list_color = percentile_colormap(
+            list_norm_count, DICT_QUARTILE_HEATMAP_COLORMAP
+        )
 
         return list_style, list_color
 
