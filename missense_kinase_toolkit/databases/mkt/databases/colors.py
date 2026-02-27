@@ -1,3 +1,9 @@
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
+import numpy as np
+from mkt.schema.io_utils import save_plot
+
+
 def map_aa_to_single_letter_code(
     aa: str,
 ) -> str | None:
@@ -328,6 +334,212 @@ DICT_COLORS = {
     - DICT_COLORS: Dictionary mapping single-letter amino acid to color
     - DICT_ANNOTATION: Dictionary mapping amino acid groups to color if one exists
 """
+
+DEFAULT_NULL_COLOR = "darkgray"
+"""str: Default color for null/zero values in colormaps."""
+
+
+def interpolate_color(
+    norm_value: float, start_color_hex: str, end_color_hex: str
+) -> str:
+    """Interpolate between two colors based on normalized value.
+
+    Parameters:
+    -----------
+    norm_value : float
+        Normalized value between 0 and 1.
+    start_color_hex : str
+        Starting color in hex format (e.g., "#FFFFFF").
+    end_color_hex : str
+        Ending color in hex format (e.g., "#FF0000").
+
+    Returns:
+    --------
+    str
+        Interpolated color in hex format.
+    """
+    # convert hex to RGB
+    start_r = int(start_color_hex[1:3], 16)
+    start_g = int(start_color_hex[3:5], 16)
+    start_b = int(start_color_hex[5:7], 16)
+
+    end_r = int(end_color_hex[1:3], 16)
+    end_g = int(end_color_hex[3:5], 16)
+    end_b = int(end_color_hex[5:7], 16)
+
+    # interpolate
+    interp_r = int(start_r + (end_r - start_r) * norm_value)
+    interp_g = int(start_g + (end_g - start_g) * norm_value)
+    interp_b = int(start_b + (end_b - start_b) * norm_value)
+
+    return f"#{interp_r:02x}{interp_g:02x}{interp_b:02x}"
+
+
+def percentile_colormap(
+    values: list[float],
+    color_stops: dict[int, tuple[str, str]],
+    zero_color: str = DEFAULT_NULL_COLOR,
+) -> list[str]:
+    """Map numeric values to colors using percentile-based interpolation.
+
+    Divides non-zero values into N equal percentile bins (where N is the number
+    of color stops) and interpolates within each bin's color range.
+
+    Parameters:
+    -----------
+    values : list[float]
+        Numeric values to map to colors.
+    color_stops : dict[int, tuple[str, str]]
+        Dict mapping bin number (1-indexed) to (start_hex, end_hex) tuples.
+        The number of entries determines the number of percentile bins
+        (e.g., 4 entries = quartiles, 5 entries = quintiles).
+    zero_color : str
+        Color for zero values (default: "darkgray").
+
+    Returns:
+    --------
+    list[str]
+        List of color strings (hex or named).
+    """
+    n_bins = len(color_stops)
+
+    # calculate percentile boundaries from non-zero values
+    non_zero_values = sorted([v for v in values if v > 0])
+    if non_zero_values:
+        n = len(non_zero_values)
+        # boundaries at each 1/n_bins fraction (e.g., 4 bins -> 0.25, 0.50, 0.75)
+        boundaries = [
+            non_zero_values[max(0, int(n * (i + 1) / n_bins) - 1)]
+            for i in range(n_bins - 1)
+        ]
+    else:
+        boundaries = [(i + 1) / n_bins for i in range(n_bins - 1)]
+
+    list_color = []
+    for value in values:
+        if value == 0:
+            list_color.append(zero_color)
+        else:
+            # determine which bin and position within it
+            bin_idx = n_bins  # default to last bin
+            q_min = boundaries[-1] if boundaries else 0
+            q_max = 1.0
+            for i, boundary in enumerate(boundaries):
+                if value <= boundary:
+                    bin_idx = i + 1
+                    q_min = boundaries[i - 1] if i > 0 else 0
+                    q_max = boundary
+                    break
+
+            # interpolate position within bin (0 to 1)
+            t = (value - q_min) / (q_max - q_min) if q_max > q_min else 0.5
+
+            start_hex, end_hex = color_stops[bin_idx]
+            list_color.append(interpolate_color(t, start_hex, end_hex))
+
+    return list_color
+
+
+DICT_QUARTILE_HEATMAP_COLORMAP = {
+    1: ("#228B22", "#FFD700"),  # green → yellow
+    2: ("#FFD700", "#FF8C00"),  # yellow → orange
+    3: ("#FF8C00", "#FF0000"),  # orange → red
+    4: ("#FF0000", "#8B0000"),  # red → dark red
+}
+"""dict[int, tuple[str, str]]: Quartile heatmap colormap for mutation visualization.
+Maps quartile bin number (1-indexed) to (start_hex, end_hex) tuples for use with ``percentile_colormap``.
+"""
+
+
+def generate_colormap_legend(
+    color_stops: dict[int, tuple[str, str]],
+    output_path: str | None = None,
+    zero_color: str = DEFAULT_NULL_COLOR,
+    n_gradient_steps: int = 256,
+    null_steps: int | None = None,
+    figsize: tuple[float, float] = (0.75, 5.5),
+) -> None:
+    """Generate a vertical colormap legend image (SVG and PNG) from color stops.
+
+    Creates a vertical gradient bar from bottom (null/zero color) to top (highest
+    density), with percentile tick labels at 0, 0.25, 0.5, 0.75, and 1. Colors are
+    generated via ``percentile_colormap`` with a synthetic uniform dataset so the
+    legend is guaranteed to match live usage.
+
+    Parameters:
+    -----------
+    color_stops : dict[int, tuple[str, str]]
+        Dict mapping bin number (1-indexed) to (start_hex, end_hex) tuples,
+        e.g., ``DICT_QUARTILE_HEATMAP_COLORMAP``.
+    output_path : str | None
+        Directory path to save the plot. If None, saves to the repo root.
+    zero_color : str
+        Color for the null/zero band at the bottom (default: ``DEFAULT_NULL_COLOR``).
+    n_gradient_steps : int
+        Number of interpolation steps per bin (default: 256).
+    null_steps : int | None
+        Height in pixels of the null/zero color band at the bottom. Defaults to
+        1/10 the height of one bin (``n_gradient_steps // 10``).
+    figsize : tuple[float, float]
+        Figure size in inches (width, height). Default: (1, 5).
+    """
+    plt.rcParams["font.family"] = "Arial"
+
+    n_bins = len(color_stops)
+    # null band height: half the height of one bin by default
+    if null_steps is None:
+        null_steps = n_gradient_steps // 10
+
+    # generate gradient via percentile_colormap with synthetic uniform values so
+    # the legend is guaranteed consistent with live usage of percentile_colormap
+    n_total = n_bins * n_gradient_steps
+    synthetic_values = [(i + 1) / n_total for i in range(n_total)]
+    gradient_hex = percentile_colormap(
+        synthetic_values, color_stops, zero_color=zero_color
+    )
+
+    # build single-column RGBA array: null band at bottom, gradient above
+    null_rgba = mcolors.to_rgba(zero_color)
+    colors_col = [null_rgba] * null_steps + [mcolors.to_rgba(c) for c in gradient_hex]
+    gradient = np.array(colors_col)[:, np.newaxis, :]  # shape: (total_rows, 1, 4)
+    total_height = null_steps + n_total
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.imshow(
+        gradient,
+        aspect="auto",
+        origin="lower",
+        extent=[0, 1, 0, total_height],
+    )
+
+    # "0" tick at the null/gradient boundary (where green starts); then one tick
+    # per bin boundary up to "1" at the top
+    tick_positions = [null_steps + i * n_gradient_steps for i in range(n_bins + 1)]
+    tick_labels = ["0", "0.25", "0.5", "0.75", "1"]
+
+    ax.set_yticks(tick_positions)
+    ax.set_yticklabels(tick_labels, fontsize=9)
+    ax.yaxis.set_ticks_position("right")
+    ax.set_title("Mutational\ndensity", fontsize=10, loc="center", pad=6)
+    ax.set_xticks([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    fig.tight_layout()
+
+    filename = "colormap_legend"
+    desc = "Colormap legend"
+    if output_path is None:
+        save_plot(fig=fig, output_filename=filename, plot_type=desc)
+    else:
+        save_plot(
+            fig=fig,
+            output_filename=filename,
+            output_path=output_path,
+            plot_type=desc,
+            bool_force_local=False,
+        )
+
 
 DICT_BIOCHEM_PROP_COLORS = {
     "Charge": "#1f77b4",
