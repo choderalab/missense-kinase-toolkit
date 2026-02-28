@@ -445,9 +445,32 @@ class KinaseInfo(BaseModel):
         """
         str_hgnc = self.hgnc_name.split("_")[0]
 
-        if str_hgnc.startswith("PI") and not (
-            str_hgnc.startswith("PIM") or str_hgnc.startswith("PIN")
-        ):
+        bool1 = str_hgnc.startswith("PI")
+        bool2 = not (str_hgnc.startswith("PIM") or str_hgnc.startswith("PIN"))
+        # the first is a protein kinase, the second and third are pseudokinases
+        bool3 = not (str_hgnc in ["PIK3R4", "PI4KAP1", "PI4KAP2"])
+
+        if bool1 and bool2 and bool3:
             return True
         else:
             return False
+
+    def is_pseudogene(self) -> bool:
+        """Return boolean if a pseudogene.
+
+        Returns
+        -------
+        bool
+            Whether or not is a pseudogene
+        """
+        from mkt.schema.utils import rgetattr
+
+        for attr, str_attr in [
+            ("uniprot.header", "putative"),
+            ("klifs.full_name", "pseudogene"),
+        ]:
+            val = rgetattr(self, attr)
+            if val is not None and str_attr in val.lower():
+                return True
+
+        return False
