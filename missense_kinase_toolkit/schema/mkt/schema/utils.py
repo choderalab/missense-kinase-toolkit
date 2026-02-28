@@ -65,3 +65,30 @@ def random_uuid():
     import uuid
 
     return uuid.UUID(bytes=bytes(random.getrandbits(8) for _ in range(16)), version=4)
+
+
+def adjudicate_kinase_group(str_kinase: str, bool_lipid: bool = True) -> str | None:
+    """Adjudicates the kinase group for a given kinase.
+
+    Parameters
+    ----------
+    str_kinase : str
+        The name of the kinase (e.g., "PIK3CA").
+    bool_lipid : bool, optional
+        Flag to indicate if lipid kinases should be classified as "Lipid" group, by default True.
+
+    Returns
+    -------
+    str | None
+        The adjudicated kinase group (e.g., "Lipid", "TK", "CMGC"), or None if the kinase is not found.
+    """
+    from mkt.schema.io_utils import deserialize_kinase_dict
+
+    DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE", bool_verbose=False)
+
+    if str_kinase not in DICT_KINASE:
+        return None
+    kinase = DICT_KINASE[str_kinase]
+    if kinase.is_lipid_kinase() and bool_lipid:
+        return "Lipid"
+    return kinase.adjudicate_group()

@@ -3,6 +3,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from mkt.schema.io_utils import deserialize_kinase_dict
 
 logger = logging.getLogger(__name__)
 
@@ -451,3 +452,27 @@ def add_one_hot_encoding_to_dataframe(
         df_out = df_base
 
     return df_out
+
+
+def load_kinase_object(str_in: str):
+    """Load a kinase object from the kinase dictionary based on the given gene name.
+
+    Parameters
+    ----------
+    str_in : str
+        Gene name of the kinase to load.
+
+    Returns
+    -------
+    KinaseInfo
+        KinaseInfo object corresponding to the given gene name.
+
+    Raises
+    ------
+    ValueError
+        If the given gene name is not found in the kinase dictionary.
+    """
+    DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE")
+    if str_in not in DICT_KINASE:
+        raise ValueError(f"Kinase {str_in} not found in DICT_KINASE.")
+    return DICT_KINASE[str_in]

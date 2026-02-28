@@ -9,7 +9,6 @@ from Bio import Align
 from bravado.client import SwaggerClient
 from mkt.databases import klifs, properties
 from mkt.databases.api_schema import APIKeySwaggerClient
-from mkt.databases.colors import DICT_KINASE_GROUP_COLORS
 from mkt.databases.config import get_cbioportal_instance, maybe_get_cbioportal_token
 from mkt.databases.io_utils import (
     parse_iterabc2dataframe,
@@ -17,6 +16,7 @@ from mkt.databases.io_utils import (
     save_dataframe_to_csv,
 )
 from mkt.databases.utils import add_one_hot_encoding_to_dataframe
+from mkt.schema.constants import DICT_KINASE_GROUP_COLORS
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -332,10 +332,10 @@ class Mutations(StudyData):
 
         """
         try:
-            # TODO: add incremental error handling beyond missing study
-            muts = self._cbioportal.Mutations.getMutationsInMolecularProfileBySampleListIdUsingGET(
+            # use POST endpoint since GET now requires entrezGeneId
+            muts = self._cbioportal.Mutations.fetchMutationsInMolecularProfileUsingPOST(
                 molecularProfileId=f"{self.study_id}_mutations",
-                sampleListId=f"{self.study_id}_all",
+                mutationFilter={"sampleListId": f"{self.study_id}_all"},
                 projection="DETAILED",
             ).result()
         except Exception as e:

@@ -1,5 +1,5 @@
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from itertools import chain
 from typing import Any
 
@@ -182,27 +182,67 @@ DICT_VIZ_OPACITY = {
 }
 """dict[str, float]: Opacity for the py3Dmol viewer."""
 
+DICT_VIZ_STYLE = {
+    "None": "cartoon",
+    "lowlight": "cartoon",
+}
+"""dict[str, str]: Default styles for py3Dmol viewer."""
 
-@dataclass
-class StructureVisualizerGenerator(StructureVisualizer):
-    """Class to generate structure visualizations for kinase structures."""
+DICT_VIZ_COLOR = {
+    "None": "spectrum",
+    "lowlight": "gray",
+}
+"""dict[str, str]: Default colors for py3Dmol viewer."""
 
-    dict_opacity: dict[str, float] = field(default_factory=lambda: DICT_VIZ_OPACITY)
-    """Opacity for the py3Dmol viewer."""
-    bool_show: bool = False
-    """Whether to show the structure in the viewer or return HTML."""
-    dict_dims: dict[str, int] = field(
-        default_factory=lambda: {"width": 600, "height": 600}
-    )
-    """Dimensions for the py3Dmol viewer."""
 
-    def __post_init__(self):
-        super().__post_init__()
+class StructureVisualizerGenerator:
+    """Generate py3Dmol structure visualizations for kinase structures.
+
+    Uses composition with StructureVisualizer to access structure data and
+    highlight information from the config.
+
+    Parameters
+    ----------
+    viz : StructureVisualizer
+        StructureVisualizer instance with loaded structure and config.
+    dict_opacity : dict[str, float], optional
+        Opacity settings for different highlight types.
+    bool_show : bool, optional
+        Whether to show the structure in the viewer or return HTML.
+    dict_dims : dict[str, int], optional
+        Dimensions for the py3Dmol viewer.
+
+    Attributes
+    ----------
+    viz : StructureVisualizer
+        The underlying structure visualizer.
+    html : str | None
+        HTML representation of the py3Dmol viewer.
+    """
+
+    def __init__(
+        self,
+        viz: StructureVisualizer,
+        dict_opacity: dict[str, float] | None = None,
+        bool_show: bool = False,
+        dict_dims: dict[str, int] | None = None,
+    ):
+        self.viz = viz
+        self.dict_opacity = dict_opacity or DICT_VIZ_OPACITY.copy()
+        self.bool_show = bool_show
+        self.dict_dims = dict_dims or {"width": 600, "height": 600}
+
+        # Generate visualization on init
         self.html = self.visualize_structure()
+
+    @property
+    def str_attr(self) -> str:
+        """Get the attribute being highlighted from the config."""
+        return self.viz.config.str_attr
 
     def _return_style_dict(
         self,
-        str_key,
+        str_key: str,
         str_color: str | None = None,
         str_style: str | None = None,
         float_opacity: float | None = None,
@@ -224,14 +264,13 @@ class StructureVisualizerGenerator(StructureVisualizer):
         -------
         dict[str, Any]
             Style dictionary for the given key.
-
         """
         if str_color is None:
-            str_color = self.dict_color[str_key]
+            str_color = DICT_VIZ_COLOR.get(str_key, "gray")
         if str_style is None:
-            str_style = self.dict_style[str_key]
+            str_style = DICT_VIZ_STYLE.get(str_key, "cartoon")
         if float_opacity is None:
-            float_opacity = self.dict_opacity[str_key]
+            float_opacity = self.dict_opacity.get(str_key, 1.0)
 
         dict_style = {
             str_style: {
@@ -247,40 +286,59 @@ class StructureVisualizerGenerator(StructureVisualizer):
 
         Returns
         -------
-        str
-            HTML representation of the py3Dmol viewer or None if self.bool_show=True.
-
+        str | None
+            HTML representation of the py3Dmol viewer or None if bool_show=True.
         """
         view = py3Dmol.view(**self.dict_dims)
 
-        view.addModel(self.pdb_text, "pdb")
+        view.addModel(self.viz.pdb_text, "pdb")
 
-        if self.str_attr is None:
-            str_attr = str(self.str_attr)
-            view.setStyle(self._return_style_dict(str_attr))
-        else:
-            list_highlight, dict_color, dict_style = self._generate_highlight_idx()
-            for i in self.residues:
-                res_no = i.get_id()[1]
-                # set lowlight background
-                view.setStyle(
+        # Get highlight data from the visualizer (which gets it from config)
+        list_highlight, dict_color, dict_style, dict_label = (
+            self.viz.get_highlight_data()
+        )
+
+        # Get opacity for this attribute type
+        attr_opacity = self.dict_opacity.get(self.str_attr, 1.0)
+
+        for residue in self.viz.residues:
+            res_no = residue.get_id()[1]
+            # set lowlight background
+            view.setStyle(
+                {"resi": str(res_no)},
+                self._return_style_dict("lowlight"),
+            )
+            # add highlights for the selected attribute
+            if res_no in list_highlight:
+                view.addStyle(
                     {"resi": str(res_no)},
-                    self._return_style_dict("lowlight"),
+                    self._return_style_dict(
+                        str_key=self.str_attr,
+                        str_color=dict_color[res_no],
+                        str_style=dict_style[res_no],
+                        float_opacity=attr_opacity,
+                    ),
                 )
-                # add highlights for the selected attribute
-                if res_no in list_highlight:
-                    # KLIFS uses KLIFS pocket colors
-                    view.addStyle(
-                        {"resi": str(res_no)},
-                        self._return_style_dict(
-                            str_key=self.str_attr,
-                            str_color=dict_color[res_no],
-                            str_style=dict_style[res_no],
-                        ),
+                # add label if present
+                label_text = dict_label.get(res_no)
+                if label_text is not None:
+                    # addLabel signature: (text, options, sel)
+                    # options = label styling, sel = atom selector for positioning
+                    view.addLabel(
+                        label_text,
+                        {
+                            "backgroundColor": "white",
+                            "fontColor": "black",
+                            "fontSize": 10,
+                            "showBackground": True,
+                            "backgroundOpacity": 0.7,
+                        },
+                        {"resi": str(res_no), "atom": "CA"},
                     )
 
         view.zoomTo()
         if self.bool_show:
             view.show()
+            return None
         else:
             return view._make_html()

@@ -13,34 +13,9 @@ from mkt.databases.datasets.process import (
     generate_stacked_barchart_df,
 )
 from mkt.databases.log_config import configure_logging
-from mkt.schema.io_utils import get_repo_root
+from mkt.schema.io_utils import get_repo_root, save_plot
 
 logger = logging.getLogger(__name__)
-
-
-def save_plot(output_path: str, plot_type: str = "plot") -> None:
-    """Save the current matplotlib figure in both SVG and PNG formats.
-
-    Parameters:
-    -----------
-    output_path : str
-        Path to save the plot files. If it ends with .png, will be converted to .svg.
-        Otherwise assumed to be .svg already.
-    plot_type : str
-        Description of the plot type for logging purposes (e.g., "Dynamic range plot")
-    """
-    # ensure we have .svg as the base extension
-    svg_path = (
-        output_path.replace(".png", ".svg")
-        if output_path.endswith(".png")
-        else output_path
-    )
-    png_path = svg_path.replace(".svg", ".png")
-
-    plt.savefig(svg_path, format="svg", bbox_inches="tight", dpi=300)
-    plt.savefig(png_path, format="png", bbox_inches="tight", dpi=300)
-    plt.close()
-    logger.info(f"{plot_type} saved to {svg_path} and {png_path}")
 
 
 def get_family_colors():

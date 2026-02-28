@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 from mkt.databases.klifs import DICT_POCKET_KLIFS_REGIONS
+from mkt.databases.utils import load_kinase_object
 from mkt.schema.kinase_schema import KinaseInfo
 from mkt.schema.utils import rgetattr
 from pydantic.dataclasses import dataclass
@@ -47,8 +48,8 @@ DICT_ALIGNMENT = {
 class SequenceAlignment:
     """Class to generate sequence alignments for kinase sequences."""
 
-    obj_kinase: KinaseInfo
-    """KinaseInfo object from which to extract sequences."""
+    str_kinase: str
+    """Gene name of the kinase for which to generate the sequence alignment."""
     dict_color: dict[str, str]
     """Color dictionary for sequence viewer."""
     bool_mismatch: bool = True
@@ -57,8 +58,12 @@ class SequenceAlignment:
     """If True, shade KLIFS pocket residues using KLIFS pocket colors, by default True."""
     bool_reverse: bool = True
     """Whether or not to reverse order of inputs"""
+    obj_kinase: KinaseInfo | None = None
+    """KinaseInfo object from which to extract sequences (loaded from str_kinase if not provided)."""
 
     def __post_init__(self):
+        if self.obj_kinase is None:
+            self.obj_kinase = load_kinase_object(self.str_kinase)
         # generate and save alignments
         self.dict_align = self.generate_alignments()
         self.list_sequences = [v["str_seq"] for v in self.dict_align.values()]

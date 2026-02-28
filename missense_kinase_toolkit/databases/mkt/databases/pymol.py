@@ -43,16 +43,15 @@ DICT_COLOR_MAP = {
 }
 """dict: Fallback color name to hex mapping (CSS3 standard colors)."""
 
-LIST_KLIFS_STICK_POSITIONS_CONSERVED = [3, 5, 8, 68, 80]
-"""list[int]: Zero-index positions in KLIFS sequence for stick representation."""
-
 
 @dataclass
 class PyMOLGenerator:
     """Generate PDB file with embedded color/style info and standalone PyMOL script."""
 
     viz: StructureVisualizer
-    """StructureVisualizer object with loaded structure and annotations."""
+    """StructureVisualizer object with loaded structure and config."""
+    str_attr: str
+    """Granular attribute name of the structure visualization (e.g., KLIFS_IMPORTANT not just KLIFS)."""
     gene_name: str = field(init=False)
     """Gene name of the structure."""
     dict_filenames: dict = field(default_factory=lambda: dict)
@@ -61,9 +60,10 @@ class PyMOLGenerator:
     def __post_init__(self):
         self.gene_name = self.viz.obj_kinase.hgnc_name
 
-        # rename files with gene name
+        # rename files with gene name and attribute
+        # str_attr = self.viz.config.str_attr
         self.dict_filenames = {
-            k: f"{self.gene_name}_{self.viz.str_attr.lower()}_{v}"
+            k: f"{self.gene_name}_{self.str_attr.lower()}_{v}"
             for k, v in DICT_FILENAME_DEFAULTS.items()
         }
 
@@ -91,53 +91,43 @@ class PyMOLGenerator:
             # fallback to custom mapping if webcolors doesn't recognize it
             return DICT_COLOR_MAP.get(color.lower(), "#808080")
 
-    def _get_color_and_style_mapping(self) -> tuple[dict[int, str], list[int]]:
-        """Generate residue-to-color mapping and stick residue list.
+    def _get_color_and_style_mapping(
+        self,
+    ) -> tuple[dict[int, str], list[int], dict[int, str]]:
+        """Generate residue-to-color mapping, stick residue list, and label mapping.
 
-        Uses the existing _generate_highlight_idx() logic from StructureVisualizer
-        to ensure consistency between py3Dmol and PyMOL visualizations.
+        Uses the get_highlight_data() from StructureVisualizer which gets
+        data from the config.
 
         Returns
         -------
-        tuple[dict[int, str], list[int]]
-            Dictionary mapping residue numbers to hex colors and list of stick residue numbers.
+        tuple[dict[int, str], list[int], dict[int, str]]
+            Dictionary mapping residue numbers to hex colors,
+            list of stick residue numbers,
+            dictionary mapping residue numbers to label strings.
         """
         color_mapping = {}
         stick_residues = []
+        label_mapping = {}
 
-        # Early return if no attribute specified
-        if not self.viz.str_attr:
-            return color_mapping, stick_residues
-
-        # Check if attribute exists (except for Mutations which uses dict_mutations)
-        if self.viz.str_attr != "Mutations":
-            if self.viz.str_attr not in self.viz.dict_align:
-                return color_mapping, stick_residues
-
-        # use the existing _generate_highlight_idx from StructureVisualizer
-        # this method returns:
-        # - list_highlight: 1-based indices in alignment space (0-indexed alignment + 1)
-        # - dict_color: mapping from alignment index to color (name or hex)
-        # - dict_style: mapping from alignment index to style ("stick" or "cartoon")
-        list_highlight_align, dict_color_align, dict_style_align = (
-            self.viz._generate_highlight_idx()
+        # Get highlight data from visualizer (which gets it from config)
+        # list_highlight is already 1-indexed
+        list_highlight_align, dict_color_align, dict_style_align, dict_label_align = (
+            self.viz.get_highlight_data()
         )
 
-        # convert alignment indices to PDB residue numbers
-        # the PDB is renumbered sequentially (1, 2, 3, ...) counting only non-gap CIF residues
-        # we need to map from alignment index (0-based + 1) to PDB residue count
+        # Access dict_align through the config's seq_align
+        str_seq_cif = self.viz.config.seq_align.dict_align["KinCore, CIF"]["str_seq"]
 
-        str_seq_cif = self.viz.dict_align["KinCore, CIF"]["str_seq"]
-
-        # create mapping: alignment_index (0-based) -> PDB_residue_number (1-based sequential)
+        # create mapping: alignment_index (1-based) -> PDB_residue_number (1-based sequential)
+        # The PDB is renumbered sequentially (1, 2, 3, ...) counting only non-gap CIF residues
         alignment_to_pdb = {}
         pdb_residue_count = 0
         for align_idx, cif_res in enumerate(str_seq_cif):
             if cif_res != "-":
                 pdb_residue_count += 1
-                alignment_to_pdb[align_idx + 1] = (
-                    pdb_residue_count  # +1 because _generate_highlight_idx returns 1-based
-                )
+                # list_highlight from config is already 1-indexed
+                alignment_to_pdb[align_idx + 1] = pdb_residue_count
 
         # convert colors to hex and identify stick residues
         for align_idx in list_highlight_align:
@@ -152,7 +142,12 @@ class PyMOLGenerator:
                 if style == "stick":
                     stick_residues.append(pdb_res_num)
 
-        return color_mapping, stick_residues
+                # Check for label
+                label = dict_label_align.get(align_idx)
+                if label is not None:
+                    label_mapping[pdb_res_num] = label
+
+        return color_mapping, stick_residues, label_mapping
 
     def return_filepath_dict(self, output_dir: str) -> dict[str, str]:
         """Return dictionary of filenames with paths.
@@ -182,7 +177,9 @@ class PyMOLGenerator:
         str
             Path to the saved annotated PDB file.
         """
-        color_mapping, stick_residues = self._get_color_and_style_mapping()
+        color_mapping, stick_residues, label_mapping = (
+            self._get_color_and_style_mapping()
+        )
 
         pdb_lines = self.viz.pdb_text.split("\n")
 
@@ -198,10 +195,10 @@ class PyMOLGenerator:
                     continue
 
         original_residues.sort()
-        print(
-            f"DEBUG: Found original residue range: {min(original_residues)} to {max(original_residues)}"
+        logger.debug(
+            f"Found original residue range: {min(original_residues)} to {max(original_residues)}"
         )
-        print(f"DEBUG: Total residues: {len(original_residues)}")
+        logger.debug(f"Total residues: {len(original_residues)}")
 
         # create mapping from original residue numbers to sequential (1, 2, 3...)
         old_to_new = {old_res: idx + 1 for idx, old_res in enumerate(original_residues)}
@@ -222,10 +219,11 @@ class PyMOLGenerator:
                 renumbered_lines.append(line)
 
         # prepare annotated lines with header
+        # str_attr = self.viz.config.str_attr
         annotated_lines = [
             "REMARK   1 GENERATED FOR PYMOL VISUALIZATION",
             f"REMARK   1 GENE: {self.gene_name}",
-            f"REMARK   1 ATTRIBUTE: {self.viz.str_attr or 'None'}",
+            f"REMARK   1 ATTRIBUTE: {self.str_attr}",
             f"REMARK   1 RESIDUES RENUMBERED: {min(original_residues)}-{max(original_residues)} -> 1-{len(original_residues)}",
             "REMARK   1 ",
             "REMARK   2 COLOR MAPPING (residue_number:hex_color):",
@@ -254,6 +252,15 @@ class PyMOLGenerator:
 
         annotated_lines.append("REMARK   4 ")
 
+        # add label mapping as remarks
+        annotated_lines.append("REMARK   5 RESIDUE LABELS:")
+        if label_mapping:
+            for res_num, label_text in label_mapping.items():
+                annotated_lines.append(f"REMARK   5 {res_num}:{label_text}")
+        else:
+            annotated_lines.append("REMARK   5 NONE")
+        annotated_lines.append("REMARK   5 ")
+
         # add renumbered PDB content
         annotated_lines.extend(renumbered_lines)
 
@@ -261,8 +268,8 @@ class PyMOLGenerator:
         with open(output_path, "w") as f:
             f.write("\n".join(annotated_lines))
 
-        print(f"DEBUG: Color mapping contains {len(color_mapping)} residues")
-        print(f"DEBUG: Stick residues: {stick_residues}")
+        logger.debug(f"Color mapping contains {len(color_mapping)} residues")
+        logger.debug(f"Stick residues: {stick_residues}")
 
         return output_path
 
@@ -282,6 +289,10 @@ class PyMOLGenerator:
             Path to the saved PyMOL script.
         """
 
+        # derive object name from PDB filename stem (e.g., "ABL1_group_structure")
+        pdb_basename = os.path.basename(pdb_path)
+        obj_name = os.path.splitext(pdb_basename)[0]
+
         script_lines = [
             f"# PyMOL script for {self.gene_name} structure visualization",
             "from pymol import cmd",
@@ -290,6 +301,7 @@ class PyMOLGenerator:
             "def parse_pdb_remarks(pdb_file):",
             "    color_mapping = {}",
             "    stick_residues = []",
+            "    label_mapping = {}",
             "    with open(pdb_file, 'r') as f:",
             "        for line in f:",
             "            if line.startswith('REMARK   2 ') and ':' in line:",
@@ -305,23 +317,37 @@ class PyMOLGenerator:
             "                        stick_residues = [int(x.strip()) for x in residues_str.split(',')]",
             "                    except ValueError:",
             "                        pass",
-            "    return color_mapping, stick_residues",
+            "            elif line.startswith('REMARK   5 ') and ':' in line:",
+            "                content = line.replace('REMARK   5 ', '').strip()",
+            "                if content and content != 'NONE' and content != 'RESIDUE LABELS:':",
+            "                    # format: res_num:label_text",
+            "                    parts = content.split(':', 1)",
+            "                    if len(parts) == 2:",
+            "                        try:",
+            "                            res_num = int(parts[0])",
+            "                            label_mapping[res_num] = parts[1]",
+            "                        except ValueError:",
+            "                            pass",
+            "    return color_mapping, stick_residues, label_mapping",
             "",
             "# Load structure",
-            f"cmd.load('{os.path.basename(pdb_path)}', '{self.gene_name}')",
+            f"cmd.load('{pdb_basename}', '{obj_name}')",
             "",
             "# Parse color data from PDB remarks",
-            f"color_mapping, stick_residues = parse_pdb_remarks('{os.path.basename(pdb_path)}')",
+            f"color_mapping, stick_residues, label_mapping = parse_pdb_remarks('{pdb_basename}')",
             "",
             "print(f'Found {len(color_mapping)} residues with colors')",
             "print(f'Found {len(stick_residues)} stick residues')",
+            "print(f'Found {len(label_mapping)} residue labels')",
             "print('Color mapping (first 5 residues):', dict(list(color_mapping.items())[:5]))  # Show first 5",
             "print('Stick residues:', stick_residues)",
+            "print('Labels:', label_mapping)",
             "",
-            "# Set initial cartoon style with gray background",
-            f"cmd.show_as('cartoon', '{self.gene_name}')",
-            f"cmd.color('gray70', '{self.gene_name}')",
-            f"cmd.set('cartoon_transparency', 0.5, '{self.gene_name}')",
+            "# Set initial cartoon style with light gray background",
+            f"cmd.show_as('cartoon', '{obj_name}')",
+            "cmd.set_color('lightgray', [0.827, 0.827, 0.827])",  # #D3D3D3
+            f"cmd.color('lightgray', '{obj_name}')",
+            f"cmd.set('cartoon_transparency', 0.5, '{obj_name}')",
             "",
             "# Apply custom colors",
             "color_counter = 0",
@@ -336,24 +362,123 @@ class PyMOLGenerator:
             "    ",
             "    # Define and apply color",
             "    cmd.set_color(color_name, [r, g, b])",
-            "    cmd.color(color_name, f'resi {res_num}')",
-            "    cmd.set('cartoon_transparency', 0.0, f'resi {res_num}')",
+            f"    cmd.color(color_name, f'{obj_name} and resi {{res_num}}')",
+            f"    cmd.set('cartoon_transparency', 0.0, f'{obj_name} and resi {{res_num}}')",
             "    ",
             "    color_counter += 1",
             "",
             "# Apply stick representation",
             "if stick_residues:",
             "    stick_selection = '+'.join(map(str, stick_residues))",
-            "    cmd.show('sticks', f'resi {stick_selection}')",
-            "    cmd.set('stick_radius', 0.3, f'resi {stick_selection}')",
+            f"    cmd.show('sticks', f'{obj_name} and resi {{stick_selection}}')",
+            f"    cmd.set('stick_radius', 0.3, f'{obj_name} and resi {{stick_selection}}')",
             "    print(f'Applied sticks to: resi {stick_selection}')",
+            "",
+            "# Disable fog/depth cueing so back-plane labels render crisp",
+            "cmd.set('depth_cue', 0)",
+            "cmd.set('fog', 0)",
+            "cmd.set('ray_trace_fog', 0)",
+            "",
+            "# Apply residue labels using pseudoatoms offset from CA with connector lines",
+            "if label_mapping:",
+            "    import numpy as np",
+            "    label_offset = 20.0  # angstroms offset from CA",
+            "    min_label_dist = 6.0  # minimum distance between labels (angstroms)",
+            "    cmd.set('label_color', 'black')",
+            "    cmd.set('label_size', 14)",
+            "    cmd.set('label_font_id', 7)",  # bold font
+            "    cmd.set('label_connector', 1)",
+            "    cmd.set('label_connector_color', 'black')",
+            "    cmd.set('label_connector_width', 1.5)",
+            "",
+            "    # pass 1: compute initial label positions",
+            f"    com = np.array(cmd.centerofmass('{obj_name}'))",
+            "    label_data = {}  # res_num -> (ca_pos, offset_pos, label_text)",
+            "    for res_num, label_text in label_mapping.items():",
+            f"        ca_sel = f'{obj_name} and resi {{res_num}} and name CA'",
+            "        coords = cmd.get_coords(ca_sel)",
+            "        if coords is not None and len(coords) > 0:",
+            "            ca_pos = np.array(coords[0])",
+            "            direction = ca_pos - com",
+            "            norm = np.linalg.norm(direction)",
+            "            if norm > 0:",
+            "                direction = direction / norm",
+            "            else:",
+            "                direction = np.array([1.0, 1.0, 0.0]) / np.sqrt(2)",
+            "            offset_pos = ca_pos + direction * label_offset",
+            "            label_data[res_num] = (ca_pos, offset_pos, label_text)",
+            "",
+            "    # pass 2: resolve label collisions by iterative repulsion",
+            "    res_nums = list(label_data.keys())",
+            "    positions = {rn: label_data[rn][1].copy() for rn in res_nums}",
+            "    for _ in range(50):  # iterate to convergence",
+            "        moved = False",
+            "        for i, rn_i in enumerate(res_nums):",
+            "            for rn_j in res_nums[i+1:]:",
+            "                diff = positions[rn_i] - positions[rn_j]",
+            "                dist = np.linalg.norm(diff)",
+            "                if dist < min_label_dist and dist > 0:",
+            "                    # push apart along their difference vector",
+            "                    push = (min_label_dist - dist) / 2.0 * (diff / dist)",
+            "                    positions[rn_i] += push",
+            "                    positions[rn_j] -= push",
+            "                    moved = True",
+            "        if not moved:",
+            "            break",
+            "",
+            "    # pass 3: place labels and connector lines",
+            "    for res_num in res_nums:",
+            "        ca_pos, _, label_text = label_data[res_num]",
+            "        offset_pos = positions[res_num]",
+            f"        ca_sel = f'{obj_name} and resi {{res_num}} and name CA'",
+            "        # create pseudoatom at offset position for label",
+            "        pseudo_name = f'label_pt_{res_num}'",
+            "        cmd.pseudoatom(pseudo_name, pos=offset_pos.tolist())",
+            "        cmd.label(pseudo_name, f'\"{label_text}\"')",
+            "        # create a second pseudoatom for the line endpoint, stopping short of label",
+            "        direction_to_label = offset_pos - ca_pos",
+            "        label_dist = np.linalg.norm(direction_to_label)",
+            "        if label_dist > 3.0:",
+            "            line_end_pos = ca_pos + direction_to_label * ((label_dist - 3.0) / label_dist)",
+            "        else:",
+            "            line_end_pos = ca_pos",
+            "        line_end_name = f'label_end_{res_num}'",
+            "        cmd.pseudoatom(line_end_name, pos=line_end_pos.tolist())",
+            "        # draw connector line from CA to shortened endpoint",
+            "        line_name = f'label_line_{res_num}'",
+            "        cmd.distance(line_name, ca_sel, line_end_name)",
+            "        cmd.hide('labels', line_name)  # hide distance measurement",
+            "        cmd.set('dash_gap', 0.0, line_name)  # solid line",
+            "        cmd.set('dash_color', 'black', line_name)",
+            "        cmd.set('dash_width', 1.5, line_name)",
+            "        cmd.hide('nonbonded', pseudo_name)  # hide pseudoatom marker",
+            "        cmd.hide('nonbonded', line_end_name)  # hide line endpoint marker",
+            "        # group label objects for easy toggling",
+            "        cmd.group('labels', f'{pseudo_name} {line_end_name} {line_name}')",
+            "    print(f'Applied labels to {len(label_mapping)} residues')",
             "",
             "# Final setup",
             "cmd.bg_color('white')",
             "",
+            "# Define save_image function for publication-quality rendering",
+            f"def save_image(output_filename='{self.gene_name}_{self.str_attr.lower()}_structure.png'):",
+            '    """Render and save a publication-quality PNG image."""',
+            "    cmd.set('ray_trace_mode', 0)",  # standard ray tracing (no black outlines)
+            "    cmd.set('ray_trace_gain', 0.0)",  # no edge darkening
+            "    cmd.set('ray_shadows', 0)",  # no shadows to preserve colormap fidelity
+            "    cmd.set('specular', 0)",  # no specular highlights
+            "    cmd.set('ambient', 0.6)",  # higher ambient light to reduce directional shading
+            "    cmd.set('direct', 0.4)",  # lower direct light to flatten shading
+            "    cmd.set('cartoon_sampling', 14)",
+            "    cmd.set('antialias', 2)",
+            "    cmd.png(output_filename, dpi=300, ray=1)",
+            "    import os",
+            "    print(f'Rendered publication-quality image to: {os.path.abspath(output_filename)}')",
+            "",
+            "cmd.extend('save_image', save_image)",
+            "",
             "print('Structure styling complete!')",
-            "print('To save as EPS: set ray_trace_mode, 3; png filename.eps, ray=1')",
-            "print('To save as PNG: set ray_trace_mode, 1; png filename.png, ray=1, dpi=300')",
+            "print('Adjust the view as needed, then run: save_image()')",
         ]
 
         script_content = "\n".join(script_lines)
@@ -365,8 +490,7 @@ class PyMOLGenerator:
         return output_path
 
     def generate_instructions(self, output_dir: str) -> str:
-        """
-        Generate instructions for manual PyMOL execution.
+        """Generate instructions for manual PyMOL execution.
 
         Parameters
         ----------
@@ -380,6 +504,7 @@ class PyMOLGenerator:
         """
         dict_filepaths = self.return_filepath_dict(output_dir)
 
+        png_filename = f"{self.gene_name}_{self.str_attr.lower()}_structure.png"
         instructions = f"""\
         Files generated:
         PDB: {dict_filepaths["file_pdb"]}
@@ -388,14 +513,15 @@ class PyMOLGenerator:
 
         {"=" * 60}
         MANUAL PYMOL INSTRUCTIONS:
-        1. 1. Open PyMOL GUI or command line
+        1. Open PyMOL GUI or command line
         2. Change to the output directory
            cd {os.path.abspath(output_dir)}
         3. Run the script:
            run {os.path.basename(dict_filepaths["file_script"])}
-        4. To save as high-res PNG:
-           set ray_trace_mode, <mode>
-           png <your_filename>.png, ray=1, dpi=300
+        4. Adjust the view so all labels are visible
+        5. Save as high-res PNG:
+           save_image()
+           (saves to {png_filename} by default, or pass a custom filename: save_image("custom.png"))
         """
         instructions = textwrap.dedent(instructions)
 
@@ -405,8 +531,7 @@ class PyMOLGenerator:
         return instructions
 
     def save_pymol_files(self, output_dir: str):
-        """
-        Generate PDB file and PyMOL script for manual PyMOL execution.
+        """Generate PDB file and PyMOL script for manual PyMOL execution.
 
         Parameters
         ----------

@@ -71,6 +71,8 @@ def generate_kinase_info_plot(
     ax_intersections.set_ylabel("log₁₀(Intersection Size)")
     # remove gridlines from intersection plot
     ax_intersections.grid(False)
+    # remove y-axis spine
+    ax_intersections.spines["left"].set_visible(False)
     # get the bar heights from the plot patches and apply colors
     for patch in ax_intersections.patches:
         height = patch.get_height()
