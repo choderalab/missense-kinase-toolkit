@@ -543,9 +543,9 @@ class TestDatabases:
         assert temp_obj._protvar_score[0]["amPathogenicity"] == 0.4217
         assert temp_obj._protvar_score[0]["amClass"] == "AMBIGUOUS"
 
-    @pytest.mark.skip(
-        reason="NCBI API currently returning 404 error as of 3/26 - see if this improves."
-    )
+    # @pytest.mark.skip(
+    #     reason="NCBI API currently returning 404 error as of 3/26 - see if this improves."
+    # )
     def test_ncbi(self):
         import requests
         from mkt.databases import ncbi

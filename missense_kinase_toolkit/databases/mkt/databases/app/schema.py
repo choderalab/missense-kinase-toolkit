@@ -5,7 +5,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from mkt.databases.app.sequences import SequenceAlignment
-from mkt.databases.colors import DICT_QUARTILE_HEATMAP_COLORMAP, percentile_colormap
+from mkt.databases.colors import (
+    DICT_QUARTILE_HEATMAP_COLORMAP_PLASMA,
+    percentile_colormap,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -632,7 +635,7 @@ class MutationsConfig(StructureConfig):
             list_style = ["cartoon" for _ in list_idx]
 
         list_color = percentile_colormap(
-            list_norm_count, DICT_QUARTILE_HEATMAP_COLORMAP
+            list_norm_count, DICT_QUARTILE_HEATMAP_COLORMAP_PLASMA
         )
 
         return list_style, list_color

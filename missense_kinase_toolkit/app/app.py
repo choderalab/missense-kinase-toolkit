@@ -150,8 +150,9 @@ class Dashboard:
             )
 
             obj_alignment = SequenceAlignmentGenerator(
-                obj_temp,
-                DICT_COLORS[dashboard_state.palette]["DICT_COLORS"],
+                str_kinase=dashboard_state.kinase,
+                dict_color=DICT_COLORS[dashboard_state.palette]["DICT_COLORS"],
+                obj_kinase=obj_temp,
             )
 
             streamlit_bokeh(
