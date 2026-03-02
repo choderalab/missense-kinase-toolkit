@@ -472,7 +472,7 @@ def load_kinase_object(str_in: str):
     ValueError
         If the given gene name is not found in the kinase dictionary.
     """
-    DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE")
-    if str_in not in DICT_KINASE:
+    dict_kinase = deserialize_kinase_dict(list_ids=[str_in])
+    if str_in not in dict_kinase:
         raise ValueError(f"Kinase {str_in} not found in DICT_KINASE.")
-    return DICT_KINASE[str_in]
+    return dict_kinase[str_in]
