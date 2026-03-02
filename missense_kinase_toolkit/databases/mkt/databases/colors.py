@@ -451,6 +451,30 @@ Maps quartile bin number (1-indexed) to (start_hex, end_hex) tuples for use with
 """
 
 
+DICT_QUARTILE_HEATMAP_COLORMAP_PLASMA = {
+    1: ("#0D0887", "#7E03A8"),  # deep indigo → violet
+    2: ("#7E03A8", "#CC4778"),  # violet → magenta/rose
+    3: ("#CC4778", "#F89441"),  # magenta/rose → orange
+    4: ("#F89441", "#F0F921"),  # orange → bright yellow
+}
+"""dict[int, tuple[str, str]]: Plasma-inspired colormap for mutation visualization.
+Colorblind-accessible. Travels purple→magenta→orange→yellow, avoiding green entirely.
+Maps quartile bin number (1-indexed) to (start_hex, end_hex) tuples for use with ``percentile_colormap``.
+"""
+
+
+DICT_QUARTILE_HEATMAP_COLORMAP_VIRIDIS = {
+    1: ("#440154", "#31688E"),  # dark purple → teal-blue
+    2: ("#31688E", "#35B779"),  # teal-blue → green
+    3: ("#35B779", "#90D743"),  # green → lime
+    4: ("#90D743", "#FDE725"),  # lime → yellow
+}
+"""dict[int, tuple[str, str]]: Viridis-inspired colormap for mutation visualization.
+Perceptually uniform with good luminance gradient. Note: passes through green tones.
+Maps quartile bin number (1-indexed) to (start_hex, end_hex) tuples for use with ``percentile_colormap``.
+"""
+
+
 def generate_colormap_legend(
     color_stops: dict[int, tuple[str, str]],
     output_path: str | None = None,
