@@ -168,6 +168,43 @@ class StructureConfig(ABC):
 
 
 @dataclass(kw_only=True)
+class DefaultConfig(StructureConfig):
+    """Default configuration rendering the whole protein as cartoon with spectrum coloring."""
+
+    str_attr: str = "KinCore, CIF"
+    """Attribute to highlight in the structure (default: 'KinCore, CIF')."""
+
+    def generate_list_idx(self) -> list[int]:
+        """Generate list of 0-indexed positions for all CIF residues.
+
+        Returns
+        -------
+        list[int]
+            List of 0-indexed positions for all CIF residues.
+        """
+        return self.return_list_cif_idx()
+
+    def generate_style_color_lists(
+        self, list_idx: list[int]
+    ) -> tuple[list[str], list[str]]:
+        """Generate style and color lists for default spectrum coloring.
+
+        Parameters
+        ----------
+        list_idx : list[int]
+            List of 0-indexed residue positions.
+
+        Returns
+        -------
+        tuple[list[str], list[str]]
+            All residues get 'cartoon' style and 'spectrum' color.
+        """
+        list_style = ["cartoon" for _ in list_idx]
+        list_color = ["spectrum" for _ in list_idx]
+        return list_style, list_color
+
+
+@dataclass(kw_only=True)
 class PhosphositesConfig(StructureConfig):
     """Configuration for highlighting phosphosites in PyMOL."""
 
@@ -743,6 +780,7 @@ class MutationsKLIFSConfig(MutationsConfig):
 class StandardConfigChoice(str, Enum):
     """String-based enum for CLI choices (dataclass not hashable)."""
 
+    DEFAULT = "DEFAULT"
     PHOSPHOSITES = "PHOSPHOSITES"
     KLIFS_CONSERVED = "KLIFS_CONSERVED"
     KLIFS_IMPORTANT = "KLIFS_IMPORTANT"
@@ -755,6 +793,7 @@ class StandardConfigChoice(str, Enum):
 class StandardConfig(Enum):
     """Enumeration of standard configurations for PyMOL visualization."""
 
+    DEFAULT = DefaultConfig
     PHOSPHOSITES = PhosphositesConfig
     KLIFS_CONSERVED = KLIFSConservedConfig
     KLIFS_IMPORTANT = KLIFSImportantConfig

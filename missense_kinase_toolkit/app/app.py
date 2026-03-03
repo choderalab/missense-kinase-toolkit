@@ -4,6 +4,12 @@ from dataclasses import dataclass
 import streamlit as st
 from constants import DICT_RESOURCE_URLS, LIST_CAPTIONS, LIST_OPTIONS
 from mkt.databases.app.properties import PropertyTables
+from mkt.databases.app.schema import (
+    DefaultConfig,
+    KLIFSImportantConfig,
+    PhosphositesConfig,
+)
+from mkt.databases.app.structures import StructureVisualizer
 from mkt.databases.colors import DICT_COLORS
 from mkt.databases.log_config import configure_logging
 from mkt.schema.io_utils import (
@@ -192,11 +198,18 @@ class Dashboard:
                         )
 
                         with plot_spot:
-                            viz = StructureVisualizerGenerator(
-                                obj_kinase=obj_temp,
-                                dict_align=obj_alignment.dict_align,
-                                str_attr=annotation,
+                            # map annotation choice to config class
+                            dict_annotation_config = {
+                                "None": DefaultConfig,
+                                "Phosphosites": PhosphositesConfig,
+                                "KLIFS": KLIFSImportantConfig,
+                            }
+
+                            config = dict_annotation_config[annotation](
+                                seq_align=obj_alignment,
                             )
+                            struct_viz = StructureVisualizer(config)
+                            viz = StructureVisualizerGenerator(struct_viz)
                             st.components.v1.html(
                                 viz.html, height=600, width=None, scrolling=False
                             )
