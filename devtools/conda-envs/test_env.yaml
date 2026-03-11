@@ -23,6 +23,9 @@ dependencies:
   - biopython
   - matplotlib
   - seaborn
+  - matplotlib-venn
+  - scipy
+  - omegaconf
   - pydantic
   - GitPython
   - importlib-resources
