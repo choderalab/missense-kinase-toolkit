@@ -7,6 +7,8 @@ via OmegaConf, following the pattern used in mkt_impact.
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import seaborn as sns
+from mkt.schema.constants import DICT_KINASE_GROUP_COLORS
 from omegaconf import OmegaConf
 
 # --- matplotlib rcParams ---
@@ -52,9 +54,6 @@ class FamilyColorConfig:
         dict
             Mapping of family names to color values.
         """
-        import seaborn as sns
-        from mkt.schema.constants import DICT_KINASE_GROUP_COLORS
-
         if self.use_kinase_group_colors:
             # start from the curated constant dict
             base = dict(DICT_KINASE_GROUP_COLORS)
@@ -66,7 +65,8 @@ class FamilyColorConfig:
         # seaborn palette mode
         families = self.families
         if families is None:
-            families = list(DICT_KINASE_GROUP_COLORS.keys())
+            # fall back to curated dict when no explicit families given
+            return dict(DICT_KINASE_GROUP_COLORS)
 
         colors = sns.color_palette(self.palette_name, n_colors=self.palette_n_colors)
 
