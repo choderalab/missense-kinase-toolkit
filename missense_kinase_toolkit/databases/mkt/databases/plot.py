@@ -7,10 +7,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from bokeh.layouts import gridplot
-from bokeh.models import ColumnDataSource, Range1d
-from bokeh.models.glyphs import Rect, Text
-from bokeh.plotting import figure
 from mkt.databases.plot_config import (
     ColKinaseColorConfig,
     DynamicRangePlotConfig,
@@ -24,7 +20,6 @@ from mkt.databases.plot_config import (
 )
 from mkt.schema.io_utils import save_plot
 from pydantic.dataclasses import dataclass
-from upsetplot import from_contents, plot
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +65,8 @@ def generate_kinase_info_plot(
     }
 
     # generate figure
+    from upsetplot import from_contents, plot
+
     contents = from_contents(dict_contents)
     fig = plt.figure(figsize=(8, 4))
     upset_plot = plot(
@@ -209,6 +206,8 @@ class SequenceAlignment:
         return list_colors
 
     def create_coldatasource(self):
+        from bokeh.models import ColumnDataSource
+
         x = np.arange(1, self.N + 1)
         y = np.arange(0, self.S, 1)
         # creates a 2D grid of coords from the 1D arrays
@@ -232,6 +231,9 @@ class SequenceAlignment:
 
     def generate_top_plot(self) -> None:
         """Generate sequence alignment plot adapted from https://dmnfarrell.github.io/bioinformatics/bokeh-sequence-aligner."""
+        from bokeh.models import Range1d
+        from bokeh.models.glyphs import Rect
+        from bokeh.plotting import figure
 
         x_range = Range1d(0, self.N + 1, bounds="auto")
 
@@ -263,6 +265,8 @@ class SequenceAlignment:
 
     def generate_bottom_plot(self) -> None:
         """Generate sequence alignment plot adapted from https://dmnfarrell.github.io/bioinformatics/bokeh-sequence-aligner."""
+        from bokeh.models.glyphs import Rect, Text
+        from bokeh.plotting import figure
 
         if self.N > 100:
             viewlen = 100
@@ -318,6 +322,8 @@ class SequenceAlignment:
 
     def generate_gridplot(self) -> None:
         """Generate sequence alignment gridplot."""
+        from bokeh.layouts import gridplot
+
         if self.bool_top:
             return gridplot(
                 [[self.plot_top], [self.plot_bottom]], toolbar_location="below"
