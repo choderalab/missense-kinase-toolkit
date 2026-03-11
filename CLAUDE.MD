@@ -35,6 +35,12 @@ app (Streamlit)
 
 ## Environment Setup
 
+### Virtual Environment
+Always use the project venv for running Python commands:
+```bash
+missense_kinase_toolkit/VE/bin/python
+```
+
 ### Python Support
 Supported Python versions: 3.9-3.12
 
