@@ -193,3 +193,6 @@ $RECYCLE.BIN/
 
 # don't save images generated during analysis
 images/
+
+# plot config files (not shipped with package)
+configs/
