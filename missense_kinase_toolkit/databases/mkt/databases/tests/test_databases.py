@@ -602,3 +602,364 @@ class TestDatabases:
 
         test = open_targets.OpenTargetsDrugMoA(chembl_id="TEST")
         assert test.get_moa() is None
+
+    # ------------------------------------------------------------------
+    # plot_config tests
+    # ------------------------------------------------------------------
+
+    def test_plot_config_defaults(self):
+        """Test that all config dataclasses instantiate with expected defaults."""
+        from mkt.databases.plot_config import (
+            ColKinaseColorConfig,
+            DataSourceConfig,
+            DynamicRangePlotConfig,
+            FamilyColorConfig,
+            MatplotlibRCConfig,
+            MetricsBoxplotConfig,
+            OutputConfig,
+            PlotDatasetConfig,
+            RidgelinePlotConfig,
+            SequenceSchematicConfig,
+            StackedBarchartConfig,
+            VennDiagramConfig,
+        )
+
+        rc = MatplotlibRCConfig()
+        assert rc.svg_fonttype == "path"
+        assert rc.pdf_fonttype == 42
+        assert rc.text_usetex is False
+
+        assert FamilyColorConfig().use_kinase_group_colors is True
+        assert ColKinaseColorConfig().construct_unaligned == [242, 101, 41]
+        assert DynamicRangePlotConfig().bins == 100
+        assert RidgelinePlotConfig().overlap == 0.1
+        assert StackedBarchartConfig().figsize_height == 7
+        assert VennDiagramConfig().circle_alpha == 0.6
+        assert MetricsBoxplotConfig().box_widths == 0.6
+        assert SequenceSchematicConfig().n_show_start == 40
+        assert DataSourceConfig().davis_csv == "data/davis_data_processed.csv"
+        assert OutputConfig().bool_svg is True
+
+        # top-level aggregator
+        cfg = PlotDatasetConfig()
+        assert isinstance(cfg.matplotlib_rc, MatplotlibRCConfig)
+        assert isinstance(cfg.dynamic_range, DynamicRangePlotConfig)
+        assert isinstance(cfg.data_sources, DataSourceConfig)
+        assert cfg.output.bool_png is True
+
+    def test_family_color_config_get_colors(self):
+        """Test FamilyColorConfig.get_colors in both modes."""
+        from mkt.databases.plot_config import FamilyColorConfig
+
+        # default mode uses curated DICT_KINASE_GROUP_COLORS
+        cfg = FamilyColorConfig()
+        colors = cfg.get_colors()
+        assert isinstance(colors, dict)
+        assert len(colors) > 0
+        assert "TK" in colors
+
+        # filtered + reordered families
+        cfg2 = FamilyColorConfig(families=["TK", "Other"])
+        colors2 = cfg2.get_colors()
+        assert list(colors2.keys()) == ["TK", "Other"]
+
+        # seaborn palette mode
+        cfg3 = FamilyColorConfig(use_kinase_group_colors=False)
+        colors3 = cfg3.get_colors()
+        assert isinstance(colors3, dict)
+        assert len(colors3) > 0
+
+    def test_col_kinase_color_config_as_rgb_dict(self):
+        """Test ColKinaseColorConfig.as_rgb_dict returns 0-1 scaled RGB tuples."""
+        from mkt.databases.plot_config import ColKinaseColorConfig
+
+        cfg = ColKinaseColorConfig()
+        rgb = cfg.as_rgb_dict()
+        assert set(rgb.keys()) == {
+            "construct_unaligned",
+            "klifs_region_aligned",
+            "klifs_residues_only",
+        }
+        # values should be 0-1 scaled
+        for v in rgb.values():
+            assert len(v) == 3
+            assert all(0 <= c <= 1 for c in v)
+        # check specific default: construct_unaligned = [242, 101, 41]
+        assert abs(rgb["construct_unaligned"][0] - 242 / 255) < 1e-6
+        assert abs(rgb["construct_unaligned"][1] - 101 / 255) < 1e-6
+        assert abs(rgb["construct_unaligned"][2] - 41 / 255) < 1e-6
+
+    def test_plot_config_from_yaml(self, tmp_path):
+        """Test PlotDatasetConfig.from_yaml loads overrides and keeps defaults."""
+        from mkt.databases.plot_config import PlotDatasetConfig
+
+        yaml_content = (
+            "matplotlib_rc:\n"
+            '  svg_fonttype: "none"\n'
+            "  pdf_fonttype: 3\n"
+            "dynamic_range:\n"
+            "  bins: 50\n"
+            "  alpha: 0.5\n"
+        )
+        yaml_file = tmp_path / "test_config.yaml"
+        yaml_file.write_text(yaml_content)
+
+        cfg = PlotDatasetConfig.from_yaml(yaml_file)
+        # overridden values
+        assert cfg.matplotlib_rc.svg_fonttype == "none"
+        assert cfg.matplotlib_rc.pdf_fonttype == 3
+        assert cfg.dynamic_range.bins == 50
+        assert cfg.dynamic_range.alpha == 0.5
+        # unspecified fields keep defaults
+        assert cfg.ridgeline.overlap == 0.1
+        assert cfg.output.bool_svg is True
+
+    # ------------------------------------------------------------------
+    # plot pure-computation tests
+    # ------------------------------------------------------------------
+
+    def test_convert_percentile_functions(self):
+        """Test convert_to_percentile and convert_from_percentile round-trip."""
+        from mkt.databases.plot import convert_from_percentile, convert_to_percentile
+
+        assert convert_to_percentile(5, orig_max=10) == 50.0
+        assert convert_to_percentile(10, orig_max=10) == 100.0
+        assert convert_to_percentile(0, orig_max=10) == 0.0
+
+        assert convert_from_percentile(50, orig_max=10) == 5.0
+        assert convert_from_percentile(100, orig_max=10) == 10.0
+        assert convert_from_percentile(0, orig_max=10) == 0.0
+
+        # round-trip
+        val = 7.5
+        assert convert_from_percentile(convert_to_percentile(val)) == val
+
+    def test_generate_venn_diagram_dict(self):
+        """Test generate_venn_diagram_dict with synthetic DataFrame."""
+        import numpy as np
+        import pandas as pd
+        from mkt.databases.plot import generate_venn_diagram_dict
+
+        df = pd.DataFrame(
+            {
+                "kinase_name": ["EGFR", "ABL1", "BRAF", "CDK2"],
+                "seq_construct_unaligned": ["ACGT", np.nan, "TGCA", "AAAA"],
+                "seq_klifs_region_aligned": ["ACGT", "TTTT", np.nan, "AAAA"],
+                "seq_klifs_residues_only": [np.nan, "TTTT", "TGCA", "AAAA"],
+            }
+        )
+        result = generate_venn_diagram_dict(df)
+        assert set(result.keys()) == {
+            "Construct Unaligned",
+            "KLIFS Region Aligned",
+            "Klifs Residues Only",
+        }
+        assert set(result["Construct Unaligned"]) == {"EGFR", "BRAF", "CDK2"}
+        assert set(result["KLIFS Region Aligned"]) == {"EGFR", "ABL1", "CDK2"}
+        assert set(result["Klifs Residues Only"]) == {"ABL1", "BRAF", "CDK2"}
+
+    def test_get_klifs_position_colors(self):
+        """Test _get_klifs_position_colors returns 85 (region, color) tuples."""
+        from mkt.databases.plot import _get_klifs_position_colors
+
+        colors = _get_klifs_position_colors()
+        assert len(colors) == 85
+        assert all(isinstance(c, tuple) and len(c) == 2 for c in colors)
+        assert all(isinstance(c[0], str) and isinstance(c[1], str) for c in colors)
+
+    def test_map_aligned_to_klifs_colors(self):
+        """Test _map_aligned_to_klifs_colors with a small synthetic example."""
+        from mkt.databases.plot import _map_aligned_to_klifs_colors
+
+        # aligned: A - B C   (4 chars)
+        # klifs:   A - B     (3 chars, 2 non-gap)
+        # klifs positions: A matches pocket pos 0 (yellow), B matches pos 2 (orange)
+        # C is not in KLIFS -> gets alphabet color
+        seq_aligned = "A-BC"
+        seq_klifs_only = "A-B"
+        dict_aa_colors = {"A": "red", "B": "blue", "C": "green"}
+        klifs_pos_colors = [
+            ("I", "yellow"),
+            ("g.l", "purple"),
+            ("II", "orange"),
+        ]
+
+        colors = _map_aligned_to_klifs_colors(
+            seq_aligned, seq_klifs_only, dict_aa_colors, klifs_pos_colors
+        )
+        assert len(colors) == 4
+        assert colors[0] == "yellow"  # A matched to KLIFS pocket pos 0
+        assert colors[1] == "white"  # gap
+        assert colors[2] == "orange"  # B matched to KLIFS pocket pos 2
+        assert colors[3] == "green"  # C not in KLIFS -> alphabet color
+
+    def test_sequence_alignment_get_colors(self):
+        """Test SequenceAlignment.get_colors static method."""
+        from mkt.databases.plot import SequenceAlignment
+
+        colors = SequenceAlignment.get_colors(
+            ["A", "B", "C"],
+            {"A": "red", "B": "green", "C": "blue"},
+        )
+        assert colors == ["red", "green", "blue"]
+
+    def test_apply_matplotlib_rc(self):
+        """Test apply_matplotlib_rc sets rcParams correctly."""
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from mkt.databases.plot import apply_matplotlib_rc
+        from mkt.databases.plot_config import MatplotlibRCConfig
+
+        rc = MatplotlibRCConfig(svg_fonttype="none", pdf_fonttype=3, text_usetex=False)
+        apply_matplotlib_rc(rc)
+        assert plt.rcParams["svg.fonttype"] == "none"
+        assert plt.rcParams["pdf.fonttype"] == 3
+        assert plt.rcParams["text.usetex"] is False
+
+    # ------------------------------------------------------------------
+    # plot smoke tests (verify execution, not visual output)
+    # ------------------------------------------------------------------
+
+    def test_plot_dynamic_range_smoke(self, tmp_path):
+        """Smoke test: plot_dynamic_range runs without error on synthetic data."""
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import pandas as pd
+        from mkt.databases.plot import plot_dynamic_range
+
+        # y column = -log10(Kd) values; function applies 10^(-y)
+        df_davis = pd.DataFrame({"y": [1.0, 2.0, 3.0, 4.0, 5.0] * 20})
+        # y column = percent inhibition values
+        df_pkis2 = pd.DataFrame({"y": [10.0, 50.0, 90.0, 30.0, 70.0] * 20})
+
+        output_path = str(tmp_path / "dynamic_range")
+        plot_dynamic_range(df_davis, df_pkis2, output_path)
+        plt.close("all")
+
+        saved = list(tmp_path.glob("dynamic_range.*"))
+        assert len(saved) >= 1
+
+    def test_plot_ridgeline_smoke(self, tmp_path):
+        """Smoke test: plot_ridgeline runs without error on synthetic data."""
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+        import pandas as pd
+        from mkt.databases.plot import plot_ridgeline
+        from mkt.databases.plot_config import FamilyColorConfig
+
+        rng = np.random.default_rng(42)
+        families = ["TK", "TKL", "STE", "Other"]
+        rows = []
+        for fam in families:
+            for i in range(20):
+                rows.append(
+                    {
+                        "kinase_name": f"{fam}_{i}",
+                        "family": fam,
+                        "fraction_construct": rng.uniform(0.3, 1.0),
+                        "source": "Davis",
+                    }
+                )
+        df = pd.DataFrame(rows)
+
+        output_path = str(tmp_path / "ridgeline")
+        plot_ridgeline(df, output_path, family_cfg=FamilyColorConfig())
+        plt.close("all")
+
+        saved = list(tmp_path.glob("ridgeline.*"))
+        assert len(saved) >= 1
+
+    def test_plot_stacked_barchart_smoke(self, tmp_path):
+        """Smoke test: plot_stacked_barchart runs without error on synthetic data."""
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import pandas as pd
+        from mkt.databases.plot import plot_stacked_barchart
+        from mkt.databases.plot_config import FamilyColorConfig
+
+        df = pd.DataFrame(
+            {
+                "family": ["TK", "TK", "TKL", "TKL"],
+                "bool_uniprot2refseq": [True, False, True, False],
+                "count": [30, 10, 20, 5],
+                "source": ["Davis", "Davis", "Davis", "Davis"],
+            }
+        )
+
+        output_path = str(tmp_path / "stacked_barchart")
+        plot_stacked_barchart(df, output_path, family_cfg=FamilyColorConfig())
+        plt.close("all")
+
+        saved = list(tmp_path.glob("stacked_barchart.*"))
+        assert len(saved) >= 1
+
+    def test_plot_venn_diagram_smoke(self, tmp_path):
+        """Smoke test: plot_venn_diagram runs without error on synthetic data."""
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+        import pandas as pd
+        from mkt.databases.plot import plot_venn_diagram
+
+        df = pd.DataFrame(
+            {
+                "kinase_name": ["EGFR", "ABL1", "BRAF", "CDK2", "SRC"],
+                "seq_construct_unaligned": ["ACGT", "TTTT", np.nan, "AAAA", "CCCC"],
+                "seq_klifs_region_aligned": ["ACGT", np.nan, "TGCA", "AAAA", "CCCC"],
+                "seq_klifs_residues_only": [np.nan, "TTTT", "TGCA", "AAAA", "CCCC"],
+            }
+        )
+
+        output_path = str(tmp_path / "venn_diagram")
+        plot_venn_diagram(df, output_path, source_name="Test")
+        plt.close("all")
+
+        saved = list(tmp_path.glob("venn_diagram.*"))
+        assert len(saved) >= 1
+
+    def test_plot_metrics_boxplot_smoke(self, tmp_path):
+        """Smoke test: plot_metrics_boxplot runs without error on synthetic data."""
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+        import pandas as pd
+        from mkt.databases.plot import plot_metrics_boxplot
+
+        rng = np.random.default_rng(42)
+        rows = []
+        for col_kinase in [
+            "construct_unaligned",
+            "klifs_region_aligned",
+            "klifs_residues_only",
+        ]:
+            for fold in range(5):
+                rows.append(
+                    {
+                        "col_kinase": col_kinase,
+                        "source": "davis",
+                        "fold": fold,
+                        "avg_stable_epoch": 10,
+                        "mse": rng.normal(0.5, 0.1),
+                    }
+                )
+        df = pd.DataFrame(rows)
+
+        output_path = str(tmp_path / "boxplot")
+        plot_metrics_boxplot(df, output_path)
+        plt.close("all")
+
+        saved = list(tmp_path.glob("boxplot.*"))
+        assert len(saved) >= 1
