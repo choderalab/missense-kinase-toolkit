@@ -12,6 +12,7 @@ dependencies:
     # Testing
   - pytest
   - pytest-cov
+  - pytest-xdist
   - codecov
 
     # databases
