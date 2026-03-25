@@ -5,6 +5,7 @@ from mkt.databases.kincore import extract_pk_cif_files_as_list
 
 
 @pytest.mark.network
+@pytest.mark.xdist_group("kincore")
 class TestKinCoreHarmonization:
     def test_cif_hgnc_count_matches_cif_file_list(self, kincore_harmonized_dict):
         """Number of non-None CIF entries matches extract_pk_cif_files_as_list."""
@@ -22,6 +23,7 @@ class TestKinCoreHarmonization:
 
 
 @pytest.mark.network
+@pytest.mark.xdist_group("kincore")
 class TestKinCoreAlignment:
     def test_aligned_sequence(self, egfr_kincore_alignment):
         assert (

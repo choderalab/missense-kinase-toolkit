@@ -69,6 +69,7 @@ class TestKLIFSKinaseInfo:
 
 
 @pytest.mark.network
+@pytest.mark.xdist_group("kincore")
 class TestKLIFSPocketAlignment:
     def test_klifs_substr_actual(self, egfr_klifs_pocket):
         assert egfr_klifs_pocket.list_klifs_substr_actual == [

@@ -55,7 +55,7 @@ jobs:
           pytest \
             -v \
             -n 2 \
-            --dist loadfile \
+            --dist loadgroup \
             --cov-report=xml \
             --color=yes  \
             --cov=mkt.databases \
