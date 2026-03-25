@@ -12,6 +12,8 @@ dependencies:
     # Testing
   - pytest
   - pytest-cov
+  - pytest-xdist
+  - filelock
   - codecov
 
     # databases
