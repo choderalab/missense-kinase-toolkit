@@ -54,7 +54,7 @@ jobs:
           set -e
           pytest \
             -v \
-            -n auto \
+            -n 2 \
             --dist loadfile \
             --cov-report=xml \
             --color=yes  \
