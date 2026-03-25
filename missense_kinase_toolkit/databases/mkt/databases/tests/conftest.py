@@ -1,5 +1,6 @@
 import pytest
 import requests
+from filelock import FileLock
 
 
 def pytest_configure(config):
@@ -41,11 +42,20 @@ def egfr_uniprot():
 
 
 @pytest.fixture(scope="session")
-def kincore_harmonized_dict():
-    """Build harmonized KinCore FASTA/CIF dict once."""
+def kincore_harmonized_dict(tmp_path_factory):
+    """Build harmonized KinCore FASTA/CIF dict once.
+
+    Uses a file lock so that parallel xdist workers do not
+    concurrently extract the KinCore tar.gz to the same directory.
+    """
     from mkt.databases.kincore import harmonize_kincore_fasta_cif
 
-    return harmonize_kincore_fasta_cif()
+    # coordinate between xdist workers via a shared lock file
+    root_tmp = tmp_path_factory.getbasetemp().parent
+    lock_file = root_tmp / "kincore_extract.lock"
+
+    with FileLock(str(lock_file)):
+        return harmonize_kincore_fasta_cif()
 
 
 @pytest.fixture(scope="session")
