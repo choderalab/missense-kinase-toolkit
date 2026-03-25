@@ -15,9 +15,14 @@ class TestKinCoreHarmonization:
             for v in kincore_harmonized_dict.values()
         ]
         list_dict_cif_hgnc = list(chain(*list_dict_cif_hgnc))
-        # count .cif members from the archive index (no extraction)
+        # count .cif members from the archive index (no extraction);
+        # exclude macOS resource fork entries (._*.cif)
         with tarfile.open(PATH_ORIG_CIF, "r:gz") as tar:
-            n_cif_files = sum(1 for m in tar.getmembers() if m.name.endswith(".cif"))
+            n_cif_files = sum(
+                1
+                for m in tar.getmembers()
+                if m.name.endswith(".cif") and "/._" not in m.name
+            )
         assert len(list_dict_cif_hgnc) == n_cif_files
 
     def test_egfr_has_single_entry(self, kincore_harmonized_dict):
