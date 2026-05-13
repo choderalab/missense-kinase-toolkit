@@ -1,6 +1,7 @@
 import json
 import logging
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -9,6 +10,7 @@ from mkt.databases.colors import (
     DICT_QUARTILE_HEATMAP_COLORMAP_PLASMA,
     percentile_colormap,
 )
+from mkt.databases.klifs import DICT_POCKET_KLIFS_REGIONS
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,12 @@ class StructureConfig(ABC):
     """List of styles for the residues to be highlighted, generated in __post_init__."""
     list_label: list[str | None] = field(init=False)
     """List of labels for the residues to be highlighted (None for no label)."""
+    label_offset: float = 20.0
+    """Angstroms offset from CA for label pseudoatom placement."""
+    label_min_dist: float = 6.0
+    """Minimum distance (angstroms) between labels for collision avoidance."""
+    label_spring_strength: float = 0.0
+    """Spring force pulling labels back toward ideal position (0 = no spring)."""
 
     def __post_init__(self):
         list_idx, list_color, list_style = self.return_list_intersect_color_style()
@@ -308,8 +316,8 @@ class KLIFSConfig(StructureConfig):
 
 
 @dataclass(kw_only=True)
-class KLIFSConservedConfig(KLIFSConfig):
-    """Configuration for highlighting KLIFS conserved residues in PyMOL."""
+class KLIFSPathogenicConfig(KLIFSConfig):
+    """Configuration for highlighting KLIFS pathogenic residues in PyMOL."""
 
     list_stick_positions: list[int] = field(
         default_factory=lambda: [
@@ -320,7 +328,7 @@ class KLIFSConservedConfig(KLIFSConfig):
             80,  # xDFG:81 (D in xDFG)
         ]
     )
-    """List of 0-indexed positions in KLIFS sequence for stick representation (conserved positions)."""
+    """List of 0-indexed positions in KLIFS sequence for stick representation (pathogenic positions)."""
 
 
 @dataclass(kw_only=True)
@@ -343,6 +351,138 @@ class KLIFSImportantConfig(KLIFSConfig):
         ]
     )
     """List of 0-indexed positions in KLIFS sequence for stick representation (important positions)."""
+
+
+@dataclass(kw_only=True)
+class KLIFSAdaptiveConfig(KLIFSConfig):
+    """Configuration for highlighting adaptive KLIFS residues in PyMOL."""
+
+    list_stick_positions: list[int] = field(
+        default_factory=lambda: [
+            36,
+            44,
+            51,
+            83,
+        ]
+    )
+    """List of 0-indexed positions in KLIFS sequence for stick representation (adaptive positions)."""
+
+
+@dataclass(kw_only=True)
+class KLIFSRegionLabelConfig(KLIFSConfig):
+    """Configuration for KLIFS residues with region name labels and all-ribbon representation.
+
+    Uses KLIFS color scheme with cartoon-only styling (no sticks) and places
+    a label at the midpoint of each KLIFS region (e.g., 'g.l', 'αC', 'hinge').
+    Labels use the collision-avoidance offset logic from the PyMOL renderer.
+    """
+
+    list_stick_positions: list[int] = field(default_factory=list)
+    """No stick positions — all ribbon representation."""
+    label_offset: float = 12.0
+    """Closer offset for region labels (angstroms)."""
+    label_min_dist: float = 4.5
+    """Tighter minimum distance between region labels (angstroms)."""
+    label_spring_strength: float = 0.3
+    """Spring force pulling labels back toward ideal position."""
+
+    def generate_style_color_lists(
+        self, list_idx: list[int]
+    ) -> tuple[list[str], list[str]]:
+        """Generate all-cartoon style with KLIFS pocket colors.
+
+        Parameters
+        ----------
+        list_idx : list[int]
+            List of 0-indexed residue positions.
+
+        Returns
+        -------
+        tuple[list[str], list[str]]
+            All residues get 'cartoon' style, colors from KLIFS pocket colors.
+        """
+        list_style = ["cartoon" for _ in list_idx]
+        list_color = [
+            self.seq_align.dict_align[self.str_attr]["list_colors"][i] for i in list_idx
+        ]
+        return list_style, list_color
+
+    def _build_align_to_klifs_mapping(self) -> dict[int, int]:
+        """Build mapping from alignment position to KLIFS pocket position (0-indexed).
+
+        Accounts for gaps in the pocket sequence using the same logic as
+        ``_index_stick_region``.
+
+        Returns
+        -------
+        dict[int, int]
+            Mapping from alignment position (0-indexed) to KLIFS pocket position (0-84).
+        """
+        pocket_seq = self.seq_align.obj_kinase.klifs.pocket_seq
+        list_attr_idx = self._generate_list_idx_from_dict_align_with_attr()
+        if list_attr_idx is None:
+            return {}
+
+        # gap-adjusted index -> original KLIFS pocket position (0-indexed, 0-84)
+        adjusted_to_klifs = {}
+        gap_count = 0
+        for idx, res in enumerate(pocket_seq):
+            if res == "-":
+                gap_count += 1
+            else:
+                adjusted_to_klifs[idx - gap_count] = idx
+
+        # alignment position -> KLIFS pocket position
+        align_to_klifs = {}
+        for adj_idx, klifs_pos in adjusted_to_klifs.items():
+            if adj_idx < len(list_attr_idx):
+                align_to_klifs[list_attr_idx[adj_idx]] = klifs_pos
+
+        return align_to_klifs
+
+    def generate_labels(self, list_idx: list[int]) -> list[str | None]:
+        """Generate region name labels at the midpoint of each KLIFS region.
+
+        For each KLIFS region defined in ``DICT_POCKET_KLIFS_REGIONS``, places
+        a label at the alignment position closest to the region midpoint.
+
+        Parameters
+        ----------
+        list_idx : list[int]
+            List of 0-indexed residue positions.
+
+        Returns
+        -------
+        list[str | None]
+            Region name at midpoint positions, None for all others.
+        """
+        align_to_klifs = self._build_align_to_klifs_mapping()
+        if not align_to_klifs:
+            return [None] * len(list_idx)
+
+        # build KLIFS pocket position (0-indexed) -> region name
+        klifs_to_region = {}
+        for region_name, info in DICT_POCKET_KLIFS_REGIONS.items():
+            for pos in range(info["start"] - 1, info["end"]):  # convert to 0-indexed
+                klifs_to_region[pos] = region_name
+
+        # collect alignment positions per region
+        set_list_idx = set(list_idx)
+        region_align_positions = defaultdict(list)
+        for align_pos in list_idx:
+            klifs_pos = align_to_klifs.get(align_pos)
+            if klifs_pos is not None:
+                region = klifs_to_region.get(klifs_pos)
+                if region and align_pos in set_list_idx:
+                    region_align_positions[region].append(align_pos)
+
+        # pick midpoint of each region's alignment positions for label placement
+        label_positions = {}
+        for region, positions in region_align_positions.items():
+            mid_idx = len(positions) // 2
+            label_positions[positions[mid_idx]] = region
+
+        return [label_positions.get(idx) for idx in list_idx]
 
 
 @dataclass(kw_only=True)
@@ -782,8 +922,10 @@ class StandardConfigChoice(str, Enum):
 
     DEFAULT = "DEFAULT"
     PHOSPHOSITES = "PHOSPHOSITES"
-    KLIFS_CONSERVED = "KLIFS_CONSERVED"
+    KLIFS_PATHOGENIC = "KLIFS_PATHOGENIC"
     KLIFS_IMPORTANT = "KLIFS_IMPORTANT"
+    KLIFS_ADAPTIVE = "KLIFS_ADAPTIVE"
+    KLIFS_REGION_LABEL = "KLIFS_REGION_LABEL"
     MUTATIONS_DEFAULT = "MUTATIONS_DEFAULT"
     MUTATIONS_GROUP = "MUTATIONS_GROUP"
     MUTATIONS_KLIFS = "MUTATIONS_KLIFS"
@@ -795,8 +937,10 @@ class StandardConfig(Enum):
 
     DEFAULT = DefaultConfig
     PHOSPHOSITES = PhosphositesConfig
-    KLIFS_CONSERVED = KLIFSConservedConfig
+    KLIFS_PATHOGENIC = KLIFSPathogenicConfig
     KLIFS_IMPORTANT = KLIFSImportantConfig
+    KLIFS_ADAPTIVE = KLIFSAdaptiveConfig
+    KLIFS_REGION_LABEL = KLIFSRegionLabelConfig
     MUTATIONS_DEFAULT = MutationsDefaultConfig
     MUTATIONS_GROUP = MutationsGroupConfig
     MUTATIONS_KLIFS = MutationsKLIFSConfig
