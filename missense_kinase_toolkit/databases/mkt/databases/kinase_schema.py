@@ -23,7 +23,7 @@ from mkt.schema.kinase_schema import (
     Pfam,
     UniProt,
 )
-from mkt.schema.utils import rgetattr, rsetattr
+from mkt.schema.utils import TQDM_BAR_FORMAT, rgetattr, rsetattr
 from pydantic import ValidationError, model_validator
 from tqdm import tqdm
 from typing_extensions import Self
@@ -724,7 +724,11 @@ def generate_dict_obj_from_api_or_scraper() -> dict[str, pd.DataFrame]:
 
     # collect HGNC, UniProt, and Pfam data from API
     dict_hgnc, dict_uniprot, dict_pfam = {}, {}, {}
-    for uniprot_id in tqdm(set_uniprot, desc="Querying UniProt, HGNC, and Pfam..."):
+    for uniprot_id in tqdm(
+        set_uniprot,
+        desc="Querying UniProt, HGNC, and Pfam...",
+        bar_format=TQDM_BAR_FORMAT,
+    ):
         # HGNC
         obj_temp = hgnc.HGNC(uniprot_id)
         obj_temp.maybe_get_symbol_from_hgnc_search(
