@@ -20,6 +20,7 @@ classifiers = [
 
 dependencies = [
     "mkt.schema",
+    "nf-rnaseq @ git+https://github.com/tansey-lab/nf-rnaseq",
     "pydantic>=2.7.4",
     "tqdm>=4.66.3",
     "pandas>=2,<3",
