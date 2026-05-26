@@ -139,9 +139,14 @@ class OncoKBProteinChange(OncoKB):
 
             json_data = self._json
             gene_exists = json_data["geneExist"]
-            variant_exists = json_data["variantExist"]
+            # The "variantExist" value is False if that specific alteration is not annotated (e.g., truncated)
+            # variant_exists = json_data["variantExist"]
+            variant_summary = json_data["variantSummary"]
+            variant_reviewed = (
+                "has not specifically been reviewed" not in variant_summary
+            )
 
-            if gene_exists and variant_exists:
+            if gene_exists and variant_reviewed:
                 self.annotate_highest_level()
                 self.get_treatments()
                 self.oncogenic = json_data.get("oncogenic", None)
@@ -152,11 +157,11 @@ class OncoKBProteinChange(OncoKB):
                     )
             elif self.verbose:
                 if gene_exists:
-                    msg = f"Alteration {self.alteration} does not exist for gene {self.gene_name} in OncoKB."
-                if variant_exists:
+                    msg = f"Alteration {self.alteration} has not been reviewed for gene {self.gene_name} in OncoKB."
+                elif variant_reviewed:
                     msg = f"Gene {self.gene_name} does not exist in OncoKB for alteration {self.alteration}."
                 else:
-                    msg = f"Gene {self.gene_name} and alteration {self.alteration} does not exist in OncoKB."
+                    msg = f"Gene {self.gene_name} does not exist and alteration {self.alteration} has not been reviewed in OncoKB."
                 logger.error(msg)
 
     def update_url(self):
