@@ -67,6 +67,7 @@ class ProtvarScore(RESTAPIClient):
             self.url_query,
             headers=ast.literal_eval(self.header),
         )
+        self._stamp_from_response(res)
 
         if res.ok:
             self._protvar_score = json.loads(res.text)

@@ -112,6 +112,7 @@ class ProteinNCBI(RESTAPIClient):
             self.url_query,
             headers=ast.literal_eval(self.headers),
         )
+        self._stamp_from_response(res)
         try:
             if res.ok:
                 zip_ref = ZipFile(BytesIO(res.content))

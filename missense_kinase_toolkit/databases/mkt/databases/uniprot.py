@@ -74,6 +74,7 @@ class UniProtFASTA(UniProt, RESTAPIClient):
 
         """
         res = requests_wrapper.get_cached_session().get(self.url_fasta)
+        self._stamp_from_response(res)
         if res.ok:
             str_fasta = res.text
             if bool_seq:
@@ -152,6 +153,7 @@ class UniProtJSON(UniProt, RESTAPIClient):
             self.url_json,
             headers=ast.literal_eval(self.headers),
         )
+        self._stamp_from_response(res)
         if res.ok:
             json = res.json()
         else:

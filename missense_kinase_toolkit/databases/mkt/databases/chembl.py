@@ -41,6 +41,7 @@ class ChEMBL(RESTAPIClient):
             res = get_cached_session().get(self.url_query, params=self.params)
         else:
             res = get_cached_session().get(self.url_query)
+        self._stamp_from_response(res)
         if res.ok:
             self._json = res.json()
 

@@ -45,6 +45,7 @@ class OncoKB(APIKeyRESTAPIClient, ABC):
         res = requests_wrapper.get_cached_session().get(
             self.url_query, headers=self.header
         )
+        self._stamp_from_response(res)
         if res.ok:
             self._json = res.json()
         else:
