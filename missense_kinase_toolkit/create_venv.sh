@@ -99,7 +99,9 @@ else
 fi
 
 # apply editable overrides (post-install so local changes are reflected
-# immediately; schema first since databases depends on it)
+# immediately; schema first since databases depends on it). Installs with
+# [dev,test] extras so pytest and linters are available in the venv.
+EXTRAS="[dev,test]"
 override_editable() {
   local pkg_path="$1"
   local pkg_name="$2"
@@ -107,11 +109,11 @@ override_editable() {
     echo "skipping $pkg_name: '$pkg_path' is not a directory"
     return
   fi
-  echo "installing $pkg_name editable from $pkg_path"
+  echo "installing $pkg_name editable from $pkg_path with extras $EXTRAS"
   if [ "$USE_UV" = "1" ]; then
-    uv pip install -e "$pkg_path"
+    uv pip install -e "${pkg_path}${EXTRAS}"
   else
-    python3 -m pip install -e "$pkg_path"
+    python3 -m pip install -e "${pkg_path}${EXTRAS}"
   fi
 }
 
