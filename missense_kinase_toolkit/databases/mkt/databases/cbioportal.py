@@ -64,6 +64,7 @@ class cBioPortal(APIKeySwaggerClient):
                 "validate_swagger_spec": False,
             },
         )
+        self._stamp_now()
 
         return cbioportal_api
 
@@ -197,6 +198,7 @@ class cBioPortalQuery(cBioPortal):
                 f"in cBioPortal instance {self.instance}"
             )
         else:
+            self._stamp_now()
             self._df = self.convert_api_query_to_dataframe()
             if self._df is None:
                 logger.error(
