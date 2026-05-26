@@ -42,6 +42,7 @@ class AlphaFoldPrediction(RESTAPIClient):
             url,
             headers=ast.literal_eval(self.headers),
         )
+        self._stamp_from_response(res)
 
         if res.ok:
             results = res.json()
@@ -102,6 +103,7 @@ class AlphaFoldStructure(AlphaFoldPrediction):
             return
 
         res = requests_wrapper.get_cached_session().get(cif_url)
+        self._stamp_from_response(res)
         if res.ok:
             self._cif = res.text
         else:
