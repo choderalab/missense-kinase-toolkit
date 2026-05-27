@@ -5,6 +5,7 @@ import tarfile
 import git
 import pandas as pd
 from mkt.databases.config import OUTPUT_DIR_VAR
+from mkt.schema.utils import TQDM_BAR_FORMAT
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -157,7 +158,10 @@ def parse_iterabc2dataframe(
 
     dict_dir = {}
     for attr in tqdm(
-        set_dir, desc="Parsing attributes from ABC...", disable=not verbose
+        set_dir,
+        desc="Parsing attributes from ABC...",
+        disable=not verbose,
+        bar_format=TQDM_BAR_FORMAT,
     ):
         if str_prefix:
             attr_prefix = f"{str_prefix}_{attr}"

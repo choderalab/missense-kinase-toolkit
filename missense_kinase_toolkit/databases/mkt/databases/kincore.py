@@ -18,6 +18,7 @@ from mkt.databases.utils import (
 )
 from mkt.schema.io_utils import extract_tarfiles, get_repo_root, untar_files_in_memory
 from mkt.schema.kinase_schema import KinCore, KinCoreCIF, KinCoreFASTA
+from mkt.schema.utils import TQDM_BAR_FORMAT
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -261,7 +262,11 @@ def extract_pk_cif_files_as_list() -> list[KinCoreCIF]:
     list_file = glob.glob(os.path.join(path_data, "*", "*.cif"))
 
     list_out = []
-    for file in tqdm(list_file, desc="Extracting and processing CIF files..."):
+    for file in tqdm(
+        list_file,
+        desc="Extracting and processing CIF files...",
+        bar_format=TQDM_BAR_FORMAT,
+    ):
         # use the filename to extract metadata as dict
         filename = os.path.basename(file)
         if filename == "TYR_LMTK2_38.37_tea2MSA_AF2tholog_model1.cif":
