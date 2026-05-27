@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from datasets import Dataset
+from mkt.schema.utils import TQDM_BAR_FORMAT
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 from transformers import AutoTokenizer
@@ -104,7 +105,9 @@ class FineTuneDataset(ABC):
 
         dict_dataset = {}
 
-        for fold_idx in tqdm(range(self.k_folds), desc="Creating CV folds..."):
+        for fold_idx in tqdm(
+            range(self.k_folds), desc="Creating CV folds...", bar_format=TQDM_BAR_FORMAT
+        ):
             if self.fold_idx is not None and fold_idx != self.fold_idx:
                 logger.info(f"Skipping fold {fold_idx + 1}...")
                 continue

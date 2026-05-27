@@ -172,7 +172,7 @@ pytest -v --cov-report=xml --color=yes --cov=mkt.schema missense_kinase_toolkit/
 pytest -v --cov-report=xml --color=yes --cov=mkt.databases missense_kinase_toolkit/databases/mkt/databases/tests/
 ```
 
-Note: `test_databases.py` includes live API tests (cBioPortal, HGNC, UniProt, ChEMBL, etc.) that require network access.
+Note: Test suite includes live API tests (cBioPortal, HGNC, UniProt, ChEMBL, etc.) that require network access.
 
 ## CI/CD
 

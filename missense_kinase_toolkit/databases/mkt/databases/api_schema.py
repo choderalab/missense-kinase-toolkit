@@ -1,6 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 import requests
 from bravado.client import SwaggerClient
@@ -14,6 +15,11 @@ logger = logging.getLogger(__name__)
 class APIClient:
     """Base class for API clients."""
 
+    query_datetime: datetime | None = field(default=None, init=False)
+    """UTC datetime the underlying network query was made (cache creation time if served from cache)."""
+    from_cache: bool | None = field(default=None, init=False)
+    """Whether the most recent response was served from requests-cache."""
+
     @staticmethod
     def check_response(res: requests.Response) -> None:
         """Check the response status code for errors."""
@@ -21,6 +27,35 @@ class APIClient:
             res.raise_for_status()
         except requests.exceptions.HTTPError as e:
             logger.error("Error at %s", "division", exc_info=e)
+
+    def _stamp_from_response(self, res: requests.Response) -> None:
+        """Record query datetime + cache provenance from a requests-cache response.
+
+        Parameters:
+        -----------
+        res : requests.Response
+            Response object from a requests-cache CachedSession; falls back to current
+            UTC time if the response lacks requests-cache metadata.
+        """
+        created_at = getattr(res, "created_at", None)
+        if created_at is not None:
+            # normalize to tz-aware UTC (older requests-cache versions return tz-naive)
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            self.query_datetime = created_at
+            self.from_cache = bool(getattr(res, "from_cache", False))
+        else:
+            self.query_datetime = datetime.now(timezone.utc)
+            self.from_cache = False
+
+    def _stamp_now(self) -> None:
+        """Record current UTC datetime; cache provenance unknown.
+
+        For clients that bypass requests-cache (e.g., bravado SwaggerClient), this
+        records when the query ran but cannot determine if a cached layer was hit.
+        """
+        self.query_datetime = datetime.now(timezone.utc)
+        self.from_cache = None
 
 
 class SwaggerAPIClient(APIClient, ABC):
@@ -158,4 +193,5 @@ class GraphQLClient(APIClient):
             },
         )
         res.raise_for_status()
+        self._stamp_from_response(res)
         return res.json()

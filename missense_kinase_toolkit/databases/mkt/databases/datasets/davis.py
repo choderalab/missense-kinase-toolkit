@@ -4,11 +4,12 @@ import numpy as np
 import pandas as pd
 from mkt.databases.chembl import ChEMBLMolecule, return_chembl_id
 from mkt.databases.datasets.process import DatasetConfig, ProcessDataset
+from mkt.schema.utils import TQDM_BAR_FORMAT
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
-tqdm.pandas()
+tqdm.pandas(bar_format=TQDM_BAR_FORMAT)
 
 
 DICT_ID2CHEMBL = {
@@ -110,7 +111,11 @@ class DavisDataset(DavisConfig, ProcessDataset):
         dict_chembl_id = {
             drug: {"source": None, "ids": []} for drug in list_davis_drugs
         }
-        for drug in tqdm(list_davis_drugs, desc="Querying drugs in ChEMBL"):
+        for drug in tqdm(
+            list_davis_drugs,
+            desc="Querying drugs in ChEMBL",
+            bar_format=TQDM_BAR_FORMAT,
+        ):
             drug_rev = drug.split(" (")[0]
             chembl_id, source = return_chembl_id(drug_rev)
             dict_chembl_id[drug]["source"] = source
@@ -121,7 +126,11 @@ class DavisDataset(DavisConfig, ProcessDataset):
         # query for ChEMBL ChEMBLMolecule objects
         list_chembl_molec = [
             ChEMBLMolecule(id=v)
-            for v in tqdm(dict_chembl_id_rev.values(), desc="Querying ChEBMLMolecule")
+            for v in tqdm(
+                dict_chembl_id_rev.values(),
+                desc="Querying ChEBMLMolecule",
+                bar_format=TQDM_BAR_FORMAT,
+            )
         ]
         dict_chembl_molecule = {
             k: {"chembl_id": v, "molecule": mol}

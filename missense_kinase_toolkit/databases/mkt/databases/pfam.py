@@ -37,6 +37,7 @@ class Pfam(RESTAPIClient):
 
         header = {"Accept": "application/json"}
         res = requests_wrapper.get_cached_session().get(url, headers=header)
+        self._stamp_from_response(res)
 
         if res.ok:
             if len(res.text) == 0:

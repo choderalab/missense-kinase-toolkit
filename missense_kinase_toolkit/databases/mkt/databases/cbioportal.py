@@ -17,6 +17,7 @@ from mkt.databases.io_utils import (
 )
 from mkt.databases.utils import add_one_hot_encoding_to_dataframe
 from mkt.schema.constants import DICT_KINASE_GROUP_COLORS
+from mkt.schema.utils import TQDM_BAR_FORMAT
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ class cBioPortal(APIKeySwaggerClient):
                 "validate_swagger_spec": False,
             },
         )
+        self._stamp_now()
 
         return cbioportal_api
 
@@ -196,6 +198,7 @@ class cBioPortalQuery(cBioPortal):
                 f"in cBioPortal instance {self.instance}"
             )
         else:
+            self._stamp_now()
             self._df = self.convert_api_query_to_dataframe()
             if self._df is None:
                 logger.error(
@@ -453,7 +456,11 @@ class KinaseMissenseMutations(Mutations):
         dict_hgnc2uniprot = dict.fromkeys(set(list_hgnc))
 
         list_err = []
-        for hgnc_name in tqdm(dict_hgnc2uniprot.keys(), desc="Querying HGNC..."):
+        for hgnc_name in tqdm(
+            dict_hgnc2uniprot.keys(),
+            desc="Querying HGNC...",
+            bar_format=TQDM_BAR_FORMAT,
+        ):
             temp = hgnc.HGNC(input_symbol_or_id=hgnc_name)
             try:
                 uniprot_id = temp.maybe_get_info_from_hgnc_fetch(
