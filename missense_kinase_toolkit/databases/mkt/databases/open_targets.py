@@ -70,7 +70,16 @@ class OpenTargetsDrugMoA(OpenTargets):
             logger.warning("No drug found for ChEMBL ID: %s", self.chembl_id)
             return None
         else:
-            list_rows = self.response["data"]["drug"]["mechanismsOfAction"]["rows"]
-            list_moa = [[i["approvedSymbol"] for i in j["targets"]] for j in list_rows]
-            set_moa = set(chain.from_iterable(list_moa))
-            return set_moa
+            try:
+                list_rows = self.response["data"]["drug"]["mechanismsOfAction"]["rows"]
+                list_moa = [
+                    [i["approvedSymbol"] for i in j["targets"]] for j in list_rows
+                ]
+                set_moa = set(chain.from_iterable(list_moa))
+                return set_moa
+            except KeyError:
+                logger.warning(
+                    "No mechanism of action information found for drug with ChEMBL ID: %s",
+                    self.chembl_id,
+                )
+                return None
