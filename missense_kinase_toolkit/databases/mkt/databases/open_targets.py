@@ -77,9 +77,9 @@ class OpenTargetsDrugMoA(OpenTargets):
                 ]
                 set_moa = set(chain.from_iterable(list_moa))
                 return set_moa
-            except KeyError:
+            except Exception as e:
                 logger.warning(
-                    "No mechanism of action information found for drug with ChEMBL ID: %s",
-                    self.chembl_id,
+                    "Error occurred while fetching mechanism of action information "
+                    f"for drug with ChEMBL ID {self.chembl_id}: {e}"
                 )
                 return None
