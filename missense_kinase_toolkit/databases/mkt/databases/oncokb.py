@@ -9,6 +9,54 @@ from mkt.databases.config import maybe_get_oncokb_token
 logger = logging.getLogger(__name__)
 
 
+DICT_ONCOKB_PREFIXES = {
+    "Resistance": "LEVEL_R",
+    "Diagnostic_Implication": "LEVEL_Dx",
+    "Prognostic_Implication": "LEVEL_Px",
+    "FDA": "LEVEL_Fda",
+    "Sensitive": "LEVEL_",  # this needs to be last because all levels start with "LEVEL_"
+}
+"""Mapping of OncoKB level prefixes to their corresponding keys in the highest level dictionary."""
+
+
+def adjudicate_prefix(str_in: str) -> str | None:
+    """Adjudicate the prefix for a given level string.
+
+    Parameters
+    ----------
+    str_in : str
+        String containing the level information (e.g., "LEVEL_1_SENSITIVE")
+
+    Returns
+    -------
+    str | None
+        Prefix of the level string (e.g., "Sensitive") if found, otherwise None
+
+    """
+    for key, prefix in DICT_ONCOKB_PREFIXES.items():
+        if str_in.startswith(prefix):
+            return key
+    logger.error(f"Could not adjudicate prefix for string: {str_in}")
+    return None
+
+
+def get_oncokb_levels() -> dict[str, str] | None:
+    """Query the OncoKB API for the current levels of evidence.
+
+    Returns
+    -------
+    dict[str, str] | None
+        Mapping of level string (e.g. "LEVEL_1") to its description, or None if
+        the levels could not be retrieved from the API.
+
+    """
+    info = OncoKBInfo()
+    if not info.has_json() or "levels" not in info._json:
+        logger.error("Could not retrieve levels of evidence from the OncoKB API.")
+        return None
+    return {i["levelOfEvidence"]: i["description"] for i in info._json["levels"]}
+
+
 @dataclass
 class OncoKB(APIKeyRESTAPIClient, ABC):
     """OncoKB API client."""
