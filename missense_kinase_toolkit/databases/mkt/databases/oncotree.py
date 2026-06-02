@@ -165,3 +165,7 @@ class OncoTree(BaseModel):
     def df(self) -> pd.DataFrame:
         """Cleaned OncoTree DataFrame populated at instantiation."""
         return self._df
+
+    def return_df_tissue_drop(self) -> pd.DataFrame:
+        """Return the OncoTree DataFrame with the tissue-level rows dropped."""
+        return self._df[self._df["depth"] > 1].reset_index(drop=True)
