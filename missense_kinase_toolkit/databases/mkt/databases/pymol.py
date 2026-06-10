@@ -363,7 +363,7 @@ class PyMOLGenerator:
             "    # Define and apply color",
             "    cmd.set_color(color_name, [r, g, b])",
             f"    cmd.color(color_name, f'{obj_name} and resi {{res_num}}')",
-            f"    cmd.set('cartoon_transparency', 0.0, f'{obj_name} and resi {{res_num}}')",
+            f"    cmd.set('cartoon_transparency', {self.viz.config.highlight_cartoon_transparency}, f'{obj_name} and resi {{res_num}}')",
             "    ",
             "    color_counter += 1",
             "",
