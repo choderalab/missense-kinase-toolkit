@@ -7,7 +7,10 @@ from typing import Annotated, Optional
 import typer
 from mkt.databases.app.schema import StandardConfig, StandardConfigChoice
 from mkt.databases.app.sequences import SequenceAlignment
-from mkt.databases.app.utils import create_structure_visualizer
+from mkt.databases.app.utils import (
+    create_structure_visualizer,
+    validate_uniprot_indices,
+)
 from mkt.databases.colors import DICT_COLORS
 from mkt.databases.log_config import configure_logging
 from mkt.databases.pymol import PyMOLGenerator
@@ -59,6 +62,34 @@ def main(
             help="JSON file of mutations to highlight (required for MUTATIONS_* configs).",
         ),
     ] = None,
+    indices: Annotated[
+        Optional[str],
+        typer.Option(
+            "--indices",
+            "-i",
+            help="Comma-separated 1-indexed full-length UniProt positions to highlight "
+            "as sticks (required for KLIFS_CUSTOM config).",
+        ),
+    ] = None,
+    colors: Annotated[
+        Optional[str],
+        typer.Option(
+            "--colors",
+            help="Comma-separated colors (names or hex) matching --indices "
+            "(required for KLIFS_CUSTOM config).",
+        ),
+    ] = None,
+    transparency: Annotated[
+        float,
+        typer.Option(
+            "--transparency",
+            "-t",
+            min=0.0,
+            max=1.0,
+            help="Cartoon transparency for the colored KLIFS regions in KLIFS_CUSTOM "
+            "config (0 = opaque, 1 = invisible).",
+        ),
+    ] = 0.3,
     verbose: Annotated[
         bool,
         typer.Option(
@@ -82,6 +113,9 @@ def main(
 
         # Generate group-averaged mutations
         generate_pymol_files --gene ABL1 --config MUTATIONS_GROUP --json-mutations mutations.json
+
+        # Generate KLIFS regions (semi-transparent cartoon) with custom stick residues
+        generate_pymol_files --gene ABL1 --config KLIFS_CUSTOM --indices 315,317 --colors red,blue
     """
     configure_logging(verbose=verbose)
 
@@ -92,6 +126,30 @@ def main(
             f"--json-mutations is required when using {config_name} config.",
             param_hint="--json-mutations",
         )
+
+    # parse and validate custom indices/colors for KLIFS_CUSTOM config
+    list_uniprot_idx: list[int] = []
+    list_custom_color: list[str] = []
+    if config_name == "KLIFS_CUSTOM":
+        if indices is None or colors is None:
+            raise typer.BadParameter(
+                "--indices and --colors are both required when using KLIFS_CUSTOM config.",
+                param_hint="--indices / --colors",
+            )
+        try:
+            list_uniprot_idx = [int(i.strip()) for i in indices.split(",") if i.strip()]
+        except ValueError:
+            raise typer.BadParameter(
+                "--indices must be a comma-separated list of integers.",
+                param_hint="--indices",
+            )
+        list_custom_color = [c.strip() for c in colors.split(",") if c.strip()]
+        if len(list_uniprot_idx) != len(list_custom_color):
+            raise typer.BadParameter(
+                f"--indices ({len(list_uniprot_idx)}) and --colors "
+                f"({len(list_custom_color)}) must have the same number of entries.",
+                param_hint="--indices / --colors",
+            )
 
     # e.g., "klifs" or "phosphosites"
     str_final_subdir = config_name.lower().split("_")[0]
@@ -104,6 +162,13 @@ def main(
         dict_color=DICT_COLORS["ALPHABET_PROJECT"]["DICT_COLORS"],
     )
 
+    # validate custom indices fall within the protein for KLIFS_CUSTOM config
+    if config_name == "KLIFS_CUSTOM":
+        try:
+            validate_uniprot_indices(seq_align, list_uniprot_idx)
+        except ValueError as e:
+            raise typer.BadParameter(str(e), param_hint="--indices")
+
     # Get the config class from StandardConfig enum
     config_class = StandardConfig[config_name].value
 
@@ -111,6 +176,10 @@ def main(
     config_kwargs: dict = {}
     if config_name.startswith("MUTATIONS"):
         config_kwargs["str_filepath_json"] = str(json_mutations)
+    elif config_name == "KLIFS_CUSTOM":
+        config_kwargs["list_uniprot_idx"] = list_uniprot_idx
+        config_kwargs["list_custom_color"] = list_custom_color
+        config_kwargs["highlight_cartoon_transparency"] = transparency
 
     # create structure visualizer using the config
     viz = create_structure_visualizer(
