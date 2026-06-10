@@ -3,7 +3,7 @@ import re
 from os import path
 
 import pandas as pd
-import requests
+from mkt.databases import requests_wrapper
 from mkt.schema.io_utils import get_repo_root
 from pydantic import BaseModel, PrivateAttr
 
@@ -24,6 +24,86 @@ META_COLS = ["metamaintype", "metacolor", "metanci", "metaumls", "history"]
 
 CODE_RE = re.compile(r"\s*\(([^()]+)\)\s*$")
 """Regex capturing the trailing ``(CODE)`` suffix on every OncoTree label."""
+
+DICT_TISSUE_COLOR = {
+    # nervous system
+    "CNS/Brain (BRAIN)": "LightGray",
+    "Peripheral Nervous System (PNS)": "LightGray",
+    # unknown primary / catch-all
+    "Other (OTHER)": "DimGray",
+    # skin
+    "Skin (SKIN)": "Black",
+    # male reproductive
+    "Penis (PENIS)": "Blue",
+    "Prostate (PROSTATE)": "Blue",
+    "Testis (TESTIS)": "Blue",
+    # gynecologic
+    "Cervix (CERVIX)": "Orange",
+    "Ovary/Fallopian Tube (OVARY)": "Orange",
+    "Uterus (UTERUS)": "Orange",
+    "Vulva/Vagina (VULVA)": "Orange",
+    # urologic
+    "Bladder/Urinary Tract (BLADDER)": "Yellow",
+    "Kidney (KIDNEY)": "Yellow",
+    # GI core (midgut/hindgut + esophagogastric); GIST joins via override below
+    "Bowel (BOWEL)": "SaddleBrown",
+    "Esophagus/Stomach (STOMACH)": "SaddleBrown",
+    # thoracic; PSEC overridden to Orange below
+    "Lung (LUNG)": "Red",
+    "Peritoneum (PERITONEUM)": "Red",
+    "Pleura (PLEURA)": "Red",
+    "Thymus (THYMUS)": "Red",
+    # endocrine; parathyroid codes join via override below
+    "Adrenal Gland (ADRENAL_GLAND)": "Cyan",
+    "Thyroid (THYROID)": "Cyan",
+    # developmental GI / foregut endoderm derivatives
+    "Ampulla of Vater (AMPULLA_OF_VATER)": "Purple",
+    "Biliary Tract (BILIARY_TRACT)": "Purple",
+    "Liver (LIVER)": "Purple",
+    "Pancreas (PANCREAS)": "Purple",
+    # eye
+    "Eye (EYE)": "Green",
+    # tissues retaining upstream metacolor (no aggregation requested)
+    "Bone (BONE)": "White",
+    "Breast (BREAST)": "HotPink",
+    "Head and Neck (HEAD_NECK)": "DarkRed",
+    "Lymphoid (LYMPH)": "LimeGreen",
+    "Myeloid (MYELOID)": "LightSalmon",
+    "Soft Tissue (SOFT_TISSUE)": "LightYellow",
+}
+"""Curated mapping from OncoTree tissue (``level_1`` label) to plotting color."""
+
+DICT_CODE_COLOR_OVERRIDE = {
+    # GI stromal tumor: administratively Soft Tissue, biologically GI
+    "GIST": "SaddleBrown",
+    # parathyroid: administratively Head and Neck, functionally endocrine
+    "PTH": "Cyan",
+    "PTHC": "Cyan",
+    # peritoneal serous carcinoma: ovarian-equivalent biology, not mesothelial
+    "PSEC": "Orange",
+}
+"""Per-code color overrides where biology diverges from the parent tissue."""
+
+DICT_COLOR_CATEGORY = {
+    "LightGray": "CNS/PNS",
+    "DimGray": "Other",
+    "Black": "Skin",
+    "Blue": "Male Reproductive",
+    "Orange": "Gynecologic",
+    "Yellow": "Urologic",
+    "SaddleBrown": "GI Core",
+    "Red": "Thoracic",
+    "Cyan": "Endocrine",
+    "Purple": "GI Developmental",
+    "Green": "Eye",
+    "White": "Bone",
+    "HotPink": "Breast",
+    "DarkRed": "Head and Neck",
+    "LimeGreen": "Lymphoid",
+    "LightSalmon": "Myeloid",
+    "LightYellow": "Soft Tissue",
+}
+"""Curated color to short category-label mapping (suitable for legends)."""
 
 
 class OncoTree(BaseModel):
@@ -85,7 +165,7 @@ class OncoTree(BaseModel):
     def _read_text(source: str) -> str:
         """Return the raw TSV text from a local path or http(s) URL."""
         if source.startswith(("http://", "https://")):
-            res = requests.get(source)
+            res = requests_wrapper.get_cached_session().get(source)
             res.raise_for_status()
             return res.text
         with open(source) as f:
@@ -169,3 +249,51 @@ class OncoTree(BaseModel):
     def return_df_tissue_drop(self) -> pd.DataFrame:
         """Return the OncoTree DataFrame with the tissue-level rows dropped."""
         return self._df[self._df["depth"] > 1].reset_index(drop=True)
+
+    @property
+    def dict_code_metacolor(self) -> dict[str, str]:
+        """Map OncoTree code -> upstream metacolor.
+
+        Tissue-level (``depth == 1``) rows are dropped so the keys are
+        unique leaf codes.
+
+        Returns
+        -------
+        dict[str, str]
+            ``{code: metacolor}`` for every non-tissue row.
+        """
+        df = self.return_df_tissue_drop()
+        return dict(zip(df["code"], df["metacolor"]))
+
+    @property
+    def dict_code_color(self) -> dict[str, str]:
+        """Map OncoTree code -> curated plotting color.
+
+        The curated color is the tissue-level default from
+        ``DICT_TISSUE_COLOR`` (keyed by ``level_1``), overridden by
+        ``DICT_CODE_COLOR_OVERRIDE`` for codes whose biology differs from
+        their administrative parent tissue (GIST under Soft Tissue,
+        parathyroid carcinomas under Head and Neck, PSEC under Peritoneum).
+
+        Returns
+        -------
+        dict[str, str]
+            ``{code: color}`` for every non-tissue row. A tissue absent
+            from ``DICT_TISSUE_COLOR`` logs a warning and falls back to
+            the upstream metacolor so the mapping still covers every code.
+        """
+        df = self.return_df_tissue_drop()
+        out = {}
+        for code, lvl1, metacolor in zip(df["code"], df["level_1"], df["metacolor"]):
+            if code in DICT_CODE_COLOR_OVERRIDE:
+                out[code] = DICT_CODE_COLOR_OVERRIDE[code]
+            elif lvl1 in DICT_TISSUE_COLOR:
+                out[code] = DICT_TISSUE_COLOR[lvl1]
+            else:
+                logger.warning(
+                    "No curated color for tissue %r; falling back to %r",
+                    lvl1,
+                    metacolor,
+                )
+                out[code] = metacolor
+        return out
