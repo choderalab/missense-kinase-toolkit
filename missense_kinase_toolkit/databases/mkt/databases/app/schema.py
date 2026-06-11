@@ -41,6 +41,10 @@ class StructureConfig(ABC):
     """Minimum distance (angstroms) between labels for collision avoidance."""
     label_spring_strength: float = 0.0
     """Spring force pulling labels back toward ideal position (0 = no spring)."""
+    label_size: int = 14
+    """Font size for residue labels."""
+    label_connector: bool = True
+    """Whether to draw leader/connector lines from each residue to its label."""
     highlight_cartoon_transparency: float = 0.0
     """Cartoon transparency applied to colored/highlighted residues (0 = opaque, 1 = invisible)."""
 
@@ -502,6 +506,16 @@ class KLIFSCustomConfig(KLIFSConfig):
     """List of colors corresponding to list_uniprot_idx (must be the same length)."""
     highlight_cartoon_transparency: float = 0.3
     """Cartoon transparency for the colored KLIFS regions (0 = opaque, 1 = invisible)."""
+    # zoomed binding-pocket view: labels sit close to their residue with no
+    # leader lines or repulsion, since only a handful of residues are labeled
+    label_offset: float = 4.0
+    """Small offset (angstroms) so the label sits next to its residue."""
+    label_min_dist: float = 0.0
+    """No collision repulsion between the few custom labels."""
+    label_connector: bool = False
+    """No leader lines for the zoomed pocket view."""
+    label_size: int = 24
+    """Larger font for the zoomed pocket view."""
 
     def __post_init__(self):
         if len(self.list_uniprot_idx) != len(self.list_custom_color):
@@ -573,6 +587,27 @@ class KLIFSCustomConfig(KLIFSConfig):
                 )
 
         return list_style, list_color
+
+    def generate_labels(self, list_idx: list[int]) -> list[str | None]:
+        """Generate amino acid + UniProt position labels for the custom stick residues.
+
+        Parameters
+        ----------
+        list_idx : list[int]
+            List of 0-indexed residue positions.
+
+        Returns
+        -------
+        list[str | None]
+            Label 'X###' (e.g., 'T790', single-letter amino acid + 1-indexed UniProt
+            position) for custom positions, None for KLIFS-only positions.
+        """
+        set_custom = {pos - 1 for pos in self.list_uniprot_idx}
+        canonical_seq = self.seq_align.obj_kinase.uniprot.canonical_seq
+        return [
+            f"{canonical_seq[idx]}{idx + 1}" if idx in set_custom else None
+            for idx in list_idx
+        ]
 
 
 @dataclass(kw_only=True)
@@ -1020,7 +1055,6 @@ class StandardConfigChoice(str, Enum):
     MUTATIONS_DEFAULT = "MUTATIONS_DEFAULT"
     MUTATIONS_GROUP = "MUTATIONS_GROUP"
     MUTATIONS_KLIFS = "MUTATIONS_KLIFS"
-    MUTATIONS_KLIFS_GROUP = "MUTATIONS_KLIFS_GROUP"
 
 
 class StandardConfig(Enum):
