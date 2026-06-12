@@ -476,8 +476,23 @@ class PyMOLGenerator:
             "cmd.bg_color('white')",
             "",
             "# Define save_image function for publication-quality rendering",
-            f"def save_image(output_filename='{self.gene_name}_{self.str_attr.lower()}_structure.png'):",
-            '    """Render and save a publication-quality PNG image."""',
+            f"def save_image(output_filename='{self.gene_name}_{self.str_attr.lower()}_structure.png', bool_datetime=True, bool_pse=True):",
+            '    """Render and save a publication-quality PNG image (and optionally a .pse session).',
+            "",
+            "    output_filename : base filename for the PNG image.",
+            "    bool_datetime : if True, append a YYYYmmdd_HHMMSS timestamp to the saved file(s)",
+            "        so repeated views do not overwrite one another.",
+            "    bool_pse : if True, also save the current PyMOL session as a .pse file",
+            "        (sharing the same timestamp as the PNG when bool_datetime is True).",
+            '    """',
+            "    import os",
+            "    from datetime import datetime",
+            "    base, ext = os.path.splitext(output_filename)",
+            "    if not ext:",
+            "        ext = '.png'",
+            "    if bool_datetime:",
+            "        base = f\"{base}_{datetime.now().strftime('%Y%m%d_%H%M%S')}\"",
+            "    png_filename = base + ext",
             "    cmd.set('ray_trace_mode', 0)",  # standard ray tracing (no black outlines)
             "    cmd.set('ray_trace_gain', 0.0)",  # no edge darkening
             "    cmd.set('ray_shadows', 0)",  # no shadows to preserve colormap fidelity
@@ -486,9 +501,12 @@ class PyMOLGenerator:
             "    cmd.set('direct', 0.4)",  # lower direct light to flatten shading
             "    cmd.set('cartoon_sampling', 14)",
             "    cmd.set('antialias', 2)",
-            "    cmd.png(output_filename, dpi=300, ray=1)",
-            "    import os",
-            "    print(f'Rendered publication-quality image to: {os.path.abspath(output_filename)}')",
+            "    cmd.png(png_filename, dpi=300, ray=1)",
+            "    print(f'Rendered publication-quality image to: {os.path.abspath(png_filename)}')",
+            "    if bool_pse:",
+            "        pse_filename = base + '.pse'",
+            "        cmd.save(pse_filename)",
+            "        print(f'Saved PyMOL session to: {os.path.abspath(pse_filename)}')",
             "",
             "cmd.extend('save_image', save_image)",
             "",
@@ -537,6 +555,9 @@ class PyMOLGenerator:
         5. Save as high-res PNG:
            save_image()
            (saves to {png_filename} by default, or pass a custom filename: save_image("custom.png"))
+           By default a YYYYmmdd_HHMMSS timestamp is appended to the filename and a
+           matching .pse session is saved, so you can capture multiple views without
+           overwriting. Disable with: save_image(bool_datetime=False, bool_pse=False)
         """
         instructions = textwrap.dedent(instructions)
 
