@@ -1,42 +1,26 @@
 ---
 name: git
 description: >-
-  Git and pull-request conventions for the missense-kinase-toolkit repo (PR
-  template, branching, commit attribution). Use when creating commits,
-  branches, or pull requests.
+  missense-kinase-toolkit-specific git conventions; extends my central `git`
+  skill. Use when creating commits, branches, or pull requests.
 ---
 
 # missense-kinase-toolkit git & pull-request conventions
 
-## Branching
+## Baseline — fetch first
 
-- Don't commit directly to the default branch (`main`). Branch first.
-- Only commit or push when explicitly asked.
+Apply my canonical `git` conventions (branch first, scoped imperative commits,
+Claude attribution, PR-template handling) before the repo-specific notes below.
+WebFetch and follow:
 
-## Pull requests
+https://raw.githubusercontent.com/jessicaw9910/skills/main/.claude/skills/git/SKILL.md
 
-Use `.github/PULL_REQUEST_TEMPLATE.md`, which has these sections:
-- **Description** — the purpose of the PR.
-- **Todos** — checklist of what was accomplished.
-- **Questions** — open items / things to revisit.
-- **Status** — readiness checkbox.
+If the fetch fails (no network / non-200), **tell me the central `git` skill
+could not be retrieved** and confirm how to proceed — do not silently skip the
+baseline.
 
-Fill in each section; leave the Status box reflecting the true state. Use the
-`gh` CLI for GitHub operations (PRs, issues, API).
+## Repo-specific additions
 
-## Commits
-
-- Keep commits scoped and message subjects in the imperative.
-- Because this is a mono repo, scope each commit to one sub-package
-  (`schema/`, `databases/`, `ml/`, `app/`) where practical — CI workflows are
-  path-filtered per sub-package (see the `ci` skill).
-- End commit messages with:
-
-  ```
-  Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
-  ```
-- End PR bodies with:
-
-  ```
-  🤖 Generated with [Claude Code](https://claude.com/claude-code)
-  ```
+- This is a mono repo: scope each commit to one sub-package (`schema/`,
+  `databases/`, `ml/`, `app/`) where practical — CI workflows are path-filtered
+  per sub-package (see the `ci` skill).

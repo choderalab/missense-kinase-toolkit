@@ -6,7 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repo ships project skills under `.claude/skills/`. **Invoke the relevant
 skill before doing that kind of work** — they hold the detailed
-conventions/recipes that used to live in this file:
+conventions/recipes that used to live in this file.
+
+The generic skills (`formatting`, `plotting`, `tests`, `ci`, `git`) are thin:
+they `WebFetch` my canonical baseline conventions from the central skills repo
+(`github.com/jessicaw9910/skills`) and layer on only the repo-specific
+additions. If a fetch fails, the skill will say so rather than silently skipping
+the baseline.
 
 - **`formatting`** — before writing or editing any Python (import grouping,
   NumPy-style docstrings, lowercase comments, double-quoted strings).
