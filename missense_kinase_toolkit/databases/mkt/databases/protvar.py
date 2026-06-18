@@ -70,7 +70,15 @@ class ProtvarScore(RESTAPIClient):
         self._stamp_from_response(res)
 
         if res.ok:
-            self._protvar_score = json.loads(res.text)
+            parsed_scores = json.loads(res.text)
+            if isinstance(parsed_scores, list):
+                self._protvar_score = [
+                    score
+                    for score in parsed_scores
+                    if score.get("type") == self.database.value
+                ]
+            else:
+                self._protvar_score = parsed_scores
         else:
             print(f"Error: {res.status_code}")
             self._protvar_scores = None
