@@ -56,6 +56,22 @@ def my_function(param1: str, param2: int) -> bool:
     """
 ```
 
+## Module-level constants
+
+Document module-level constants with a **trailing docstring** (a string literal
+on the line(s) immediately after the assignment), not a leading `#` comment.
+Start it with the type, then a colon and the description — mirroring the
+constants in `mkt.databases.klifs`. Use a trailing `\` to wrap long lines.
+
+```python
+DICT_SCORE_KEY = {
+    ScoreDatabase.Conservation: "score",
+    ScoreDatabase.AlphaMissense: "amPathogenicity",
+}
+"""dict[ScoreDatabase, str]: Key holding the numeric score within each database's \
+    score dict; databases absent from this mapping have no single scalar score."""
+```
+
 ## Comments
 
 Lowercase first letter for non-proper-noun comments:
