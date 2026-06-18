@@ -26,6 +26,12 @@ def akt1_no_cif(akt1_kinase):
     return akt1_kinase.model_copy(update={"kincore": None})
 
 
+def _run_df(calc):
+    """Run a ResidueSASA and return its cached ``df`` (``run`` returns None)."""
+    calc.run()
+    return calc.df
+
+
 class TestConvertMmcifdict2Structure:
     def test_residues_numbered_by_uniprot(self, akt1_kinase):
         """auth_seq_id numbering means residue ids are UniProt positions."""
@@ -66,14 +72,16 @@ class TestResidueSASAConfig:
 class TestResidueSASABiopython:
     @pytest.fixture(scope="class")
     def df_sasa(self, akt1_kinase):
-        return sasa.ResidueSASA(
-            dict_kinase={"AKT1": akt1_kinase}, bool_pymol=False
-        ).run()
+        return _run_df(
+            sasa.ResidueSASA(dict_kinase={"AKT1": akt1_kinase}, bool_pymol=False)
+        )
 
     def test_run_caches_on_df(self, akt1_kinase):
         calc = sasa.ResidueSASA(dict_kinase={"AKT1": akt1_kinase}, bool_pymol=False)
-        df = calc.run()
-        assert calc.df is df
+        assert calc.df is None
+        calc.run()
+        assert isinstance(calc.df, pd.DataFrame)
+        assert len(calc.df) == AKT1_N_RES
 
     def test_columns(self, df_sasa):
         assert list(df_sasa.columns) == EXPECTED_COLS + ["rsa"]
@@ -100,22 +108,28 @@ class TestResidueSASABiopython:
 
     def test_hydrogens_excluded_by_default(self, akt1_kinase):
         """Including hydrogens should change per-residue SASA values."""
-        df_no_h = sasa.ResidueSASA(
-            dict_kinase={"AKT1": akt1_kinase}, bool_pymol=False
-        ).run()
+        df_no_h = _run_df(
+            sasa.ResidueSASA(dict_kinase={"AKT1": akt1_kinase}, bool_pymol=False)
+        )
         # bool_relative must be False with explicit H (rSASA is heavy-atom only)
-        df_with_h = sasa.ResidueSASA(
-            dict_kinase={"AKT1": akt1_kinase},
-            bool_pymol=False,
-            bool_include_hydrogens=True,
-            bool_relative=False,
-        ).run()
+        df_with_h = _run_df(
+            sasa.ResidueSASA(
+                dict_kinase={"AKT1": akt1_kinase},
+                bool_pymol=False,
+                bool_include_hydrogens=True,
+                bool_relative=False,
+            )
+        )
         assert not df_no_h["sasa"].equals(df_with_h["sasa"])
 
     def test_no_relative_omits_rsa(self, akt1_kinase):
-        df = sasa.ResidueSASA(
-            dict_kinase={"AKT1": akt1_kinase}, bool_pymol=False, bool_relative=False
-        ).run()
+        df = _run_df(
+            sasa.ResidueSASA(
+                dict_kinase={"AKT1": akt1_kinase},
+                bool_pymol=False,
+                bool_relative=False,
+            )
+        )
         assert "rsa" not in df.columns
 
     def test_skips_kinase_without_cif(self, akt1_kinase, akt1_no_cif):
@@ -124,14 +138,14 @@ class TestResidueSASABiopython:
             dict_kinase={"AKT1": akt1_kinase, "NOCIF": akt1_no_cif},
             bool_pymol=False,
         )
-        df = calc.run()
+        df = _run_df(calc)
         assert set(df["hgnc_name"].unique()) == {"AKT1"}
         assert len(df) == AKT1_N_RES
 
     def test_all_missing_cif_returns_empty(self, akt1_no_cif):
-        df = sasa.ResidueSASA(
-            dict_kinase={"NOCIF": akt1_no_cif}, bool_pymol=False
-        ).run()
+        df = _run_df(
+            sasa.ResidueSASA(dict_kinase={"NOCIF": akt1_no_cif}, bool_pymol=False)
+        )
         assert isinstance(df, pd.DataFrame)
         assert df.empty
 
@@ -140,11 +154,13 @@ class TestResidueSASAPymol:
     def test_pymol_matches_biopython(self, akt1_kinase):
         """PyMOL dot_solvent SASA agrees with Shrake-Rupley; both run together."""
         pytest.importorskip("pymol2")
-        df = sasa.ResidueSASA(
-            dict_kinase={"AKT1": akt1_kinase},
-            bool_biopython=True,
-            bool_pymol=True,
-        ).run()
+        df = _run_df(
+            sasa.ResidueSASA(
+                dict_kinase={"AKT1": akt1_kinase},
+                bool_biopython=True,
+                bool_pymol=True,
+            )
+        )
         assert set(df["method"].unique()) == {"biopython", "pymol"}
         assert len(df) == 2 * AKT1_N_RES
 
@@ -176,7 +192,7 @@ class TestPymolUnavailable:
             bool_pymol=True,
         )
         assert calc._resolve_methods() == ["biopython"]
-        df = calc.run()
+        df = _run_df(calc)
         assert set(df["method"].unique()) == {"biopython"}
         assert len(df) == AKT1_N_RES
 
@@ -330,12 +346,12 @@ class TestParallelExecution:
         dict_kinase = deserialize_kinase_dict(
             list_ids=["AKT1", "EGFR"], bool_verbose=False
         )
-        serial = sasa.ResidueSASA(
-            dict_kinase=dict(dict_kinase), bool_pymol=False, n_jobs=1
-        ).run()
-        parallel = sasa.ResidueSASA(
-            dict_kinase=dict(dict_kinase), bool_pymol=False, n_jobs=2
-        ).run()
+        serial = _run_df(
+            sasa.ResidueSASA(dict_kinase=dict(dict_kinase), bool_pymol=False, n_jobs=1)
+        )
+        parallel = _run_df(
+            sasa.ResidueSASA(dict_kinase=dict(dict_kinase), bool_pymol=False, n_jobs=2)
+        )
         key = ["hgnc_name", "uniprot_idx"]
         df_serial = serial.sort_values(key).reset_index(drop=True)
         df_parallel = parallel.sort_values(key).reset_index(drop=True)
