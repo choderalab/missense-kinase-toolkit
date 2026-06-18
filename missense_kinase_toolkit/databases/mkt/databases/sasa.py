@@ -546,7 +546,13 @@ class ResidueSASA(BaseModel):
 
     @property
     def df(self) -> pd.DataFrame | None:
-        """Per-residue SASA results; None until :meth:`run` is called."""
+        """Per-residue SASA results; None until :meth:`run` is called.
+
+        Long-format DataFrame with columns ``hgnc_name``, ``method``,
+        ``uniprot_idx`` (UniProt position), ``residue`` (single-letter code),
+        ``resname`` (3-letter code), ``sasa`` (Å^2), and, if ``bool_relative``,
+        ``rsa``. Empty if no kinase had a CIF structure.
+        """
         return self._df
 
     @property
@@ -610,20 +616,17 @@ class ResidueSASA(BaseModel):
                 )
         return list_methods
 
-    def run(self) -> pd.DataFrame:
+    def run(self) -> None:
         """Compute per-residue SASA for all kinases and backends.
 
         Loops over each selected backend and kinase, tagging rows with
         ``method`` and ``hgnc_name``; kinases without a KinCore CIF are skipped.
+        The long-format result is stored on :attr:`df` (not returned).
 
         Returns:
         --------
-        pd.DataFrame
-            Long-format DataFrame (also cached on :attr:`df`) with columns
-            ``hgnc_name``, ``method``, ``uniprot_idx`` (UniProt position),
-            ``residue`` (single-letter code), ``resname`` (3-letter code),
-            ``sasa`` (Å^2), and, if ``bool_relative``, ``rsa``. Empty if no
-            kinase had a CIF structure.
+        None
+            Results are cached on :attr:`df`; see that property for the columns.
         """
         list_methods = self._resolve_methods()
 
@@ -653,10 +656,10 @@ class ResidueSASA(BaseModel):
         if list_df:
             self._df = pd.concat(list_df, ignore_index=True)
         else:
-            logger.warning("No kinases with CIF structures; returning empty DataFrame.")
+            logger.warning(
+                "No kinases with CIF structures; .df set to empty DataFrame."
+            )
             self._df = pd.DataFrame()
-
-        return self._df
 
     def _compute_params(self) -> dict[str, object]:
         """Scalar config forwarded to the (picklable) per-kinase compute worker."""
