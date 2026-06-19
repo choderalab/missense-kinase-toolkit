@@ -1,3 +1,5 @@
+from enum import Enum
+
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
@@ -80,6 +82,17 @@ def map_single_letter_aa_to_color(aa, dict_color):
         return dict_color[aa_clean]
     else:
         print(f"Invalid amino acid: {aa}")
+
+
+class AminoAcidPalette(str, Enum):
+    """Enumeration of supported color palettes for amino acid visualization."""
+
+    ALPHABET_PROJECT = "ALPHABET_PROJECT"
+    ASAP = "ASAP"
+    RASMOL = "RASMOL"
+    SHAPELY = "SHAPELY"
+    CLUSTALX = "CLUSTALX"
+    ZAPPO = "ZAPPO"
 
 
 AA_MAPPING = [

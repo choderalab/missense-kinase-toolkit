@@ -196,3 +196,7 @@ images/
 
 # plot config files (not shipped with package)
 configs/
+
+.claude/*
+# but keep version-controlled project skills so they're shared/reusable
+!.claude/skills/
