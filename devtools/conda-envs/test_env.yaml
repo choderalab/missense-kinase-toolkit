@@ -23,6 +23,7 @@ dependencies:
   - beautifulsoup4
   - numpy
   - biopython
+  - pymol-open-source
   - matplotlib
   - seaborn
   - matplotlib-venn
