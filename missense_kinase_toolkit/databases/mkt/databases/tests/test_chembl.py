@@ -1,4 +1,5 @@
 import pytest
+import requests as req_lib
 from mkt.databases import chembl
 
 # ---------------------------------------------------------------------------
@@ -39,7 +40,12 @@ def chembl_exact_invalid():
 @pytest.fixture(scope="module")
 def chembl_preferred_invalid():
     """ChEMBLMoleculePreferred for non-existent drug (1 API call)."""
-    return chembl.ChEMBLMoleculePreferred(id="TESTTESTTEST")
+    try:
+        return chembl.ChEMBLMoleculePreferred(id="TESTTESTTEST")
+    except req_lib.exceptions.RequestException as e:
+        if "500 error responses" in str(e) or "Failed to resolve" in str(e):
+            pytest.skip("ChEMBL API request failed - skipping test")
+        raise
 
 
 # ---------------------------------------------------------------------------
