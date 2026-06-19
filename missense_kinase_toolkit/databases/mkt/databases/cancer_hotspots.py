@@ -135,6 +135,15 @@ def first_occurrence_map() -> dict[tuple[str, int], str]:
     if it appears only in ``version=v3``. Positions absent from both are simply
     not keyed (the downstream consumer treats them as "Not a hotspot").
 
+    Note: this keys on ``(hugoSymbol, positionStart)`` rather than the full
+    ``residue`` string, because the downstream lollipop colors residue positions
+    on its x-axis. As a result the "Bandlamudi 2026" tier holds 161 positions,
+    not the 164 new ``(gene, residue)`` pairs reported by cancerhotspots.org:
+    three v3-only residues (FOXA1 D249, MTOR Y1450, TP53 E224) sit at positions
+    already called in v2, so they collapse into existing "Chang" positions. If
+    you need the headline 164, key on ``residue`` instead — but then
+    ``(gene, position)`` is no longer unique and a position can carry both tiers.
+
     Returns:
     --------
     dict[tuple[str, int], str]
