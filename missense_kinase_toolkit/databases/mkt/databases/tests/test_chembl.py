@@ -7,45 +7,50 @@ from mkt.databases import chembl
 # ---------------------------------------------------------------------------
 
 
+def _build_chembl_query(query_class, query_id):
+    """Build ChEMBL query object, skipping on transient request failures."""
+    try:
+        return query_class(id=query_id)
+    except req_lib.exceptions.RequestException as e:
+        if "500 error responses" in str(e) or "Failed to resolve" in str(e):
+            pytest.skip("ChEMBL API request failed - skipping test")
+        raise
+
+
 @pytest.fixture(scope="module")
 def chembl_search_erlotinib():
     """ChEMBLMoleculeSearch for erlotinib (1 API call)."""
-    return chembl.ChEMBLMoleculeSearch(id="erlotinib")
+    return _build_chembl_query(chembl.ChEMBLMoleculeSearch, "erlotinib")
 
 
 @pytest.fixture(scope="module")
 def chembl_exact_erlotinib():
     """ChEMBLMoleculeExact for erlotinib (1 API call)."""
-    return chembl.ChEMBLMoleculeExact(id="erlotinib")
+    return _build_chembl_query(chembl.ChEMBLMoleculeExact, "erlotinib")
 
 
 @pytest.fixture(scope="module")
 def chembl_preferred_erlotinib():
     """ChEMBLMoleculePreferred for erlotinib (1 API call)."""
-    return chembl.ChEMBLMoleculePreferred(id="erlotinib")
+    return _build_chembl_query(chembl.ChEMBLMoleculePreferred, "erlotinib")
 
 
 @pytest.fixture(scope="module")
 def chembl_search_invalid():
     """ChEMBLMoleculeSearch for non-existent drug (1 API call)."""
-    return chembl.ChEMBLMoleculeSearch(id="TESTTESTTEST")
+    return _build_chembl_query(chembl.ChEMBLMoleculeSearch, "TESTTESTTEST")
 
 
 @pytest.fixture(scope="module")
 def chembl_exact_invalid():
     """ChEMBLMoleculeExact for non-existent drug (1 API call)."""
-    return chembl.ChEMBLMoleculeExact(id="TESTTESTTEST")
+    return _build_chembl_query(chembl.ChEMBLMoleculeExact, "TESTTESTTEST")
 
 
 @pytest.fixture(scope="module")
 def chembl_preferred_invalid():
     """ChEMBLMoleculePreferred for non-existent drug (1 API call)."""
-    try:
-        return chembl.ChEMBLMoleculePreferred(id="TESTTESTTEST")
-    except req_lib.exceptions.RequestException as e:
-        if "500 error responses" in str(e) or "Failed to resolve" in str(e):
-            pytest.skip("ChEMBL API request failed - skipping test")
-        raise
+    return _build_chembl_query(chembl.ChEMBLMoleculePreferred, "TESTTESTTEST")
 
 
 # ---------------------------------------------------------------------------
