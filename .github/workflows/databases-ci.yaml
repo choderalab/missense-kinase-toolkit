@@ -8,11 +8,11 @@ on:
       - "main"
     paths:
       - "missense_kinase_toolkit/databases/**"
-  # pull_request:
-  #   branches:
-  #     - "main"
-  #   paths:
-  #     - "missense_kinase_toolkit/databases/**"
+  pull_request:
+    branches:
+      - "main"
+    paths:
+      - "missense_kinase_toolkit/databases/**"
   schedule:
     # Weekly tests run on main by default:
     #   Scheduled workflows run on the latest commit on the default or base branch.
@@ -67,10 +67,11 @@ jobs:
           # pytest -n auto --durations=10 -v --cov-report=xml --cov-report=term --color=yes \
           pytest \
             -v \
+            -n 2 \
+            --dist loadfile \
             --cov-report=xml \
             --color=yes  \
             --cov=mkt.databases \
-            -F databases \
             missense_kinase_toolkit/databases/mkt/databases/tests/
 
       - name: Upload coverage reports to Codecov

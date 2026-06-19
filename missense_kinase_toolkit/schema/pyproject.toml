@@ -24,12 +24,12 @@ dependencies = [
     "toml",
     "pyyaml",
     "tqdm",
-    "gitpython==3.1.43",
+    "gitpython==3.1.50",
 ]
 
 [project.optional-dependencies]
-dev = ["black>=26.3.1", "flake8==7.0.0", "sphinx==7.3.7", "sphinx-rtd-theme==2.0.0"]
-test = ["pytest>=9.0.3", "pytest-runner==6.0.1", "pytest-cov>=4.0"]
+dev = ["black==24.3.0", "flake8==7.0.0", "sphinx==7.3.7", "sphinx-rtd-theme==2.0.0"]
+test = ["pytest==8.0.1", "pytest-runner==6.0.1", "pytest-cov>=4.0"]
 
 [tool.setuptools.package-data]
 schema = [
