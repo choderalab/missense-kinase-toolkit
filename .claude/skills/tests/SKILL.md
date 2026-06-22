@@ -23,7 +23,10 @@ baseline.
 
 ### Locations
 
-- `missense_kinase_toolkit/schema/mkt/schema/tests/test_schema.py`
+- `missense_kinase_toolkit/schema/mkt/schema/tests/` — `test_<concern>.py`
+  (imports, deserialize, adjudicate, serde, utils) with shared fixtures in
+  `conftest.py`: session-scoped read-only `dict_kinase` and a single-object
+  `mutable_kinase(hgnc_name)` factory (deep-copies one entry, not all 566).
 - `missense_kinase_toolkit/databases/mkt/databases/tests/` — one
   `test_<module>.py` per source module, shared fixtures in `conftest.py`.
 - No tests for `ml/`, `experiments/`, or `app/`.
@@ -39,9 +42,42 @@ pytest -v --cov-report=xml --color=yes --cov=mkt.databases \
     missense_kinase_toolkit/databases/mkt/databases/tests/
 ```
 
-The databases suite runs under xdist in CI (`-n 2 --dist loadfile`); keep it
-parallel-safe locally too (guard shared on-disk work with `filelock.FileLock` —
-see `kincore_harmonized_dict`).
+The databases and schema suites run under xdist in CI (`-n 2 --dist loadfile`);
+keep them parallel-safe locally too (guard shared on-disk work with
+`filelock.FileLock` — see `kincore_harmonized_dict` — or write to per-test
+`tmp_path`, as `schema/.../test_serde.py` does).
+
+### Local venv (`VE/`)
+
+Created by `missense_kinase_toolkit/create_venv.sh` (prompts for Python
+3.9–3.12):
+
+- Uses `uv sync --all-extras` when `uv` + `uv.lock` are present, else `uv venv`,
+  else `python3 -m venv`.
+- Installs `mkt-schema` then `mkt-databases` (order matters — databases depends
+  on schema) **editable with `[dev,test]` extras**, so the venv has both
+  packages plus pytest, pytest-cov, black, flake8. It does **not** include
+  `ml/`, `app/`, or `experiments/`.
+- Appends `.env` vars to `VE/bin/activate`.
+
+`missense_kinase_toolkit/editable_overrides.sh` re-applies just the two editable
+installs after a manual `uv sync` (which reinstalls them from the lockfile and
+undoes the editable overrides).
+
+Gotchas:
+
+- A uv-created `VE/` has **no `pip`**. Add a package with
+  `uv pip install --python missense_kinase_toolkit/VE/bin/python <pkg>`.
+- `pytest-xdist` + `filelock` are in the CI conda env (`test_env.yaml`); the pip
+  `[test]` extras carry them only partially (schema lists `pytest-xdist`,
+  databases lists `filelock`), so a bare `VE/` may need
+  `uv pip install --python missense_kinase_toolkit/VE/bin/python pytest-xdist`
+  before running `-n`.
+- `pre-commit` is usually not on PATH but runs as a git commit hook, so
+  black/isort/flake8/pyupgrade fire on `git commit`. To run manually:
+  `VE/bin/black`, `VE/bin/flake8 --max-line-length=88 --extend-ignore=E203,E501`,
+  `uvx isort --profile black` (repo isort has no `known_first_party`, so `mkt.*`
+  imports group with third-party).
 
 ### Gating and config
 
