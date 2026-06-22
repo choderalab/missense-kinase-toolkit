@@ -53,6 +53,9 @@ jobs:
           set -e
           pytest \
             -v \
+            -n 2 \
+            --dist loadfile \
+            --durations=10 \
             --cov-report=xml \
             --color=yes  \
             --cov=mkt.schema \
