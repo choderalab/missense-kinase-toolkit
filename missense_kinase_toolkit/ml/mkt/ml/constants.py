@@ -14,6 +14,15 @@ class KinaseGroupSource(Enum):
     consensus = None
 
 
+# TODO: implement this in the future
+# class KinaseKDSequenceSource(Enum):
+#     """Enum for kinase KD sequence sources."""
+
+#     kincore = "kincore.fasta.kd_sequence"
+#     klifs = "klifs.kd_sequence"
+#     consensus = None
+
+
 class DataSet(Enum):
     """Enum for dataset names."""
 
@@ -43,3 +52,7 @@ class KinaseModel(StrEnum):
     ESM2_T33_650M = "facebook/esm2_t33_650M_UR50D"
     ESM2_T36_3B = "facebook/esm2_t36_3B_UR50D"
     ESM2_T48_15B = "facebook/esm2_t48_15B_UR50D"
+
+
+R = 8.314
+"""Gas constant in J/(K*mol)"""

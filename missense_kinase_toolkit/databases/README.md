@@ -6,6 +6,8 @@ Note that `mkt.schema` is a dependency of `mkt.databases`, so the former package
 ```
 pip install git+https://github.com/choderalab/missense-kinase-toolkit.git#subdirectory=missense_kinase_toolkit/schema
 pip install git+https://github.com/choderalab/missense-kinase-toolkit.git#subdirectory=missense_kinase_toolkit/databases
+# necessasry to map DiscoverX accessions
+pip install git+https://github.com/tansey-lab/nf-rnaseq
 ```
 
 Please note that the `ClustalOmegaAligner` in the `aligners` module requires a local installation of [Clustal Omega](http://www.clustal.org/omega/). By default, we assume the local executable is `/usr/local/bin/clustalo` though a different path can be specified with the `path_bin` argument.

@@ -12,15 +12,23 @@ dependencies:
     # Testing
   - pytest
   - pytest-cov
+  - pytest-xdist
+  - filelock
   - codecov
 
-    # Databases
+    # databases
   - pandas
   - bravado
   - requests-cache
   - beautifulsoup4
   - numpy
   - biopython
+  - pymol-open-source
+  - matplotlib
+  - seaborn
+  - matplotlib-venn
+  - scipy
+  - omegaconf
   - pydantic
   - GitPython
   - importlib-resources
@@ -32,3 +40,6 @@ dependencies:
   - toml
   - pyyaml
   - tqdm
+
+  - pip:
+    - git+https://github.com/tansey-lab/nf-rnaseq

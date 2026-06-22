@@ -1,4 +1,4 @@
-"""Module in missense-kinase-toolkit for schema managements."""
+"""Module in missense-kinase-toolkit for schema management."""
 
 from importlib.metadata import version
 

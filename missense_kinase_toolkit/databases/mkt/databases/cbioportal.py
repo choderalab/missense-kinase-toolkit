@@ -9,7 +9,6 @@ from Bio import Align
 from bravado.client import SwaggerClient
 from mkt.databases import klifs, properties
 from mkt.databases.api_schema import APIKeySwaggerClient
-from mkt.databases.colors import DICT_KINASE_GROUP_COLORS
 from mkt.databases.config import get_cbioportal_instance, maybe_get_cbioportal_token
 from mkt.databases.io_utils import (
     parse_iterabc2dataframe,
@@ -17,6 +16,8 @@ from mkt.databases.io_utils import (
     save_dataframe_to_csv,
 )
 from mkt.databases.utils import add_one_hot_encoding_to_dataframe
+from mkt.schema.constants import DICT_KINASE_GROUP_COLORS
+from mkt.schema.utils import TQDM_BAR_FORMAT
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -40,10 +41,12 @@ class cBioPortal(APIKeySwaggerClient):
         """Post-initialization to set up cBioPortal API client."""
         self.instance = get_cbioportal_instance()
         self.url = f"https://{self.instance}/api/v2/api-docs"
-        self._cbioportal = self.query_api()
-        if self._cbioportal is None:
-            logger.error(
-                f"Failed to initialize cBioPortal API client for instance {self.instance}"
+        try:
+            self._cbioportal = self.query_api()
+        except Exception as e:
+            logger.warning(
+                f"Error initializing cBioPortal API client: {e}\n"
+                "Can still load data from CSV files if pathfile(s) provided."
             )
 
     def maybe_get_token(self):
@@ -61,6 +64,7 @@ class cBioPortal(APIKeySwaggerClient):
                 "validate_swagger_spec": False,
             },
         )
+        self._stamp_now()
 
         return cbioportal_api
 
@@ -91,13 +95,15 @@ class cBioPortalQuery(cBioPortal):
     _data: list | None = field(init=False, default=None)
     """List of cBioPortal sub-API queries; None if ID not found (post-init)."""
     _df: pd.DataFrame | None = field(init=False, default=None)
+    """DataFrame of cBioPortal data; None if DataFrame could not be created (post-init)."""
 
     def __post_init__(self):
         """Post-initialization to check study ID in instance and query API data."""
         super().__post_init__()
         if not self.check_entity_id():
-            logger.error(
-                f"Study {self.get_entity_id()} not found in cBioPortal instance {self.instance}"
+            logger.warning(
+                f"Study {self.get_entity_id()} not found "
+                f"in cBioPortal instance {self.instance}"
             )
         if self.pathfile is not None:
             try:
@@ -144,23 +150,37 @@ class cBioPortalQuery(cBioPortal):
         """
         ...
 
-    def load_from_csv(self) -> pd.DataFrame | None:
+    def load_from_csv(
+        self,
+        str_path: str | None = None,
+    ) -> pd.DataFrame | None:
         """Load DataFrame from CSV file.
+
+        Parameters
+        ----------
+        str_path : str | None
+            Path to CSV file; if None, use self.pathfile
 
         Returns
         -------
         pd.DataFrame | None
             DataFrame loaded from CSV file if successful, otherwise None
         """
-        if self.pathfile is not None and os.path.exists(self.pathfile):
+        if str_path is not None:
+            path_to_use = str_path
+        else:
+            path_to_use = self.pathfile
+            logger.info(f"Loading DataFrame from CSV file: {path_to_use}.")
+
+        if path_to_use is not None and os.path.exists(path_to_use):
             try:
-                df = pd.read_csv(self.pathfile)
+                df = pd.read_csv(path_to_use)
                 return df
             except Exception as e:
-                logger.error(f"Error loading DataFrame from {self.pathfile}: {e}")
+                logger.error(f"Error loading DataFrame from {path_to_use}: {e}")
                 return None
         else:
-            logger.error(f"Path {self.pathfile} does not exist or is not specified.")
+            logger.error(f"Path {path_to_use} does not exist or is not specified.")
             return None
 
     def regenerate_dataframe(self) -> pd.DataFrame | None:
@@ -178,6 +198,7 @@ class cBioPortalQuery(cBioPortal):
                 f"in cBioPortal instance {self.instance}"
             )
         else:
+            self._stamp_now()
             self._df = self.convert_api_query_to_dataframe()
             if self._df is None:
                 logger.error(
@@ -286,9 +307,13 @@ class StudyData(cBioPortalQuery):
         bool
             True if the study ID is valid, False otherwise
         """
-        studies = self._cbioportal.Studies.getAllStudiesUsingGET().result()
-        study_ids = [study.studyId for study in studies]
-        return self.study_id in study_ids
+        try:
+            studies = self._cbioportal.Studies.getAllStudiesUsingGET().result()
+            study_ids = [study.studyId for study in studies]
+            return self.study_id in study_ids
+        except Exception as e:
+            logger.warning(f"Error checking study ID {self.study_id}: {e}")
+            return False
 
 
 @dataclass
@@ -310,10 +335,10 @@ class Mutations(StudyData):
 
         """
         try:
-            # TODO: add incremental error handling beyond missing study
-            muts = self._cbioportal.Mutations.getMutationsInMolecularProfileBySampleListIdUsingGET(
+            # use POST endpoint since GET now requires entrezGeneId
+            muts = self._cbioportal.Mutations.fetchMutationsInMolecularProfileUsingPOST(
                 molecularProfileId=f"{self.study_id}_mutations",
-                sampleListId=f"{self.study_id}_all",
+                mutationFilter={"sampleListId": f"{self.study_id}_all"},
                 projection="DETAILED",
             ).result()
         except Exception as e:
@@ -327,25 +352,31 @@ class KinaseMissenseMutations(Mutations):
     """Class to get kinase mutations from a cBioPortal study."""
 
     dict_replace: dict[str, str] = field(default_factory=lambda: {"STK19": "WHR1"})
-    """Dictionary mapping cBioPortal to MKT HGNC gene names for mismatches; default is {"STK19": "WHR1"}."""
+    """Dictionary mapping cBioPortal to mkt gene names for mismatches; default is {"STK19": "WHR1"}."""
     str_blosom: str = "BLOSUM80"
     """BLOSUM matrix to use for mutation analysis; default is "BLOSUM80"."""
+    pathfile_filter: str | None = None
+    """Path to CSV file for filtered kinase missense mutations; default is None."""
     _df_filter: pd.DataFrame | None = field(init=False, default=None)
     """DataFrame of kinase missense mutations; None if DataFrame could not be created (post-init)."""
 
     def __post_init__(self):
         super().__post_init__()
-        if self.pathfile is not None:
+        if self.pathfile_filter is not None:
+            str_temp = "loaded"
             logger.info(
-                f"Loading filtered DataFrame from {self.pathfile} for study {self.study_id}."
+                f"Loading filtered DataFrame from CSV file: {self.pathfile_filter}."
             )
-            self._df_filter = self._df.copy()
+            self._df_filter = self.load_from_csv(str_path=self.pathfile_filter)
         else:
+            str_temp = "generated"
             self._df_filter = self.get_kinase_missense_mutations()
-            if self._df_filter is None:
-                logger.error(
-                    f"DataFrame for kinase missense mutations in study {self.study_id} could not be created."
-                )
+
+        if self._df_filter is None:
+            logger.error(
+                "DataFrame for kinase missense mutations in study "
+                f"{self.study_id} could not be {str_temp}."
+            )
 
     def filter_single_aa_missense_mutations(
         self,
@@ -425,7 +456,11 @@ class KinaseMissenseMutations(Mutations):
         dict_hgnc2uniprot = dict.fromkeys(set(list_hgnc))
 
         list_err = []
-        for hgnc_name in tqdm(dict_hgnc2uniprot.keys(), desc="Querying HGNC..."):
+        for hgnc_name in tqdm(
+            dict_hgnc2uniprot.keys(),
+            desc="Querying HGNC...",
+            bar_format=TQDM_BAR_FORMAT,
+        ):
             temp = hgnc.HGNC(input_symbol_or_id=hgnc_name)
             try:
                 uniprot_id = temp.maybe_get_info_from_hgnc_fetch(
@@ -433,9 +468,10 @@ class KinaseMissenseMutations(Mutations):
                 )["uniprot_ids"][0][0]
                 dict_hgnc2uniprot[hgnc_name] = uniprot_id
             except Exception as e:
-                logger.error(f"Error retrieving Uniprot ID for {hgnc_name}: {e}")
-                list_err.append(hgnc_name)
-        logger.error(f"List errors:\n{list_err}")
+                list_err.append(f"{hgnc_name}: {e}")
+        if len(list_err) > 0:
+            str_errors = "\n".join(list_err)
+            logger.error(f"Errors retrieving HGNC gene names:\n{str_errors}")
 
         # replace any HGNC gene names in the dictionary
         for cbio_name, mkt_name in self.dict_replace.items():
@@ -461,7 +497,6 @@ class KinaseMissenseMutations(Mutations):
             DataFrame of kinase mutations if successful, otherwise None
 
         """
-        # dict_in = return_kinase_dict()
 
         col_hgnc = self.return_adjusted_colname("hugoGeneSymbol")
 
@@ -488,9 +523,12 @@ class KinaseMissenseMutations(Mutations):
             for k, v in DICT_KINASE.items()
             if v.uniprot_id.split("_")[0] in dict_hgnc2uniprot_kin.values()
         }
+
         # replace any mismatched gene names in the dictionary
         for cbio_name, mkt_name in self.dict_replace.items():
-            dict_kinase_cbio[cbio_name] = dict_kinase_cbio.pop(mkt_name)
+            if mkt_name in dict_kinase_cbio:
+                dict_kinase_cbio[cbio_name] = dict_kinase_cbio.pop(mkt_name)
+
         # BRD4 and STK19 don't have KLIFS - if want to remove them, uncomment below
         # dict_kinase_cbio = {
         #     k: v for k, v in dict_kinase_cbio.items()
@@ -557,7 +595,12 @@ class KinaseMissenseMutations(Mutations):
 
         # TODO: check non-mismatches for list_set_kinase_mismatch gene_hugoGeneSymbol
         set_kinase_mismatch = {i.split("_")[1] for i in list_mismatch + list_err}
-        logger.error(f"HGNC gene names with mismatches: {set_kinase_mismatch}")
+        if len(set_kinase_mismatch) > 0:
+            str_errors = "\n".join(set_kinase_mismatch)
+            logger.error(
+                "HGNC gene names of kinases with mismatches between "
+                f"cBioPortal and canonical Uniprot sequences:\n{str_errors}"
+            )
         df_filtered = df.loc[
             ~df["gene_hugoGeneSymbol"].isin(set_kinase_mismatch), :
         ].reset_index(drop=True)

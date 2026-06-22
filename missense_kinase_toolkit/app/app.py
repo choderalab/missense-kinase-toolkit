@@ -3,9 +3,13 @@ from dataclasses import dataclass
 
 import streamlit as st
 from constants import DICT_RESOURCE_URLS, LIST_CAPTIONS, LIST_OPTIONS
-from generate_alignments import SequenceAlignment
-from generate_properties import PropertyTables
-from generate_structures import StructureVisualizer
+from mkt.databases.app.properties import PropertyTables
+from mkt.databases.app.schema import (
+    DefaultConfig,
+    KLIFSImportantConfig,
+    PhosphositesConfig,
+)
+from mkt.databases.app.structures import StructureVisualizer
 from mkt.databases.colors import DICT_COLORS
 from mkt.databases.log_config import configure_logging
 from mkt.schema.io_utils import (
@@ -17,6 +21,7 @@ from mkt.schema.io_utils import (
 from mkt.schema.kinase_schema import KinaseInfo
 from mkt.schema.utils import rgetattr
 from streamlit_bokeh import streamlit_bokeh
+from visualizers import SequenceAlignmentGenerator, StructureVisualizerGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -150,9 +155,10 @@ class Dashboard:
                 "Crimson y-axis labels indicate the absense of a sequence for the chosen kinase in the database queried.\n"
             )
 
-            obj_alignment = SequenceAlignment(
-                obj_temp,
-                DICT_COLORS[dashboard_state.palette]["DICT_COLORS"],
+            obj_alignment = SequenceAlignmentGenerator(
+                str_kinase=dashboard_state.kinase,
+                dict_color=DICT_COLORS[dashboard_state.palette]["DICT_COLORS"],
+                obj_kinase=obj_temp,
             )
 
             streamlit_bokeh(
@@ -165,46 +171,52 @@ class Dashboard:
 
         with col1:
             with st.expander("Structure", expanded=True):
-                st.markdown("### KinCore active structure\n")
-                try:
-                    plot_spot = st.empty()
+                if obj_temp.kincore is None:
+                    st.error("No KinCore objects available for this kinase.", icon="⚠️")
+                else:
+                    st.markdown("### KinCore active structure\n")
+                    try:
+                        plot_spot = st.empty()
 
-                    # allow for annotations if present in the KinaseInfo object
-                    list_idx = [0] + [
-                        idx + 1
-                        for idx, i in enumerate(
-                            [
-                                "uniprot.phospho_sites",
-                                "KLIFS2UniProtIdx",
-                            ]
+                        # allow for annotations if present in the KinaseInfo object
+                        list_idx = [0] + [
+                            idx + 1
+                            for idx, i in enumerate(
+                                [
+                                    "uniprot.phospho_sites",
+                                    "KLIFS2UniProtIdx",
+                                ]
+                            )
+                            if rgetattr(obj_temp, i) is not None
+                        ]
+
+                        annotation = st.radio(  # noqa: F841
+                            "Select an annotation to render (select one):",
+                            options=[LIST_OPTIONS[i] for i in list_idx],
+                            captions=[LIST_CAPTIONS[i] for i in list_idx],
+                            index=0,
                         )
-                        if rgetattr(obj_temp, i) is not None
-                    ]
 
-                    annotation = st.radio(  # noqa: F841
-                        "Select an annotation to render (select one):",
-                        options=[LIST_OPTIONS[i] for i in list_idx],
-                        captions=[LIST_CAPTIONS[i] for i in list_idx],
-                        index=0,
-                    )
+                        with plot_spot:
+                            # map annotation choice to config class
+                            dict_annotation_config = {
+                                "None": DefaultConfig,
+                                "Phosphosites": PhosphositesConfig,
+                                "KLIFS": KLIFSImportantConfig,
+                            }
 
-                    with plot_spot:
-                        viz = StructureVisualizer(
-                            obj_kinase=obj_temp,
-                            dict_align=obj_alignment.dict_align,
-                            str_attr=annotation,
+                            config = dict_annotation_config[annotation](
+                                seq_align=obj_alignment,
+                            )
+                            struct_viz = StructureVisualizer(config)
+                            viz = StructureVisualizerGenerator(struct_viz)
+                            st.components.v1.html(
+                                viz.html, height=600, width=None, scrolling=False
+                            )
+                    except Exception as e:
+                        logger.exception(
+                            f"Error generating structure for {dashboard_state.kinase}: {e}",
                         )
-                        st.components.v1.html(viz.html, height=600)
-
-                except Exception as e:
-                    logger.exception(
-                        f"Error generating structure for {dashboard_state.kinase}: {e}",
-                    )
-                    if obj_temp.kincore is None:
-                        st.error(
-                            "No KinCore objects available for this kinase.", icon="⚠️"
-                        )
-                    else:
                         st.error("No structure available for this kinase.", icon="⚠️")
 
         with col2:

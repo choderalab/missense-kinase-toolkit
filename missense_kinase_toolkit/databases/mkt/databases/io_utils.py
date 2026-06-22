@@ -5,6 +5,7 @@ import tarfile
 import git
 import pandas as pd
 from mkt.databases.config import OUTPUT_DIR_VAR
+from mkt.schema.utils import TQDM_BAR_FORMAT
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -157,7 +158,10 @@ def parse_iterabc2dataframe(
 
     dict_dir = {}
     for attr in tqdm(
-        set_dir, desc="Parsing attributes from ABC...", disable=not verbose
+        set_dir,
+        desc="Parsing attributes from ABC...",
+        disable=not verbose,
+        bar_format=TQDM_BAR_FORMAT,
     ):
         if str_prefix:
             attr_prefix = f"{str_prefix}_{attr}"
@@ -193,7 +197,7 @@ def get_repo_root():
         return repo.working_tree_dir
     except git.InvalidGitRepositoryError:
         logger.info("Not a git repository; using current directory as root...")
-        return "."
+        return os.getcwd()
 
 
 def create_tar_without_metadata(
@@ -249,10 +253,10 @@ def return_kinase_dict(bool_hgnc: bool = True) -> dict[str, object]:
     """
     from mkt.schema import io_utils
 
-    dict_kinase = io_utils.deserialize_kinase_dict()
+    DICT_KINASE = io_utils.deserialize_kinase_dict(str_name="DICT_KINASE")
 
     # use HGNC IDs as keys if bool_hgnc is True, else use UniProt IDs
     if not bool_hgnc:
-        dict_kinase = {v.uniprot_id: v for v in dict_kinase.values()}
+        DICT_KINASE = {v.uniprot_id: v for v in DICT_KINASE.values()}
 
-    return dict_kinase
+    return DICT_KINASE

@@ -202,6 +202,7 @@ class KLIFS(SwaggerAPIClient):
                 "validate_swagger_spec": False,
             },
         )
+        self._stamp_now()
         return klifs_api
 
     def get_url(self):

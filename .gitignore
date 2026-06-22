@@ -87,6 +87,7 @@ celerybeat-schedule
 .venv
 venv/
 ENV/
+VE/
 
 # Spyder project settings
 .spyderproject
@@ -189,3 +190,13 @@ $RECYCLE.BIN/
 # data_cache/
 *params.json
 *.sqlite
+
+# don't save images generated during analysis
+images/
+
+# plot config files (not shipped with package)
+configs/
+
+.claude/*
+# but keep version-controlled project skills so they're shared/reusable
+!.claude/skills/

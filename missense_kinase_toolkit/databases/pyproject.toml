@@ -20,6 +20,7 @@ classifiers = [
 
 dependencies = [
     "mkt.schema",
+    "nf-rnaseq @ git+https://github.com/tansey-lab/nf-rnaseq",
     "pydantic>=2.7.4",
     "tqdm>=4.66.3",
     "pandas>=2,<3",
@@ -34,20 +35,31 @@ dependencies = [
     "bokeh>=3.7.0",
     "seaborn>=0.13.2",
     "scipy>=1.13.1",
+    "statsmodels>=0.12.2",
+    "matplotlib>=3.7.0",
     "matplotlib-venn>=1.1.1",
+    "numpy>=1.24.0",
     "pyhmmer>=0.10.15",
     "biotite>=1.0.1",
     "openpyxl>=3.1.5",
     "upsetplot>=0.9.0",
+    "xlrd>=2.0.1",
+    "rdkit>=2023.9.6",
+    "webcolors>=24.11.1",
+    "typer>=0.12.0",
+    "omegaconf>=2.3.0",
 ]
 
 [project.optional-dependencies]
-dev = ["black==24.3.0", "flake8==7.0.0", "sphinx==7.3.7", "sphinx-rtd-theme==2.0.0"]
-test = ["pytest==8.0.1", "pytest-runner==6.0.1"]
+dev = ["black>=26.3.1", "flake8==7.0.0", "sphinx==7.3.7", "sphinx-rtd-theme==2.0.0"]
+test = ["pytest>=9.0.3", "pytest-runner==6.0.1", "pytest-cov>=4.0", "filelock>=3.0"]
 
 [project.scripts]
 generate_kinaseinfo_objects = "mkt.databases.cli.generate_kinaseinfo_objects:main"
 extract_cbioportal_missense_kinases = "mkt.databases.cli.extract_cbioportal_missense_kinases:main"
+generate_dataset_csv_files = "mkt.databases.cli.generate_dataset_csv_files:main"
+generate_pymol_files = "mkt.databases.cli.generate_pymol_files:app"
+plot_dataset_data = "mkt.databases.cli.plot_dataset_data:app"
 
 [project.urls]
 "Homepage" = "https://github.com/choderalab/missense-kinase-toolkit"

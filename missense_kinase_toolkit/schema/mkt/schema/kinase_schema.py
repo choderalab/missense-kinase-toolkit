@@ -2,6 +2,7 @@ import logging
 from enum import Enum
 
 from mkt.schema.constants import LIST_FULL_KLIFS_REGION, LIST_KLIFS_REGION, LIST_PFAM_KD
+from mkt.schema.utils import rgetattr
 from pydantic import BaseModel, ConfigDict, Field, constr, field_validator
 from strenum import StrEnum
 
@@ -304,8 +305,13 @@ class KinaseInfo(BaseModel):
         else:
             return None
 
-    def extract_sequence_from_cif(self) -> str | None:
+    def extract_sequence_from_cif(self, bool_verbose: bool = False) -> str | None:
         """Extract sequence from CIF if available.
+
+        Parameters
+        ----------
+        bool_verbose : bool, optional
+            Whether to log verbose messages, by default False.
 
         Returns
         -------
@@ -318,14 +324,21 @@ class KinaseInfo(BaseModel):
             if self.kincore is not None and self.kincore.cif is not None:
                 return self.kincore.cif.cif[key_seq][0].replace("\n", "")
             else:
-                logger.info(f"No CIF sequence for {self.hgnc_name}")
+                if bool_verbose:
+                    logger.info(f"No CIF sequence for {self.hgnc_name}")
                 return None
         except Exception as e:
-            logger.info(f"No Kincore entry for {self.hgnc_name}: {e}")
+            if bool_verbose:
+                logger.info(f"No Kincore entry for {self.hgnc_name}: {e}")
             return None
 
-    def adjudicate_kd_sequence(self) -> str | None:
+    def adjudicate_kd_sequence(self, bool_verbose: bool = False) -> str | None:
         """Adjudicate kinase domain sequence based on available data.
+
+        Parameters
+        ----------
+        bool_verbose : bool, optional
+            Whether to log verbose messages, by default False.
 
         Returns
         -------
@@ -333,7 +346,7 @@ class KinaseInfo(BaseModel):
             The kinase domain sequence if available, otherwise None.
         """
         if self.kincore is not None:
-            seq = self.extract_sequence_from_cif()
+            seq = self.extract_sequence_from_cif(bool_verbose=bool_verbose)
             if seq is not None:
                 return seq
             else:
@@ -342,29 +355,122 @@ class KinaseInfo(BaseModel):
         elif self.pfam is not None:
             return self.uniprot.canonical_seq[self.pfam.start - 1 : self.pfam.end]
         else:
-            logger.info(f"No kinase domain sequence found for {self.hgnc_name}")
+            if bool_verbose:
+                logger.info(f"No kinase domain sequence found for {self.hgnc_name}")
             return None
 
-    def adjudicate_group(self) -> str | None:
+    def adjudicate_kd_start(self, bool_verbose: bool = False) -> int | None:
+        """Adjudicate kinase domain start based on available data.
+
+        Parameters
+        ----------
+        bool_verbose : bool, optional
+            Whether to log verbose messages, by default False.
+
+        Returns
+        -------
+        int | None
+            The start of the kinase domain if available, otherwise None.
+        """
+        if self.kincore is not None:
+            start = rgetattr(self, "kincore.cif.start") or rgetattr(
+                self, "kincore.fasta.start"
+            )
+            return start
+        elif self.pfam is not None:
+            return self.pfam.start
+        else:
+            if bool_verbose:
+                logger.info(
+                    f"No kinase domain sequence start found for {self.hgnc_name}"
+                )
+            return None
+
+    def adjudicate_kd_end(self, bool_verbose: bool = False) -> int | None:
+        """Adjudicate kinase domain end based on available data.
+
+        Parameters
+        ----------
+        bool_verbose : bool, optional
+            Whether to log verbose messages, by default False.
+
+        Returns
+        -------
+        int | None
+            The end of the kinase domain if available, otherwise None.
+        """
+        if self.kincore is not None:
+            end = rgetattr(self, "kincore.cif.end") or rgetattr(
+                self, "kincore.fasta.end"
+            )
+            return end
+        elif self.pfam is not None:
+            return self.pfam.end
+        else:
+            if bool_verbose:
+                logger.info(f"No kinase domain sequence end found for {self.hgnc_name}")
+            return None
+
+    def adjudicate_group(self, bool_verbose: bool = False) -> str | None:
         """Adjudicate group based on available data.
+
+        Parameters
+        ----------
+        bool_verbose : bool, optional
+            Whether to log verbose messages, by default False.
 
         Returns
         -------
         str | None
             The group of the kinase if available, otherwise None.
         """
-        if self.kincore is not None:
-            group = self.kincore.fasta.group
+        list_attr = ["kincore.fasta.group", "kinhub.group", "klifs.group"]
+
+        for attr in list_attr:
+            group = rgetattr(self, attr)
             if group is not None:
                 return group
-        elif self.kinhub is not None:
-            group = self.kinhub.group
-            if group is not None:
-                return group
-        elif self.klifs is not None:
-            group = self.klifs.group
-            if group is not None:
-                return group
-        else:
+
+        if bool_verbose:
             logger.info(f"No group found for {self.hgnc_name}")
-            return None
+        return None
+
+    def is_lipid_kinase(self) -> bool:
+        """Return boolean if a lipid kinase.
+
+        Returns
+        -------
+        bool
+            Whether or not is a lipid kinase
+        """
+        str_hgnc = self.hgnc_name.split("_")[0]
+
+        bool1 = str_hgnc.startswith("PI")
+        bool2 = not (str_hgnc.startswith("PIM") or str_hgnc.startswith("PIN"))
+        # the first is a protein kinase, the second and third are pseudokinases
+        bool3 = not (str_hgnc in ["PIK3R4", "PI4KAP1", "PI4KAP2"])
+
+        if bool1 and bool2 and bool3:
+            return True
+        else:
+            return False
+
+    def is_pseudogene(self) -> bool:
+        """Return boolean if a pseudogene.
+
+        Returns
+        -------
+        bool
+            Whether or not is a pseudogene
+        """
+        from mkt.schema.utils import rgetattr
+
+        for attr, str_attr in [
+            ("uniprot.header", "putative"),
+            ("klifs.full_name", "pseudogene"),
+        ]:
+            val = rgetattr(self, attr)
+            if val is not None and str_attr in val.lower():
+                return True
+
+        return False

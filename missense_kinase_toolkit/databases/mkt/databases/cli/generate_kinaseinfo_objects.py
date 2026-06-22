@@ -101,9 +101,12 @@ def main():
     serialize_kinase_dict(dict_kinaseinfo, str_path=path_objects)
 
     # create tar file without metadata one level from the objects directory
+    filepath_kinaseinfo_tar = os.path.join(
+        dict_path["objects"], "..", "KinaseInfo.tar.gz"
+    )
     create_tar_without_metadata(
         path_source=path_objects,
-        filename_tar=os.path.join(dict_path["objects"], "..", "KinaseInfo.tar.gz"),
+        filename_tar=filepath_kinaseinfo_tar,
     )
 
     # generate kinase info plot

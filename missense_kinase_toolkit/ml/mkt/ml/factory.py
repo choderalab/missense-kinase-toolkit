@@ -74,11 +74,12 @@ class ExperimentFactory:
             model_class = getattr(ModelType, self.config["model"]["type"])
 
             # instantiate the dataset class
-            logger.info(f"Dataset configs:\n{self.config["data"]["configs"]}\n")
+            logger.info(f"Dataset configs:\n{self.config['data']['configs']}\n")
             dataset = dataset_class.value(**self.config["data"]["configs"])
 
-            # instantiate the model class and make sure tokenizer matches model
+            # instantiate the model class
             dict_model_configs = self.config["model"]["configs"]
+            # make sure tokenizer matches model so get model names from dataset
             dict_model_configs["model_name_drug"] = dataset.model_drug
             dict_model_configs["model_name_kinase"] = dataset.model_kinase
             logger.info(f"Model configs:\n{dict_model_configs}\n")
