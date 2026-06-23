@@ -251,6 +251,12 @@ def return_kinase_dict(bool_hgnc: bool = True) -> dict[str, object]:
         otherwise with UniProt IDs as keys
 
     """
+    # during a docs build, autodoc only imports modules and never calls the
+    # methods that consume the kinase dict, so skip the expensive
+    # deserialization (docs/build_docs.sh sets SPHINX_BUILD)
+    if os.environ.get("SPHINX_BUILD"):
+        return {}
+
     from mkt.schema import io_utils
 
     DICT_KINASE = io_utils.deserialize_kinase_dict(str_name="DICT_KINASE")
