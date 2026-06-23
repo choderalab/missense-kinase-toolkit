@@ -24,17 +24,18 @@ dependencies = [
     "toml",
     "pyyaml",
     "tqdm",
-    "gitpython==3.1.43",
+    "gitpython==3.1.50",
 ]
 
 [project.optional-dependencies]
-dev = ["black==24.3.0", "flake8==7.0.0", "sphinx==7.3.7", "sphinx-rtd-theme==2.0.0"]
-test = ["pytest==8.0.1", "pytest-runner==6.0.1"]
+dev = ["black>=26.3.1", "flake8==7.0.0", "sphinx==7.3.7", "sphinx-rtd-theme==2.0.0"]
+test = ["pytest>=9.0.3", "pytest-runner==6.0.1", "pytest-cov>=4.0", "pytest-xdist>=3.0"]
 
-[tool.setuptools.package-data]
-schema = [
-    "KinaseInfo.tar.gz",
-]
+# include files grafted by MANIFEST.in (e.g. mkt/schema/KinaseInfo.tar.gz) in the
+# wheel as well as the sdist; the broken `package-data` key "schema" matched no
+# package (the import package is the namespaced `mkt.schema`)
+[tool.setuptools]
+include-package-data = true
 
 [project.urls]
 "Homepage" = "https://github.com/choderalab/missense-kinase-toolkit"

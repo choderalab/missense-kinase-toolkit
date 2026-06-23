@@ -14,6 +14,11 @@ on:
   schedule:
     - cron: "0 0 * * 0"
 
+# cancel superseded in-progress runs for the same ref (e.g. rapid PR pushes)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test on ${{ matrix.os }}, Python ${{ matrix.python-version }}
@@ -53,6 +58,9 @@ jobs:
           set -e
           pytest \
             -v \
+            -n 2 \
+            --dist loadfile \
+            --durations=10 \
             --cov-report=xml \
             --color=yes  \
             --cov=mkt.schema \

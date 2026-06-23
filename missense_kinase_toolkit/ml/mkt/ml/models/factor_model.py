@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from mkt.ml.utils import set_seed
+from mkt.schema.utils import TQDM_BAR_FORMAT
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 
@@ -388,7 +389,9 @@ class TensorFactorPipeline(TensorFactorTrainer):
             f"{self.df[self.val_col].sum():,} validation samples"
         )
 
-        for epoch in tqdm(range(self.epochs), desc="Training epochs"):
+        for epoch in tqdm(
+            range(self.epochs), desc="Training epochs", bar_format=TQDM_BAR_FORMAT
+        ):
             train_loss = self.train_epoch(self.dataloader_train)
             val_loss = self.evaluate(self.dataloader_val)
 

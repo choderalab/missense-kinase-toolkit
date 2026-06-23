@@ -12,6 +12,8 @@ import git
 import toml
 import yaml
 from mkt.schema import kinase_schema
+from mkt.schema.config import get_output_dir
+from mkt.schema.utils import TQDM_BAR_FORMAT
 from pydantic import BaseModel
 from tqdm import tqdm
 
@@ -293,7 +295,11 @@ def serialize_kinase_dict(
 
     str_path = return_str_path_from_pkg_data(str_path)
 
-    for key, val in tqdm(kinase_dict.items(), desc="Serializing KinaseInfo objects..."):
+    for key, val in tqdm(
+        kinase_dict.items(),
+        desc="Serializing KinaseInfo objects...",
+        bar_format=TQDM_BAR_FORMAT,
+    ):
         with open(f"{str_path}/{key}.{suffix}", "w") as outfile:
             val_serialized = DICT_FUNCS[suffix]["serialize"](
                 val.model_dump(),
@@ -309,6 +315,7 @@ def deserialize_kinase_dict(
     bool_remove: bool = True,
     list_ids: list[str] | None = None,
     str_name: str | None = None,
+    bool_verbose: bool = True,
 ) -> dict[str, BaseModel]:
     """Deserialize KinaseInfo object from files.
 
@@ -333,7 +340,8 @@ def deserialize_kinase_dict(
         Dictionary of KinaseInfo objects.
     """
     if str_name is not None and str_name in _deserialization_cache:
-        logger.info(f"Loading KinaseInfo object from variable {str_name}...")
+        if bool_verbose:
+            logger.info(f"Loading KinaseInfo object from variable {str_name}...")
         return _deserialization_cache[str_name]
 
     if suffix not in DICT_FUNCS:
@@ -355,7 +363,9 @@ def deserialize_kinase_dict(
     if str_path.endswith(".tar.gz"):
         dict_str = untar_files_in_memory(str_path, list_ids=list_ids)[1]
         for val in tqdm(
-            dict_str.values(), desc="Deserializing KinaseInfo objects in memory..."
+            dict_str.values(),
+            desc="Deserializing KinaseInfo objects in memory...",
+            bar_format=TQDM_BAR_FORMAT,
         ):
 
             val_deserialized = DICT_FUNCS[suffix]["deserialize_str"](
@@ -368,7 +378,9 @@ def deserialize_kinase_dict(
     else:
         list_file = glob.glob(os.path.join(str_path, f"*.{suffix}"))
         for file in tqdm(
-            list_file, desc="Deserializing KinaseInfo objects from files..."
+            list_file,
+            desc="Deserializing KinaseInfo objects from files...",
+            bar_format=TQDM_BAR_FORMAT,
         ):
             with open(file) as openfile:
 
@@ -389,3 +401,67 @@ def deserialize_kinase_dict(
         _deserialization_cache[str_name] = dict_import
 
     return dict_import
+
+
+def save_plot(
+    fig,
+    output_filename: str,
+    plot_type: str = "Plot",
+    bool_force_local: bool = True,
+    bool_image_subdir=True,
+    output_path: str | None = None,
+    **kwargs,
+) -> None:
+    """Save the current matplotlib figure in both SVG and PNG formats.
+
+    Parameters:
+    -----------
+    fig : matplotlib.figure.Figure
+        The figure object to save.
+    output_filename : str
+        Name of the output file to save the plot. If it ends with .png, will be converted to .svg.
+        Otherwise assumed to be .svg already.
+    plot_type : str
+        Description of the plot type for logging purposes (e.g., "Dynamic range plot")
+    bool_force_local : bool
+        If True, forces saving to the local dir (repo root or cwd) regardless of env var; default is True.
+    bool_image_subdir : bool
+        If True, saves images to a subdirectory named "images" within the output path; default is True.
+    output_path : str | None
+        Optional path to save the plot. If None, saves to the current working directory.
+    **kwargs
+        Additional keyword arguments to pass to plt.savefig (e.g., {"dpi": 300}). Default is empty dict.
+    """
+    import matplotlib.pyplot as plt
+
+    # remove extension if provided
+    output_filename = os.path.splitext(output_filename)[0]
+
+    # get_repo_root() > output_path > get_output_dir()
+    if bool_force_local:
+        if output_path is not None:
+            logger.info(
+                "bool_force_local is True, so ignoring provided output_path "
+                f"{output_path} and saving to local directory instead."
+            )
+        output_path = get_repo_root()
+    elif output_path is None:
+        output_path = get_output_dir()
+
+    # set default savefig parameters
+    savefig_params = {"bbox_inches": "tight"}
+    # update with any user-provided kwargs
+    savefig_params.update(kwargs)
+
+    for suffix in ["svg", "png"]:
+        if bool_image_subdir:
+            file_path = os.path.join(
+                output_path, "images", f"{output_filename}.{suffix}"
+            )
+        else:
+            file_path = os.path.join(output_path, f"{output_filename}.{suffix}")
+
+        fig.savefig(file_path, format=suffix, **savefig_params)
+        logger.info(f"{plot_type} saved to {file_path}")
+
+    plt.close(fig)

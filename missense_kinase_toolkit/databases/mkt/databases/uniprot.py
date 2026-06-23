@@ -46,8 +46,10 @@ class UniProtFASTA(UniProt, RESTAPIClient):
         """Set URL for UniProt API; UniProtKB if SwissProt or Unisave if TrEMBL."""
         import re
 
-        if re.match(SwissProtPattern, self.uniprot_id):
+        str_id_temp = self.uniprot_id.split("-")[0]
+        if re.match(SwissProtPattern, str_id_temp):
             return "https://rest.uniprot.org/uniprotkb/<ID>.fasta"
+        # note: not sure if TrEMBL entries can have different isoforms - assume not for now
         elif re.match(TrEMBLPattern, self.uniprot_id):
             return "https://rest.uniprot.org/unisave/<ID>?format=fasta&versions=67"
         else:
@@ -72,6 +74,7 @@ class UniProtFASTA(UniProt, RESTAPIClient):
 
         """
         res = requests_wrapper.get_cached_session().get(self.url_fasta)
+        self._stamp_from_response(res)
         if res.ok:
             str_fasta = res.text
             if bool_seq:
@@ -150,6 +153,7 @@ class UniProtJSON(UniProt, RESTAPIClient):
             self.url_json,
             headers=ast.literal_eval(self.headers),
         )
+        self._stamp_from_response(res)
         if res.ok:
             json = res.json()
         else:

@@ -10,7 +10,7 @@ from mkt.databases.datasets.constants import KinaseGroupSource
 from mkt.databases.datasets.discoverx import DiscoverXInfoGenerator
 from mkt.databases.log_config import configure_logging
 from mkt.schema.io_utils import deserialize_kinase_dict, get_repo_root
-from mkt.schema.utils import rgetattr
+from mkt.schema.utils import TQDM_BAR_FORMAT, rgetattr
 from pydantic import BaseModel, Field
 from rdkit import Chem
 from tqdm import tqdm
@@ -337,7 +337,9 @@ class ProcessDataset(ABC):
 
         list_region = list(dict_unaligned[list(dict_unaligned.keys())[0]].keys())
         for region in tqdm(
-            list_region, desc=f"Aligning sequence regions using {str_in} strategy"
+            list_region,
+            desc=f"Aligning sequence regions using {str_in} strategy",
+            bar_format=TQDM_BAR_FORMAT,
         ):
             if any([i in region for i in list_align_region]):
                 dict_temp_region = {
@@ -435,6 +437,21 @@ class ProcessDataset(ABC):
 
 
 def generate_ridgeline_df(df_in: pd.DataFrame, source: str):
+    """Generate a DataFrame for ridgeline plot visualization of kinase groups and sequence coverage.
+
+    Parameters:
+    -----------
+    df_in : pd.DataFrame
+        Input DataFrame containing a 'kinase_name' column.
+
+    source : str
+        Source name to be added as a column in the output DataFrame.
+
+    Returns:
+    --------
+    pd.DataFrame
+        Output DataFrame with columns for kinase family, fraction of construct sequence relative to RefSeq, and source.
+    """
     list_ids = df_in["kinase_name"].unique()
 
     list_frac_refseq = [
@@ -474,6 +491,20 @@ def generate_ridgeline_df(df_in: pd.DataFrame, source: str):
 
 
 def generate_stacked_barchart_df(df_in: pd.DataFrame, source: str):
+    """Generate a DataFrame for stacked bar chart visualization of kinase groups and sequence coverage.
+
+    Parameters:
+    -----------
+    df_in : pd.DataFrame
+        Input DataFrame containing a 'kinase_name' column.
+    source : str
+        Source name to be added as a column in the output DataFrame.
+
+    Returns:
+    --------
+    pd.DataFrame
+        Output DataFrame with columns for kinase family, whether UniProt and RefSeq sequences are the same, and source.
+    """
     list_ids = df_in["kinase_name"].unique()
 
     list_bool_uniprot2refseq = [

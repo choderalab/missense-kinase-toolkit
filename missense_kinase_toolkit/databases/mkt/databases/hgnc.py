@@ -3,12 +3,13 @@ from dataclasses import dataclass
 
 import requests
 from mkt.databases import requests_wrapper, utils_requests
+from mkt.databases.api_schema import RESTAPIClient
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class HGNC:
+class HGNC(RESTAPIClient):
     """Class to interact with the HGNC API."""
 
     input_symbol_or_id: str
@@ -26,6 +27,21 @@ class HGNC:
         else:
             self.hgnc = None
             self.ensembl = self.input_symbol_or_id
+
+    def query_api(self, **kwargs) -> list[str] | None:
+        """Default HGNC query: forwards to maybe_get_symbol_from_hgnc_search.
+
+        Parameters:
+        -----------
+        **kwargs
+            Forwarded to maybe_get_symbol_from_hgnc_search.
+
+        Returns:
+        --------
+        list[str] | None
+            Result of the search; see maybe_get_symbol_from_hgnc_search for details.
+        """
+        return self.maybe_get_symbol_from_hgnc_search(**kwargs)
 
     def maybe_get_symbol_from_hgnc_search(
         self,
@@ -62,6 +78,7 @@ class HGNC:
         res = requests_wrapper.get_cached_session().get(
             url, headers={"Accept": "application/json"}
         )
+        self._stamp_from_response(res)
 
         if res.ok:
             list_hgnc_gene_name = self._extract_list_from_hgnc_response_docs(
@@ -131,6 +148,7 @@ class HGNC:
             res = requests_wrapper.get_cached_session().get(
                 url, headers={"Accept": "application/json"}
             )
+            self._stamp_from_response(res)
 
             if list_to_extract is None:
                 list_to_extract = ["locus_type"]

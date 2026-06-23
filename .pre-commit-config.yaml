@@ -14,13 +14,13 @@ repos:
     files: ^missense_kinase_toolkit
     exclude: ^missense_kinase_toolkit/schema/mkt/schema/KinaseInfo/
 - repo: https://github.com/psf/black-pre-commit-mirror
-  rev: 25.12.0
+  rev: 26.3.1
   hooks:
   - id: black
     files: ^missense_kinase_toolkit
     exclude: ^missense_kinase_toolkit/schema/mkt/schema/KinaseInfo/
 - repo: https://github.com/PyCQA/isort
-  rev: 7.0.0
+  rev: 8.0.1
   hooks:
   - id: isort
     files: ^missense_kinase_toolkit
