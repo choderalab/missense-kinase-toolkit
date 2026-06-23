@@ -52,7 +52,8 @@ class PropertyTables:
         try:
             obj_temp = rgetattr(self.obj_kinase, str_attr)
 
-            dict_temp = obj_temp.__dict__
+            # copy so list_drop's `del` does not mutate the cached KinaseInfo object
+            dict_temp = dict(obj_temp.__dict__)
 
             # drop or keep specified attributes
             if list_drop is not None:
@@ -92,3 +93,44 @@ class PropertyTables:
             "kincore.fasta",
             list_keep=["group", "hgnc", "swissprot", "uniprot", "source_file"],
         )
+
+        self.format_property_columns()
+
+    @staticmethod
+    def _format_property_value(value) -> str:
+        """Render a single property value as a display string.
+
+        Parameters
+        ----------
+        value : Any
+            The raw attribute value from the KinaseInfo sub-object.
+
+        Returns
+        -------
+        str
+            String representation; iterables are comma-joined and None becomes "".
+        """
+        if value is None:
+            return ""
+        if isinstance(value, (list, tuple, set, frozenset)):
+            return ", ".join(str(v) for v in value)
+        return str(value)
+
+    def format_property_columns(self) -> None:
+        """Stringify the ``Property`` column of each table for ``st.table``.
+
+        The property tables collapse a kinase's heterogeneous attributes (str,
+        int, list, set, ...) into a single column, which pyarrow cannot serialize
+        to an Arrow table. Coercing every value to a string yields a uniform,
+        Arrow-compatible column.
+
+        Returns
+        -------
+        None
+            The ``Property`` column of each populated table is modified in place.
+        """
+        for df_temp in (self.df_kinhub, self.df_klifs, self.df_kincore):
+            if df_temp is not None and "Property" in df_temp.columns:
+                df_temp["Property"] = df_temp["Property"].map(
+                    self._format_property_value
+                )
