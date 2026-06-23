@@ -1,8 +1,15 @@
 import logging
+import os
+from io import StringIO
+from tempfile import NamedTemporaryFile
 from typing import Any
 
 import numpy as np
 import pandas as pd
+from Bio.PDB import MMCIFParser
+from Bio.PDB.mmcifio import MMCIFIO
+from Bio.PDB.PDBIO import PDBIO
+from Bio.PDB.Structure import Structure
 from mkt.schema.io_utils import deserialize_kinase_dict
 
 logger = logging.getLogger(__name__)
@@ -454,6 +461,73 @@ def add_one_hot_encoding_to_dataframe(
     return df_out
 
 
+def convert_mmcifdict2structure(
+    dict_cif: dict[str, str | list[str]],
+    structure_id: str = "kinase",
+) -> Structure:
+    """Convert an MMCIF2Dict dictionary into a Bio.PDB Structure.
+
+    The CIF data stored on ``KinaseInfo.kincore.cif.cif`` is an ``MMCIF2Dict``
+    object; Bio.PDB cannot build a structure from it directly, so it is round
+    tripped through a temporary CIF file via ``MMCIFIO``/``MMCIFParser``.
+
+    Parameters
+    ----------
+    dict_cif : dict[str, str | list[str]]
+        CIF dictionary (``MMCIF2Dict``), e.g. ``KinaseInfo.kincore.cif.cif``.
+    structure_id : str
+        Identifier assigned to the returned structure, by default "kinase".
+
+    Returns
+    -------
+    Structure
+        Bio.PDB Structure object parsed from the CIF dictionary. Residues are
+        numbered by ``auth_seq_id``, which for KinCore CIFs corresponds to the
+        UniProt sequence position.
+
+    """
+    mmcif_io = MMCIFIO()
+    mmcif_io.set_dict(dict_cif)
+
+    temp_string = StringIO()
+    mmcif_io.save(temp_string)
+
+    with NamedTemporaryFile(mode="w+", suffix=".cif", delete=False) as temp_file:
+        temp_file.write(temp_string.getvalue())
+        temp_file_name = temp_file.name
+
+    try:
+        parser = MMCIFParser(QUIET=True)
+        structure = parser.get_structure(structure_id, temp_file_name)
+    finally:
+        os.remove(temp_file_name)
+
+    return structure
+
+
+def convert_structure2string(structure: Structure) -> str:
+    """Serialize a Bio.PDB Structure to a PDB-format string.
+
+    Parameters
+    ----------
+    structure : Structure
+        Bio.PDB Structure object.
+
+    Returns
+    -------
+    str
+        Structure in PDB string format; residue numbering is preserved from
+        ``auth_seq_id`` (UniProt position for KinCore CIFs).
+
+    """
+    pdb_io = PDBIO()
+    pdb_io.set_structure(structure)
+    pdb_string = StringIO()
+    pdb_io.save(pdb_string)
+
+    return pdb_string.getvalue()
+
+
 def load_kinase_object(str_in: str):
     """Load a kinase object from the kinase dictionary based on the given gene name.
 
@@ -472,7 +546,7 @@ def load_kinase_object(str_in: str):
     ValueError
         If the given gene name is not found in the kinase dictionary.
     """
-    DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE")
-    if str_in not in DICT_KINASE:
+    dict_kinase = deserialize_kinase_dict(list_ids=[str_in])
+    if str_in not in dict_kinase:
         raise ValueError(f"Kinase {str_in} not found in DICT_KINASE.")
-    return DICT_KINASE[str_in]
+    return dict_kinase[str_in]

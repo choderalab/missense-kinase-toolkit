@@ -9,6 +9,54 @@ from mkt.databases.config import maybe_get_oncokb_token
 logger = logging.getLogger(__name__)
 
 
+DICT_ONCOKB_PREFIXES = {
+    "Resistance": "LEVEL_R",
+    "Diagnostic_Implication": "LEVEL_Dx",
+    "Prognostic_Implication": "LEVEL_Px",
+    "FDA": "LEVEL_Fda",
+    "Sensitive": "LEVEL_",  # this needs to be last because all levels start with "LEVEL_"
+}
+"""Mapping of OncoKB level prefixes to their corresponding keys in the highest level dictionary."""
+
+
+def adjudicate_prefix(str_in: str) -> str | None:
+    """Adjudicate the prefix for a given level string.
+
+    Parameters
+    ----------
+    str_in : str
+        String containing the level information (e.g., "LEVEL_1_SENSITIVE")
+
+    Returns
+    -------
+    str | None
+        Prefix of the level string (e.g., "Sensitive") if found, otherwise None
+
+    """
+    for key, prefix in DICT_ONCOKB_PREFIXES.items():
+        if str_in.startswith(prefix):
+            return key
+    logger.error(f"Could not adjudicate prefix for string: {str_in}")
+    return None
+
+
+def get_oncokb_levels() -> dict[str, str] | None:
+    """Query the OncoKB API for the current levels of evidence.
+
+    Returns
+    -------
+    dict[str, str] | None
+        Mapping of level string (e.g. "LEVEL_1") to its description, or None if
+        the levels could not be retrieved from the API.
+
+    """
+    info = OncoKBInfo()
+    if not info.has_json() or "levels" not in info._json:
+        logger.error("Could not retrieve levels of evidence from the OncoKB API.")
+        return None
+    return {i["levelOfEvidence"]: i["description"] for i in info._json["levels"]}
+
+
 @dataclass
 class OncoKB(APIKeyRESTAPIClient, ABC):
     """OncoKB API client."""
@@ -45,6 +93,7 @@ class OncoKB(APIKeyRESTAPIClient, ABC):
         res = requests_wrapper.get_cached_session().get(
             self.url_query, headers=self.header
         )
+        self._stamp_from_response(res)
         if res.ok:
             self._json = res.json()
         else:
@@ -139,9 +188,14 @@ class OncoKBProteinChange(OncoKB):
 
             json_data = self._json
             gene_exists = json_data["geneExist"]
-            variant_exists = json_data["variantExist"]
+            # The "variantExist" value is False if that specific alteration is not annotated (e.g., truncated)
+            # variant_exists = json_data["variantExist"]
+            variant_summary = json_data["variantSummary"]
+            variant_reviewed = (
+                "has not specifically been reviewed" not in variant_summary
+            )
 
-            if gene_exists and variant_exists:
+            if gene_exists and variant_reviewed:
                 self.annotate_highest_level()
                 self.get_treatments()
                 self.oncogenic = json_data.get("oncogenic", None)
@@ -152,11 +206,11 @@ class OncoKBProteinChange(OncoKB):
                     )
             elif self.verbose:
                 if gene_exists:
-                    msg = f"Alteration {self.alteration} does not exist for gene {self.gene_name} in OncoKB."
-                if variant_exists:
+                    msg = f"Alteration {self.alteration} has not been reviewed for gene {self.gene_name} in OncoKB."
+                elif variant_reviewed:
                     msg = f"Gene {self.gene_name} does not exist in OncoKB for alteration {self.alteration}."
                 else:
-                    msg = f"Gene {self.gene_name} and alteration {self.alteration} does not exist in OncoKB."
+                    msg = f"Gene {self.gene_name} does not exist and alteration {self.alteration} has not been reviewed in OncoKB."
                 logger.error(msg)
 
     def update_url(self):

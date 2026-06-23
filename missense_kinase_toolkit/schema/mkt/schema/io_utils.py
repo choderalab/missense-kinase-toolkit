@@ -13,6 +13,7 @@ import toml
 import yaml
 from mkt.schema import kinase_schema
 from mkt.schema.config import get_output_dir
+from mkt.schema.utils import TQDM_BAR_FORMAT
 from pydantic import BaseModel
 from tqdm import tqdm
 
@@ -294,7 +295,11 @@ def serialize_kinase_dict(
 
     str_path = return_str_path_from_pkg_data(str_path)
 
-    for key, val in tqdm(kinase_dict.items(), desc="Serializing KinaseInfo objects..."):
+    for key, val in tqdm(
+        kinase_dict.items(),
+        desc="Serializing KinaseInfo objects...",
+        bar_format=TQDM_BAR_FORMAT,
+    ):
         with open(f"{str_path}/{key}.{suffix}", "w") as outfile:
             val_serialized = DICT_FUNCS[suffix]["serialize"](
                 val.model_dump(),
@@ -358,7 +363,9 @@ def deserialize_kinase_dict(
     if str_path.endswith(".tar.gz"):
         dict_str = untar_files_in_memory(str_path, list_ids=list_ids)[1]
         for val in tqdm(
-            dict_str.values(), desc="Deserializing KinaseInfo objects in memory..."
+            dict_str.values(),
+            desc="Deserializing KinaseInfo objects in memory...",
+            bar_format=TQDM_BAR_FORMAT,
         ):
 
             val_deserialized = DICT_FUNCS[suffix]["deserialize_str"](
@@ -371,7 +378,9 @@ def deserialize_kinase_dict(
     else:
         list_file = glob.glob(os.path.join(str_path, f"*.{suffix}"))
         for file in tqdm(
-            list_file, desc="Deserializing KinaseInfo objects from files..."
+            list_file,
+            desc="Deserializing KinaseInfo objects from files...",
+            bar_format=TQDM_BAR_FORMAT,
         ):
             with open(file) as openfile:
 

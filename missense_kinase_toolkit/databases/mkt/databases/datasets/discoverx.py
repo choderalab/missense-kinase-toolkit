@@ -18,12 +18,13 @@ from mkt.databases.ncbi import ProteinNCBI
 from mkt.databases.uniprot import UniProtFASTA, query_uniprotbulk_api
 from mkt.schema.io_utils import deserialize_kinase_dict
 from mkt.schema.kinase_schema import SwissProtPattern
+from mkt.schema.utils import TQDM_BAR_FORMAT
 from pydantic import BaseModel, Field, constr, model_validator
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
-tqdm.pandas()
+tqdm.pandas(bar_format=TQDM_BAR_FORMAT)
 
 
 DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE")

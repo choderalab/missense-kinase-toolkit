@@ -3,6 +3,7 @@ from os import path
 import pandas as pd
 from mkt.databases.chembl import return_chembl_id
 from mkt.schema.io_utils import get_repo_root
+from mkt.schema.utils import TQDM_BAR_FORMAT
 from tqdm import tqdm
 
 
@@ -22,7 +23,11 @@ def main():
     )
 
     dict_chembl_id = {drug: {"source": None, "ids": []} for drug in list_davis_drugs}
-    for drug in tqdm(list_davis_drugs, desc="Querying drugs in ChEMBL"):
+    for drug in tqdm(
+        list_davis_drugs,
+        desc="Querying drugs in ChEMBL",
+        bar_format=TQDM_BAR_FORMAT,
+    ):
         drug_rev = drug.split(" (")[0]
 
         chembl_id, source = return_chembl_id(drug_rev)

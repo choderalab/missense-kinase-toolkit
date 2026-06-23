@@ -1,11 +1,16 @@
 import json
 import logging
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 
 from mkt.databases.app.sequences import SequenceAlignment
-from mkt.databases.colors import DICT_QUARTILE_HEATMAP_COLORMAP, percentile_colormap
+from mkt.databases.colors import (
+    DICT_QUARTILE_HEATMAP_COLORMAP_PLASMA,
+    percentile_colormap,
+)
+from mkt.databases.klifs import DICT_POCKET_KLIFS_REGIONS
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +35,18 @@ class StructureConfig(ABC):
     """List of styles for the residues to be highlighted, generated in __post_init__."""
     list_label: list[str | None] = field(init=False)
     """List of labels for the residues to be highlighted (None for no label)."""
+    label_offset: float = 20.0
+    """Angstroms offset from CA for label pseudoatom placement."""
+    label_min_dist: float = 6.0
+    """Minimum distance (angstroms) between labels for collision avoidance."""
+    label_spring_strength: float = 0.0
+    """Spring force pulling labels back toward ideal position (0 = no spring)."""
+    label_size: int = 14
+    """Font size for residue labels."""
+    label_connector: bool = True
+    """Whether to draw leader/connector lines from each residue to its label."""
+    highlight_cartoon_transparency: float = 0.0
+    """Cartoon transparency applied to colored/highlighted residues (0 = opaque, 1 = invisible)."""
 
     def __post_init__(self):
         list_idx, list_color, list_style = self.return_list_intersect_color_style()
@@ -165,6 +182,43 @@ class StructureConfig(ABC):
 
 
 @dataclass(kw_only=True)
+class DefaultConfig(StructureConfig):
+    """Default configuration rendering the whole protein as cartoon with spectrum coloring."""
+
+    str_attr: str = "KinCore, CIF"
+    """Attribute to highlight in the structure (default: 'KinCore, CIF')."""
+
+    def generate_list_idx(self) -> list[int]:
+        """Generate list of 0-indexed positions for all CIF residues.
+
+        Returns
+        -------
+        list[int]
+            List of 0-indexed positions for all CIF residues.
+        """
+        return self.return_list_cif_idx()
+
+    def generate_style_color_lists(
+        self, list_idx: list[int]
+    ) -> tuple[list[str], list[str]]:
+        """Generate style and color lists for default spectrum coloring.
+
+        Parameters
+        ----------
+        list_idx : list[int]
+            List of 0-indexed residue positions.
+
+        Returns
+        -------
+        tuple[list[str], list[str]]
+            All residues get 'cartoon' style and 'spectrum' color.
+        """
+        list_style = ["cartoon" for _ in list_idx]
+        list_color = ["spectrum" for _ in list_idx]
+        return list_style, list_color
+
+
+@dataclass(kw_only=True)
 class PhosphositesConfig(StructureConfig):
     """Configuration for highlighting phosphosites in PyMOL."""
 
@@ -268,8 +322,8 @@ class KLIFSConfig(StructureConfig):
 
 
 @dataclass(kw_only=True)
-class KLIFSConservedConfig(KLIFSConfig):
-    """Configuration for highlighting KLIFS conserved residues in PyMOL."""
+class KLIFSPathogenicConfig(KLIFSConfig):
+    """Configuration for highlighting KLIFS pathogenic residues in PyMOL."""
 
     list_stick_positions: list[int] = field(
         default_factory=lambda: [
@@ -280,7 +334,7 @@ class KLIFSConservedConfig(KLIFSConfig):
             80,  # xDFG:81 (D in xDFG)
         ]
     )
-    """List of 0-indexed positions in KLIFS sequence for stick representation (conserved positions)."""
+    """List of 0-indexed positions in KLIFS sequence for stick representation (pathogenic positions)."""
 
 
 @dataclass(kw_only=True)
@@ -303,6 +357,257 @@ class KLIFSImportantConfig(KLIFSConfig):
         ]
     )
     """List of 0-indexed positions in KLIFS sequence for stick representation (important positions)."""
+
+
+@dataclass(kw_only=True)
+class KLIFSAdaptiveConfig(KLIFSConfig):
+    """Configuration for highlighting adaptive KLIFS residues in PyMOL."""
+
+    list_stick_positions: list[int] = field(
+        default_factory=lambda: [
+            36,
+            44,
+            51,
+            83,
+        ]
+    )
+    """List of 0-indexed positions in KLIFS sequence for stick representation (adaptive positions)."""
+
+
+@dataclass(kw_only=True)
+class KLIFSRegionLabelConfig(KLIFSConfig):
+    """Configuration for KLIFS residues with region name labels and all-ribbon representation.
+
+    Uses KLIFS color scheme with cartoon-only styling (no sticks) and places
+    a label at the midpoint of each KLIFS region (e.g., 'g.l', 'αC', 'hinge').
+    Labels use the collision-avoidance offset logic from the PyMOL renderer.
+    """
+
+    list_stick_positions: list[int] = field(default_factory=list)
+    """No stick positions — all ribbon representation."""
+    label_offset: float = 12.0
+    """Closer offset for region labels (angstroms)."""
+    label_min_dist: float = 4.5
+    """Tighter minimum distance between region labels (angstroms)."""
+    label_spring_strength: float = 0.3
+    """Spring force pulling labels back toward ideal position."""
+
+    def generate_style_color_lists(
+        self, list_idx: list[int]
+    ) -> tuple[list[str], list[str]]:
+        """Generate all-cartoon style with KLIFS pocket colors.
+
+        Parameters
+        ----------
+        list_idx : list[int]
+            List of 0-indexed residue positions.
+
+        Returns
+        -------
+        tuple[list[str], list[str]]
+            All residues get 'cartoon' style, colors from KLIFS pocket colors.
+        """
+        list_style = ["cartoon" for _ in list_idx]
+        list_color = [
+            self.seq_align.dict_align[self.str_attr]["list_colors"][i] for i in list_idx
+        ]
+        return list_style, list_color
+
+    def _build_align_to_klifs_mapping(self) -> dict[int, int]:
+        """Build mapping from alignment position to KLIFS pocket position (0-indexed).
+
+        Accounts for gaps in the pocket sequence using the same logic as
+        ``_index_stick_region``.
+
+        Returns
+        -------
+        dict[int, int]
+            Mapping from alignment position (0-indexed) to KLIFS pocket position (0-84).
+        """
+        pocket_seq = self.seq_align.obj_kinase.klifs.pocket_seq
+        list_attr_idx = self._generate_list_idx_from_dict_align_with_attr()
+        if list_attr_idx is None:
+            return {}
+
+        # gap-adjusted index -> original KLIFS pocket position (0-indexed, 0-84)
+        adjusted_to_klifs = {}
+        gap_count = 0
+        for idx, res in enumerate(pocket_seq):
+            if res == "-":
+                gap_count += 1
+            else:
+                adjusted_to_klifs[idx - gap_count] = idx
+
+        # alignment position -> KLIFS pocket position
+        align_to_klifs = {}
+        for adj_idx, klifs_pos in adjusted_to_klifs.items():
+            if adj_idx < len(list_attr_idx):
+                align_to_klifs[list_attr_idx[adj_idx]] = klifs_pos
+
+        return align_to_klifs
+
+    def generate_labels(self, list_idx: list[int]) -> list[str | None]:
+        """Generate region name labels at the midpoint of each KLIFS region.
+
+        For each KLIFS region defined in ``DICT_POCKET_KLIFS_REGIONS``, places
+        a label at the alignment position closest to the region midpoint.
+
+        Parameters
+        ----------
+        list_idx : list[int]
+            List of 0-indexed residue positions.
+
+        Returns
+        -------
+        list[str | None]
+            Region name at midpoint positions, None for all others.
+        """
+        align_to_klifs = self._build_align_to_klifs_mapping()
+        if not align_to_klifs:
+            return [None] * len(list_idx)
+
+        # build KLIFS pocket position (0-indexed) -> region name
+        klifs_to_region = {}
+        for region_name, info in DICT_POCKET_KLIFS_REGIONS.items():
+            for pos in range(info["start"] - 1, info["end"]):  # convert to 0-indexed
+                klifs_to_region[pos] = region_name
+
+        # collect alignment positions per region
+        set_list_idx = set(list_idx)
+        region_align_positions = defaultdict(list)
+        for align_pos in list_idx:
+            klifs_pos = align_to_klifs.get(align_pos)
+            if klifs_pos is not None:
+                region = klifs_to_region.get(klifs_pos)
+                if region and align_pos in set_list_idx:
+                    region_align_positions[region].append(align_pos)
+
+        # pick midpoint of each region's alignment positions for label placement
+        label_positions = {}
+        for region, positions in region_align_positions.items():
+            mid_idx = len(positions) // 2
+            label_positions[positions[mid_idx]] = region
+
+        return [label_positions.get(idx) for idx in list_idx]
+
+
+@dataclass(kw_only=True)
+class KLIFSCustomConfig(KLIFSConfig):
+    """Configuration for KLIFS regions as semi-transparent cartoon with custom stick residues.
+
+    Renders all KLIFS pocket residues as pocket-colored, slightly transparent cartoon
+    and overlays a user-supplied set of full-length UniProt positions as opaque sticks
+    in user-supplied colors.
+    """
+
+    list_uniprot_idx: list[int] = field(default_factory=list)
+    """List of 1-indexed full-length UniProt positions to highlight as sticks."""
+    list_custom_color: list[str] = field(default_factory=list)
+    """List of colors corresponding to list_uniprot_idx (must be the same length)."""
+    highlight_cartoon_transparency: float = 0.3
+    """Cartoon transparency for the colored KLIFS regions (0 = opaque, 1 = invisible)."""
+    # zoomed binding-pocket view: labels sit close to their residue with no
+    # leader lines or repulsion, since only a handful of residues are labeled
+    label_offset: float = 4.0
+    """Small offset (angstroms) so the label sits next to its residue."""
+    label_min_dist: float = 0.0
+    """No collision repulsion between the few custom labels."""
+    label_connector: bool = False
+    """No leader lines for the zoomed pocket view."""
+    label_size: int = 24
+    """Larger font for the zoomed pocket view."""
+
+    def __post_init__(self):
+        if len(self.list_uniprot_idx) != len(self.list_custom_color):
+            raise ValueError(
+                "list_uniprot_idx and list_custom_color must have the same length "
+                f"(got {len(self.list_uniprot_idx)} and {len(self.list_custom_color)})."
+            )
+        super().__post_init__()
+
+    def generate_list_idx(self) -> list[int]:
+        """Generate 0-indexed positions for KLIFS pocket residues plus custom positions.
+
+        Returns
+        -------
+        list[int]
+            Sorted union of 0-indexed KLIFS pocket residues (present in the CIF) and
+            custom UniProt positions (1-indexed input converted to 0-indexed), filtered
+            to those present in the KinCore CIF structure.
+        """
+        list_klifs = self.return_list_idx_intersect()
+        set_cif = set(self.return_list_cif_idx())
+
+        list_custom = []
+        for pos in self.list_uniprot_idx:
+            idx_0based = pos - 1
+            if idx_0based in set_cif:
+                list_custom.append(idx_0based)
+            else:
+                logger.warning(
+                    f"Custom UniProt position {pos} for "
+                    f"{self.seq_align.obj_kinase.hgnc_name} is not present in the "
+                    "KinCore CIF structure; skipping."
+                )
+
+        return sorted(set(list_klifs) | set(list_custom))
+
+    def generate_style_color_lists(
+        self, list_idx: list[int]
+    ) -> tuple[list[str], list[str]]:
+        """Generate style and color lists for KLIFS regions and custom residues.
+
+        Parameters
+        ----------
+        list_idx : list[int]
+            List of 0-indexed residue positions.
+
+        Returns
+        -------
+        tuple[list[str], list[str]]
+            Custom positions get 'stick' style and their supplied color; all other
+            (KLIFS) positions get 'cartoon' style and their KLIFS pocket color.
+        """
+        # 0-indexed custom position -> custom color
+        dict_custom_color = {
+            pos - 1: color
+            for pos, color in zip(self.list_uniprot_idx, self.list_custom_color)
+        }
+
+        list_style = []
+        list_color = []
+        for idx in list_idx:
+            if idx in dict_custom_color:
+                list_style.append("stick")
+                list_color.append(dict_custom_color[idx])
+            else:
+                list_style.append("cartoon")
+                list_color.append(
+                    self.seq_align.dict_align[self.str_attr]["list_colors"][idx]
+                )
+
+        return list_style, list_color
+
+    def generate_labels(self, list_idx: list[int]) -> list[str | None]:
+        """Generate amino acid + UniProt position labels for the custom stick residues.
+
+        Parameters
+        ----------
+        list_idx : list[int]
+            List of 0-indexed residue positions.
+
+        Returns
+        -------
+        list[str | None]
+            Label 'X###' (e.g., 'T790', single-letter amino acid + 1-indexed UniProt
+            position) for custom positions, None for KLIFS-only positions.
+        """
+        set_custom = {pos - 1 for pos in self.list_uniprot_idx}
+        canonical_seq = self.seq_align.obj_kinase.uniprot.canonical_seq
+        return [
+            f"{canonical_seq[idx]}{idx + 1}" if idx in set_custom else None
+            for idx in list_idx
+        ]
 
 
 @dataclass(kw_only=True)
@@ -632,7 +937,7 @@ class MutationsConfig(StructureConfig):
             list_style = ["cartoon" for _ in list_idx]
 
         list_color = percentile_colormap(
-            list_norm_count, DICT_QUARTILE_HEATMAP_COLORMAP
+            list_norm_count, DICT_QUARTILE_HEATMAP_COLORMAP_PLASMA
         )
 
         return list_style, list_color
@@ -740,21 +1045,28 @@ class MutationsKLIFSConfig(MutationsConfig):
 class StandardConfigChoice(str, Enum):
     """String-based enum for CLI choices (dataclass not hashable)."""
 
+    DEFAULT = "DEFAULT"
     PHOSPHOSITES = "PHOSPHOSITES"
-    KLIFS_CONSERVED = "KLIFS_CONSERVED"
+    KLIFS_PATHOGENIC = "KLIFS_PATHOGENIC"
     KLIFS_IMPORTANT = "KLIFS_IMPORTANT"
+    KLIFS_ADAPTIVE = "KLIFS_ADAPTIVE"
+    KLIFS_REGION_LABEL = "KLIFS_REGION_LABEL"
+    KLIFS_CUSTOM = "KLIFS_CUSTOM"
     MUTATIONS_DEFAULT = "MUTATIONS_DEFAULT"
     MUTATIONS_GROUP = "MUTATIONS_GROUP"
     MUTATIONS_KLIFS = "MUTATIONS_KLIFS"
-    MUTATIONS_KLIFS_GROUP = "MUTATIONS_KLIFS_GROUP"
 
 
 class StandardConfig(Enum):
     """Enumeration of standard configurations for PyMOL visualization."""
 
+    DEFAULT = DefaultConfig
     PHOSPHOSITES = PhosphositesConfig
-    KLIFS_CONSERVED = KLIFSConservedConfig
+    KLIFS_PATHOGENIC = KLIFSPathogenicConfig
     KLIFS_IMPORTANT = KLIFSImportantConfig
+    KLIFS_ADAPTIVE = KLIFSAdaptiveConfig
+    KLIFS_REGION_LABEL = KLIFSRegionLabelConfig
+    KLIFS_CUSTOM = KLIFSCustomConfig
     MUTATIONS_DEFAULT = MutationsDefaultConfig
     MUTATIONS_GROUP = MutationsGroupConfig
     MUTATIONS_KLIFS = MutationsKLIFSConfig

@@ -15,6 +15,10 @@ from io_utils import (
 from pymol import cmd, finish_launching
 from tqdm import tqdm
 
+TQDM_BAR_FORMAT = (
+    "{l_bar}{bar}| {n:,}/{total:,} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
+)
+
 
 def align_structures(
     reference_pdb,
@@ -60,7 +64,11 @@ def align_structures(
         os.makedirs(temp_dir)
 
     # Process each CIF file
-    for str_filename, str_cif in tqdm(dict_cif.items(), desc="Aligning structures..."):
+    for str_filename, str_cif in tqdm(
+        dict_cif.items(),
+        desc="Aligning structures...",
+        bar_format=TQDM_BAR_FORMAT,
+    ):
         str_filename_update = str_filename.split("/")[1]
         str_filepath = os.path.join(temp_dir, str_filename_update)
 

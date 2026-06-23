@@ -58,6 +58,37 @@ def create_structure_visualizer(
     return viz
 
 
+def validate_uniprot_indices(
+    seq_align: SequenceAlignment,
+    list_uniprot_idx: list[int],
+) -> None:
+    """Validate that 1-indexed UniProt positions fall within the kinase sequence.
+
+    Parameters
+    ----------
+    seq_align : SequenceAlignment
+        SequenceAlignment object providing the kinase and its canonical sequence.
+    list_uniprot_idx : list[int]
+        List of 1-indexed full-length UniProt positions to validate.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    ValueError
+        If any position falls outside the valid range [1, len(canonical_seq)].
+    """
+    seq_len = len(seq_align.obj_kinase.uniprot.canonical_seq)
+    list_out_of_range = sorted({i for i in list_uniprot_idx if i < 1 or i > seq_len})
+    if list_out_of_range:
+        raise ValueError(
+            f"UniProt position(s) {list_out_of_range} out of range for "
+            f"{seq_align.obj_kinase.hgnc_name} (valid range: 1-{seq_len})."
+        )
+
+
 def convert_color_to_hex(color: str) -> str:
     """Convert named color to hex.
 

@@ -1,14 +1,9 @@
 import logging
-import os
-from io import StringIO
-from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Any
 
-from Bio.PDB import MMCIFParser
-from Bio.PDB.mmcifio import MMCIFIO
-from Bio.PDB.PDBIO import PDBIO
 from Bio.PDB.Structure import Structure
 from mkt.databases.colors import map_aa_to_single_letter_code
+from mkt.databases.utils import convert_mmcifdict2structure, convert_structure2string
 
 if TYPE_CHECKING:
     from mkt.databases.app.schema import StructureConfig
@@ -82,45 +77,27 @@ class StructureVisualizer:
             return None
 
     def _convert_mmcifdict2structure(self) -> Structure:
-        """Convert MMCIF2Dict object to a Bio.PDB Structure.
+        """Convert this kinase's MMCIF2Dict to a Bio.PDB Structure.
 
         Returns
         -------
         Structure
             Bio.PDB Structure object.
         """
-        mmcif_io = MMCIFIO()
-        mmcif_io.set_dict(self.obj_kinase.kincore.cif.cif)
-
-        temp_string = StringIO()
-        mmcif_io.save(temp_string)
-
-        with NamedTemporaryFile(mode="w+", suffix=".cif", delete=False) as temp_file:
-            temp_file.write(temp_string.getvalue())
-            temp_file_name = temp_file.name
-
-        parser = MMCIFParser()
-        structure = parser.get_structure(self.obj_kinase.hgnc_name, temp_file_name)
-
-        os.remove(temp_file_name)
-
-        return structure
+        return convert_mmcifdict2structure(
+            self.obj_kinase.kincore.cif.cif,
+            structure_id=self.obj_kinase.hgnc_name,
+        )
 
     def _convert_structure2string(self) -> str:
-        """Convert Bio.PDB Structure object to PDB format string.
+        """Convert this Bio.PDB Structure object to a PDB format string.
 
         Returns
         -------
         str
             Structure in PDB string format.
         """
-        pdb_io = PDBIO()
-        pdb_io.set_structure(self.structure)
-        pdb_string = StringIO()
-        pdb_io.save(pdb_string)
-        pdb_text = pdb_string.getvalue()
-
-        return pdb_text
+        return convert_structure2string(self.structure)
 
     def get_highlight_data(
         self,

@@ -2,6 +2,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+TQDM_BAR_FORMAT = (
+    "{l_bar}{bar}| {n:,}/{total:,} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
+)
+"""Default tqdm bar format with comma-separated thousands in counts."""
+
 
 def rgetattr(obj, attr, *args):
     """Get attribute from object recursively.

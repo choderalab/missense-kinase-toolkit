@@ -2,6 +2,34 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Skills
+
+This repo ships project skills under `.claude/skills/`. **Invoke the relevant
+skill before doing that kind of work** — they hold the detailed
+conventions/recipes that used to live in this file.
+
+The generic skills (`formatting`, `plotting`, `tests`, `ci`, `git`) are thin:
+they `WebFetch` my canonical baseline conventions from the central skills repo
+(`github.com/jessicaw9910/skills`) and layer on only the repo-specific
+additions. If a fetch fails, the skill will say so rather than silently skipping
+the baseline.
+
+- **`formatting`** — before writing or editing any Python (import grouping,
+  NumPy-style docstrings, lowercase comments, double-quoted strings).
+- **`plotting`** — before writing or editing any figure/plot code (Arial,
+  `LIST_NPG_COLORS`, PowerPoint/PDF-safe transparency, spine removal).
+- **`building_api_clients`** — before adding or editing a database/API client in
+  `mkt.databases` (the `APIClient` hierarchy, caching, query/cache stamping).
+- **`tests`** — before adding or running tests (pytest layout, `network` marker,
+  token-gated skips, xdist-safe fixtures).
+- **`ci`** — before editing `.github/workflows`, adding a sub-package, or
+  changing the test env (path-filtered per-sub-package workflows, micromamba).
+- **`pymol_viz`** — before generating/editing PyMOL files, structure highlight
+  configs, or SASA (licensed-PyMOL scripts vs in-process `pymol2`).
+- **`app_integration`** — before editing the Streamlit app or
+  `mkt.databases.app` (logic in the package, UI in Streamlit).
+- **`git`** — before creating commits, branches, or pull requests.
+
 ## Project Overview
 
 `missense-kinase-toolkit` (mkt) is a Python mono repo for integrating kinase data from multiple sources (KLIFS, KinCore, UniProt, cBioPortal, OncoKB, ChEMBL, OpenTargets, HGNC, Pfam, NCBI, ProtVar), modeling kinase schemas with Pydantic, and building ML models for kinase activity prediction. It also includes a Streamlit web application for interactive kinase exploration.
@@ -34,6 +62,12 @@ app (Streamlit)
 ```
 
 ## Environment Setup
+
+### Virtual Environment
+Always use the project venv for running Python commands:
+```bash
+missense_kinase_toolkit/VE/bin/python
+```
 
 ### Python Support
 Supported Python versions: 3.9-3.12
@@ -77,7 +111,7 @@ Managed via `mkt.databases.config` module-level `get_*()`/`set_*()` functions th
 generate_kinaseinfo_objects     # build KinaseInfo objects from APIs and serialize to tar.gz
 extract_cbioportal_missense_kinases  # extract missense kinase mutations from cBioPortal
 generate_dataset_csv_files      # generate CSV dataset files
-generate_pymol_files            # generate PyMOL visualization files
+generate_pymol_files            # generate PyMOL visualization files (see pymol_viz skill)
 ```
 
 ### CLI Entry Points (`mkt-ml`)
@@ -88,10 +122,10 @@ run_trainer         # run PyTorch training loop
 
 ### Development Commands
 ```bash
-# run pre-commit hooks
+# run pre-commit hooks (see ci skill)
 pre-commit run --all-files
 
-# run tests per sub-package
+# run tests per sub-package (see tests skill)
 pytest -v --cov=mkt.schema missense_kinase_toolkit/schema/mkt/schema/tests/
 pytest -v --cov=mkt.databases missense_kinase_toolkit/databases/mkt/databases/tests/
 ```
@@ -133,7 +167,7 @@ APIClient (base)
   └── GraphQLClient → OpenTargetsDrugMoA
 ```
 
-Additional database clients: `UniProtFASTA`, `Pfam`, `HGNC`, `ProteinNCBI`, `ProtvarScore`, `ChEMBLMoleculeSearch`
+Additional database clients: `UniProtFASTA`, `Pfam`, `HGNC`, `ProteinNCBI`, `ProtvarScore`, `ChEMBLMoleculeSearch`. For how to add or modify a client, see the **`building_api_clients`** skill.
 
 ### Serialization (`mkt.schema.io_utils`)
 
@@ -149,157 +183,21 @@ Additional database clients: `UniProtFASTA`, `Pfam`, `HGNC`, `ProteinNCBI`, `Pro
 - **Config management** (`mkt.databases.config`): module-level `get_*()`/`set_*()` functions reading/writing `os.environ`
 - **Logging** (`mkt.databases.log_config`): `configure_logging()` and `add_logging_flags()`
 
+### Visualization & App
+
+Kinase structure visualization (`mkt.databases.app`, `mkt.databases.pymol`) and the Streamlit front-end (`missense_kinase_toolkit/app/`) — see the **`pymol_viz`** and **`app_integration`** skills.
+
 ### Versioning
 
 All setuptools sub-packages use `versioningit` for git-tag-based dynamic versioning (default tag: `"0.0.0"`).
 
 ## Testing
 
-### Test Locations
-- `missense_kinase_toolkit/schema/mkt/schema/tests/test_schema.py`
-- `missense_kinase_toolkit/databases/mkt/databases/tests/test_databases.py`
-- No tests exist for `ml`, `experiments`, or `app`
-
-### Running Tests
-```bash
-pytest -v --cov-report=xml --color=yes --cov=mkt.schema missense_kinase_toolkit/schema/mkt/schema/tests/
-pytest -v --cov-report=xml --color=yes --cov=mkt.databases missense_kinase_toolkit/databases/mkt/databases/tests/
-```
-
-Note: `test_databases.py` includes live API tests (cBioPortal, HGNC, UniProt, ChEMBL, etc.) that require network access.
+Tests live per sub-package and include live API tests requiring network access. See the **`tests`** skill for layout, the `network` marker, token-gated skips, and xdist-safe fixtures.
 
 ## CI/CD
 
-### GitHub Actions Workflows
-
-- **`schema-ci.yaml`**: triggers on push/PR to `main` affecting `missense_kinase_toolkit/schema/**`; weekly cron
-- **`databases-ci.yaml`**: triggers on push/PR to `main` affecting `missense_kinase_toolkit/databases/**`; weekly cron
-- Both use: macOS/ubuntu/windows × Python 3.10, 3.11 matrix via `micromamba`
-- Coverage uploaded to Codecov with per-package flags
-
-### Pre-commit Hooks (`.pre-commit-config.yaml`)
-
-All hooks scoped to `^missense_kinase_toolkit` (excluding `KinaseInfo/`):
-- `black` - code formatting
-- `isort` (profile: "black") - import sorting
-- `flake8` (max-line-length: 88, ignores E203/E501) - linting
-- `pyupgrade` (--py39-plus) - syntax modernization
-- `check-yaml`, `debug-statements`, `end-of-file-fixer`, `trailing-whitespace`
-
-## Code Style Guidelines
-
-### Import Statements
-- All import statements MUST be placed at the top of the script/module
-- Group imports in the following order:
-  1. Standard library imports
-  2. Third-party library imports (numpy, pandas, matplotlib, etc.)
-  3. Local application imports (mkt modules)
-- Separate each group with a blank line
-- Example:
-```python
-import numpy as np
-from collections import Counter
-import pandas as pd
-
-from sklearn.cluster import KMeans
-import matplotlib.pyplot as plt
-
-from mkt.schema.kinase_schema import KinaseInfo
-from mkt.databases.klifs import KLIFSPocket
-```
-
-### Docstrings
-- Use NumPy-style docstrings with ":" after section headers
-- Required sections: Parameters, Returns
-- Example:
-```python
-def my_function(param1: str, param2: int) -> bool:
-    """Brief description.
-
-    Parameters:
-    -----------
-    param1 : str
-        Description of param1.
-    param2 : int
-        Description of param2.
-
-    Returns:
-    --------
-    bool
-        Description of return value.
-    """
-```
-
-### Comments
-- Use lowercase letters for non-proper noun starting comments
-- Example: `# create bins for the count column` (not "Create bins...")
-
-### String Quotes
-- Use double quotation marks (`"`) for strings where possible
-- Exceptions:
-  - Inside f-strings, use single quotes for nested strings: `f"Value: {dict['key']}"`
-  - In docstrings, continue using triple double quotes: `"""`
-- Example:
-```python
-# Preferred
-filename = "my_file.csv"
-color = "#FFD700"
-result = f"The value is {my_dict['key']}"
-
-# Avoid
-filename = 'my_file.csv'
-color = '#FFD700'
-```
-
-### Plotting
-- Use Nature journal style color palette: `LIST_NPG_COLORS`
-- Set plot style consistently:
-```python
-plt.rcParams["font.family"] = "Arial"
-sns.set_palette(sns.color_palette(LIST_NPG_COLORS))
-sns.set_style("white")
-```
-- **PowerPoint/PDF Transparency Best Practices**: To prevent greyish hue on transparent objects when SVGs are used in PowerPoint and converted to PDF:
-  - **Option 1 (Recommended)**: Use RGBA tuples for colors with separate alpha values instead of global alpha parameter:
-  ```python
-  import matplotlib.colors as mcolors
-
-  # For ellipses/patches: transparent fill, opaque edge
-  facecolor_rgba = mcolors.to_rgba("#FFD700", alpha=0.5)
-  ellipse = Ellipse((x, y), width, height, facecolor=facecolor_rgba, edgecolor="#FFD700")
-
-  # For legends: fully opaque background
-  ax.legend(..., framealpha=1.0, facecolor='white', edgecolor='black')
-  ```
-  This method avoids the PowerPoint PDF rendering issue by baking transparency into color values.
-
-  - **Option 2**: Save as high-DPI PNG instead of SVG for PowerPoint presentations:
-  ```python
-  fig.savefig("plot.png", dpi=300, bbox_inches='tight', facecolor='white')
-  ```
-  - **Option 3**: If using SVG, configure matplotlib for PowerPoint compatibility and convert SVG to PowerPoint shapes:
-  ```python
-  import matplotlib as mpl
-  mpl.rcParams["svg.fonttype"] = "none"  # Prevents characters as separate text boxes
-  mpl.rcParams["svg.hashsalt"] = "42"    # Makes SVG generation deterministic
-  fig.savefig("plot.svg", bbox_inches='tight', facecolor='white')
-  ```
-  Then in PowerPoint: drag SVG file → right-click → Convert to Shape
-- Remove plot spines while keeping tick marks for a cleaner look:
-```python
-ax.spines['top'].set_visible(False)
-ax.spines['right'].set_visible(False)
-ax.spines['left'].set_visible(False)
-ax.spines['bottom'].set_visible(False)
-```
-
-## Pull Request Template
-
-When creating PRs, use `.github/PULL_REQUEST_TEMPLATE.md`:
-- Description section for PR purpose
-- Todos checklist for accomplishments
-- Questions section for open items
-- Status checkbox for readiness
+Path-filtered GitHub Actions workflows run one per setuptools sub-package via micromamba, with Codecov per-package flags; pre-commit enforces formatting/linting. See the **`ci`** skill.
 
 ## Documentation
 
