@@ -256,3 +256,73 @@ class CancerHotspots:
                     lambda x: json.dumps(x) if isinstance(x, dict) else x
                 )
         df.to_csv(path, index=False)
+
+    @staticmethod
+    def read_csv(path: str) -> pd.DataFrame:
+        """Read a harmonized table written by :meth:`to_csv` back into a DataFrame.
+
+        Inverts :meth:`to_csv`: json-decodes the dict-valued columns and restores
+        the nullable integer position columns.
+
+        Parameters
+        ----------
+        path : str
+            Path to a CSV previously written by :meth:`to_csv`.
+
+        Returns
+        -------
+        pd.DataFrame
+            Tier-annotated table equivalent to :attr:`df`.
+        """
+        df = pd.read_csv(path)
+        for col in DICT_COLUMNS:
+            if col in df.columns:
+                df[col] = df[col].apply(
+                    lambda x: json.loads(x) if isinstance(x, str) else x
+                )
+        for col in ("positionStart", "positionEnd"):
+            if col in df.columns:
+                df[col] = df[col].astype("Int64")
+        return df
+
+    @classmethod
+    def from_dataframe(cls, df: pd.DataFrame) -> "CancerHotspots":
+        """Build a client from an already-harmonized table without querying the API.
+
+        Bypasses ``__post_init__`` (which would issue the per-tier network
+        queries) via ``object.__new__`` and sets ``_df`` directly, so cached data
+        can be reloaded offline. The per-tier provenance objects
+        (``query_chang`` / ``query_bandlamudi``) are set to None.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Tier-annotated table (e.g. from :meth:`read_csv` or :attr:`df`).
+
+        Returns
+        -------
+        CancerHotspots
+            Instance backed by ``df``; :meth:`get_gene` and
+            :meth:`first_occurrence_map` work as usual.
+        """
+        obj = object.__new__(cls)
+        obj.query_chang = None
+        obj.query_bandlamudi = None
+        obj._df = df
+        return obj
+
+    @classmethod
+    def from_csv(cls, path: str) -> "CancerHotspots":
+        """Build a client from a CSV written by :meth:`to_csv`, without querying.
+
+        Parameters
+        ----------
+        path : str
+            Path to a CSV previously written by :meth:`to_csv`.
+
+        Returns
+        -------
+        CancerHotspots
+            Instance backed by the cached table.
+        """
+        return cls.from_dataframe(cls.read_csv(path))
