@@ -1,3 +1,11 @@
+"""Builders that assemble :class:`KinaseInfo` objects from API and scraper data.
+
+Defines the ``*Generator`` subclasses (:class:`KinaseInfoGenerator` and friends) and the
+conversion/combination functions that populate
+:class:`mkt.schema.kinase_schema.KinaseInfo` from UniProt, KLIFS, Pfam, KinCore, and
+KinHub sources.
+"""
+
 import logging
 import os
 from itertools import chain

@@ -1,3 +1,10 @@
+"""OncoKB API client for therapeutic levels and protein-change annotations.
+
+Provides :class:`OncoKBInfo` and :class:`OncoKBProteinChange` REST clients plus helpers
+(:func:`get_oncokb_levels`, :func:`adjudicate_prefix`) for OncoKB therapeutic-level and
+variant annotations.
+"""
+
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field

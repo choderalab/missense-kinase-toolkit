@@ -1,3 +1,10 @@
+"""Client for retrieving AlphaFold structure predictions.
+
+Provides :class:`AlphaFoldPrediction` and :class:`AlphaFoldStructure`, REST clients
+that fetch AlphaFold model metadata and downloadable structure files for a given
+UniProt accession.
+"""
+
 import ast
 import logging
 

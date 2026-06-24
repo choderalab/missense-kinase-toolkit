@@ -1,3 +1,8 @@
+"""Web scrapers for kinase data sources.
+
+Provides :func:`kinhub` to scrape the KinHub kinase classification table.
+"""
+
 import pandas as pd
 from mkt.databases import requests_wrapper
 

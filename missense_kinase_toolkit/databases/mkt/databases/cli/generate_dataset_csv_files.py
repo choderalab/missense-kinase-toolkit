@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+"""CLI to generate kinase dataset CSV files.
+
+Entry point (``generate_dataset_csv_files``) that builds and writes the processed
+dataset CSV files.
+"""
 
 import logging
 from os import path

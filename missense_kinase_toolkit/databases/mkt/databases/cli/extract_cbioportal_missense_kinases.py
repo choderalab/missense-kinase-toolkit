@@ -1,4 +1,9 @@
 #!/usr/bin/env python
+"""CLI to extract missense kinase mutations from cBioPortal.
+
+Entry point (``extract_cbioportal_missense_kinases``) that queries cBioPortal and writes
+missense kinase mutation tables to the output directory.
+"""
 
 import argparse
 import logging

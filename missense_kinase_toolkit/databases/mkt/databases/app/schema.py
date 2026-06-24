@@ -1,3 +1,10 @@
+"""Structure-highlighting configuration classes for the Streamlit app.
+
+Defines the :class:`StructureConfig` hierarchy (default, phosphosites, KLIFS, and
+mutation variants) that parameterizes how kinase structures are colored and annotated
+in the app.
+"""
+
 import json
 import logging
 from abc import ABC, abstractmethod

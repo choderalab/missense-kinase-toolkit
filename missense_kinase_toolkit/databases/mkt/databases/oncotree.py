@@ -1,3 +1,9 @@
+"""OncoTree cancer-type ontology model and parsing.
+
+Provides the :class:`OncoTree` model for loading and navigating the OncoTree
+cancer-type hierarchy.
+"""
+
 import logging
 import re
 from os import path

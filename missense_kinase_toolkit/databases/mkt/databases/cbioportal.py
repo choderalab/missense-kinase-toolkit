@@ -1,3 +1,10 @@
+"""cBioPortal API client and extraction of missense kinase mutations, treatments, and panels.
+
+Builds on :class:`cBioPortal`/:class:`cBioPortalQuery` to pull study, mutation,
+treatment, and gene-panel data; :class:`KinaseMissenseMutations` extracts missense
+mutations restricted to kinase genes.
+"""
+
 import logging
 import os
 from abc import abstractmethod

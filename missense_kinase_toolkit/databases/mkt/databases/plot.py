@@ -1,3 +1,10 @@
+"""Plotting functions for kinase data.
+
+Includes dynamic-range, ridgeline, stacked-bar, Venn-diagram, metrics-boxplot, and
+sequence-input schematic plots, plus :class:`SequenceAlignment` rendering and
+Matplotlib RC configuration helpers.
+"""
+
 import logging
 import os
 from os import path

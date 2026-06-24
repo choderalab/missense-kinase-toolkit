@@ -1,3 +1,9 @@
+"""Kinase-level property tables backing the Streamlit app.
+
+Provides :class:`PropertyTables`, which assembles the property summary tables rendered
+in the Streamlit app.
+"""
+
 import logging
 from dataclasses import dataclass
 

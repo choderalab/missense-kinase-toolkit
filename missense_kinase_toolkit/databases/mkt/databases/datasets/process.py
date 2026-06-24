@@ -1,3 +1,10 @@
+"""Base dataset configuration and processing pipeline for kinase profiling datasets.
+
+Defines :class:`DatasetConfig` and the abstract :class:`ProcessDataset` pipeline shared
+by the Davis, PKIS2, and DiscoverX datasets, plus helpers for building ridgeline and
+stacked-barchart dataframes.
+"""
+
 import logging
 from abc import ABC, abstractmethod
 from copy import deepcopy

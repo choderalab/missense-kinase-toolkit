@@ -1,3 +1,9 @@
+"""DiscoverX kinase panel metadata model and generator.
+
+Provides the :class:`DiscoverXInfo` model and :class:`DiscoverXInfoGenerator` for
+representing and building DiscoverX/scanMAX kinase panel metadata.
+"""
+
 import logging
 import re
 from collections.abc import Iterable

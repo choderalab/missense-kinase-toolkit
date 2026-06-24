@@ -1,3 +1,10 @@
+"""File I/O helpers for CSV/dataframe round-tripping, tar creation, and kinase-dict loading.
+
+Includes helpers to load and save dataframes, concatenate CSVs by glob, parse iterables
+into dataframes, create metadata-free tar archives, and load the packaged kinase
+dictionary.
+"""
+
 import logging
 import os
 import tarfile

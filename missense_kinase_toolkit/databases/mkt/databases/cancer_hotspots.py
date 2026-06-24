@@ -1,3 +1,10 @@
+"""Client and parser for the Cancer Hotspots database.
+
+Provides :class:`CancerHotspotsQuery` to fetch hotspot records and
+:class:`CancerHotspots` to parse them, with :class:`HotspotVersion` and
+:class:`HotspotTier` enumerations for versioning and tier classification.
+"""
+
 import json
 import logging
 from enum import Enum

@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+"""CLI to plot processed kinase dataset data.
+
+Entry point that renders figures from processed dataset data using YAML-configured plot
+aesthetics.
+"""
 
 import logging
 import os

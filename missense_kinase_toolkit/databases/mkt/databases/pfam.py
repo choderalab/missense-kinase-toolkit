@@ -1,3 +1,9 @@
+"""Pfam API client and helper for locating kinase-domain boundaries.
+
+Provides :class:`Pfam`, a REST client for Pfam domain annotations, and
+:func:`find_pfam_domain` to identify kinase-domain boundaries for a sequence.
+"""
+
 import json
 import logging
 from dataclasses import dataclass, field

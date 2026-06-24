@@ -1,3 +1,9 @@
+"""Client for NCBI Entrez protein records.
+
+Provides :class:`ProteinNCBI` (and the :class:`ProteinEntrez` helper) to retrieve
+protein sequence and metadata from NCBI Entrez.
+"""
+
 import ast
 import logging
 import os.path

@@ -1,3 +1,9 @@
+"""Structure visualization backing the Streamlit app.
+
+Provides :class:`StructureVisualizer`, which builds the interactive structure views
+rendered in the Streamlit app.
+"""
+
 import logging
 from typing import TYPE_CHECKING, Any
 

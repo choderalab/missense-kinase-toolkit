@@ -1,3 +1,9 @@
+"""KLIFS API client for kinase names, pocket residues, and KLIFS region annotations.
+
+Provides KLIFS Swagger clients (:class:`KinaseNames`, :class:`KinaseInfo`) and
+:class:`KLIFSPocket` for retrieving and structuring KLIFS pocket and region data.
+"""
+
 import logging
 import re
 from dataclasses import dataclass, field

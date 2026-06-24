@@ -1,4 +1,9 @@
 #!/usr/bin/env python
+"""CLI to build :class:`KinaseInfo` objects from APIs and serialize them to tar.gz.
+
+Entry point (``generate_kinaseinfo_objects``) that assembles :class:`KinaseInfo` objects
+from the various data sources and serializes them to a ``.tar.gz`` archive.
+"""
 
 import argparse
 import logging
