@@ -1,3 +1,9 @@
+"""Schema utility helpers: recursive attribute access, UUID generation, and kinase-group adjudication.
+
+Provides :func:`rgetattr`/:func:`rsetattr` for traversing nested Pydantic models,
+:func:`random_uuid`, and :func:`adjudicate_kinase_group`.
+"""
+
 import logging
 
 logger = logging.getLogger(__name__)
