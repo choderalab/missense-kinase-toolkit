@@ -1,3 +1,11 @@
+"""Core Pydantic models representing a kinase at the kinase-domain level.
+
+Defines :class:`KinaseInfo` and its component models (:class:`UniProt`,
+:class:`KinHub`, :class:`KLIFS`, :class:`Pfam`, :class:`KinCore`) along with the
+:class:`Group`/:class:`Family` enumerations. :class:`KinaseInfo` exposes adjudication
+helpers for kinase-domain sequence and group assignment.
+"""
+
 import logging
 from enum import Enum
 

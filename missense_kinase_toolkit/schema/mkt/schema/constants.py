@@ -1,3 +1,10 @@
+"""Constants for KLIFS regions, Pfam kinase domains, and kinase groups/families.
+
+Defines the canonical KLIFS region orderings, Pfam kinase-domain accessions, and the
+controlled vocabularies for kinase groups and families referenced throughout the
+schema and databases packages.
+"""
+
 import logging
 from itertools import chain
 
