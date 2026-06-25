@@ -344,6 +344,18 @@ def deserialize_kinase_dict(
             logger.info(f"Loading KinaseInfo object from variable {str_name}...")
         return _deserialization_cache[str_name]
 
+    # callers that only need the modules importable (e.g. a Sphinx docs build or
+    # a CLI printing usage text) can set MKT_SKIP_KINASE_DICT to skip the
+    # expensive deserialization; cache the empty result so repeat calls are cheap
+    if os.environ.get("MKT_SKIP_KINASE_DICT"):
+        if bool_verbose:
+            logger.info(
+                "MKT_SKIP_KINASE_DICT set; skipping KinaseInfo deserialization."
+            )
+        if str_name is not None:
+            _deserialization_cache[str_name] = {}
+        return {}
+
     if suffix not in DICT_FUNCS:
         logger.error(
             f"Serialization type ({suffix}) not supported; must be json, yaml, or toml."
