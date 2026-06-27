@@ -188,9 +188,10 @@ def _collect_region_gap_specs(
     Intra-region gaps are the ``KLIFS2UniProtSeq`` keys ending in ``"_intra"``.
     Gap length is the length of the stored sequence; ``None`` counts as 0.
 
-    Only kinases with a KLIFS annotation are included: those with ``klifs is
-    None`` have no ``KLIFS2UniProtSeq`` mapping at all, so counting them would
-    inflate the zero-length bin with kinases that simply lack KLIFS data.
+    Only kinases with a KLIFS pocket annotation are included: those with
+    ``klifs.pocket_seq is None`` (no KLIFS object, or a KLIFS object without a
+    pocket sequence) have no ``KLIFS2UniProtSeq`` region mapping, so counting
+    them would inflate the zero-length bin with kinases that lack pocket data.
 
     Parameters
     ----------
@@ -206,9 +207,11 @@ def _collect_region_gap_specs(
     from mkt.databases.klifs import DICT_POCKET_KLIFS_REGIONS
     from mkt.schema.utils import rgetattr
 
-    # restrict to kinases that actually have a KLIFS annotation
+    # restrict to kinases that actually have a KLIFS pocket annotation
     dict_in = {
-        name: v for name, v in dict_in.items() if rgetattr(v, "klifs") is not None
+        name: v
+        for name, v in dict_in.items()
+        if rgetattr(v, "klifs.pocket_seq") is not None
     }
 
     regions = list(DICT_POCKET_KLIFS_REGIONS.items())
