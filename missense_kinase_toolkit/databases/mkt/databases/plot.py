@@ -188,6 +188,10 @@ def _collect_region_gap_specs(
     Intra-region gaps are the ``KLIFS2UniProtSeq`` keys ending in ``"_intra"``.
     Gap length is the length of the stored sequence; ``None`` counts as 0.
 
+    Only kinases with a KLIFS annotation are included: those with ``klifs is
+    None`` have no ``KLIFS2UniProtSeq`` mapping at all, so counting them would
+    inflate the zero-length bin with kinases that simply lack KLIFS data.
+
     Parameters
     ----------
     dict_in : dict[str, Any]
@@ -201,6 +205,11 @@ def _collect_region_gap_specs(
     """
     from mkt.databases.klifs import DICT_POCKET_KLIFS_REGIONS
     from mkt.schema.utils import rgetattr
+
+    # restrict to kinases that actually have a KLIFS annotation
+    dict_in = {
+        name: v for name, v in dict_in.items() if rgetattr(v, "klifs") is not None
+    }
 
     regions = list(DICT_POCKET_KLIFS_REGIONS.items())
     region_color = {r: info["color"] for r, info in regions}
@@ -264,12 +273,12 @@ def plot_region_gap_violin(
     """Plot inter-/intra-region gap-length distributions as split-color violins.
 
     Each region gap gets a violin (log-scaled y-axis) over the per-kinase gap
-    lengths in ``DICT_KINASE``, overlaid with jittered raw points and a
-    Max/Median/Min summary table. Inter-region gaps (derived from
+    lengths across the KLIFS-annotated kinases, overlaid with jittered raw points
+    and a Max/Median/Min summary table. Inter-region gaps (derived from
     ``DICT_POCKET_KLIFS_REGIONS`` ``contiguous=False`` entries) and intra-region
     gaps (``_intra`` keys) are shown as two grouped sections. When a gap's two
-    flanking regions differ in color the violin is split-colored and the jitter
-    uses ``cfg.jitter_mixed_color``.
+    flanking regions differ in color the violin and jitter use
+    ``cfg.jitter_mixed_color``.
 
     Parameters
     ----------
