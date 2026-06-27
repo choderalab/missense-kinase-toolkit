@@ -257,6 +257,106 @@ class SequenceSchematicConfig:
     filename: str = "sequence_input_schematic"
 
 
+@dataclass
+class UpsetPlotConfig:
+    """Aesthetics for the KinaseInfo source-coverage upset plot.
+
+    Defaults reproduce the original (pre-config) figure for backwards
+    compatibility. Use :meth:`preprint_2026` for the smaller publication size.
+    """
+
+    figsize: list[float] = field(default_factory=lambda: [8.0, 4.0])
+    dict_colors: dict = field(
+        default_factory=lambda: {
+            "UniProt": "#00FF00",
+            "Pfam": "#00FFFF",
+            "KinCore": "#FF00FF",
+            "KLIFS": "#FFA500",
+            "KinHub": "#000000",
+        }
+    )
+    # upsetplot grid layout; ``element_size`` (points/cell) drives the plot-area
+    # size when set, otherwise the figure is sized via ``figsize``.
+    element_size: float | None = None
+    intersection_plot_elements: int = 6
+    totals_plot_elements: int = 2
+    # close the dead whitespace between the totals bars and the category labels
+    # (slides matrix left to fill) and trim the totals right-margin overhang
+    tighten_totals_gap: bool = False
+    totals_gap_margin: float = 0.01
+    # cap the intersections y-axis at the tallest bar so log minor ticks don't
+    # crowd the headroom above it where the percentage labels float
+    cap_intersection_ylim: bool = False
+    pct_label_fontsize: int = 8
+    count_label_fontsize: int = 8
+    filename: str = "upset_plot"
+
+    @classmethod
+    def preprint_2026(cls) -> "UpsetPlotConfig":
+        """~5 x 3.5 in plot-area variant for the 2026 preprint figures.
+
+        ``element_size`` is tuned empirically (with ``intersection_plot_elements``
+        / ``totals_plot_elements``) so the upset grid renders ~5 x 3.5 in rather
+        than the near-square default; the figure is saved tight-cropped.
+        """
+        cfg = cls()
+        cfg.element_size = 30.0
+        cfg.intersection_plot_elements = 4
+        cfg.totals_plot_elements = 2
+        cfg.tighten_totals_gap = True
+        cfg.cap_intersection_ylim = True
+        return cfg
+
+
+@dataclass
+class RegionGapViolinConfig:
+    """Aesthetics for the inter-/intra-region gap violin plot.
+
+    Defaults match the larger exploratory figure; use :meth:`preprint_2026` for
+    the smaller (~5 x 3.5 in) publication size used by the CLI going forward.
+    """
+
+    figsize: list[float] = field(default_factory=lambda: [7.0, 5.0])
+    base_fontsize: int = 11
+    fill_alpha: float = 0.45
+    violin_width: float = 0.85
+    violin_linewidth: float = 1.2
+    jitter_size: float = 9.0
+    jitter_std: float = 0.05
+    jitter_alpha: float = 0.8
+    jitter_edgecolor: str = "black"
+    jitter_linewidth: float = 0.3
+    # color for gaps whose two flanking regions differ (e.g. III–αC)
+    jitter_mixed_color: str = "orange"
+    group_gap: float = 1.3
+    break_offset: float = 0.65
+    divider_color: str = "#bbbbbb"
+    divider_linestyle: str = "--"
+    divider_linewidth: float = 0.8
+    header_y: float = -0.55
+    table_label_x: float = -0.05
+    table_row_y: list[float] = field(default_factory=lambda: [1.18, 1.11, 1.04])
+    top_adjust: float = 0.82
+    bottom_adjust: float = 0.2
+    left_adjust: float = 0.12
+    right_adjust: float = 0.97
+    ylabel_text: str = "Number of residues"
+    grid_alpha: float = 0.3
+    text_color: str = "#333333"
+    filename: str = "region_gap_violin"
+
+    @classmethod
+    def preprint_2026(cls) -> "RegionGapViolinConfig":
+        """Smaller (~5 x 3.5 in) variant used for the 2026 preprint figures."""
+        cfg = cls()
+        cfg.figsize = [5.0, 3.5]
+        cfg.base_fontsize = 9
+        cfg.violin_linewidth = 1.0
+        cfg.jitter_size = 5.0
+        cfg.jitter_linewidth = 0.25
+        return cfg
+
+
 # --- data sources ---
 
 

@@ -19,7 +19,8 @@ from mkt.databases.kinase_schema import (
     generate_dict_obj_from_api_or_scraper,
 )
 from mkt.databases.log_config import add_logging_flags, configure_logging
-from mkt.databases.plot import generate_kinase_info_plot
+from mkt.databases.plot import generate_kinase_info_plot, plot_region_gap_violin
+from mkt.databases.plot_config import RegionGapViolinConfig, UpsetPlotConfig
 from mkt.schema.io_utils import get_repo_root, serialize_kinase_dict
 
 logger = logging.getLogger(__name__)
@@ -114,8 +115,15 @@ def main():
         filename_tar=filepath_kinaseinfo_tar,
     )
 
-    # generate kinase info plot
-    generate_kinase_info_plot(dict_kinaseinfo, path_reports)
+    # generate kinase info plot (preprint 2026 sizing)
+    generate_kinase_info_plot(
+        dict_kinaseinfo, path_reports, cfg=UpsetPlotConfig.preprint_2026()
+    )
+
+    # generate inter-/intra-region gap violin plot (preprint 2026 sizing)
+    plot_region_gap_violin(
+        dict_kinaseinfo, path_reports, cfg=RegionGapViolinConfig.preprint_2026()
+    )
 
     # remove all files in the objects directory
     shutil.rmtree(path_objects)
