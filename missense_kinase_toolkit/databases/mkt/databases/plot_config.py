@@ -310,51 +310,57 @@ class UpsetPlotConfig:
 
 @dataclass
 class RegionGapViolinConfig:
-    """Aesthetics for the inter-/intra-region gap violin plot.
+    """Aesthetics for the combined UniProt->KLIFS map + region-gap violin figure.
 
-    Defaults match the larger exploratory figure; use :meth:`preprint_2026` for
-    the smaller (~5 x 3.5 in) publication size used by the CLI going forward.
+    The figure stacks the UniProt-to-KLIFS residue map (top, spanning the full
+    width) over two grouped violin panels (inter- and intra-region gaps) on
+    separate log-scaled axes. All statistics are computed on the fly.
     """
 
-    figsize: list[float] = field(default_factory=lambda: [7.0, 5.0])
-    base_fontsize: int = 11
-    fill_alpha: float = 0.45
+    figsize: list[float] = field(default_factory=lambda: [15.0, 10.9])
+    height_ratios: list[float] = field(default_factory=lambda: [1.0, 1.76])
+    width_ratios: list[float] = field(default_factory=lambda: [2.0, 1.0])
+    hspace: float = 0.12
+    wspace: float = 0.06
+    left_adjust: float = 0.05
+    right_adjust: float = 0.985
+    top_adjust: float = 0.97
+    bottom_adjust: float = 0.085
+
+    # --- map panel ---
+    use_ribbon: bool = False
+    inter_color: str = "#cfcfcf"
+    intra_color: str = "#8c8c8c"
+    ribbon_alpha: float = 0.30
+    map_name_fontsize: int = 21
+    map_range_fontsize: int = 17
+    map_track_fontsize: int = 25
+    map_region_fontsize: int = 12
+    map_ellipsis_fontsize: int = 32
+    map_legend_fontsize: int = 17
+
+    # --- violin panels ---
+    violin_fontsize: int = 22
+    fill_alpha: float = 0.3
     violin_width: float = 0.85
-    violin_linewidth: float = 1.2
-    jitter_size: float = 9.0
-    jitter_std: float = 0.05
+    violin_linewidth: float = 1.0
+    violin_edgecolor: str = "#333333"
+    jitter_size: float = 7.0
+    jitter_std: float = 0.06
     jitter_alpha: float = 0.8
     jitter_edgecolor: str = "black"
-    jitter_linewidth: float = 0.3
+    jitter_linewidth: float = 0.25
     # color for gaps whose two flanking regions differ (e.g. III–αC)
     jitter_mixed_color: str = "orange"
-    group_gap: float = 1.3
-    break_offset: float = 0.65
-    divider_color: str = "#bbbbbb"
-    divider_linestyle: str = "--"
-    divider_linewidth: float = 0.8
-    header_y: float = -0.55
-    table_label_x: float = -0.05
-    table_row_y: list[float] = field(default_factory=lambda: [1.18, 1.11, 1.04])
-    top_adjust: float = 0.82
-    bottom_adjust: float = 0.2
-    left_adjust: float = 0.12
-    right_adjust: float = 0.97
-    ylabel_text: str = "Number of residues"
     grid_alpha: float = 0.3
     text_color: str = "#333333"
+    ylabel_text: str = "Number of residues"
     filename: str = "region_gap_violin"
 
     @classmethod
     def preprint_2026(cls) -> "RegionGapViolinConfig":
-        """Smaller (~5 x 3.5 in) variant used for the 2026 preprint figures."""
-        cfg = cls()
-        cfg.figsize = [5.0, 3.5]
-        cfg.base_fontsize = 9
-        cfg.violin_linewidth = 1.0
-        cfg.jitter_size = 5.0
-        cfg.jitter_linewidth = 0.25
-        return cfg
+        """Preset used by the 2026 preprint figures (current defaults)."""
+        return cls()
 
 
 # --- data sources ---
