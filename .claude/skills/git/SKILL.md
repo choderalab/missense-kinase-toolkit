@@ -53,3 +53,20 @@ git stash pop             # if you stashed
   the actual merge into `main` happens later via a PR.
 - For a small, isolated fix, branch off `main` instead — these topic branches
   can be ~70 commits ahead, so a PR from one drags in unrelated commits.
+
+## Splitting intermingled changes across topic branches
+
+When one working tree has uncommitted changes spanning several sub-packages and
+each belongs on a different stale topic branch, don't try to carry them across
+`git switch` (stale branches diverge and the switch will conflict or refuse).
+Instead, patch each set onto its freshly-synced branch:
+
+1. Capture per-sub-package patches: `git diff -- <subpkg> > <subpkg>.patch`.
+2. Reset the working tree: `git checkout -- <paths>` (untracked WIP files stay
+   put and travel harmlessly across switches — confirm they aren't tracked on
+   the target branch first).
+3. For each branch: `git switch <branch>`, refresh from `main` (see above), then
+   `git apply --3way <subpkg>.patch`, and commit.
+
+Stage with `git add -u <subpkg>` (not `git add <subpkg>`, which also stages
+untracked WIP files) so pre-commit only lints what you're committing.

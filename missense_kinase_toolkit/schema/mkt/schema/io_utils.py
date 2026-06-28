@@ -1,3 +1,10 @@
+"""Serialize and deserialize :class:`KinaseInfo` objects to/from json/yaml/toml and tar archives.
+
+Provides :func:`serialize_kinase_dict` and :func:`deserialize_kinase_dict` for
+round-tripping per-kinase files, plus helpers for reading packaged ``.tar.gz`` data
+in memory. TOML serialization is skipped on Windows.
+"""
+
 import glob
 import json
 import logging
