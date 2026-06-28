@@ -367,11 +367,89 @@ class KinaseInfo(BaseModel):
                 logger.info(f"No kinase domain sequence found for {self.hgnc_name}")
             return None
 
-    def adjudicate_kd_start(self, bool_verbose: bool = False) -> int | None:
+    def _klifs_uniprot_idx_bounds(self) -> tuple[int, int] | None:
+        """Return the min and max non-None UniProt indices in KLIFS2UniProtIdx.
+
+        Returns
+        -------
+        tuple[int, int] | None
+            The (min, max) UniProt indices spanned by the KLIFS pocket if any
+            are available, otherwise None.
+        """
+        if self.KLIFS2UniProtIdx is None:
+            return None
+        list_idx = [idx for idx in self.KLIFS2UniProtIdx.values() if idx is not None]
+        if len(list_idx) == 0:
+            return None
+        return min(list_idx), max(list_idx)
+
+    def _reconcile_kd_bound_with_klifs(
+        self,
+        bound: int,
+        klifs_bound: int,
+        is_start: bool,
+        int_max_gap: int,
+        bool_verbose: bool,
+    ) -> int | None:
+        """Reconcile an adjudicated kinase domain bound with the KLIFS pocket.
+
+        The KLIFS pocket should fall within the kinase domain, i.e. the minimum
+        KLIFS index should be >= the kinase domain start and the maximum KLIFS
+        index should be <= the kinase domain end. When this is violated, the gap
+        is compared against ``int_max_gap``: small gaps expand the bound to the
+        KLIFS index, larger gaps return None since the mapping is unreliable.
+
+        Parameters
+        ----------
+        bound : int
+            The adjudicated kinase domain bound (start or end).
+        klifs_bound : int
+            The corresponding KLIFS pocket bound (min for start, max for end).
+        is_start : bool
+            Whether ``bound`` is the kinase domain start (True) or end (False).
+        int_max_gap : int
+            Maximum allowed gap between the kinase domain bound and the KLIFS
+            bound before the bound is treated as unreliable and None is returned.
+        bool_verbose : bool
+            Whether to log verbose messages.
+
+        Returns
+        -------
+        int | None
+            The reconciled bound, expanded to the KLIFS index when the gap is
+            within ``int_max_gap``, otherwise None.
+        """
+        str_bound = "start" if is_start else "end"
+        # violation is min < start (start) or max > end (end)
+        gap = bound - klifs_bound if is_start else klifs_bound - bound
+        if gap <= 0:
+            return bound
+        if gap <= int_max_gap:
+            if bool_verbose:
+                logger.info(
+                    f"KLIFS pocket {str_bound} ({klifs_bound}) extends past kinase "
+                    f"domain {str_bound} ({bound}) for {self.hgnc_name} by {gap}; "
+                    f"expanding {str_bound} to {klifs_bound}."
+                )
+            return klifs_bound
+        logger.warning(
+            f"Kinase domain {str_bound} found for {self.hgnc_name} but KLIFS pocket "
+            f"{str_bound} ({klifs_bound}) gap is {gap} (larger than cut-off "
+            f"{int_max_gap}); returning None."
+        )
+        return None
+
+    def adjudicate_kd_start(
+        self, int_max_gap: int = 15, bool_verbose: bool = False
+    ) -> int | None:
         """Adjudicate kinase domain start based on available data.
 
         Parameters
         ----------
+        int_max_gap : int, optional
+            Maximum allowed gap between the kinase domain start and the minimum
+            KLIFS pocket index before the start is treated as unreliable and None
+            is returned, by default 15.
         bool_verbose : bool, optional
             Whether to log verbose messages, by default False.
 
@@ -384,9 +462,8 @@ class KinaseInfo(BaseModel):
             start = rgetattr(self, "kincore.cif.start") or rgetattr(
                 self, "kincore.fasta.start"
             )
-            return start
         elif self.pfam is not None:
-            return self.pfam.start
+            start = self.pfam.start
         else:
             if bool_verbose:
                 logger.info(
@@ -394,11 +471,28 @@ class KinaseInfo(BaseModel):
                 )
             return None
 
-    def adjudicate_kd_end(self, bool_verbose: bool = False) -> int | None:
+        bounds = self._klifs_uniprot_idx_bounds()
+        if start is not None and bounds is not None:
+            start = self._reconcile_kd_bound_with_klifs(
+                bound=start,
+                klifs_bound=bounds[0],
+                is_start=True,
+                int_max_gap=int_max_gap,
+                bool_verbose=bool_verbose,
+            )
+        return start
+
+    def adjudicate_kd_end(
+        self, int_max_gap: int = 15, bool_verbose: bool = False
+    ) -> int | None:
         """Adjudicate kinase domain end based on available data.
 
         Parameters
         ----------
+        int_max_gap : int, optional
+            Maximum allowed gap between the kinase domain end and the maximum
+            KLIFS pocket index before the end is treated as unreliable and None
+            is returned, by default 15.
         bool_verbose : bool, optional
             Whether to log verbose messages, by default False.
 
@@ -411,13 +505,23 @@ class KinaseInfo(BaseModel):
             end = rgetattr(self, "kincore.cif.end") or rgetattr(
                 self, "kincore.fasta.end"
             )
-            return end
         elif self.pfam is not None:
-            return self.pfam.end
+            end = self.pfam.end
         else:
             if bool_verbose:
                 logger.info(f"No kinase domain sequence end found for {self.hgnc_name}")
             return None
+
+        bounds = self._klifs_uniprot_idx_bounds()
+        if end is not None and bounds is not None:
+            end = self._reconcile_kd_bound_with_klifs(
+                bound=end,
+                klifs_bound=bounds[1],
+                is_start=False,
+                int_max_gap=int_max_gap,
+                bool_verbose=bool_verbose,
+            )
+        return end
 
     def adjudicate_group(self, bool_verbose: bool = False) -> str | None:
         """Adjudicate group based on available data.
@@ -482,3 +586,58 @@ class KinaseInfo(BaseModel):
                 return True
 
         return False
+
+    def is_pseudokinase(self) -> bool:
+        """Return boolean if a (predicted) pseudokinase.
+
+        Predicts catalytic deficiency from the KLIFS pocket by testing the three
+        canonical catalytic residues -- the VAIK beta3 lysine (III:17), the HRD
+        catalytic aspartate (c.l:70) and the DFG aspartate (xDFG:81); a kinase missing
+        any one is called a pseudokinase. The catalytic lysine may instead sit in beta2
+        (II:13) in the WNK family, which is accepted as present. Two hand-curated
+        overrides correct the known failure modes of the heuristic (see
+        ``LIST_PSEUDOKINASE_TRIAD_INTACT`` and
+        ``LIST_PSEUDOKINASE_HEURISTIC_FALSE_POSITIVE`` in ``mkt.schema.constants`` for
+        membership and citations). Returns False when no KLIFS pocket is available.
+
+        Returns
+        -------
+        bool
+            Whether or not is a predicted pseudokinase
+        """
+        from mkt.schema.constants import (
+            LIST_KLIFS_REGION,
+            LIST_PSEUDOKINASE_HEURISTIC_FALSE_POSITIVE,
+            LIST_PSEUDOKINASE_TRIAD_INTACT,
+            STR_KLIFS_BETA2_LYSINE,
+            STR_KLIFS_BETA3_LYSINE,
+            STR_KLIFS_CATALYTIC_ASP,
+            STR_KLIFS_DFG_ASP,
+        )
+
+        # curated literature overrides take precedence over the sequence heuristic
+        if self.hgnc_name in LIST_PSEUDOKINASE_TRIAD_INTACT:
+            return True
+        if self.hgnc_name in LIST_PSEUDOKINASE_HEURISTIC_FALSE_POSITIVE:
+            return False
+
+        # cannot assess catalytic residues without a pocket
+        if self.klifs is None or self.klifs.pocket_seq is None:
+            return False
+
+        pocket = self.klifs.pocket_seq
+
+        def _residue(label):
+            return pocket[LIST_KLIFS_REGION.index(label)]
+
+        # the catalytic lysine is normally in beta3 (VAIK); the WNK family relocates it
+        # to beta2 ("With No K [in beta3]"), so accept a lysine at either position
+        has_lysine = (
+            _residue(STR_KLIFS_BETA3_LYSINE) == "K"
+            or _residue(STR_KLIFS_BETA2_LYSINE) == "K"
+        )
+        has_catalytic_asp = _residue(STR_KLIFS_CATALYTIC_ASP) == "D"
+        has_dfg_asp = _residue(STR_KLIFS_DFG_ASP) == "D"
+
+        # a pseudokinase is missing at least one of the three catalytic residues
+        return not (has_lysine and has_catalytic_asp and has_dfg_asp)
