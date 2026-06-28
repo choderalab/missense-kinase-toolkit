@@ -136,9 +136,16 @@ class KinaseInfoKinaseDomainGenerator(KinaseInfoKinaseDomain):
         if uniprot_id == "Q5S007":
             self.klifs.pocket_seq = "FLLGDGSFGSVYRVAVKIFLLRQELVVLCHLHPSLISLLAAMLVMELASKGSLDRLLQQYLHSAMIIYRDLKPHNVLLIADYGIA"
 
-        # https://klifs.net/details.php?structure_id=9709 just a misalignment vs. UniProt[130:196] aligns matches structure seq
+        # https://klifs.net/details.php?structure_id=9709 misalignment vs. UniProt.
+        # The previous hardcoded string had TWO errors: (1) an off-by-one -- it began one
+        # residue too early at the preceding UniProt residue Q130 ("...KL[Q]SEIGKG..."),
+        # shifting every column right and truncating a.l:85; and (2) a mis-mapping of the
+        # ~10-residue IV:38-linker:52 window that flanks the large alpha-C/beta-4 insert.
+        # The string below is reconstructed directly from this kinase's (correct)
+        # KLIFS2UniProtIdx mapping, which properly skips the inserts; it puts the catalytic
+        # residues back on their canonical columns (III:17=K, c.l:70=D, xDFG:81=D).
         if uniprot_id == "Q8N5S9":
-            self.klifs.pocket_seq = "QSEIGKGAYGVVRHYAMKVERVYQEIAILKKLHVNVVKLIENLYLVFDLRKGPVMEVPCEYLHCQKIVHRDIKPSNLLKIADFGV"
+            self.klifs.pocket_seq = "SEIGKGAYGVVRLYAMKVLRVYQEIAILKKLDVNVVKLIEVLYLVFDLRKGPVMEVPCDYLHCQKIVHRDIKPSNLLLIADFGVS"
 
         # there are no matches when looking manually to canonical UniProt sequence
         if uniprot_id == "P35557":
