@@ -101,7 +101,7 @@ def split_domain_suffix(name: str) -> tuple[str, str]:
 
 
 def group_name_homologs(
-    names: list[str], min_prefix: int = 3
+    names: list[str], min_prefix: int = 3, show_count: bool = True
 ) -> list[tuple[str, list[str]]]:
     """Collapse prefix-homologous kinase names into compact labeled groups.
 
@@ -120,6 +120,8 @@ def group_name_homologs(
         ``(domain_suffix, name)`` internally so homologs are adjacent.
     min_prefix : int, optional
         Minimum shared base-prefix length required to merge, by default 3.
+    show_count : bool, optional
+        Append a ``" (N)"`` member count to each merged group's label, by default True.
 
     Returns
     -------
@@ -165,7 +167,7 @@ def group_name_homologs(
                 + "/"
                 + "/".join(b[len(p) :] for b in bases[1:])
                 + dom
-                + f" ({len(group)})"
+                + (f" ({len(group)})" if show_count else "")
             )
         out.append((label, members))
         i = j
