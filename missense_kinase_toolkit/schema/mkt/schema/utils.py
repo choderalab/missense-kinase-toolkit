@@ -105,13 +105,16 @@ def group_name_homologs(
 ) -> list[tuple[str, list[str]]]:
     """Collapse prefix-homologous kinase names into compact labeled groups.
 
-    Names are grouped when they share a base prefix of at least ``min_prefix``
-    characters, differ only by a base suffix of at most one character, and carry the
-    same multi-domain suffix (see :func:`split_domain_suffix`). Each group is labeled
-    by factoring out the common prefix, e.g.
-    ``["JAK1_1", "JAK2_1", "JAK3_1"] -> ("JAK1/2/3_1 (3)", [...])``. The default
-    ``min_prefix`` of 3 keeps coincidental two-character matches apart (e.g. the
-    unrelated ATM and ATR).
+    Names are grouped when they share a common base stem of at least ``min_prefix``
+    characters, each member's remaining variant is a single letter or a pure number
+    (so distinct subfamilies such as EPHA10 / EPHB6 stay apart), and they carry the
+    same multi-domain suffix (see :func:`split_domain_suffix`). The stem is trimmed
+    back off any mid-number boundary so a shorter member number is not split out of a
+    longer one (NEK1 vs NEK10/NEK11), and numeric variants are sorted numerically.
+    Each group is labeled by factoring out the stem, e.g.
+    ``["JAK1_1", "JAK2_1", "JAK3_1"] -> ("JAK1/2/3_1 (3)", [...])`` or
+    ``["NEK1", "NEK10", "NEK2"] -> ("NEK1/2/10", [...])``. The default ``min_prefix``
+    of 3 keeps coincidental two-character matches apart (e.g. the unrelated ATM, ATR).
 
     Parameters
     ----------
@@ -119,7 +122,7 @@ def group_name_homologs(
         Kinase names to group. Order is not significant: names are sorted by
         ``(domain_suffix, name)`` internally so homologs are adjacent.
     min_prefix : int, optional
-        Minimum shared base-prefix length required to merge, by default 3.
+        Minimum shared base-stem length required to merge, by default 3.
     show_count : bool, optional
         Append a ``" (N)"`` member count to each merged group's label, by default True.
 
@@ -135,6 +138,32 @@ def group_name_homologs(
             k += 1
         return k
 
+    def _stem(bases: list[str]) -> str:
+        """Common prefix, trimmed back off a mid-number boundary."""
+        p = bases[0]
+        for b in bases[1:]:
+            p = p[: _lcp(p, b)]
+        while (
+            p
+            and p[-1].isdigit()
+            and any(len(b) > len(p) and b[len(p)].isdigit() for b in bases)
+        ):
+            p = p[:-1]
+        return p
+
+    def _is_homolog_set(bases: list[str]) -> bool:
+        """True if the bases share a >=min_prefix stem with single-letter / pure-number
+        variants (so e.g. FGFR1-4, PRKACA/B/G, NEK1/10 group; EPHA10/EPHB6 do not)."""
+        p = _stem(bases)
+        if len(p) < min_prefix:
+            return False
+        return all(
+            (suf := b[len(p) :]) == ""
+            or suf.isdigit()
+            or (len(suf) == 1 and suf.isalpha())
+            for b in bases
+        )
+
     items = sorted(
         (
             (base, dom, nm)
@@ -145,13 +174,11 @@ def group_name_homologs(
     out, i = [], 0
     while i < len(items):
         j = i + 1
-        while j < len(items) and items[j][1] == items[i][1]:  # same domain suffix
-            bases = [items[k][0] for k in range(i, j + 1)]
-            p = bases[0]
-            for b in bases[1:]:
-                p = p[: _lcp(p, b)]
-            if len(p) < min_prefix or any(len(b[len(p) :]) > 1 for b in bases):
-                break
+        while (
+            j < len(items)
+            and items[j][1] == items[i][1]  # same domain suffix
+            and _is_homolog_set([items[k][0] for k in range(i, j + 1)])
+        ):
             j += 1
         group = items[i:j]
         members = [it[2] for it in group]
@@ -159,13 +186,15 @@ def group_name_homologs(
         if len(group) == 1:
             label = bases[0] + dom
         else:
-            p = bases[0]
-            for b in bases[1:]:
-                p = p[: _lcp(p, b)]
+            p = _stem(bases)
+            variants = [b[len(p) :] for b in bases]
+            if all(v == "" or v.isdigit() for v in variants):
+                variants = sorted(variants, key=lambda v: int(v) if v else -1)
+            else:
+                variants = sorted(variants)
             label = (
-                bases[0]
-                + "/"
-                + "/".join(b[len(p) :] for b in bases[1:])
+                p
+                + "/".join(variants)
                 + dom
                 + (f" ({len(group)})" if show_count else "")
             )
