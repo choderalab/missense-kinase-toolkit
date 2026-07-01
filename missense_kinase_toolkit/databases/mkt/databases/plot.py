@@ -1,3 +1,10 @@
+"""Plotting functions for kinase data.
+
+Includes dynamic-range, ridgeline, stacked-bar, Venn-diagram, metrics-boxplot, and
+sequence-input schematic plots, plus :class:`SequenceAlignment` rendering and
+Matplotlib RC configuration helpers.
+"""
+
 import logging
 import os
 from os import path
@@ -13,9 +20,11 @@ from mkt.databases.plot_config import (
     FamilyColorConfig,
     MatplotlibRCConfig,
     MetricsBoxplotConfig,
+    RegionGapViolinConfig,
     RidgelinePlotConfig,
     SequenceSchematicConfig,
     StackedBarchartConfig,
+    UpsetPlotConfig,
     VennDiagramConfig,
 )
 from mkt.schema.io_utils import save_plot
@@ -31,6 +40,7 @@ logger = logging.getLogger(__name__)
 def generate_kinase_info_plot(
     dict_in: dict[str, Any],
     path_save: str,
+    cfg: UpsetPlotConfig | None = None,
 ) -> None:
     """Plot KinaseInfo upset plots from final harmonzied objects.
 
@@ -40,12 +50,17 @@ def generate_kinase_info_plot(
         Dictionary of KinaseInfo objects.
     path_save : str
         Path to save the plot.
+    cfg : UpsetPlotConfig | None
+        Plot aesthetics config; uses defaults (original size) when None.
 
     Returns
     -------
     None
         None
     """
+    if cfg is None:
+        cfg = UpsetPlotConfig()
+
     # generate data
     list_attr = ["uniprot", "pfam", "kinhub", "klifs", "kincore"]
     list_proper = ["UniProt", "Pfam", "KinHub", "KLIFS", "KinCore"]
@@ -56,23 +71,19 @@ def generate_kinase_info_plot(
     dict_contents = dict(zip(list_proper, list_contents))
 
     # define colors for each database
-    dict_colors = {
-        "UniProt": "#00FF00",
-        "Pfam": "#00FFFF",
-        "KinCore": "#FF00FF",
-        "KLIFS": "#FFA500",
-        "KinHub": "#000000",
-    }
+    dict_colors = cfg.dict_colors
 
     # generate figure
     from upsetplot import from_contents, plot
 
     contents = from_contents(dict_contents)
-    fig = plt.figure(figsize=(8, 4))
+    fig = plt.figure(figsize=tuple(cfg.figsize))
     upset_plot = plot(
         contents,
         fig=fig,
-        element_size=None,
+        element_size=cfg.element_size,
+        intersection_plot_elements=cfg.intersection_plot_elements,
+        totals_plot_elements=cfg.totals_plot_elements,
         sort_by="cardinality",
         sort_categories_by=None,
     )
@@ -82,13 +93,19 @@ def generate_kinase_info_plot(
     ax_intersections = upset_plot["intersections"]
     # set y-axis to log scale
     ax_intersections.set_yscale("log")
-    # update y-axis label to indicate log scale
-    ax_intersections.set_ylabel("log₁₀(Intersection Size)")
+    # the axis (not the data) is log-scaled, so the label stays plain
+    ax_intersections.set_ylabel("Intersection Size")
     # remove gridlines from intersection plot
     ax_intersections.grid(False)
     # remove y-axis spine
     ax_intersections.spines["left"].set_visible(False)
-    # get the bar heights from the plot patches and apply colors
+    # cap the y-axis at the tallest bar so the log minor ticks stop at the data
+    # and don't crowd the headroom where the percentage labels float
+    if cfg.cap_intersection_ylim:
+        max_height = max(p.get_height() for p in ax_intersections.patches)
+        ax_intersections.set_ylim(top=max_height)
+    # get the bar heights from the plot patches and apply colors; clip_on=False
+    # lets the tallest bar's label render just above the capped axis
     for patch in ax_intersections.patches:
         height = patch.get_height()
         percentage = (height / total) * 100
@@ -100,7 +117,8 @@ def generate_kinase_info_plot(
             f"{percentage:.1f}%",
             ha="center",
             va="bottom",
-            fontsize=8,
+            fontsize=cfg.pct_label_fontsize,
+            clip_on=False,
         )
 
     # add total counts to category bars on the left and apply colors
@@ -124,13 +142,622 @@ def generate_kinase_info_plot(
             f" {int(width)}",
             ha="left",
             va="center_baseline",
-            fontsize=8,
+            fontsize=cfg.count_label_fontsize,
             color=label_color,
         )
         # apply color to tick label
         ax_totals.get_yticklabels()[i].set_color(dict_colors.get(label, "#000000"))
 
-    plt.savefig(path.join(path_save, "upset_plot.pdf"), bbox_inches="tight")
+    # close the dead whitespace between the totals bars and the category labels:
+    # slide the matrix/intersections left (carrying the labels) to abut the
+    # totals and widen them so the freed space is filled by the bars.
+    if cfg.tighten_totals_gap:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        inv = fig.transFigure.inverted()
+        ax_matrix = upset_plot["matrix"]
+        label_left = min(
+            lbl.get_window_extent(renderer).transformed(inv).x0
+            for lbl in ax_matrix.get_yticklabels()
+            if lbl.get_text()
+        )
+        totals_x1 = ax_totals.get_position().x1
+        shift = label_left - (totals_x1 + cfg.totals_gap_margin)
+        if shift > 0:
+            # widen only the matrix + intersection bars to fill the freed space;
+            # the shading already spans the full width, so leave it in place
+            for key in ("matrix", "intersections"):
+                ax = upset_plot.get(key)
+                if ax is None:
+                    continue
+                p = ax.get_position()
+                # keep the right edge fixed; extend left by ``shift``
+                ax.set_position([p.x0 - shift, p.y0, p.width + shift, p.height])
+
+    # tight-crop so the saved file tracks the (element_size-driven) plot area
+    plt.savefig(path.join(path_save, f"{cfg.filename}.pdf"), bbox_inches="tight")
+
+
+def _collect_region_gap_specs(
+    dict_in: dict[str, Any],
+) -> tuple[list[dict], list[dict]]:
+    """Collect inter- and intra-region gap specs with per-kinase gap lengths.
+
+    Inter-region gaps are derived from ``DICT_POCKET_KLIFS_REGIONS`` entries where
+    ``contiguous`` is ``False`` (the gap spans from that region to the next one).
+    Intra-region gaps are the ``KLIFS2UniProtSeq`` keys ending in ``"_intra"``.
+    Gap length is the length of the stored sequence; ``None`` counts as 0.
+
+    Only kinases with a KLIFS pocket annotation are included: those with
+    ``klifs.pocket_seq is None`` (no KLIFS object, or a KLIFS object without a
+    pocket sequence) have no ``KLIFS2UniProtSeq`` region mapping, so counting
+    them would inflate the zero-length bin with kinases that lack pocket data.
+
+    Parameters
+    ----------
+    dict_in : dict[str, Any]
+        Dictionary of KinaseInfo objects.
+
+    Returns
+    -------
+    tuple[list[dict], list[dict]]
+        ``(inter, intra)`` lists of spec dicts, each with keys ``key``, ``label``,
+        ``color_left``, ``color_right``, ``lengths`` (np.ndarray) and ``median``.
+    """
+    from mkt.databases.klifs import DICT_POCKET_KLIFS_REGIONS
+    from mkt.schema.utils import rgetattr
+
+    # restrict to kinases that actually have a KLIFS pocket annotation
+    dict_in = {
+        name: v
+        for name, v in dict_in.items()
+        if rgetattr(v, "klifs.pocket_seq") is not None
+    }
+
+    regions = list(DICT_POCKET_KLIFS_REGIONS.items())
+    region_color = {r: info["color"] for r, info in regions}
+
+    inter, intra = [], []
+    for i, (region, info) in enumerate(regions):
+        if not info["contiguous"] and i + 1 < len(regions):
+            nxt, nxt_info = regions[i + 1]
+            inter.append(
+                {
+                    "key": f"{region}:{nxt}",
+                    "label": f"{region}–{nxt}",
+                    "color_left": info["color"],
+                    "color_right": nxt_info["color"],
+                }
+            )
+
+    # intra keys live in KLIFS2UniProtSeq; take a representative sample's keys
+    sample = next(
+        (
+            rgetattr(v, "KLIFS2UniProtSeq")
+            for v in dict_in.values()
+            if rgetattr(v, "KLIFS2UniProtSeq")
+        ),
+        {},
+    )
+    for key in sample:
+        if key.endswith("_intra"):
+            base = key[: -len("_intra")]
+            color = region_color.get(base, "grey")
+            intra.append(
+                {
+                    "key": key,
+                    "label": base,
+                    "color_left": color,
+                    "color_right": color,
+                }
+            )
+
+    for spec in inter + intra:
+        lengths = []
+        for v in dict_in.values():
+            seq_dict = rgetattr(v, "KLIFS2UniProtSeq")
+            seq = seq_dict.get(spec["key"]) if seq_dict else None
+            lengths.append(len(seq) if seq else 0)
+        spec["lengths"] = np.array(lengths)
+        spec["median"] = float(np.median(lengths))
+
+    # sort within group by median so violins shift monotonically (less overlap)
+    inter = sorted(inter, key=lambda s: s["median"], reverse=True)
+    intra = sorted(intra, key=lambda s: s["median"], reverse=True)
+    return inter, intra
+
+
+# UniProt->KLIFS map track geometry (data coords within the map axis)
+_MAP_TOP_Y1, _MAP_TOP_Y0 = 2.0, 1.3
+_MAP_BOT_Y1, _MAP_BOT_Y0 = 0.9, 0.2
+_MAP_INTRA_BASES = ("b.l", "linker")
+
+
+def _flatten_on_white(color: str, alpha: float) -> tuple:
+    """Pre-blend ``color`` onto white at ``alpha`` (fully opaque output)."""
+    import matplotlib.colors as mcolors
+
+    rgb = mcolors.to_rgb(color)
+    return tuple(c * alpha + (1 - alpha) for c in rgb)
+
+
+def _collect_region_map_extras(dict_in: dict[str, Any]) -> tuple:
+    """Compute intra-split lengths and N-/C-terminal residue-count ranges.
+
+    Returns ``(splits, nterm, cterm)`` where ``splits`` maps each split region
+    (b.l, linker) to its modal ``(before, after)`` KLIFS-residue counts, and
+    ``nterm``/``cterm`` are ``(min, max)`` residue counts preceding/following
+    the KLIFS region across the pocket-annotated kinases.
+    """
+    from collections import Counter
+
+    from mkt.schema.utils import rgetattr
+
+    items = [v for v in dict_in.values() if rgetattr(v, "klifs.pocket_seq") is not None]
+    splits = {}
+    for base in _MAP_INTRA_BASES:
+        n1 = Counter(
+            len(rgetattr(v, "KLIFS2UniProtSeq").get(base + "_1") or "") for v in items
+        ).most_common(1)[0][0]
+        n2 = Counter(
+            len(rgetattr(v, "KLIFS2UniProtSeq").get(base + "_2") or "") for v in items
+        ).most_common(1)[0][0]
+        splits[base] = (n1, n2)
+
+    pre, post = [], []
+    for v in items:
+        idx = rgetattr(v, "KLIFS2UniProtIdx")
+        seq = rgetattr(v, "uniprot.canonical_seq")
+        if not idx or not seq:
+            continue
+        vals = [x for x in idx.values() if x is not None]
+        if vals:
+            pre.append(min(vals))
+            post.append(len(seq) - max(vals) - 1)
+    nterm = (int(min(pre)), int(max(pre)))
+    cterm = (int(min(post)), int(max(post)))
+    return splits, nterm, cterm
+
+
+def _region_map_segments(inter_median: dict, splits: dict, cfg) -> tuple:
+    """Build the ordered UniProt-track segments and contiguous KLIFS blocks."""
+    from mkt.databases.klifs import DICT_POCKET_KLIFS_REGIONS
+
+    regions = list(DICT_POCKET_KLIFS_REGIONS.items())
+    top = []
+    for i, (r, info) in enumerate(regions):
+        color = info["color"]
+        if r in splits:
+            n1, n2 = splits[r]
+            s = info["start"]
+            top.append(
+                {
+                    "kind": "klifs",
+                    "length": n1,
+                    "color": color,
+                    "klifs": (s, s + n1 - 1),
+                }
+            )
+            top.append(
+                {
+                    "kind": "intra",
+                    "label": r,
+                    "rkey": r,
+                    "length": 1,
+                    "color": cfg.intra_color,
+                    "klifs": None,
+                }
+            )
+            top.append(
+                {
+                    "kind": "klifs",
+                    "length": n2,
+                    "color": color,
+                    "klifs": (s + n1, info["end"]),
+                }
+            )
+        else:
+            top.append(
+                {
+                    "kind": "klifs",
+                    "length": info["end"] - info["start"] + 1,
+                    "color": color,
+                    "klifs": (info["start"], info["end"]),
+                }
+            )
+        if not info["contiguous"] and i + 1 < len(regions):
+            key = f"{r}:{regions[i + 1][0]}"
+            if key in inter_median:
+                top.append(
+                    {
+                        "kind": "inter",
+                        "label": f"{r}–{regions[i + 1][0]}",
+                        "rkey": key,
+                        "length": inter_median[key],
+                        "color": cfg.inter_color,
+                        "klifs": None,
+                    }
+                )
+    bottom = [
+        {
+            "label": r,
+            "length": info["end"] - info["start"] + 1,
+            "color": info["color"],
+            "klifs": (info["start"], info["end"]),
+        }
+        for r, info in regions
+    ]
+    return top, bottom
+
+
+def _draw_map_block(ax, x0, length, y0, h, color, cells) -> None:
+    """Draw a track block: light-grey interior residue dividers, heavy black box."""
+    from matplotlib.patches import Rectangle
+
+    if cells and length > 1:
+        for k in range(1, int(round(length))):
+            ax.plot(
+                [x0 + k, x0 + k],
+                [y0, y0 + h],
+                color="white",
+                linewidth=0.4,
+                zorder=2.1,
+            )
+    ax.add_patch(
+        Rectangle((x0, y0), length, h, facecolor=color, edgecolor="none", zorder=2)
+    )
+    ax.add_patch(
+        Rectangle(
+            (x0, y0),
+            length,
+            h,
+            facecolor="none",
+            edgecolor="black",
+            linewidth=1.3,
+            zorder=2.2,
+        )
+    )
+
+
+def _draw_map_connector(ax, tx0, tx1, bx0, bx1, color, cfg) -> None:
+    """Connect a UniProt block to its KLIFS block (band or curved ribbon)."""
+    from matplotlib.patches import Polygon
+
+    fc = _flatten_on_white(color, cfg.ribbon_alpha)
+    if not cfg.use_ribbon:
+        ax.add_patch(
+            Polygon(
+                [
+                    (tx0, _MAP_TOP_Y0),
+                    (tx1, _MAP_TOP_Y0),
+                    (bx1, _MAP_BOT_Y1),
+                    (bx0, _MAP_BOT_Y1),
+                ],
+                closed=True,
+                facecolor=fc,
+                edgecolor="none",
+                zorder=1,
+            )
+        )
+        return
+    import matplotlib.patches as mpatches
+    from matplotlib.path import Path
+
+    my = (_MAP_TOP_Y0 + _MAP_BOT_Y1) / 2
+    verts = [
+        (tx0, _MAP_TOP_Y0),
+        (tx0, my),
+        (bx0, my),
+        (bx0, _MAP_BOT_Y1),
+        (bx1, _MAP_BOT_Y1),
+        (bx1, my),
+        (tx1, my),
+        (tx1, _MAP_TOP_Y0),
+        (tx0, _MAP_TOP_Y0),
+    ]
+    codes = [
+        Path.MOVETO,
+        Path.CURVE4,
+        Path.CURVE4,
+        Path.CURVE4,
+        Path.LINETO,
+        Path.CURVE4,
+        Path.CURVE4,
+        Path.CURVE4,
+        Path.CLOSEPOLY,
+    ]
+    ax.add_patch(
+        mpatches.PathPatch(Path(verts, codes), facecolor=fc, edgecolor="none", zorder=1)
+    )
+
+
+def _draw_uniprot_klifs_map(
+    ax, inter_median, ranges, splits, nterm, cterm, cfg
+) -> None:
+    """Render the two-track UniProt->KLIFS residue mapping diagram on ``ax``."""
+    from matplotlib.patches import Patch
+
+    top, bottom = _region_map_segments(inter_median, splits, cfg)
+    x = 0.0
+    for seg in top:
+        seg["x0"], seg["x1"] = x, x + seg["length"]
+        x += seg["length"]
+    w_top = x
+    offset = (w_top - sum(b["length"] for b in bottom)) / 2.0
+
+    def kx(a, b):
+        return offset + a - 1, offset + b
+
+    for seg in top:
+        if seg["kind"] == "klifs":
+            _draw_map_connector(
+                ax, seg["x0"], seg["x1"], *kx(*seg["klifs"]), seg["color"], cfg
+            )
+
+    th, bh = _MAP_TOP_Y1 - _MAP_TOP_Y0, _MAP_BOT_Y1 - _MAP_BOT_Y0
+    for seg in top:
+        _draw_map_block(
+            ax,
+            seg["x0"],
+            seg["length"],
+            _MAP_TOP_Y0,
+            th,
+            seg["color"],
+            seg["kind"] == "klifs",
+        )
+        if seg["kind"] in ("inter", "intra"):
+            xc = (seg["x0"] + seg["x1"]) / 2
+            lo, hi = ranges[seg["rkey"]]
+            ax.text(
+                xc,
+                _MAP_TOP_Y1 + 0.52,
+                seg["label"],
+                ha="center",
+                va="bottom",
+                fontsize=cfg.map_name_fontsize,
+                fontweight="bold",
+            )
+            ax.text(
+                xc,
+                _MAP_TOP_Y1 + 0.14,
+                f"{lo}–{hi}",
+                ha="center",
+                va="bottom",
+                fontsize=cfg.map_range_fontsize,
+                color="#666666",
+            )
+
+    for b in bottom:
+        bx0, bx1 = kx(*b["klifs"])
+        _draw_map_block(ax, bx0, bx1 - bx0, _MAP_BOT_Y0, bh, b["color"], True)
+        ax.text(
+            (bx0 + bx1) / 2,
+            _MAP_BOT_Y0 - 0.14,
+            b["label"],
+            ha="center",
+            va="top",
+            fontsize=cfg.map_region_fontsize,
+            rotation=90,
+        )
+
+    for ex, lab, rng in ((-3.0, "N-term", nterm), (w_top + 4.0, "C-term", cterm)):
+        ax.text(
+            ex,
+            (_MAP_TOP_Y0 + _MAP_TOP_Y1) / 2,
+            "···",
+            ha="center",
+            va="center",
+            fontsize=cfg.map_ellipsis_fontsize,
+            color="#555555",
+        )
+        ax.text(
+            ex,
+            _MAP_TOP_Y1 + 0.52,
+            lab,
+            ha="center",
+            va="bottom",
+            fontsize=cfg.map_name_fontsize,
+            fontweight="bold",
+        )
+        ax.text(
+            ex,
+            _MAP_TOP_Y1 + 0.14,
+            f"{rng[0]:,}–{rng[1]:,}",
+            ha="center",
+            va="bottom",
+            fontsize=cfg.map_range_fontsize,
+            color="#666666",
+        )
+
+    ax.text(
+        -29,
+        (_MAP_TOP_Y0 + _MAP_TOP_Y1) / 2,
+        "UniProt",
+        ha="left",
+        va="center",
+        fontsize=cfg.map_track_fontsize,
+        fontweight="bold",
+    )
+    ax.text(
+        -29,
+        (_MAP_BOT_Y0 + _MAP_BOT_Y1) / 2,
+        "KLIFS",
+        ha="left",
+        va="center",
+        fontsize=cfg.map_track_fontsize,
+        fontweight="bold",
+    )
+
+    leg = ax.legend(
+        handles=[
+            Patch(facecolor=cfg.inter_color, edgecolor="black", label="Inter-Region"),
+            Patch(facecolor=cfg.intra_color, edgecolor="black", label="Intra-Region"),
+        ],
+        loc="lower left",
+        bbox_to_anchor=(0.0, -0.05),
+        fontsize=cfg.map_legend_fontsize,
+        frameon=True,
+        handlelength=1.2,
+        handleheight=1.2,
+    )
+    leg.get_frame().set_edgecolor("#bbbbbb")
+
+    ax.set_xlim(-31, w_top + 9)
+    ax.set_ylim(-1.2, 3.1)
+    ax.axis("off")
+
+
+def _draw_region_gap_violin_panel(
+    ax, specs, group_label, y_max, show_ylabel, cfg
+) -> None:
+    """Draw one grouped violin panel (log-scaled y-axis) on ``ax``."""
+    import matplotlib.colors as mcolors
+
+    def to_log(arr):
+        return np.log10(np.asarray(arr, dtype=float) + 1.0)
+
+    def style(parts, color):
+        rgb = mcolors.to_rgb(color)
+        for body in parts["bodies"]:
+            body.set_facecolor((*rgb, cfg.fill_alpha))
+            body.set_edgecolor(cfg.violin_edgecolor)
+            body.set_linewidth(cfg.violin_linewidth)
+
+    positions = list(range(len(specs)))
+    for x, s in zip(positions, specs):
+        data = to_log(s["lengths"])
+        vp = ax.violinplot(
+            [data],
+            positions=[x],
+            widths=cfg.violin_width,
+            showmedians=False,
+            showextrema=False,
+        )
+        color = (
+            s["color_left"]
+            if s["color_left"] == s["color_right"]
+            else cfg.jitter_mixed_color
+        )
+        style(vp, color)
+        jx = x + np.random.normal(0, cfg.jitter_std, size=len(data))
+        ax.scatter(
+            jx,
+            data,
+            s=cfg.jitter_size,
+            color=color,
+            alpha=cfg.jitter_alpha,
+            edgecolors=cfg.jitter_edgecolor,
+            linewidths=cfg.jitter_linewidth,
+            zorder=2.5,
+        )
+
+    fs = cfg.violin_fontsize
+    ticks = [t for t in [0, 1, 2, 5, 10, 20, 50, 100, 200, 300] if t <= y_max]
+    ax.set_yticks(to_log(ticks))
+    ax.set_yticklabels([str(t) for t in ticks])
+    ax.set_xticks(positions)
+    ax.set_xticklabels([s["label"] for s in specs], fontsize=fs)
+    ax.set_xlabel(group_label, fontsize=fs, fontweight="bold", labelpad=10)
+    if show_ylabel:
+        ax.set_ylabel(cfg.ylabel_text, fontsize=fs)
+    ax.set_ylim(-0.15, to_log(y_max) + 0.3)
+    ax.set_xlim(-0.6, len(specs) - 0.4)
+    ax.tick_params(axis="y", labelsize=fs)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.grid(axis="y", alpha=cfg.grid_alpha)
+
+
+def plot_region_gap_violin(
+    dict_in: dict[str, Any],
+    path_save: str,
+    cfg: RegionGapViolinConfig | None = None,
+    rc: MatplotlibRCConfig | None = None,
+) -> None:
+    """Plot the combined UniProt->KLIFS residue map over region-gap violins.
+
+    The top panel maps the KLIFS-region span of the UniProt sequence (inter
+    fillers sized to the median gap, intra fillers length 1, ellipses for the
+    rest of the sequence) onto the contiguous KLIFS pocket residues via colored
+    connectors (bands by default, ribbons when ``cfg.use_ribbon``). The two
+    bottom panels show the inter- and intra-region gap-length distributions as
+    violins with jittered points on separate log-scaled axes. Only kinases with
+    a KLIFS pocket annotation are included; all statistics are computed on the
+    fly.
+
+    Parameters
+    ----------
+    dict_in : dict[str, Any]
+        Dictionary of KinaseInfo objects.
+    path_save : str
+        Directory in which to save the plot.
+    cfg : RegionGapViolinConfig | None
+        Plot aesthetics config; uses defaults when None.
+    rc : MatplotlibRCConfig | None
+        Matplotlib rcParams config; uses defaults when None.
+
+    Returns
+    -------
+    None
+    """
+    if cfg is None:
+        cfg = RegionGapViolinConfig()
+    if rc is None:
+        rc = MatplotlibRCConfig()
+
+    apply_matplotlib_rc(rc)
+    plt.rcParams["font.family"] = "Arial"
+
+    inter, intra = _collect_region_gap_specs(dict_in)
+    inter_median = {s["key"]: int(s["median"]) for s in inter}
+    ranges = {
+        s["key"]: (int(s["lengths"].min()), int(s["lengths"].max())) for s in inter
+    }
+    for s in intra:
+        base = s["key"][: -len("_intra")]
+        ranges[base] = (int(s["lengths"].min()), int(s["lengths"].max()))
+    splits, nterm, cterm = _collect_region_map_extras(dict_in)
+    inter_max = float(max(s["lengths"].max() for s in inter))
+    intra_max = float(max(s["lengths"].max() for s in intra))
+
+    fig = plt.figure(figsize=tuple(cfg.figsize))
+    gs = fig.add_gridspec(
+        2,
+        2,
+        height_ratios=cfg.height_ratios,
+        width_ratios=cfg.width_ratios,
+        hspace=cfg.hspace,
+        wspace=cfg.wspace,
+    )
+    ax_map = fig.add_subplot(gs[0, :])
+    ax_inter = fig.add_subplot(gs[1, 0])
+    ax_intra = fig.add_subplot(gs[1, 1])
+
+    _draw_uniprot_klifs_map(ax_map, inter_median, ranges, splits, nterm, cterm, cfg)
+    _draw_region_gap_violin_panel(ax_inter, inter, "Inter-region", inter_max, True, cfg)
+    _draw_region_gap_violin_panel(
+        ax_intra, intra, "Intra-region", intra_max, False, cfg
+    )
+
+    # widen the violin panels to the full width, then let the diagram span the
+    # entire figure (independent of the violin y-axis)
+    fig.subplots_adjust(
+        left=cfg.left_adjust,
+        right=cfg.right_adjust,
+        top=cfg.top_adjust,
+        bottom=cfg.bottom_adjust,
+    )
+    pm = ax_map.get_position()
+    ax_map.set_position([0.012, pm.y0, 0.978, pm.height])
+
+    save_plot(
+        fig,
+        cfg.filename,
+        "Region gap map + violin",
+        bool_force_local=False,
+        bool_image_subdir=False,
+        output_path=path_save,
+    )
 
 
 @dataclass

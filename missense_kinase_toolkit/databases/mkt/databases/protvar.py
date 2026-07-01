@@ -1,3 +1,10 @@
+"""ProtVar API client for variant pathogenicity scores.
+
+Provides :class:`ProtvarScoreQuery` and the :class:`ProtvarVariant` model for
+retrieving variant pathogenicity scores, with a :class:`ScoreDatabase` enumeration of
+supported score sources.
+"""
+
 import json
 import logging
 from collections import defaultdict

@@ -1,3 +1,9 @@
+"""Generation of PyMOL visualization scripts for kinase structures.
+
+Provides :class:`PyMOLGenerator`, which renders parameterized PyMOL scripts for
+highlighting kinase structure features (see the ``pymol_viz`` skill).
+"""
+
 import logging
 import os
 import textwrap

@@ -1,3 +1,10 @@
+"""File I/O helpers for CSV/dataframe round-tripping, tar creation, and kinase-dict loading.
+
+Includes helpers to load and save dataframes, concatenate CSVs by glob, parse iterables
+into dataframes, create metadata-free tar archives, and load the packaged kinase
+dictionary.
+"""
+
 import logging
 import os
 import tarfile
@@ -253,6 +260,9 @@ def return_kinase_dict(bool_hgnc: bool = True) -> dict[str, object]:
     """
     from mkt.schema import io_utils
 
+    # deserialize_kinase_dict self-guards on MKT_SKIP_KINASE_DICT (returning an
+    # empty dict), so metadata-only callers such as docs builds skip the
+    # expensive load without a check here
     DICT_KINASE = io_utils.deserialize_kinase_dict(str_name="DICT_KINASE")
 
     # use HGNC IDs as keys if bool_hgnc is True, else use UniProt IDs

@@ -1,3 +1,9 @@
+"""DiscoverX kinase panel metadata model and generator.
+
+Provides the :class:`DiscoverXInfo` model and :class:`DiscoverXInfoGenerator` for
+representing and building DiscoverX/scanMAX kinase panel metadata.
+"""
+
 import logging
 import re
 from collections.abc import Iterable
@@ -8,6 +14,7 @@ import numpy as np
 import pandas as pd
 from mkt.databases import hgnc
 from mkt.databases.aligners import BL2UniProtAligner
+from mkt.databases.io_utils import return_kinase_dict
 from mkt.databases.klifs import (
     DICT_POCKET_KLIFS_REGIONS,
     LIST_INTER_REGIONS,
@@ -16,7 +23,6 @@ from mkt.databases.klifs import (
 )
 from mkt.databases.ncbi import ProteinNCBI
 from mkt.databases.uniprot import UniProtFASTA, query_uniprotbulk_api
-from mkt.schema.io_utils import deserialize_kinase_dict
 from mkt.schema.kinase_schema import SwissProtPattern
 from mkt.schema.utils import TQDM_BAR_FORMAT
 from pydantic import BaseModel, Field, constr, model_validator
@@ -27,7 +33,7 @@ logger = logging.getLogger(__name__)
 tqdm.pandas(bar_format=TQDM_BAR_FORMAT)
 
 
-DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE")
+DICT_KINASE = return_kinase_dict()
 DICT_KINASE_REV = {v.uniprot_id: v for v in DICT_KINASE.values()}
 
 DICT_DAVIS_DROP = {

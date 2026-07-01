@@ -1,3 +1,9 @@
+"""Logging configuration helpers and argparse logging flags.
+
+Provides :func:`configure_logging` to set up package logging and
+:func:`add_logging_flags` to attach verbosity flags to an argparse parser.
+"""
+
 import logging
 
 

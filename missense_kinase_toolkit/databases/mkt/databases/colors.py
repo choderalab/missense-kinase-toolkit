@@ -1,3 +1,9 @@
+"""Color palettes and colormap helpers for amino acids and percentile-based plotting.
+
+Defines the :class:`AminoAcidPalette`, amino-acid-to-color mapping helpers, and
+utilities for interpolating colors and building percentile colormaps with legends.
+"""
+
 from enum import Enum
 
 import matplotlib.colors as mcolors
