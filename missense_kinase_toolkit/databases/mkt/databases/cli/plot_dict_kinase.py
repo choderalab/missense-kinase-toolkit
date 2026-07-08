@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
 """CLI to plot the DICT_KINASE figures from YAML-configured aesthetics.
 
-Renders the KinaseInfo figures built from the shipped ``DICT_KINASE`` archive:
-the source-coverage upset plot and the combined UniProt->KLIFS residue map with
-inter-/intra-region gap violins. Each figure is rendered only when its config
-section is present in the YAML (both are rendered when no config is given).
+Renders the study-independent KinaseInfo figures built from the shipped
+``DICT_KINASE`` archive: the source-coverage upset plot, the combined
+UniProt->KLIFS residue map with inter-/intra-region gap violins, and the KLIFS
+hierarchical conservation-tree supplement (static split figures + interactive
+Bokeh explorer). Each figure is rendered only when its config section is present
+in the YAML (the non-tree figures are rendered when no config is given).
+
+Following ``mkt_impact.cli.run_analysis``, the figures are registered in a
+``_PLOT_STEPS`` dict keyed by config section, so adding a figure is one entry.
 
 This CLI deliberately does not import ``mkt.databases.datasets.process`` (which
-has a network side effect on import), so it never needs the Davis/PKIS2 data.
+has a network side effect on import); the conservation-tree renderers are
+imported lazily inside their steps so the panel build only runs when requested.
 """
 
 import logging
 import os
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Callable, Optional
 
 import typer
 from mkt.databases.log_config import configure_logging
@@ -26,7 +32,63 @@ logger = logging.getLogger(__name__)
 
 app = typer.Typer()
 
-# figures rendered when no --config is provided
+
+def _plot_upset(
+    dict_kinase: dict, output_dir: str, cfg: DictKinaseFiguresConfig
+) -> None:
+    """Source-coverage upset plot over the DICT_KINASE archive."""
+    plot_dict_kinase_upset(dict_kinase, output_dir, cfg=cfg.upset_plot)
+
+
+def _plot_region_gap_violin(
+    dict_kinase: dict, output_dir: str, cfg: DictKinaseFiguresConfig
+) -> None:
+    """UniProt->KLIFS residue map with inter-/intra-region gap violins."""
+    plot_region_gap_violin(
+        dict_kinase,
+        output_dir,
+        cfg=cfg.region_gap_violin,
+        rc=cfg.matplotlib_rc,
+    )
+
+
+def _plot_conservation_tree(
+    dict_kinase: dict, output_dir: str, cfg: DictKinaseFiguresConfig
+) -> None:
+    """Static KLIFS conservation-tree supplement (summary + top/bottom panels)."""
+    from mkt.databases.conservation import KLIFSConservationTreeFigure
+
+    tree_cfg = cfg.conservation_tree
+    KLIFSConservationTreeFigure(
+        min_cluster_size=tree_cfg.min_cluster_size,
+        font_size=tree_cfg.font_size,
+        split_index=tree_cfg.split_index,
+    ).plot_split(output_dir, formats=tuple(tree_cfg.formats))
+
+
+def _plot_conservation_tree_explorer(
+    dict_kinase: dict, output_dir: str, cfg: DictKinaseFiguresConfig
+) -> None:
+    """Interactive KLIFS conservation-tree Bokeh explorer (standalone HTML)."""
+    from mkt.databases.conservation import KLIFSTreeConservationApp
+
+    app_cfg = cfg.conservation_tree_explorer
+    KLIFSTreeConservationApp(
+        min_cluster_size=app_cfg.min_cluster_size,
+        logo_cutoff=app_cfg.logo_cutoff,
+        name_trunc=app_cfg.name_trunc,
+    ).save_app(output_dir, filename=app_cfg.filename)
+
+
+# registry of figure steps keyed by config section, rendered in this order
+_PLOT_STEPS: dict[str, Callable[[dict, str, DictKinaseFiguresConfig], None]] = {
+    "upset_plot": _plot_upset,
+    "region_gap_violin": _plot_region_gap_violin,
+    "conservation_tree": _plot_conservation_tree,
+    "conservation_tree_explorer": _plot_conservation_tree_explorer,
+}
+
+# figures rendered when no --config is provided (the non-tree, always-cheap ones)
 _DEFAULT_SECTIONS = {"upset_plot", "region_gap_violin"}
 
 
@@ -42,11 +104,12 @@ def main(
         typer.Option("--verbose", "-v", help="Enable verbose (DEBUG) logging."),
     ] = False,
 ) -> None:
-    """Generate the DICT_KINASE figures (upset plot and region-gap map/violin).
+    """Generate the DICT_KINASE figures.
 
     Loads aesthetics from a YAML config file when ``--config`` is provided,
     otherwise uses defaults. Each figure is rendered only when its config section
-    (``upset_plot`` / ``region_gap_violin``) is present in the YAML.
+    (one of :data:`_PLOT_STEPS`) is present in the YAML; with no config the
+    always-cheap non-tree figures (:data:`_DEFAULT_SECTIONS`) are rendered.
     """
     configure_logging(verbose=verbose)
 
@@ -69,16 +132,10 @@ def main(
 
     dict_kinase = deserialize_kinase_dict(str_name="DICT_KINASE")
 
-    if "upset_plot" in present:
-        plot_dict_kinase_upset(dict_kinase, output_dir, cfg=cfg.upset_plot)
-
-    if "region_gap_violin" in present:
-        plot_region_gap_violin(
-            dict_kinase,
-            output_dir,
-            cfg=cfg.region_gap_violin,
-            rc=cfg.matplotlib_rc,
-        )
+    for section, render in _PLOT_STEPS.items():
+        if section in present:
+            logger.info(f"Rendering {section}")
+            render(dict_kinase, output_dir, cfg)
 
     logger.info("All plots generated successfully!")
 

@@ -461,6 +461,38 @@ class PlotDatasetConfig:
         return cfg
 
 
+# --- KLIFS hierarchical conservation-tree figures ---
+# defaults mirror the constants in mkt.databases.conservation (kept as literals here so
+# plot_config stays import-light and does not trigger the conservation panel build).
+
+
+@dataclass
+class ConservationTreeConfig:
+    """Aesthetics for the static KLIFS conservation-tree supplemental figures.
+
+    Rendered by :class:`mkt.databases.conservation.KLIFSConservationTreeFigure`
+    (summary dendrogram + top/bottom detail panels).
+    """
+
+    min_cluster_size: int = 12
+    font_size: float = 4.0
+    split_index: int | None = None
+    formats: list[str] = field(default_factory=lambda: ["pdf"])
+
+
+@dataclass
+class ConservationTreeExplorerConfig:
+    """Params for the interactive KLIFS conservation-tree Bokeh explorer.
+
+    Rendered by :class:`mkt.databases.conservation.KLIFSTreeConservationApp`.
+    """
+
+    min_cluster_size: int = 12
+    logo_cutoff: float = 0.10
+    name_trunc: int = 14
+    filename: str | None = None
+
+
 @dataclass
 class DictKinaseFiguresConfig:
     """Top-level config for the DICT_KINASE figures (upset + region-gap map/violin).
@@ -474,6 +506,12 @@ class DictKinaseFiguresConfig:
     upset_plot: UpsetPlotConfig = field(default_factory=UpsetPlotConfig.preprint_2026)
     region_gap_violin: RegionGapViolinConfig = field(
         default_factory=RegionGapViolinConfig
+    )
+    conservation_tree: ConservationTreeConfig = field(
+        default_factory=ConservationTreeConfig
+    )
+    conservation_tree_explorer: ConservationTreeExplorerConfig = field(
+        default_factory=ConservationTreeExplorerConfig
     )
     output: OutputConfig = field(default_factory=OutputConfig)
 
@@ -501,6 +539,12 @@ class DictKinaseFiguresConfig:
             cfg.upset_plot = UpsetPlotConfig(**raw["upset_plot"])
         if "region_gap_violin" in raw:
             cfg.region_gap_violin = RegionGapViolinConfig(**raw["region_gap_violin"])
+        if "conservation_tree" in raw:
+            cfg.conservation_tree = ConservationTreeConfig(**raw["conservation_tree"])
+        if "conservation_tree_explorer" in raw:
+            cfg.conservation_tree_explorer = ConservationTreeExplorerConfig(
+                **raw["conservation_tree_explorer"]
+            )
         if "output" in raw:
             cfg.output = OutputConfig(**raw["output"])
 
