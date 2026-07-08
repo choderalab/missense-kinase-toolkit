@@ -411,6 +411,10 @@ class PlotDatasetConfig:
     sequence_schematic: SequenceSchematicConfig = field(
         default_factory=SequenceSchematicConfig
     )
+    upset_plot: UpsetPlotConfig = field(default_factory=UpsetPlotConfig)
+    region_gap_violin: RegionGapViolinConfig = field(
+        default_factory=RegionGapViolinConfig
+    )
     data_sources: DataSourceConfig = field(default_factory=DataSourceConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
 
@@ -452,6 +456,10 @@ class PlotDatasetConfig:
             cfg.sequence_schematic = SequenceSchematicConfig(
                 **raw["sequence_schematic"]
             )
+        if "upset_plot" in raw:
+            cfg.upset_plot = UpsetPlotConfig(**raw["upset_plot"])
+        if "region_gap_violin" in raw:
+            cfg.region_gap_violin = RegionGapViolinConfig(**raw["region_gap_violin"])
         if "data_sources" in raw:
             cfg.data_sources = DataSourceConfig(**raw["data_sources"])
         if "output" in raw:
