@@ -429,17 +429,20 @@ def save_plot(
     bool_force_local: bool = True,
     bool_image_subdir=True,
     output_path: str | None = None,
+    bool_svg: bool = True,
+    bool_png: bool = True,
+    bool_pdf: bool = False,
     **kwargs,
 ) -> None:
-    """Save the current matplotlib figure in both SVG and PNG formats.
+    """Save the current matplotlib figure in the requested vector/raster formats.
 
     Parameters:
     -----------
     fig : matplotlib.figure.Figure
         The figure object to save.
     output_filename : str
-        Name of the output file to save the plot. If it ends with .png, will be converted to .svg.
-        Otherwise assumed to be .svg already.
+        Name of the output file to save the plot. Any extension is stripped; the
+        format suffixes are appended per the ``bool_svg``/``bool_png``/``bool_pdf`` flags.
     plot_type : str
         Description of the plot type for logging purposes (e.g., "Dynamic range plot")
     bool_force_local : bool
@@ -448,6 +451,12 @@ def save_plot(
         If True, saves images to a subdirectory named "images" within the output path; default is True.
     output_path : str | None
         Optional path to save the plot. If None, saves to the current working directory.
+    bool_svg : bool
+        If True, write an SVG copy; default is True.
+    bool_png : bool
+        If True, write a PNG copy; default is True.
+    bool_pdf : bool
+        If True, write a PDF copy; default is False.
     **kwargs
         Additional keyword arguments to pass to plt.savefig (e.g., {"dpi": 300}). Default is empty dict.
     """
@@ -472,7 +481,12 @@ def save_plot(
     # update with any user-provided kwargs
     savefig_params.update(kwargs)
 
-    for suffix in ["svg", "png"]:
+    suffixes = [
+        suffix
+        for suffix, flag in (("svg", bool_svg), ("png", bool_png), ("pdf", bool_pdf))
+        if flag
+    ]
+    for suffix in suffixes:
         if bool_image_subdir:
             file_path = os.path.join(
                 output_path, "images", f"{output_filename}.{suffix}"
