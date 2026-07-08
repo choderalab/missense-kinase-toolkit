@@ -385,6 +385,7 @@ class OutputConfig:
     subdir: str = "images"
     bool_svg: bool = True
     bool_png: bool = True
+    bool_pdf: bool = False
 
 
 # --- top-level config ---
@@ -410,10 +411,6 @@ class PlotDatasetConfig:
     metrics_boxplot: MetricsBoxplotConfig = field(default_factory=MetricsBoxplotConfig)
     sequence_schematic: SequenceSchematicConfig = field(
         default_factory=SequenceSchematicConfig
-    )
-    upset_plot: UpsetPlotConfig = field(default_factory=UpsetPlotConfig)
-    region_gap_violin: RegionGapViolinConfig = field(
-        default_factory=RegionGapViolinConfig
     )
     data_sources: DataSourceConfig = field(default_factory=DataSourceConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
@@ -456,12 +453,54 @@ class PlotDatasetConfig:
             cfg.sequence_schematic = SequenceSchematicConfig(
                 **raw["sequence_schematic"]
             )
+        if "data_sources" in raw:
+            cfg.data_sources = DataSourceConfig(**raw["data_sources"])
+        if "output" in raw:
+            cfg.output = OutputConfig(**raw["output"])
+
+        return cfg
+
+
+@dataclass
+class DictKinaseFiguresConfig:
+    """Top-level config for the DICT_KINASE figures (upset + region-gap map/violin).
+
+    Consumed by the ``plot_dict_kinase`` CLI. Kept separate from
+    :class:`PlotDatasetConfig` so rendering these figures never imports the
+    dataset-processing module (which has a network side effect on import).
+    """
+
+    matplotlib_rc: MatplotlibRCConfig = field(default_factory=MatplotlibRCConfig)
+    upset_plot: UpsetPlotConfig = field(default_factory=UpsetPlotConfig.preprint_2026)
+    region_gap_violin: RegionGapViolinConfig = field(
+        default_factory=RegionGapViolinConfig
+    )
+    output: OutputConfig = field(default_factory=OutputConfig)
+
+    @classmethod
+    def from_yaml(cls, config_path: str | Path) -> "DictKinaseFiguresConfig":
+        """Load a DictKinaseFiguresConfig from a YAML file.
+
+        Parameters:
+        -----------
+        config_path : str | Path
+            Path to the YAML configuration file.
+
+        Returns:
+        --------
+        DictKinaseFiguresConfig
+            Fully populated config instance.
+        """
+        omega = OmegaConf.load(config_path)
+        raw = OmegaConf.to_container(omega, resolve=True)
+
+        cfg = cls()
+        if "matplotlib_rc" in raw:
+            cfg.matplotlib_rc = MatplotlibRCConfig(**raw["matplotlib_rc"])
         if "upset_plot" in raw:
             cfg.upset_plot = UpsetPlotConfig(**raw["upset_plot"])
         if "region_gap_violin" in raw:
             cfg.region_gap_violin = RegionGapViolinConfig(**raw["region_gap_violin"])
-        if "data_sources" in raw:
-            cfg.data_sources = DataSourceConfig(**raw["data_sources"])
         if "output" in raw:
             cfg.output = OutputConfig(**raw["output"])
 

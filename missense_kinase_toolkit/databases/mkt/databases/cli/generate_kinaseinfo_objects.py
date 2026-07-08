@@ -19,7 +19,7 @@ from mkt.databases.kinase_schema import (
     generate_dict_obj_from_api_or_scraper,
 )
 from mkt.databases.log_config import add_logging_flags, configure_logging
-from mkt.databases.plot import generate_kinase_info_plot, plot_region_gap_violin
+from mkt.databases.plot import plot_dict_kinase_upset, plot_region_gap_violin
 from mkt.databases.plot_config import RegionGapViolinConfig, UpsetPlotConfig
 from mkt.schema.io_utils import get_repo_root, serialize_kinase_dict
 
@@ -116,7 +116,7 @@ def main():
     )
 
     # generate kinase info plot (preprint 2026 sizing)
-    generate_kinase_info_plot(
+    plot_dict_kinase_upset(
         dict_kinaseinfo, path_reports, cfg=UpsetPlotConfig.preprint_2026()
     )
 

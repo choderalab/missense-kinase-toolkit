@@ -33,16 +33,34 @@ from pydantic.dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 
+def remove_spines(ax):
+    """Remove plot spines while keeping tick marks for cleaner appearance.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axes object from which to remove spines.
+
+    Returns
+    -------
+    None
+    """
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+
+
 # from mkt.schema.io_utils import deserialize_kinase_dict
-# from mkt.databases.plot import generate_kinase_info_plot
+# from mkt.databases.plot import plot_dict_kinase_upset
 # DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE")
-# generate_kinase_info_plot(DICT_KINASE, "/Users/jessicawhite/Library/CloudStorage/OneDrive-Personal/PhD/Chodera/missense-kinase-toolkit/images")
-def generate_kinase_info_plot(
+# plot_dict_kinase_upset(DICT_KINASE, "images")
+def plot_dict_kinase_upset(
     dict_in: dict[str, Any],
     path_save: str,
     cfg: UpsetPlotConfig | None = None,
 ) -> None:
-    """Plot KinaseInfo upset plots from final harmonzied objects.
+    """Plot a source-coverage upset plot of the DICT_KINASE KinaseInfo objects.
 
     Parameters
     ----------

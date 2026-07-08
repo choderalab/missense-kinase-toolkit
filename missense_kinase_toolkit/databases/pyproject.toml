@@ -60,6 +60,7 @@ extract_cbioportal_missense_kinases = "mkt.databases.cli.extract_cbioportal_miss
 generate_dataset_csv_files = "mkt.databases.cli.generate_dataset_csv_files:main"
 generate_pymol_files = "mkt.databases.cli.generate_pymol_files:app"
 plot_dataset_data = "mkt.databases.cli.plot_dataset_data:app"
+plot_dict_kinase = "mkt.databases.cli.plot_dict_kinase:app"
 
 [project.urls]
 "Homepage" = "https://github.com/choderalab/missense-kinase-toolkit"
