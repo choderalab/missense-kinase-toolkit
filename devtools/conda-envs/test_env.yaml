@@ -28,6 +28,7 @@ dependencies:
   - seaborn
   - matplotlib-venn
   - scipy
+  - scikit-learn
   - omegaconf
   - pydantic
   - GitPython
