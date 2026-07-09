@@ -221,6 +221,12 @@ TUP_TREE_SUMMARY_PAGE = (11.0, 5.0)
 """tuple[float, float]: Figure size (inches) of the horizontal summary dendrogram."""
 FLOAT_TREE_SUMMARY_LEGEND_FS = 7.0
 """float: Font size for the summary dendrogram's kinase-group legend."""
+INT_TREE_SPLIT_INDEX = 47
+"""int: Default leaf-order index splitting the top/bottom detail panels of the
+human-kinome KLIFS conservation tree -- the boundary between the mostly-CMGC clade
+and the mostly-CAMK clade. A property of the fixed KLIFS panel (study-independent),
+so it is hardcoded; :meth:`KLIFSConservationTreeFigure._split_index` is retained as a
+fallback (used when this index is None or out of range for a non-standard panel)."""
 STR_BLOSUM_MATRIX = "BLOSUM62"
 """str: Substitution matrix name (Bio.Align.substitution_matrices) for the default metric."""
 STR_METRIC_BLOSUM = "blosum"
@@ -1246,11 +1252,11 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
     """Gathered subtrees with fewer members collapse to a single leaf bar."""
     font_size: float = FLOAT_TREE_FONT_SIZE
     """Base font size; raising it widens the (measured) name boxes and narrows the table."""
-    split_index: int | None = None
-    """Leaf-order index splitting the top/bottom detail panels. None (default) resolves
-    per study in :meth:`build_split_figures`: the curated CMGC/CAMK boundary for
-    ``mskimpact`` (:data:`INT_TREE_SPLIT_INDEX_MSKIMPACT`), else the group boundary
-    nearest the midpoint (:meth:`_split_index`)."""
+    split_index: int | None = INT_TREE_SPLIT_INDEX
+    """Leaf-order index splitting the top/bottom detail panels. Defaults to the curated
+    CMGC/CAMK boundary of the human-kinome KLIFS tree (:data:`INT_TREE_SPLIT_INDEX`).
+    Set to None (or an out-of-range value) to auto-pick the group boundary nearest the
+    midpoint (:meth:`_split_index`)."""
 
     # -- per-leaf styling (family color, pseudokinase border, branch color) --
 
@@ -1816,8 +1822,9 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
         self, split_index: int | None = None
     ) -> list[tuple[str, plt.Figure]]:
         """Build the three supplemental figures: horizontal summary + top / bottom
-        detail panels, split at ``split_index`` (default: the group boundary nearest the
-        midpoint, :meth:`_split_index`).
+        detail panels, split at ``split_index`` (default: :data:`INT_TREE_SPLIT_INDEX`,
+        the CMGC/CAMK boundary; falls back to :meth:`_split_index` when the resolved
+        index is None or out of range for the current panel).
 
         Returns
         -------
@@ -1828,11 +1835,11 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
             min_cluster_size=self.min_cluster_size, aggregate_singletons=True
         )
         if split_index is None:
-            split_index = (
-                self.split_index
-                if self.split_index is not None
-                else self._split_index(tree)
-            )
+            split_index = self.split_index
+        # fall back to the auto midpoint boundary for a None or out-of-range hardcode
+        # (e.g. a non-standard / reduced panel where the curated index no longer applies)
+        if split_index is None or not 0 < split_index < len(tree.order):
+            split_index = self._split_index(tree)
         top, bottom = tree.order[:split_index], tree.order[split_index:]
 
         def detail(sub):

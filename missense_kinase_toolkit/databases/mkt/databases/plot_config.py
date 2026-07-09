@@ -476,7 +476,9 @@ class ConservationTreeConfig:
 
     min_cluster_size: int = 12
     font_size: float = 4.0
-    split_index: int | None = None
+    # 47 mirrors conservation.INT_TREE_SPLIT_INDEX (the CMGC/CAMK boundary of the
+    # human-kinome KLIFS tree); set null to auto-pick via _split_index.
+    split_index: int | None = 47
     formats: list[str] = field(default_factory=lambda: ["pdf"])
 
 

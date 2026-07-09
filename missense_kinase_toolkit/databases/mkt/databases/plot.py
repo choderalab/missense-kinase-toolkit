@@ -51,10 +51,6 @@ def remove_spines(ax):
     ax.spines["bottom"].set_visible(False)
 
 
-# from mkt.schema.io_utils import deserialize_kinase_dict
-# from mkt.databases.plot import plot_dict_kinase_upset
-# DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE")
-# plot_dict_kinase_upset(DICT_KINASE, "images")
 def plot_dict_kinase_upset(
     dict_in: dict[str, Any],
     path_save: str,
@@ -81,7 +77,7 @@ def plot_dict_kinase_upset(
 
     # generate data
     list_attr = ["uniprot", "pfam", "kinhub", "klifs", "kincore"]
-    list_proper = ["UniProt", "Pfam", "KinHub", "KLIFS", "KinCore"]
+    list_proper = ["UniProt", "Pfam", "KinHub", "KLIFS", "KinCoRe"]
     list_contents = [
         [k for k, v in dict_in.items() if getattr(v, attr) is not None]
         for attr in list_attr
