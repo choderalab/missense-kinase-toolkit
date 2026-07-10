@@ -51,8 +51,25 @@ git stash pop             # if you stashed
   `main`'s blob.
 - This **updates the topic branch** so I can keep developing on a current base;
   the actual merge into `main` happens later via a PR.
-- For a small, isolated fix, branch off `main` instead — these topic branches
-  can be ~70 commits ahead, so a PR from one drags in unrelated commits.
+
+## Opening a PR from a topic branch — just do it, don't ask
+
+When I ask you to open a PR for work committed on a topic branch (`schema`,
+`databases`, `ml`, etc.), **push that topic branch and open the `<branch>` →
+`main` PR directly. Do not ask me whether to use a clean branch off `main`, and
+do not create one.**
+
+- **The commit count is irrelevant.** These branches can be 100+ commits ahead
+  of `main`, but I **squash-and-merge** every topic-branch PR — the whole branch
+  collapses to a single commit on `main`. The PR's *commit list* looks long; the
+  *merged diff* is exactly the branch's net change vs. `main`. A large
+  ahead-of-`main` count is expected and is **not** a reason to hesitate, warn,
+  or propose an alternative.
+- Sync the branch from `main` first if it's stale (see the section above), then
+  `git push origin <branch>` and `gh pr create --base main --head <branch>`.
+- Only branch off `main` for a standalone fix that genuinely belongs to **no**
+  existing topic branch — and even then, don't carve a fix *out* of a topic
+  branch it's already committed on.
 
 ## Splitting intermingled changes across topic branches
 

@@ -100,6 +100,12 @@ def split_domain_suffix(name: str) -> tuple[str, str]:
     return name, ""
 
 
+SET_HOMOLOG_DO_NOT_MERGE = frozenset([frozenset({"BUB1", "BUB1B"})])
+"""frozenset[frozenset[str]]: Hand-curated name pairs that :func:`group_name_homologs`
+must never collapse together, overriding the prefix heuristic. BUB1 / BUB1B are distinct
+genes (BUB1B is BUBR1) whose ``B`` suffix is not the receptor ``R`` case caught generically."""
+
+
 def group_name_homologs(
     names: list[str], min_prefix: int = 3, show_count: bool = True
 ) -> list[tuple[str, list[str]]]:
@@ -115,6 +121,9 @@ def group_name_homologs(
     ``["JAK1_1", "JAK2_1", "JAK3_1"] -> ("JAK1/2/3_1 (3)", [...])`` or
     ``["NEK1", "NEK10", "NEK2"] -> ("NEK1/2/10", [...])``. The default ``min_prefix``
     of 3 keeps coincidental two-character matches apart (e.g. the unrelated ATM, ATR).
+    A complete gene name and its ``stem + "R"`` receptor paralog are never merged (e.g.
+    INSR / INSRR stay apart), and any pair in :data:`SET_HOMOLOG_DO_NOT_MERGE` is held
+    apart by hand (BUB1 / BUB1B).
 
     Parameters
     ----------
@@ -153,9 +162,18 @@ def group_name_homologs(
 
     def _is_homolog_set(bases: list[str]) -> bool:
         """True if the bases share a >=min_prefix stem with single-letter / pure-number
-        variants (so e.g. FGFR1-4, PRKACA/B/G, NEK1/10 group; EPHA10/EPHB6 do not)."""
+        variants (so e.g. FGFR1-4, PRKACA/B/G, NEK1/10 group; EPHA10/EPHB6 do not).
+
+        A bare stem member plus its ``stem + "R"`` receptor paralog is never merged
+        (e.g. INSR / INSRR), nor is any pair in :data:`SET_HOMOLOG_DO_NOT_MERGE`."""
+        base_set = set(bases)
+        if any(pair <= base_set for pair in SET_HOMOLOG_DO_NOT_MERGE):
+            return False
         p = _stem(bases)
         if len(p) < min_prefix:
+            return False
+        # a complete gene name and its receptor paralog (stem + "R") are distinct genes
+        if p in base_set and (p + "R") in base_set:
             return False
         return all(
             (suf := b[len(p) :]) == ""
