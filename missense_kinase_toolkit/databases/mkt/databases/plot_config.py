@@ -270,7 +270,7 @@ class UpsetPlotConfig:
         default_factory=lambda: {
             "UniProt": "#00FF00",
             "Pfam": "#00FFFF",
-            "KinCore": "#FF00FF",
+            "KinCoRe": "#FF00FF",
             "KLIFS": "#FFA500",
             "KinHub": "#000000",
         }
