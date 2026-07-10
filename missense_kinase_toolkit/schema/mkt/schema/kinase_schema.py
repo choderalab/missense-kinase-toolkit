@@ -559,8 +559,9 @@ class KinaseInfo(BaseModel):
 
         bool1 = str_hgnc.startswith("PI")
         bool2 = not (str_hgnc.startswith("PIM") or str_hgnc.startswith("PIN"))
-        # the first is a protein kinase, the second and third are pseudokinases
-        bool3 = not (str_hgnc in ["PIK3R4", "PI4KAP1", "PI4KAP2"])
+        # protein kinase
+        # previously included "PI4KAP1" and "PI4KAP2" since pseudogenes but they're lipid
+        bool3 = not (str_hgnc in ["PIK3R4"])
 
         if bool1 and bool2 and bool3:
             return True
