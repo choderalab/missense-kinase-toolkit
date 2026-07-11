@@ -1,3 +1,11 @@
+"""Base API client hierarchy (Swagger, REST, GraphQL) with query and cache provenance stamping.
+
+Defines :class:`APIClient` and its abstract subclasses (:class:`SwaggerAPIClient`,
+:class:`RESTAPIClient`, :class:`GraphQLClient`, and their API-key variants), which
+centralize request execution, query-datetime recording, and requests-cache provenance
+for all concrete database clients.
+"""
+
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field

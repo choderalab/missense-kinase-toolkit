@@ -23,8 +23,11 @@ cd "$SCRIPT_DIR"
 # clean previous output and autosummary stubs (regenerated on build)
 rm -rf _build generated
 
-# guard read by the package to skip cohort/network data loading during build
+# guards read by the package to skip cohort/network data loading during build:
+# SPHINX_BUILD skips the DiscoverX network query, MKT_SKIP_KINASE_DICT skips the
+# kinase-dict deserialization
 export SPHINX_BUILD=1
+export MKT_SKIP_KINASE_DICT=1
 
 echo "building Sphinx HTML docs..."
 "$VENV_PY" -m sphinx -b html . _build/html

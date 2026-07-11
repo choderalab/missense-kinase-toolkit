@@ -1,3 +1,10 @@
+"""General-purpose string, dataframe, and structure utility functions.
+
+Collects string-splitting/matching helpers, dataframe aggregation and one-hot encoding
+utilities, and conversions between mmCIF dictionaries, Biopython structures, and
+serialized strings.
+"""
+
 import logging
 import os
 from io import StringIO

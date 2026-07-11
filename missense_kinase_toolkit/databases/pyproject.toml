@@ -35,6 +35,7 @@ dependencies = [
     "bokeh>=3.7.0",
     "seaborn>=0.13.2",
     "scipy>=1.13.1",
+    "scikit-learn>=1.3",
     "statsmodels>=0.12.2",
     "matplotlib>=3.7.0",
     "matplotlib-venn>=1.1.1",
@@ -58,8 +59,10 @@ test = ["pytest>=9.0.3", "pytest-runner==6.0.1", "pytest-cov>=4.0", "filelock>=3
 generate_kinaseinfo_objects = "mkt.databases.cli.generate_kinaseinfo_objects:main"
 extract_cbioportal_missense_kinases = "mkt.databases.cli.extract_cbioportal_missense_kinases:main"
 generate_dataset_csv_files = "mkt.databases.cli.generate_dataset_csv_files:main"
+generate_conservation_data = "mkt.databases.cli.generate_conservation_data:app"
 generate_pymol_files = "mkt.databases.cli.generate_pymol_files:app"
 plot_dataset_data = "mkt.databases.cli.plot_dataset_data:app"
+plot_dict_kinase = "mkt.databases.cli.plot_dict_kinase:app"
 
 [project.urls]
 "Homepage" = "https://github.com/choderalab/missense-kinase-toolkit"

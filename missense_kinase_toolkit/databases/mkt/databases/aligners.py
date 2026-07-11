@@ -1,3 +1,10 @@
+"""Pairwise and multiple-sequence aligner wrappers for mapping kinase sequences onto UniProt.
+
+Wraps Clustal Omega (:class:`ClustalOmegaAligner`) and Biopython (:class:`BioAligner`)
+behind a common :class:`CustomAligner` interface, with specializations for aligning
+BLOSUM-based and KinCore sequences to UniProt.
+"""
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 

@@ -8,7 +8,7 @@ This repo ships project skills under `.claude/skills/`. **Invoke the relevant
 skill before doing that kind of work** — they hold the detailed
 conventions/recipes that used to live in this file.
 
-The generic skills (`formatting`, `plotting`, `tests`, `ci`, `git`) are thin:
+The generic skills (`formatting`, `plotting`, `tests`, `ci`, `git`, `docs`) are thin:
 they `WebFetch` my canonical baseline conventions from the central skills repo
 (`github.com/jessicaw9910/skills`) and layer on only the repo-specific
 additions. If a fetch fails, the skill will say so rather than silently skipping
@@ -29,6 +29,9 @@ the baseline.
 - **`app_integration`** — before editing the Streamlit app or
   `mkt.databases.app` (logic in the package, UI in Streamlit).
 - **`git`** — before creating commits, branches, or pull requests.
+- **`docs`** — before building/regenerating the Sphinx API docs or writing
+  docstrings for the rendered docs (autosummary + napoleon; `make clean &&
+  make html`; never hand-edit `docs/generated/`).
 
 ## Project Overview
 

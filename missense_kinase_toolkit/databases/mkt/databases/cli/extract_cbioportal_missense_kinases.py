@@ -1,9 +1,13 @@
 #!/usr/bin/env python
+"""CLI to extract missense kinase mutations from cBioPortal.
+
+Entry point (``extract_cbioportal_missense_kinases``) that queries cBioPortal and writes
+missense kinase mutation tables to the output directory.
+"""
 
 import argparse
 import logging
 import os
-from ast import literal_eval
 
 from mkt.databases import cbioportal, config
 from mkt.databases.log_config import add_logging_flags, configure_logging
@@ -59,19 +63,6 @@ def get_parser():
         type=str,
         default=None,
         help="Path to save the extracted missense kinase data; default: None (will try root repo, else current wd).",
-    )
-
-    parser.add_argument(
-        "--generateHeatmap",
-        action="store_true",
-        help="Invoke flag to generate a heatmap of missense kinase mutations (default: False).",
-    )
-
-    parser.add_argument(
-        "--dictHeatmap",
-        type=str,
-        default=None,
-        help="Path to a dictionary file for heatmap generation; default: None (will use default arguments).",
     )
 
     parser = add_logging_flags(parser)
@@ -152,37 +143,6 @@ def main():
     )
     df_kin_mis.to_csv(output_file, index=False)
     logger.info(f"Missense kinase mutations saved to {output_file}.")
-
-    if args.generateHeatmap:
-        output_heatmap = os.path.join(
-            path_out, f"{args.studyId}_kinase_missense_heatmap.png"
-        )
-        if args.dictHeatmap:
-            try:
-                dict_heatmap = literal_eval(args.dictHeatmap)
-                suffix = "".join([f"_{key}-{val}" for key, val in dict_heatmap.items()])
-                output_heatmap = output_heatmap.replace(".png", f"{suffix}.png")
-                logger.info(
-                    f"Using user-provided heatmap settings from --dictHeatmap: {dict_heatmap}"
-                )
-                kinase_missense_muts.generate_heatmap_fig(
-                    df_kin_mis,
-                    filename=output_heatmap,
-                    dict_clustermap_args=dict_heatmap,
-                )
-            except Exception as e:
-                logger.error(
-                    f"Failed to parse dictionary from --dictHeatmap: {e}\n"
-                    f"Using default heatmap settings...\n"
-                )
-                kinase_missense_muts.generate_heatmap_fig(
-                    df_kin_mis, filename=output_heatmap
-                )
-        else:
-            kinase_missense_muts.generate_heatmap_fig(
-                df_kin_mis, filename=output_heatmap
-            )
-        logger.info(f"Heatmap saved to {output_heatmap}.")
 
 
 if __name__ == "__main__":
