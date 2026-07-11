@@ -1,3 +1,9 @@
+"""Parsing and harmonization of KinCore FASTA and CIF structure files, aligned to UniProt.
+
+Reads KinCore FASTA and CIF files, extracts kinase-domain metadata, aligns KinCore
+sequences to UniProt, and harmonizes the FASTA- and CIF-derived records.
+"""
+
 import glob
 import logging
 import os

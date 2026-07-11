@@ -1,3 +1,9 @@
+"""Client for the HGNC (HUGO Gene Nomenclature Committee) REST API.
+
+Provides :class:`HGNC`, a REST client that resolves gene symbols and cross-references
+via the HGNC service.
+"""
+
 import logging
 from dataclasses import dataclass
 

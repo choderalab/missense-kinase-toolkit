@@ -1,3 +1,10 @@
+"""Solvent-accessible surface area (SASA) computation configs and residue-level calculation.
+
+Defines SASA configuration dataclasses (Biopython and PyMOL backends, with and without
+hydrogens), the :class:`StandardSASAConfigs` presets, and the :class:`ResidueSASA`
+model produced by residue-level SASA computation.
+"""
+
 import logging
 import os
 from concurrent.futures import ProcessPoolExecutor

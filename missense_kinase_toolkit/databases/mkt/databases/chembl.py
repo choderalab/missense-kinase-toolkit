@@ -1,3 +1,9 @@
+"""ChEMBL molecule-search client for resolving drug names to ChEMBL IDs and metadata.
+
+Provides :class:`ChEMBLMoleculeSearch` and related clients plus :func:`return_chembl_id`
+to map drug names/synonyms to ChEMBL identifiers and molecule records.
+"""
+
 import logging
 from dataclasses import dataclass, field
 

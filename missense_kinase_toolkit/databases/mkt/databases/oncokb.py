@@ -1,9 +1,19 @@
+"""OncoKB API client for therapeutic levels, protein-change annotations, and the cancer gene list.
+
+Provides :class:`OncoKBInfo` and :class:`OncoKBProteinChange` REST clients plus helpers
+(:func:`get_oncokb_levels`, :func:`adjudicate_prefix`) for OncoKB therapeutic-level and
+variant annotations, and :class:`OncoKBCancerGeneList` for fetching/caching the OncoKB
+cancer gene list.
+"""
+
+import json
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+import pandas as pd
 from mkt.databases import requests_wrapper
-from mkt.databases.api_schema import APIKeyRESTAPIClient
+from mkt.databases.api_schema import APIKeyRESTAPIClient, RESTAPIClient
 from mkt.databases.config import maybe_get_oncokb_token
 
 logger = logging.getLogger(__name__)
@@ -260,3 +270,150 @@ class OncoKBProteinChange(OncoKB):
                     f"No 'treatments' found in response for "
                     f"{self.gene_name}_{self.alteration}."
                 )
+
+
+# record keys whose values are lists (gene aliases); json-encoded when writing to CSV
+LIST_COLUMNS = ("geneAliases",)
+"""Record keys whose values are lists; json-encoded when writing to CSV."""
+
+
+@dataclass
+class OncoKBCancerGeneList(RESTAPIClient):
+    """Client for the OncoKB cancer gene list endpoint.
+
+    Fetches the full OncoKB cancer gene list (``/utils/cancerGeneList``) in a
+    single network call, exposing the raw JSON in ``_json`` and a tidy table in
+    ``_df``. The endpoint is public (no token required), so this subclasses the
+    plain :class:`RESTAPIClient` rather than the token-bearing :class:`OncoKB`
+    hierarchy used for therapeutic-level/variant annotations. Mirrors the
+    cancerhotspots client: query once, filter client-side via :meth:`get_gene`,
+    and round-trip to CSV via :meth:`to_csv` / :meth:`from_csv`.
+    """
+
+    url: str = "https://www.oncokb.org/api/v1/utils/cancerGeneList"
+    """URL for the OncoKB cancer gene list endpoint."""
+    _json: list | None = field(init=False, default=None)
+    _df: pd.DataFrame | None = field(init=False, default=None)
+
+    def __post_init__(self):
+        self.query_api()
+
+    def query_api(self) -> None:
+        """Query the OncoKB cancer gene list endpoint and populate ``_json`` and ``_df``."""
+        res = requests_wrapper.get_cached_session().get(self.url)
+        self._stamp_from_response(res)
+        self.check_response(res)
+
+        if res.ok:
+            self._json = res.json()
+            self._df = pd.DataFrame(self._json)
+        else:
+            logger.error("Error querying OncoKB cancer gene list: %s", res.status_code)
+            self._json = None
+            self._df = None
+
+    @property
+    def df(self) -> pd.DataFrame | None:
+        """Cancer gene list as a DataFrame (one row per gene)."""
+        return self._df
+
+    def get_gene(self, hugo_symbol: str) -> pd.DataFrame:
+        """Return the cancer gene list record(s) for a single gene.
+
+        Parameters
+        ----------
+        hugo_symbol : str
+            HGNC gene symbol to filter on (e.g. ``"BRAF"``).
+
+        Returns
+        -------
+        pd.DataFrame
+            Rows of :attr:`df` whose ``hugoSymbol`` matches; empty if none.
+        """
+        if self._df is None:
+            return pd.DataFrame()
+        return self._df[self._df["hugoSymbol"] == hugo_symbol].reset_index(drop=True)
+
+    def to_csv(self, path: str) -> None:
+        """Write the cancer gene list to CSV, json-encoding list-valued columns.
+
+        Parameters
+        ----------
+        path : str
+            Output CSV path.
+        """
+        if self._df is None:
+            logger.warning("No data to write; query returned no records.")
+            return
+        df = self._df.copy()
+        for col in LIST_COLUMNS:
+            if col in df.columns:
+                df[col] = df[col].apply(
+                    lambda x: json.dumps(x) if isinstance(x, list) else x
+                )
+        df.to_csv(path, index=False)
+
+    @staticmethod
+    def read_csv(path: str) -> pd.DataFrame:
+        """Read a cancer gene list written by :meth:`to_csv` back into a DataFrame.
+
+        Inverts :meth:`to_csv`: json-decodes the list-valued columns.
+
+        Parameters
+        ----------
+        path : str
+            Path to a CSV previously written by :meth:`to_csv`.
+
+        Returns
+        -------
+        pd.DataFrame
+            Cancer gene list equivalent to :attr:`df`.
+        """
+        df = pd.read_csv(path)
+        for col in LIST_COLUMNS:
+            if col in df.columns:
+                df[col] = df[col].apply(
+                    lambda x: json.loads(x) if isinstance(x, str) else x
+                )
+        return df
+
+    @classmethod
+    def from_dataframe(cls, df: pd.DataFrame) -> "OncoKBCancerGeneList":
+        """Build a client from an existing table without querying the API.
+
+        Bypasses ``__post_init__`` (which would issue the network query) via
+        ``object.__new__`` and sets ``_df`` directly, so cached data can be
+        reloaded offline. ``_json`` is left None.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Cancer gene list table (e.g. from :meth:`read_csv` or :attr:`df`).
+
+        Returns
+        -------
+        OncoKBCancerGeneList
+            Instance backed by ``df``; :meth:`get_gene` works as usual.
+        """
+        obj = object.__new__(cls)
+        obj.query_datetime = None
+        obj.from_cache = None
+        obj._json = None
+        obj._df = df
+        return obj
+
+    @classmethod
+    def from_csv(cls, path: str) -> "OncoKBCancerGeneList":
+        """Build a client from a CSV written by :meth:`to_csv`, without querying.
+
+        Parameters
+        ----------
+        path : str
+            Path to a CSV previously written by :meth:`to_csv`.
+
+        Returns
+        -------
+        OncoKBCancerGeneList
+            Instance backed by the cached table.
+        """
+        return cls.from_dataframe(cls.read_csv(path))

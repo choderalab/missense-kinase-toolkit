@@ -351,6 +351,18 @@ def deserialize_kinase_dict(
             logger.info(f"Loading KinaseInfo object from variable {str_name}...")
         return _deserialization_cache[str_name]
 
+    # callers that only need the modules importable (e.g. a Sphinx docs build or
+    # a CLI printing usage text) can set MKT_SKIP_KINASE_DICT to skip the
+    # expensive deserialization; cache the empty result so repeat calls are cheap
+    if os.environ.get("MKT_SKIP_KINASE_DICT"):
+        if bool_verbose:
+            logger.info(
+                "MKT_SKIP_KINASE_DICT set; skipping KinaseInfo deserialization."
+            )
+        if str_name is not None:
+            _deserialization_cache[str_name] = {}
+        return {}
+
     if suffix not in DICT_FUNCS:
         logger.error(
             f"Serialization type ({suffix}) not supported; must be json, yaml, or toml."
@@ -408,6 +420,117 @@ def deserialize_kinase_dict(
         _deserialization_cache[str_name] = dict_import
 
     return dict_import
+
+
+STR_CONSERVATION_FILENAME = "KLIFSConservationData"
+"""str: Basename (no suffix) of the persisted KLIFS conservation-data artifact."""
+
+_conservation_cache = {}
+"""dict: Module-level cache of loaded :class:`KLIFSConservationData` objects keyed by
+``str_name`` (mirrors :data:`_deserialization_cache`)."""
+
+
+def serialize_conservation_data(
+    conservation_data: BaseModel,
+    suffix: str = "json",
+    str_path: str | None = None,
+) -> str | None:
+    """Serialize a :class:`KLIFSConservationData` artifact to a single file.
+
+    Unlike :func:`serialize_kinase_dict` (one file per kinase), this writes the whole
+    single-object artifact to ``{str_path}/KLIFSConservationData.{suffix}``, reusing the
+    :data:`DICT_FUNCS` serialization registry.
+
+    Parameters
+    ----------
+    conservation_data : BaseModel
+        The :class:`mkt.schema.conservation_schema.KLIFSConservationData` object.
+    suffix : str
+        Serialization type supported: json, yaml, toml.
+    str_path : str | None
+        Directory to write into, by default None (the ``mkt.schema`` package directory).
+
+    Returns
+    -------
+    str | None
+        Path written, or None if the suffix is unsupported.
+    """
+    if suffix not in DICT_FUNCS:
+        logger.error(
+            f"Serialization type ({suffix}) not supported; must be json, yaml, or toml."
+        )
+        return None
+
+    if os.name == "nt" and suffix == "toml":
+        logger.info("TOML serialization is not supported on Windows.")
+        return None
+
+    if str_path is None:
+        str_path = str(resources.files("mkt.schema"))
+    os.makedirs(str_path, exist_ok=True)
+
+    filepath = os.path.join(str_path, f"{STR_CONSERVATION_FILENAME}.{suffix}")
+    with open(filepath, "w") as outfile:
+        outfile.write(
+            DICT_FUNCS[suffix]["serialize"](
+                conservation_data.model_dump(),
+                **DICT_FUNCS[suffix]["kwargs_serialize"],
+            )
+        )
+    logger.info(f"Serialized KLIFSConservationData to {filepath}")
+    return filepath
+
+
+def load_conservation_data(
+    suffix: str = "json",
+    str_path: str | None = None,
+    str_name: str | None = None,
+):
+    """Load a :class:`KLIFSConservationData` artifact from a single file.
+
+    Parameters
+    ----------
+    suffix : str
+        Deserialization type supported: json, yaml, toml.
+    str_path : str | None
+        Path to the artifact file, by default None (the packaged
+        ``mkt/schema/KLIFSConservationData.json``).
+    str_name : str | None
+        If provided, cache the loaded object under this name in
+        :data:`_conservation_cache` to prevent reloading.
+
+    Returns
+    -------
+    KLIFSConservationData
+        The deserialized conservation-data object.
+    """
+    if str_name is not None and str_name in _conservation_cache:
+        logger.info(f"Loading KLIFSConservationData from variable {str_name}...")
+        return _conservation_cache[str_name]
+
+    if suffix not in DICT_FUNCS:
+        logger.error(
+            f"Serialization type ({suffix}) not supported; must be json, yaml, or toml."
+        )
+        return None
+
+    from mkt.schema.conservation_schema import KLIFSConservationData
+
+    if str_path is None:
+        str_path = os.path.join(
+            str(resources.files("mkt.schema")), f"{STR_CONSERVATION_FILENAME}.{suffix}"
+        )
+
+    with open(str_path) as openfile:
+        val_deserialized = DICT_FUNCS[suffix]["deserialize_file"](
+            openfile,
+            **DICT_FUNCS[suffix]["kwargs_deserialize"],
+        )
+    obj = KLIFSConservationData.model_validate(val_deserialized)
+
+    if str_name is not None:
+        _conservation_cache[str_name] = obj
+    return obj
 
 
 def save_plot(

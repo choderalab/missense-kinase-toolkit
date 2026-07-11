@@ -16,10 +16,12 @@ import os
 import sys
 
 # mark this process as a Sphinx docs build so the mkt packages skip expensive,
-# network-dependent module-level work at import (see return_kinase_dict and the
-# datasets.process guards). set here rather than in docs/build_docs.sh so it
-# applies to every Sphinx build, including Read the Docs.
+# network-dependent module-level work at import: SPHINX_BUILD gates the
+# datasets.process DiscoverX network query, and MKT_SKIP_KINASE_DICT skips the
+# kinase-dict deserialization (see deserialize_kinase_dict). set here rather than
+# in docs/build_docs.sh so they apply to every Sphinx build, including Read the Docs.
 os.environ.setdefault("SPHINX_BUILD", "1")
+os.environ.setdefault("MKT_SKIP_KINASE_DICT", "1")
 
 import mkt.schema
 import mkt.databases

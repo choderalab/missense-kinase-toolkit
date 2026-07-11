@@ -1,3 +1,9 @@
+"""Amino-acid property lookups and classification of amino-acid changes.
+
+Provides :func:`get_aa_property` for per-residue physicochemical properties and
+:func:`classify_aa_change` for categorizing missense substitutions.
+"""
+
 import logging
 
 logger = logging.getLogger(__name__)

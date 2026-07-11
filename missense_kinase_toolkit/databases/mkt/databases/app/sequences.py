@@ -1,3 +1,9 @@
+"""Sequence-alignment logic backing the Streamlit app.
+
+Provides :class:`SequenceAlignment`, which computes and formats kinase sequence
+alignments for display in the Streamlit app.
+"""
+
 import logging
 from typing import Any
 

@@ -257,6 +257,112 @@ class SequenceSchematicConfig:
     filename: str = "sequence_input_schematic"
 
 
+@dataclass
+class UpsetPlotConfig:
+    """Aesthetics for the KinaseInfo source-coverage upset plot.
+
+    Defaults reproduce the original (pre-config) figure for backwards
+    compatibility. Use :meth:`preprint_2026` for the smaller publication size.
+    """
+
+    figsize: list[float] = field(default_factory=lambda: [8.0, 4.0])
+    dict_colors: dict = field(
+        default_factory=lambda: {
+            "UniProt": "#00FF00",
+            "Pfam": "#00FFFF",
+            "KinCoRe": "#FF00FF",
+            "KLIFS": "#FFA500",
+            "KinHub": "#000000",
+        }
+    )
+    # upsetplot grid layout; ``element_size`` (points/cell) drives the plot-area
+    # size when set, otherwise the figure is sized via ``figsize``.
+    element_size: float | None = None
+    intersection_plot_elements: int = 6
+    totals_plot_elements: int = 2
+    # close the dead whitespace between the totals bars and the category labels
+    # (slides matrix left to fill) and trim the totals right-margin overhang
+    tighten_totals_gap: bool = False
+    totals_gap_margin: float = 0.01
+    # cap the intersections y-axis at the tallest bar so log minor ticks don't
+    # crowd the headroom above it where the percentage labels float
+    cap_intersection_ylim: bool = False
+    pct_label_fontsize: int = 8
+    count_label_fontsize: int = 8
+    filename: str = "upset_plot"
+
+    @classmethod
+    def preprint_2026(cls) -> "UpsetPlotConfig":
+        """~5 x 3.5 in plot-area variant for the 2026 preprint figures.
+
+        ``element_size`` is tuned empirically (with ``intersection_plot_elements``
+        / ``totals_plot_elements``) so the upset grid renders ~5 x 3.5 in rather
+        than the near-square default; the figure is saved tight-cropped.
+        """
+        cfg = cls()
+        cfg.element_size = 30.0
+        cfg.intersection_plot_elements = 4
+        cfg.totals_plot_elements = 2
+        cfg.tighten_totals_gap = True
+        cfg.cap_intersection_ylim = True
+        return cfg
+
+
+@dataclass
+class RegionGapViolinConfig:
+    """Aesthetics for the combined UniProt->KLIFS map + region-gap violin figure.
+
+    The figure stacks the UniProt-to-KLIFS residue map (top, spanning the full
+    width) over two grouped violin panels (inter- and intra-region gaps) on
+    separate log-scaled axes. All statistics are computed on the fly.
+    """
+
+    figsize: list[float] = field(default_factory=lambda: [15.0, 10.9])
+    height_ratios: list[float] = field(default_factory=lambda: [1.0, 1.76])
+    width_ratios: list[float] = field(default_factory=lambda: [2.0, 1.0])
+    hspace: float = 0.12
+    wspace: float = 0.06
+    left_adjust: float = 0.05
+    right_adjust: float = 0.985
+    top_adjust: float = 0.97
+    bottom_adjust: float = 0.085
+
+    # --- map panel ---
+    use_ribbon: bool = False
+    inter_color: str = "#cfcfcf"
+    intra_color: str = "#8c8c8c"
+    ribbon_alpha: float = 0.30
+    map_name_fontsize: int = 21
+    map_range_fontsize: int = 17
+    map_track_fontsize: int = 25
+    map_region_fontsize: int = 12
+    map_ellipsis_fontsize: int = 32
+    map_legend_fontsize: int = 17
+
+    # --- violin panels ---
+    violin_fontsize: int = 22
+    fill_alpha: float = 0.3
+    violin_width: float = 0.85
+    violin_linewidth: float = 1.0
+    violin_edgecolor: str = "#333333"
+    jitter_size: float = 7.0
+    jitter_std: float = 0.06
+    jitter_alpha: float = 0.8
+    jitter_edgecolor: str = "black"
+    jitter_linewidth: float = 0.25
+    # color for gaps whose two flanking regions differ (e.g. III–αC)
+    jitter_mixed_color: str = "orange"
+    grid_alpha: float = 0.3
+    text_color: str = "#333333"
+    ylabel_text: str = "Number of residues"
+    filename: str = "region_gap_violin"
+
+    @classmethod
+    def preprint_2026(cls) -> "RegionGapViolinConfig":
+        """Preset used by the 2026 preprint figures (current defaults)."""
+        return cls()
+
+
 # --- data sources ---
 
 
@@ -279,6 +385,7 @@ class OutputConfig:
     subdir: str = "images"
     bool_svg: bool = True
     bool_png: bool = True
+    bool_pdf: bool = False
 
 
 # --- top-level config ---
@@ -348,6 +455,133 @@ class PlotDatasetConfig:
             )
         if "data_sources" in raw:
             cfg.data_sources = DataSourceConfig(**raw["data_sources"])
+        if "output" in raw:
+            cfg.output = OutputConfig(**raw["output"])
+
+        return cfg
+
+
+# --- KLIFS hierarchical conservation-tree figures ---
+# defaults mirror the constants in mkt.databases.conservation (kept as literals here so
+# plot_config stays import-light and does not trigger the conservation panel build).
+
+
+@dataclass
+class ConservationTreeConfig:
+    """Aesthetics for the static KLIFS conservation-tree supplemental figures.
+
+    Rendered by :class:`mkt.databases.conservation.KLIFSConservationTreeFigure`
+    (summary dendrogram + top/bottom detail panels).
+    """
+
+    min_cluster_size: int = 12
+    font_size: float = 4.0
+    # 47 mirrors conservation.INT_TREE_SPLIT_INDEX (the CMGC/CAMK boundary of the
+    # human-kinome KLIFS tree); set null to auto-pick via _split_index.
+    split_index: int | None = 47
+    formats: list[str] = field(default_factory=lambda: ["pdf"])
+
+
+@dataclass
+class ConservationTreeExplorerConfig:
+    """Params for the interactive KLIFS conservation-tree Bokeh explorer.
+
+    Rendered by :class:`mkt.databases.conservation.KLIFSTreeConservationApp`.
+    """
+
+    min_cluster_size: int = 12
+    logo_cutoff: float = 0.10
+    name_trunc: int = 14
+    filename: str | None = None
+
+
+@dataclass
+class ResidueDotConfig:
+    """Aesthetics for the static per-amino-acid KLIFS dot-plot figure.
+
+    Rendered by
+    :meth:`mkt.databases.conservation.KLIFSConservationTreeFigure.plot_residue_dot`.
+    """
+
+    amino_acid: str = "C"
+    min_cluster_size: int = 12
+    formats: list[str] = field(default_factory=lambda: ["pdf"])
+
+
+@dataclass
+class ResidueDotExplorerConfig:
+    """Params for the interactive per-amino-acid KLIFS dot-plot Bokeh explorer.
+
+    Rendered by :class:`mkt.databases.conservation.KLIFSResidueDotApp`.
+    """
+
+    min_cluster_size: int = 12
+    default_aa: str = "C"
+    filename: str | None = None
+
+
+@dataclass
+class DictKinaseFiguresConfig:
+    """Top-level config for the DICT_KINASE figures (upset + region-gap map/violin).
+
+    Consumed by the ``plot_dict_kinase`` CLI. Kept separate from
+    :class:`PlotDatasetConfig` so rendering these figures never imports the
+    dataset-processing module (which has a network side effect on import).
+    """
+
+    matplotlib_rc: MatplotlibRCConfig = field(default_factory=MatplotlibRCConfig)
+    upset_plot: UpsetPlotConfig = field(default_factory=UpsetPlotConfig.preprint_2026)
+    region_gap_violin: RegionGapViolinConfig = field(
+        default_factory=RegionGapViolinConfig
+    )
+    conservation_tree: ConservationTreeConfig = field(
+        default_factory=ConservationTreeConfig
+    )
+    conservation_tree_explorer: ConservationTreeExplorerConfig = field(
+        default_factory=ConservationTreeExplorerConfig
+    )
+    residue_dot: ResidueDotConfig = field(default_factory=ResidueDotConfig)
+    residue_dot_explorer: ResidueDotExplorerConfig = field(
+        default_factory=ResidueDotExplorerConfig
+    )
+    output: OutputConfig = field(default_factory=OutputConfig)
+
+    @classmethod
+    def from_yaml(cls, config_path: str | Path) -> "DictKinaseFiguresConfig":
+        """Load a DictKinaseFiguresConfig from a YAML file.
+
+        Parameters:
+        -----------
+        config_path : str | Path
+            Path to the YAML configuration file.
+
+        Returns:
+        --------
+        DictKinaseFiguresConfig
+            Fully populated config instance.
+        """
+        omega = OmegaConf.load(config_path)
+        raw = OmegaConf.to_container(omega, resolve=True)
+
+        cfg = cls()
+        if "matplotlib_rc" in raw:
+            cfg.matplotlib_rc = MatplotlibRCConfig(**raw["matplotlib_rc"])
+        if "upset_plot" in raw:
+            cfg.upset_plot = UpsetPlotConfig(**raw["upset_plot"])
+        if "region_gap_violin" in raw:
+            cfg.region_gap_violin = RegionGapViolinConfig(**raw["region_gap_violin"])
+        if "conservation_tree" in raw:
+            cfg.conservation_tree = ConservationTreeConfig(**raw["conservation_tree"])
+        if "conservation_tree_explorer" in raw:
+            cfg.conservation_tree_explorer = ConservationTreeExplorerConfig(
+                **raw["conservation_tree_explorer"]
+            )
+        if "residue_dot" in raw:
+            cfg.residue_dot = ResidueDotConfig(**raw["residue_dot"])
+        if "residue_dot_explorer" in raw:
+            cfg.residue_dot_explorer = ResidueDotExplorerConfig(
+                **raw["residue_dot_explorer"]
+            )
         if "output" in raw:
             cfg.output = OutputConfig(**raw["output"])
 
