@@ -496,6 +496,31 @@ class ConservationTreeExplorerConfig:
 
 
 @dataclass
+class ResidueDotConfig:
+    """Aesthetics for the static per-amino-acid KLIFS dot-plot figure.
+
+    Rendered by
+    :meth:`mkt.databases.conservation.KLIFSConservationTreeFigure.plot_residue_dot`.
+    """
+
+    amino_acid: str = "C"
+    min_cluster_size: int = 12
+    formats: list[str] = field(default_factory=lambda: ["pdf"])
+
+
+@dataclass
+class ResidueDotExplorerConfig:
+    """Params for the interactive per-amino-acid KLIFS dot-plot Bokeh explorer.
+
+    Rendered by :class:`mkt.databases.conservation.KLIFSResidueDotApp`.
+    """
+
+    min_cluster_size: int = 12
+    default_aa: str = "C"
+    filename: str | None = None
+
+
+@dataclass
 class DictKinaseFiguresConfig:
     """Top-level config for the DICT_KINASE figures (upset + region-gap map/violin).
 
@@ -514,6 +539,10 @@ class DictKinaseFiguresConfig:
     )
     conservation_tree_explorer: ConservationTreeExplorerConfig = field(
         default_factory=ConservationTreeExplorerConfig
+    )
+    residue_dot: ResidueDotConfig = field(default_factory=ResidueDotConfig)
+    residue_dot_explorer: ResidueDotExplorerConfig = field(
+        default_factory=ResidueDotExplorerConfig
     )
     output: OutputConfig = field(default_factory=OutputConfig)
 
@@ -546,6 +575,12 @@ class DictKinaseFiguresConfig:
         if "conservation_tree_explorer" in raw:
             cfg.conservation_tree_explorer = ConservationTreeExplorerConfig(
                 **raw["conservation_tree_explorer"]
+            )
+        if "residue_dot" in raw:
+            cfg.residue_dot = ResidueDotConfig(**raw["residue_dot"])
+        if "residue_dot_explorer" in raw:
+            cfg.residue_dot_explorer = ResidueDotExplorerConfig(
+                **raw["residue_dot_explorer"]
             )
         if "output" in raw:
             cfg.output = OutputConfig(**raw["output"])

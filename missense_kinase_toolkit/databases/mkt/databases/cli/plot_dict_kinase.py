@@ -56,10 +56,14 @@ def _plot_conservation_tree(
     dict_kinase: dict, output_dir: str, cfg: DictKinaseFiguresConfig
 ) -> None:
     """Static KLIFS conservation-tree supplement (summary + top/bottom panels)."""
-    from mkt.databases.conservation import KLIFSConservationTreeFigure
+    from mkt.databases.conservation import (
+        KLIFSConservationTreeFigure,
+        load_conservation_renderer,
+    )
 
     tree_cfg = cfg.conservation_tree
-    KLIFSConservationTreeFigure(
+    load_conservation_renderer(
+        KLIFSConservationTreeFigure,
         min_cluster_size=tree_cfg.min_cluster_size,
         font_size=tree_cfg.font_size,
         split_index=tree_cfg.split_index,
@@ -70,13 +74,52 @@ def _plot_conservation_tree_explorer(
     dict_kinase: dict, output_dir: str, cfg: DictKinaseFiguresConfig
 ) -> None:
     """Interactive KLIFS conservation-tree Bokeh explorer (standalone HTML)."""
-    from mkt.databases.conservation import KLIFSTreeConservationApp
+    from mkt.databases.conservation import (
+        KLIFSTreeConservationApp,
+        load_conservation_renderer,
+    )
 
     app_cfg = cfg.conservation_tree_explorer
-    KLIFSTreeConservationApp(
+    load_conservation_renderer(
+        KLIFSTreeConservationApp,
         min_cluster_size=app_cfg.min_cluster_size,
         logo_cutoff=app_cfg.logo_cutoff,
         name_trunc=app_cfg.name_trunc,
+    ).save_app(output_dir, filename=app_cfg.filename)
+
+
+def _plot_residue_dot(
+    dict_kinase: dict, output_dir: str, cfg: DictKinaseFiguresConfig
+) -> None:
+    """Static per-amino-acid KLIFS dot-plot figure (default cysteine)."""
+    from mkt.databases.conservation import (
+        KLIFSConservationTreeFigure,
+        load_conservation_renderer,
+    )
+
+    dot_cfg = cfg.residue_dot
+    load_conservation_renderer(
+        KLIFSConservationTreeFigure,
+        min_cluster_size=dot_cfg.min_cluster_size,
+    ).plot_residue_dot(
+        output_dir, aa=dot_cfg.amino_acid, formats=tuple(dot_cfg.formats)
+    )
+
+
+def _plot_residue_dot_explorer(
+    dict_kinase: dict, output_dir: str, cfg: DictKinaseFiguresConfig
+) -> None:
+    """Interactive per-amino-acid KLIFS dot-plot Bokeh explorer (standalone HTML)."""
+    from mkt.databases.conservation import (
+        KLIFSResidueDotApp,
+        load_conservation_renderer,
+    )
+
+    app_cfg = cfg.residue_dot_explorer
+    load_conservation_renderer(
+        KLIFSResidueDotApp,
+        min_cluster_size=app_cfg.min_cluster_size,
+        default_aa=app_cfg.default_aa,
     ).save_app(output_dir, filename=app_cfg.filename)
 
 
@@ -86,6 +129,8 @@ _PLOT_STEPS: dict[str, Callable[[dict, str, DictKinaseFiguresConfig], None]] = {
     "region_gap_violin": _plot_region_gap_violin,
     "conservation_tree": _plot_conservation_tree,
     "conservation_tree_explorer": _plot_conservation_tree_explorer,
+    "residue_dot": _plot_residue_dot,
+    "residue_dot_explorer": _plot_residue_dot_explorer,
 }
 
 # figures rendered when no --config is provided (the non-tree, always-cheap ones)

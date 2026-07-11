@@ -27,14 +27,16 @@ from bokeh.models import (
     ColumnDataSource,
     CustomJS,
     Div,
+    FixedTicker,
     HoverTool,
     Select,
     TapTool,
 )
 from bokeh.plotting import figure
 from bokeh.resources import INLINE
-from matplotlib.patches import Patch, Rectangle
+from matplotlib.patches import Ellipse, Patch, Rectangle
 from mkt.databases.colors import (
+    AA_MAPPING,
     CMAP_CRITICAL_DEPTH,
     COLOR_CONSERVATION_PRIMARY,
     COLOR_DARK_TEXT,
@@ -63,9 +65,14 @@ from mkt.databases.pssm import (
     SubstitutionPseudocounts,
     column_conservation,
 )
+from mkt.schema.conservation_schema import KLIFSConservationData
 from mkt.schema.constants import DICT_KINASE_GROUP_COLORS
-from mkt.schema.io_utils import deserialize_kinase_dict, save_plot
-from mkt.schema.utils import group_name_homologs
+from mkt.schema.io_utils import (
+    deserialize_kinase_dict,
+    load_conservation_data,
+    save_plot,
+)
+from mkt.schema.utils import group_name_homologs, rgetattr
 from pydantic import BaseModel, Field
 from scipy.cluster.hierarchy import (
     ClusterNode,
@@ -217,6 +224,9 @@ FLOAT_TREE_DETAIL_PAGE_W = 9.5
 """float: Width (inches) of each split detail panel; height is flexible (row count)."""
 FLOAT_TREE_DETAIL_ROW_IN = 0.18
 """float: Inches of page height per leaf row in a split detail panel."""
+FLOAT_TREE_DETAIL_LEGEND_IN = 0.4
+"""float: Inches of page height reserved beneath a split detail panel for its
+kinase-group legend (matching the summary dendrogram's legend)."""
 TUP_TREE_SUMMARY_PAGE = (11.0, 5.0)
 """tuple[float, float]: Figure size (inches) of the horizontal summary dendrogram."""
 FLOAT_TREE_SUMMARY_LEGEND_FS = 7.0
@@ -254,6 +264,21 @@ FLOAT_TREE_LOGO_IC_MAX = 4.6
 """float: y-axis top (bits) for the information-content logo modes."""
 INT_TREE_NAME_TRUNC = 14
 """int: Max items listed in a conservation-tree tooltip field before truncation."""
+
+# --- per-amino-acid KLIFS dot plot (KLIFSResidueDotApp / residue-dot figure) ---
+STR_FILE_RESIDUE_DOT_APP = "conservation_residue_dotplot.html"
+"""str: Output filename for the interactive per-amino-acid KLIFS dot-plot explorer."""
+STR_FILE_RESIDUE_DOT = "conservation_residue_dotplot"
+"""str: Output basename for the static per-amino-acid KLIFS dot-plot figure."""
+STR_RESIDUE_DOT_DEFAULT_AA = "C"
+"""str: Default amino acid for the static dot-plot figure (cysteine)."""
+INT_RESIDUE_DOT_MIN_ENCLOSE = 2
+"""int: Minimum same-clade dots at a position for a clade enclosure to be drawn."""
+FLOAT_RESIDUE_DOT_PX_PER_ROW = 7.0
+"""float: Interactive dot-plot pixel height allotted per kinase row."""
+LIST_DOT_ALPHABET = [aa for _, aa, _ in AA_MAPPING] + ["-"]
+"""list[str]: The 20 amino-acid single-letter codes plus the gap symbol, for the
+dot-plot amino-acid selector."""
 
 
 def _build_klifs_panel(
@@ -408,10 +433,11 @@ class KLIFSHierarchicalConservation(BaseModel):
     gap_chars: str = STR_GAP_CHARS
     """Characters treated as gap/unknown and excluded from scoring and conservation."""
 
-    distance_matrix: np.ndarray | None = Field(default=None, init=False)
-    """Square ``N x N`` pairwise distance matrix, computed post-init."""
-    linkage_matrix: np.ndarray | None = Field(default=None, init=False)
-    """SciPy linkage matrix, computed post-init."""
+    distance_matrix: np.ndarray | None = None
+    """Square ``N x N`` pairwise distance matrix; computed post-init unless supplied
+    (e.g. injected by :meth:`from_conservation_data` from a persisted artifact)."""
+    linkage_matrix: np.ndarray | None = None
+    """SciPy linkage matrix; computed post-init unless supplied."""
     tree: ClusterNode | None = Field(default=None, init=False)
     """Root ``ClusterNode`` of the hierarchical tree, computed post-init."""
     _node_records: list[dict] | None = None
@@ -424,6 +450,13 @@ class KLIFSHierarchicalConservation(BaseModel):
     """Cached substitution-aware pseudocount models, keyed by background choice."""
 
     def model_post_init(self, __context) -> None:
+        # precomputed distances + linkage supplied (e.g. loaded from a persisted
+        # KLIFSConservationData artifact): trust them and skip the expensive recompute,
+        # only reconstructing the ClusterNode tree from the linkage
+        if self.distance_matrix is not None and self.linkage_matrix is not None:
+            if self.tree is None:
+                self.tree = to_tree(self.linkage_matrix, rd=False)
+            return
         if self.exclude_pseudokinases:
             self._drop_pseudokinases()
         self.distance_matrix = self.compute_distance_matrix()
@@ -432,6 +465,57 @@ class KLIFSHierarchicalConservation(BaseModel):
             method=self.linkage_method,
         )
         self.tree = to_tree(self.linkage_matrix, rd=False)
+
+    @classmethod
+    def from_conservation_data(
+        cls, data: KLIFSConservationData, **kwargs
+    ) -> "KLIFSHierarchicalConservation":
+        """Build a renderer from a persisted :class:`KLIFSConservationData` artifact.
+
+        Reuses the stored distances + linkage (so the rendered tree matches the
+        persisted one and no clustering is recomputed), recovering the per-kinase
+        pocket/group panel from :data:`DICT_KINASE` by name. Any renderer-specific
+        keyword (e.g. ``min_cluster_size``, ``font_size``) is passed through.
+
+        Parameters
+        ----------
+        data : KLIFSConservationData
+            The persisted conservation-data artifact.
+        **kwargs
+            Extra fields forwarded to the (sub)class constructor.
+
+        Returns
+        -------
+        KLIFSHierarchicalConservation
+            An instance of ``cls`` with injected distances, linkage, and tree.
+        """
+        panel_names, panel_pockets, panel_groups = _KLIFS_PANEL
+        lookup = {
+            name: (pocket, group)
+            for name, pocket, group in zip(panel_names, panel_pockets, panel_groups)
+        }
+        pockets, groups = [], []
+        for name in data.names:
+            pocket, group = lookup[name]
+            pockets.append(pocket)
+            groups.append(group)
+
+        distance_matrix = squareform(np.array(data.distances_condensed, dtype=float))
+        return cls(
+            names=list(data.names),
+            pockets=pockets,
+            groups=groups,
+            position_labels=list(data.position_labels),
+            metric=data.metric,
+            blosum_name=data.blosum_name,
+            linkage_method=data.linkage_method,
+            conservation_threshold=data.conservation_threshold,
+            weighting=data.weighting,
+            gap_chars=data.gap_chars,
+            distance_matrix=distance_matrix,
+            linkage_matrix=np.array(data.linkage_matrix, dtype=float),
+            **kwargs,
+        )
 
     def _drop_pseudokinases(self) -> None:
         """Filter the panel to catalytically active kinases (in place).
@@ -1227,6 +1311,197 @@ class KLIFSHierarchicalConservation(BaseModel):
             ]
         leaves[:] = kept
 
+    def _member_style(self, i: int) -> tuple[str, str, float]:
+        """``(fill, edge, linewidth)`` for leaf ``i``'s name box / dot.
+
+        Lipid kinases get no border, pseudokinases a black border, active kinases a
+        thin white border; the fill is the Manning-group (or Lipid) color. Shared by the
+        static tree figure and the interactive dot-plot explorer.
+        """
+        info = DICT_KINASE.get(self.names[i])
+        if info is not None and info.is_lipid_kinase():
+            return (
+                DICT_KINASE_GROUP_COLORS.get("Lipid", COLOR_TREE_FALLBACK),
+                "none",
+                0.0,
+            )
+        color = DICT_KINASE_GROUP_COLORS.get(self.groups[i], COLOR_TREE_FALLBACK)
+        if info is not None and info.is_pseudokinase():
+            return color, "#000000", FLOAT_TREE_PSEUDO_BORDER_LW
+        return color, "#FFFFFF", 0.3
+
+    def _family_label(self, i: int) -> str:
+        """Family used for the color: Lipid or Manning group (pseudo folds in)."""
+        info = DICT_KINASE.get(self.names[i])
+        if info is not None and info.is_lipid_kinase():
+            return "Lipid"
+        return self.groups[i]
+
+    def _uniprot_index_at(self, i: int, pos: int) -> int | None:
+        """1-based UniProt canonical index of leaf ``i`` at KLIFS column ``pos``.
+
+        Read from ``KinaseInfo.KLIFS2UniProtIdx`` keyed by the column's region label;
+        None when the kinase, mapping, or that position is unavailable.
+        """
+        info = DICT_KINASE.get(self.names[i])
+        if info is None or info.KLIFS2UniProtIdx is None:
+            return None
+        return info.KLIFS2UniProtIdx.get(self.position_labels[pos])
+
+    def _hover_families(self, i: int) -> tuple[str, str]:
+        """``(kinhub_family, klifs_family)`` labels for leaf ``i``'s dot hover."""
+        info = DICT_KINASE.get(self.names[i])
+        kinhub_family = rgetattr(info, "kinhub.family")
+        klifs_family = rgetattr(info, "klifs.family")
+        return (
+            getattr(kinhub_family, "name", "") or "",
+            getattr(klifs_family, "name", "") or "",
+        )
+
+    def residue_dot_layout(
+        self, min_cluster_size: int = INT_TREE_MIN_CLUSTER_DISPLAY
+    ) -> tuple[
+        KLIFSDisplayTree, list[int], dict[int, int], dict[int, int], list[list[int]]
+    ]:
+        """Row/leaf assignment for the per-amino-acid dot plot.
+
+        Orders kinases by the display-tree leaf order (dendrogram order), assigning each
+        kinase a y row and the 1-based number of the display leaf (clade) it belongs to.
+        Shared by the interactive Bokeh explorer and the static companion figure so their
+        ordering and clade grouping cannot diverge.
+
+        Parameters
+        ----------
+        min_cluster_size : int, optional
+            Display-tree collapse threshold, by default :data:`INT_TREE_MIN_CLUSTER_DISPLAY`.
+
+        Returns
+        -------
+        tuple
+            ``(tree, ordered_members, row_of_member, leaf_of_member, leaf_members)``:
+            ``ordered_members`` are leaf indices (into :attr:`names`) top-to-bottom,
+            ``row_of_member`` maps each to its y row, ``leaf_of_member`` to its 1-based
+            display-leaf number, and ``leaf_members`` lists members per display leaf in
+            display order.
+        """
+        tree = self.build_display_tree(
+            min_cluster_size=min_cluster_size, aggregate_singletons=True
+        )
+        ordered_members: list[int] = []
+        leaf_of_member: dict[int, int] = {}
+        leaf_members: list[list[int]] = []
+        for number, li in enumerate(tree.order, start=1):
+            members = list(tree.leaves[li].members)
+            leaf_members.append(members)
+            for member in members:
+                leaf_of_member[member] = number
+                ordered_members.append(member)
+        row_of_member = {member: y for y, member in enumerate(ordered_members)}
+        return tree, ordered_members, row_of_member, leaf_of_member, leaf_members
+
+    def to_conservation_data(
+        self,
+        min_cluster_size: int = INT_TREE_MIN_CLUSTER_DISPLAY,
+        aggregate_singletons: bool = True,
+    ) -> KLIFSConservationData:
+        """Package the clustering output as a serializable :class:`KLIFSConservationData`.
+
+        Stores the condensed upper-triangle distances, the SciPy linkage matrix, the
+        leaf order, and the display-tree leaf composition (all as plain Python numbers),
+        alongside the provenance metadata describing how they were assembled.
+
+        Parameters
+        ----------
+        min_cluster_size : int, optional
+            Display-tree collapse threshold passed to :meth:`build_display_tree`,
+            by default :data:`INT_TREE_MIN_CLUSTER_DISPLAY`.
+        aggregate_singletons : bool, optional
+            Whether to fold singleton leaves in the display tree, by default True.
+
+        Returns
+        -------
+        KLIFSConservationData
+            The serializable conservation-data artifact.
+        """
+        tree = self.build_display_tree(
+            min_cluster_size=min_cluster_size,
+            aggregate_singletons=aggregate_singletons,
+        )
+        return KLIFSConservationData(
+            metric=self.metric,
+            blosum_name=self.blosum_name,
+            linkage_method=self.linkage_method,
+            conservation_threshold=self.conservation_threshold,
+            weighting=self.weighting,
+            exclude_pseudokinases=self.exclude_pseudokinases,
+            gap_chars=self.gap_chars,
+            n_kinases=len(self.names),
+            pocket_length=INT_KLIFS_POCKET_LENGTH,
+            names=list(self.names),
+            position_labels=list(self.position_labels),
+            distances_condensed=squareform(self.distance_matrix, checks=False).tolist(),
+            linkage_matrix=self.linkage_matrix.tolist(),
+            leaves_order=leaves_list(self.linkage_matrix).tolist(),
+            display_leaves=[
+                {"members": list(leaf.members), "kind": leaf.kind}
+                for leaf in tree.leaves
+            ],
+            display_order=list(tree.order),
+        )
+
+
+def load_conservation_renderer(cls, **kwargs):
+    """Build a conservation renderer from the shipped :class:`KLIFSConservationData`.
+
+    Deserializes the packaged artifact (via
+    :func:`mkt.schema.io_utils.load_conservation_data`) and injects its distances +
+    linkage into ``cls`` through :meth:`KLIFSHierarchicalConservation.from_conservation_data`,
+    so no clustering is recomputed. If the artifact is not found, falls back to building
+    ``cls`` from the live KLIFS panel with a warning (run ``generate_conservation_data``
+    to persist it).
+
+    Parameters
+    ----------
+    cls : type[KLIFSHierarchicalConservation]
+        The renderer (sub)class to instantiate.
+    **kwargs
+        Renderer-specific keyword arguments forwarded to the constructor.
+
+    Returns
+    -------
+    KLIFSHierarchicalConservation
+        An instance of ``cls``.
+    """
+    try:
+        data = load_conservation_data(str_name="KLIFSConservationData")
+        return cls.from_conservation_data(data, **kwargs)
+    except FileNotFoundError:
+        logger.warning(
+            "no persisted KLIFSConservationData found; building from the live panel "
+            "(run generate_conservation_data to persist it)"
+        )
+        return cls(**kwargs)
+
+
+def rebuild_tree_from_data(data: KLIFSConservationData) -> ClusterNode:
+    """Reconstruct the SciPy hierarchical tree from a persisted artifact.
+
+    The scipy bridge for :class:`KLIFSConservationData`: consumers holding only the
+    schema (which is scipy-free) call this in ``mkt.databases`` to recover the full
+    ``ClusterNode`` tree from the stored linkage matrix.
+
+    Parameters
+    ----------
+    data : KLIFSConservationData
+        The persisted conservation-data artifact.
+
+    Returns
+    -------
+    scipy.cluster.hierarchy.ClusterNode
+        Root node of the reconstructed hierarchical tree.
+    """
+    return to_tree(np.array(data.linkage_matrix), rd=False)
+
 
 class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
     """Static letter-page figure of the KLIFS conservation tree + per-leaf table.
@@ -1259,31 +1534,6 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
     midpoint (:meth:`_split_index`)."""
 
     # -- per-leaf styling (family color, pseudokinase border, branch color) --
-
-    def _member_style(self, i: int) -> tuple[str, str, float]:
-        """``(fill, edge, linewidth)`` for leaf ``i``'s name box.
-
-        Lipid kinases get no border, pseudokinases a black border, active kinases a
-        thin white border; the fill is the Manning-group (or Lipid) color.
-        """
-        info = DICT_KINASE.get(self.names[i])
-        if info is not None and info.is_lipid_kinase():
-            return (
-                DICT_KINASE_GROUP_COLORS.get("Lipid", COLOR_TREE_FALLBACK),
-                "none",
-                0.0,
-            )
-        color = DICT_KINASE_GROUP_COLORS.get(self.groups[i], COLOR_TREE_FALLBACK)
-        if info is not None and info.is_pseudokinase():
-            return color, "#000000", FLOAT_TREE_PSEUDO_BORDER_LW
-        return color, "#FFFFFF", 0.3
-
-    def _family_label(self, i: int) -> str:
-        """Family used for the *branch* color: Lipid or Manning group (pseudo folds in)."""
-        info = DICT_KINASE.get(self.names[i])
-        if info is not None and info.is_lipid_kinase():
-            return "Lipid"
-        return self.groups[i]
 
     def _dominant_color(self, members: list[int]) -> str:
         """Branch color: the family color if >=80% of members share it, else mixed-grey."""
@@ -1318,6 +1568,45 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
                 groups.append((label, name2member[gnames[0]]))
         return groups
 
+    def _group_legend_handles(self, fams: set[str]) -> list[Patch]:
+        """Kinase-group legend handles, ordered by the standard Manning-group order.
+
+        Shared by the summary dendrogram and the top/bottom detail panels so their
+        kinase-group legends match. Families outside the curated order are appended
+        alphabetically.
+
+        Parameters
+        ----------
+        fams : set[str]
+            Family labels present in the drawn subset (Manning group or Lipid).
+
+        Returns
+        -------
+        list[matplotlib.patches.Patch]
+            One color swatch per present family, in display order.
+        """
+        fam_order = [
+            "TK",
+            "TKL",
+            "STE",
+            "CK1",
+            "AGC",
+            "CAMK",
+            "CMGC",
+            "NEK",
+            "RGC",
+            "Other",
+            "Atypical",
+            "Lipid",
+        ]
+        present = [g for g in fam_order if g in fams] + sorted(fams - set(fam_order))
+        return [
+            Patch(
+                facecolor=DICT_KINASE_GROUP_COLORS.get(g, COLOR_TREE_FALLBACK), label=g
+            )
+            for g in present
+        ]
+
     def build_figure(self) -> tuple[plt.Figure, plt.Axes]:
         """Render the full conservation tree + per-leaf table on a US-letter portrait page.
 
@@ -1331,7 +1620,7 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
         )
         return self._render_panel(tree, tree.order, TUP_TREE_PAGE, self.font_size)
 
-    def _render_panel(self, tree, subset, page, fs):
+    def _render_panel(self, tree, subset, page, fs, show_legend=False):
         """Render a dendrogram + name boxes + conservation table for a leaf subset.
 
         Shared by the full figure and each split detail panel. ``subset`` is a
@@ -1351,6 +1640,10 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
             Figure size in inches.
         fs : float
             Base font size for the boxes / table / KLIFS labels.
+        show_legend : bool, optional
+            If True, reserve a bottom band and draw the kinase-group legend beneath the
+            panel (used by the top/bottom detail panels; the caller must have added
+            :data:`FLOAT_TREE_DETAIL_LEGEND_IN` to ``page`` height). Default False.
 
         Returns
         -------
@@ -1395,7 +1688,10 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
             leaves[li].groups = self._leaf_groups(leaves[li].members)
 
         fig = plt.figure(figsize=page, facecolor="white")
-        ax = fig.add_axes([0.008, 0.008, 0.984, 0.984])
+        # reserve a bottom band for the group legend when requested, so the inch-based
+        # layout below (which reads ax.get_position()) shrinks to fit rather than overlap
+        legend_frac = FLOAT_TREE_DETAIL_LEGEND_IN / page[1] if show_legend else 0.0
+        ax = fig.add_axes([0.008, 0.008 + legend_frac, 0.984, 0.984 - legend_frac])
         ax.set_facecolor("white")
 
         # x-axis laid out in INCHES: size name boxes from the rendered text so they
@@ -1449,6 +1745,22 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
         ax.set_ylim(y_top, n_rows + 0.5)
         ax.invert_yaxis()
         ax.axis("off")
+
+        # kinase-group legend in the reserved bottom band (matches the summary panel)
+        if show_legend:
+            fams = {self._family_label(m) for li in sub for m in leaves[li].members}
+            handles = self._group_legend_handles(fams)
+            ax.legend(
+                handles=handles,
+                loc="upper center",
+                bbox_to_anchor=(0.5, -0.005),
+                ncol=len(handles),
+                frameon=False,
+                fontsize=fs,
+                handlelength=1.0,
+                handletextpad=0.4,
+                columnspacing=1.3,
+            )
         return fig, ax
 
     def _draw_dendrogram(self, ax, splits, leaves, split_yc, base_depth, x_leaf, yof):
@@ -1779,27 +2091,7 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
         fams = set()
         for li in order:
             fams.update(self._family_label(m) for m in leaves[li].members)
-        fam_order = [
-            "TK",
-            "TKL",
-            "STE",
-            "CK1",
-            "AGC",
-            "CAMK",
-            "CMGC",
-            "NEK",
-            "RGC",
-            "Other",
-            "Atypical",
-            "Lipid",
-        ]
-        present = [g for g in fam_order if g in fams] + sorted(fams - set(fam_order))
-        handles = [
-            Patch(
-                facecolor=DICT_KINASE_GROUP_COLORS.get(g, COLOR_TREE_FALLBACK), label=g
-            )
-            for g in present
-        ]
+        handles = self._group_legend_handles(fams)
         ax.legend(
             handles=handles,
             loc="upper center",
@@ -1845,9 +2137,12 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
         def detail(sub):
             page = (
                 FLOAT_TREE_DETAIL_PAGE_W,
-                max(7.0, len(sub) * FLOAT_TREE_DETAIL_ROW_IN),
+                max(7.0, len(sub) * FLOAT_TREE_DETAIL_ROW_IN)
+                + FLOAT_TREE_DETAIL_LEGEND_IN,
             )
-            return self._render_panel(tree, sub, page, FLOAT_TREE_SPLIT_FONT_SIZE)[0]
+            return self._render_panel(
+                tree, sub, page, FLOAT_TREE_SPLIT_FONT_SIZE, show_legend=True
+            )[0]
 
         return [
             (
@@ -1893,6 +2188,165 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
                 bbox_inches=None,
                 facecolor="white",
             )
+
+    # -- static per-amino-acid dot-plot companion (see KLIFSResidueDotApp) --
+
+    def build_residue_dot_figure(
+        self,
+        aa: str = STR_RESIDUE_DOT_DEFAULT_AA,
+        figsize: tuple[float, float] | None = None,
+    ) -> tuple[plt.Figure, plt.Axes]:
+        """Static companion to :class:`KLIFSResidueDotApp` for a single amino acid.
+
+        Draws one dot per (KLIFS column, kinase) where the kinase carries ``aa`` at that
+        column, with kinases in dendrogram leaf order (y) and the 85 KLIFS columns on x.
+        Dots are colored by Manning group / Lipid (black outline for pseudokinases);
+        same-clade dots sharing the residue at a column are enclosed
+        (:data:`INT_RESIDUE_DOT_MIN_ENCLOSE`+). A KLIFS region color bar and rotated
+        position labels run beneath, and the kinase-group legend sits above.
+
+        Parameters
+        ----------
+        aa : str
+            Amino-acid single-letter code (or ``"-"``) to plot, by default cysteine.
+        figsize : tuple[float, float] | None, optional
+            Figure size; by default sized to the row count.
+
+        Returns
+        -------
+        tuple[matplotlib.figure.Figure, matplotlib.axes.Axes]
+        """
+        (
+            _tree,
+            ordered_members,
+            row_of_member,
+            leaf_of_member,
+            leaf_members,
+        ) = self.residue_dot_layout(min_cluster_size=self.min_cluster_size)
+        n_rows = len(ordered_members)
+        labels = self.position_labels
+        ncol = len(labels)
+
+        if figsize is None:
+            figsize = (12.0, max(6.0, n_rows * 0.06))
+        fig, ax = plt.subplots(figsize=figsize, facecolor="white")
+        ax.set_facecolor("white")
+
+        # clade enclosures (drawn under the dots)
+        for members in leaf_members:
+            for pos in range(ncol):
+                rows = [row_of_member[m] for m in members if self.pockets[m][pos] == aa]
+                if len(rows) < INT_RESIDUE_DOT_MIN_ENCLOSE:
+                    continue
+                lo, hi = min(rows), max(rows)
+                ax.add_patch(
+                    Ellipse(
+                        (pos, (lo + hi) / 2.0),
+                        width=0.8,
+                        height=(hi - lo) + 1.0,
+                        fill=False,
+                        edgecolor=COLOR_TREE_PSEUDO,
+                        lw=0.5,
+                        zorder=3,
+                    )
+                )
+
+        # dots, one kinase row at a time
+        for i in ordered_members:
+            fill, edge, _ = self._member_style(i)
+            line = COLOR_TREE_PSEUDO if edge == "#000000" else fill
+            xs = [pos for pos in range(ncol) if self.pockets[i][pos] == aa]
+            if not xs:
+                continue
+            ax.scatter(
+                xs,
+                [row_of_member[i]] * len(xs),
+                s=7,
+                c=fill,
+                edgecolors=line,
+                linewidths=0.3,
+                zorder=4,
+            )
+
+        # KLIFS region color bar + rotated position labels beneath the dot field
+        bar_y = n_rows + 0.5
+        for pos, label in enumerate(labels):
+            region_color = DICT_POCKET_KLIFS_REGIONS[label.split(":")[0]]["color"]
+            ax.add_patch(
+                Rectangle(
+                    (pos - 0.5, bar_y),
+                    1,
+                    1.0,
+                    facecolor=region_color,
+                    edgecolor="white",
+                    linewidth=0.4,
+                    zorder=2,
+                )
+            )
+            ax.text(
+                pos,
+                bar_y + 1.3,
+                label,
+                rotation=90,
+                ha="center",
+                va="top",
+                fontsize=5,
+            )
+
+        ax.set_xlim(-0.6, ncol - 0.4)
+        ax.set_ylim(-1.0, bar_y + 6.0)
+        ax.invert_yaxis()
+        ax.set_xticks([])
+        ax.set_yticks([])
+        remove_spines(ax)
+        ax.set_ylabel("kinases in dendrogram leaf order")
+
+        fams = {self._family_label(m) for m in ordered_members}
+        ax.legend(
+            handles=self._group_legend_handles(fams),
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.005),
+            ncol=len(fams),
+            frameon=False,
+            fontsize=6,
+            handlelength=1.0,
+            handletextpad=0.4,
+            columnspacing=1.3,
+        )
+        fig.tight_layout()
+        return fig, ax
+
+    def plot_residue_dot(
+        self,
+        output_path: str,
+        aa: str = STR_RESIDUE_DOT_DEFAULT_AA,
+        formats: tuple[str, ...] = ("pdf",),
+    ) -> None:
+        """Render and save the static per-amino-acid dot-plot figure to ``output_path``.
+
+        Parameters
+        ----------
+        output_path : str
+            Directory to write the figure into.
+        aa : str
+            Amino-acid single-letter code (or ``"-"``) to plot, by default cysteine.
+        formats : tuple[str, ...], optional
+            File extensions to write, by default ``("pdf",)``.
+        """
+        fig, _ = self.build_residue_dot_figure(aa=aa)
+        save_plot(
+            fig,
+            STR_FILE_RESIDUE_DOT,
+            plot_type="KLIFS residue dot plot",
+            bool_force_local=False,
+            bool_image_subdir=False,
+            output_path=output_path,
+            bool_svg="svg" in formats,
+            bool_png="png" in formats,
+            bool_pdf="pdf" in formats,
+            dpi=300,
+            facecolor="white",
+        )
 
 
 class KLIFSTreeConservationApp(KLIFSHierarchicalConservation):
@@ -2430,3 +2884,335 @@ class KLIFSTreeConservationApp(KLIFSHierarchicalConservation):
         with open(filepath, "w") as f:
             f.write(html)
         logger.info("saved KLIFS conservation-tree explorer -> %s", filepath)
+
+
+class KLIFSResidueDotApp(KLIFSHierarchicalConservation):
+    """Interactive standalone-HTML per-amino-acid KLIFS dot-plot explorer.
+
+    A ``Select`` dropdown chooses one of the 20 amino acids (or the ``-`` gap); the
+    plot then shows, for the 85 KLIFS pocket columns (x) against the human kinome in
+    dendrogram leaf order (y), a dot wherever a kinase carries the selected residue at
+    that column. Dots are colored by the dendrogram leaf coloring (Manning group /
+    Lipid, with a black outline for pseudokinases). Dots of the same display-leaf clade
+    that share the residue at a column (:data:`INT_RESIDUE_DOT_MIN_ENCLOSE` or more) are
+    enclosed, revealing columns "enriched" for that residue within a family (e.g.
+    conserved cysteines). Hover reports the kinase, its display-leaf number, the UniProt
+    residue (amino acid + canonical index, e.g. ``L858``), the KLIFS label, and the
+    KinHub / KLIFS family labels. All per-amino-acid data is precomputed and embedded,
+    so the HTML needs no server.
+
+    Panel-only view built on :class:`KLIFSHierarchicalConservation`; ``save_app`` writes
+    a self-contained HTML file to the structured output tree.
+    """
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    min_cluster_size: int = INT_TREE_MIN_CLUSTER_DISPLAY
+    """Display-tree collapse threshold (sets the display-leaf clades that are enclosed)."""
+    default_aa: str = STR_RESIDUE_DOT_DEFAULT_AA
+    """Amino acid shown on first load (default: cysteine)."""
+    px_per_row: float = FLOAT_RESIDUE_DOT_PX_PER_ROW
+    """Pixel height allotted per kinase row."""
+
+    def _dot_style(self, i: int) -> tuple[str, str]:
+        """``(fill, line)`` colors for leaf ``i``'s dot (black outline if pseudokinase)."""
+        fill, edge, _ = self._member_style(i)
+        line = "#000000" if edge == "#000000" else fill
+        return fill, line
+
+    def _precompute_aa_data(
+        self,
+        ordered_members: list[int],
+        row_of_member: dict[int, int],
+        leaf_of_member: dict[int, int],
+        leaf_members: list[list[int]],
+    ) -> tuple[dict, dict]:
+        """Per-amino-acid dot and clade-enclosure payloads for the CustomJS switch.
+
+        Returns
+        -------
+        tuple[dict, dict]
+            ``(aa_data, enc_data)`` keyed by amino-acid symbol; each value is a dict of
+            parallel arrays ready to become a ``ColumnDataSource``.
+        """
+        labels = self.position_labels
+        ncol = len(labels)
+
+        # per-member constants (color, outline, name, leaf number, families) + the
+        # per-column UniProt indices, computed once and reused across every amino acid
+        meta = {}
+        for i in ordered_members:
+            fill, line = self._dot_style(i)
+            kinhub_family, klifs_family = self._hover_families(i)
+            meta[i] = {
+                "fill": fill,
+                "line": line,
+                "name": self.names[i],
+                "leaf": leaf_of_member[i],
+                "kinhub": kinhub_family,
+                "klifs": klifs_family,
+                "uniprot": [self._uniprot_index_at(i, pos) for pos in range(ncol)],
+            }
+
+        aa_data, enc_data = {}, {}
+        for aa in LIST_DOT_ALPHABET:
+            dots = dict(
+                x=[],
+                y=[],
+                color=[],
+                line=[],
+                name=[],
+                leaf=[],
+                residue=[],
+                klifs=[],
+                kinhub=[],
+                klifs_fam=[],
+            )
+            for i in ordered_members:
+                pocket = self.pockets[i]
+                info = meta[i]
+                for pos in range(ncol):
+                    if pocket[pos] != aa:
+                        continue
+                    uniprot_idx = info["uniprot"][pos]
+                    residue = (
+                        f"{aa}{uniprot_idx}" if uniprot_idx is not None else f"{aa}?"
+                    )
+                    dots["x"].append(pos)
+                    dots["y"].append(row_of_member[i])
+                    dots["color"].append(info["fill"])
+                    dots["line"].append(info["line"])
+                    dots["name"].append(info["name"])
+                    dots["leaf"].append(info["leaf"])
+                    dots["residue"].append(residue)
+                    dots["klifs"].append(labels[pos])
+                    dots["kinhub"].append(info["kinhub"])
+                    dots["klifs_fam"].append(info["klifs"])
+            aa_data[aa] = dots
+
+            enc = dict(x=[], y=[], width=[], height=[])
+            for members in leaf_members:
+                for pos in range(ncol):
+                    rows = [
+                        row_of_member[m] for m in members if self.pockets[m][pos] == aa
+                    ]
+                    if len(rows) < INT_RESIDUE_DOT_MIN_ENCLOSE:
+                        continue
+                    lo, hi = min(rows), max(rows)
+                    enc["x"].append(pos)
+                    enc["y"].append((lo + hi) / 2.0)
+                    enc["width"].append(0.7)
+                    enc["height"].append((hi - lo) + 0.9)
+            enc_data[aa] = enc
+
+        return aa_data, enc_data
+
+    def build_layout(self):
+        """Assemble the Bokeh dot-plot layout with an amino-acid selector.
+
+        Returns
+        -------
+        bokeh.models.LayoutDOM
+            The column layout ready for :func:`bokeh.embed.file_html`.
+        """
+        labels = self.position_labels
+        ncol = len(labels)
+        region_colors = [
+            DICT_POCKET_KLIFS_REGIONS[lab.split(":")[0]]["color"] for lab in labels
+        ]
+
+        (
+            _tree,
+            ordered_members,
+            row_of_member,
+            leaf_of_member,
+            leaf_members,
+        ) = self.residue_dot_layout(min_cluster_size=self.min_cluster_size)
+        n_rows = len(ordered_members)
+
+        aa_data, enc_data = self._precompute_aa_data(
+            ordered_members, row_of_member, leaf_of_member, leaf_members
+        )
+        default_aa = (
+            self.default_aa if self.default_aa in aa_data else LIST_DOT_ALPHABET[0]
+        )
+
+        dot_src = ColumnDataSource(dict(aa_data[default_aa]))
+        enc_src = ColumnDataSource(dict(enc_data[default_aa]))
+
+        height_px = int(60 + n_rows * self.px_per_row)
+        # y increases downward: leaf order runs top (row 0) to bottom, with a top margin
+        # reserved for the KLIFS region strip
+        p = figure(
+            width=1400,
+            height=height_px,
+            sizing_mode="stretch_width",
+            x_range=(-0.6, ncol - 0.4),
+            y_range=(n_rows - 0.5, -3.5),
+            tools="pan,wheel_zoom,box_zoom,reset,save",
+            toolbar_location="above",
+            title=f"KLIFS residue dot plot — {default_aa}",
+        )
+
+        # clade enclosures (drawn under the dots)
+        p.ellipse(
+            x="x",
+            y="y",
+            width="width",
+            height="height",
+            source=enc_src,
+            fill_color=None,
+            line_color=COLOR_TREE_PSEUDO,
+            line_width=1.0,
+        )
+        dot_glyph = p.scatter(
+            x="x",
+            y="y",
+            source=dot_src,
+            size=6,
+            marker="circle",
+            fill_color="color",
+            line_color="line",
+            line_width=0.4,
+        )
+        p.add_tools(
+            HoverTool(
+                renderers=[dot_glyph],
+                tooltips=[
+                    ("kinase", "@name"),
+                    ("leaf", "@leaf"),
+                    ("residue", "@residue"),
+                    ("KLIFS", "@klifs"),
+                    ("KinHub family", "@kinhub"),
+                    ("KLIFS family", "@klifs_fam"),
+                ],
+            )
+        )
+
+        # KLIFS region color strip + block labels along the top
+        region_src = ColumnDataSource(
+            dict(x=list(range(ncol)), color=region_colors, y=[-1.6] * ncol)
+        )
+        p.rect(
+            x="x",
+            y="y",
+            width=1.0,
+            height=0.8,
+            source=region_src,
+            color="color",
+            line_color="white",
+        )
+        regs = [lab.split(":")[0] for lab in labels]
+        blocks, start = [], 0
+        for i in range(1, ncol + 1):
+            if i == ncol or regs[i] != regs[start]:
+                blocks.append((regs[start], (start + i - 1) / 2.0))
+                start = i
+        block_src = ColumnDataSource(
+            dict(x=[c for _, c in blocks], name=[r for r, _ in blocks])
+        )
+        p.text(
+            x="x",
+            y=-2.7,
+            text="name",
+            source=block_src,
+            text_align="center",
+            text_baseline="middle",
+            text_font_size="8pt",
+            text_color=COLOR_DARK_TEXT,
+        )
+
+        # y-axis shows display-leaf (clade) numbers at each clade's row center
+        tick_positions, tick_labels = [], {}
+        for members in leaf_members:
+            rows = [row_of_member[m] for m in members]
+            center = sum(rows) / len(rows)
+            tick_positions.append(center)
+            tick_labels[center] = str(leaf_of_member[members[0]])
+        p.yaxis.ticker = FixedTicker(ticks=tick_positions)
+        p.yaxis.major_label_overrides = tick_labels
+        p.yaxis.axis_label = "dendrogram leaf (clade) number"
+        p.yaxis.major_label_text_font_size = "6px"
+        p.xaxis.visible = False
+        p.xgrid.visible = False
+        p.ygrid.visible = False
+
+        select = Select(
+            title="Amino acid",
+            value=default_aa,
+            options=list(LIST_DOT_ALPHABET),
+            width=160,
+        )
+        callback = CustomJS(
+            args=dict(
+                dot_src=dot_src,
+                enc_src=enc_src,
+                aa_data=aa_data,
+                enc_data=enc_data,
+                select=select,
+                fig=p,
+            ),
+            code="""
+            const aa = select.value;
+            dot_src.data = aa_data[aa];
+            dot_src.change.emit();
+            enc_src.data = enc_data[aa];
+            enc_src.change.emit();
+            fig.title.text = "KLIFS residue dot plot — " + aa;
+            """,
+        )
+        select.js_on_change("value", callback)
+
+        # kinase-group legend (Manning group / Lipid) plus the pseudokinase-outline note
+        present = []
+        seen = set()
+        for i in ordered_members:
+            fam = self._family_label(i)
+            if fam not in seen:
+                seen.add(fam)
+                present.append(fam)
+        swatches = "".join(
+            f"<span style='color:{DICT_KINASE_GROUP_COLORS.get(g, COLOR_TREE_FALLBACK)};"
+            f"font-weight:bold'>&#9679;</span>&nbsp;{g} &nbsp;&nbsp;"
+            for g in present
+        )
+        legend = Div(
+            width=1400,
+            sizing_mode="stretch_width",
+            text="<b>Dot color</b> = Manning group / Lipid; "
+            "<b>black outline</b> = pseudokinase. "
+            f"<b>Circles</b> enclose &ge;{INT_RESIDUE_DOT_MIN_ENCLOSE} same-clade dots at "
+            "a KLIFS column (residue enriched within that family).<br>" + swatches,
+        )
+        header = Div(
+            width=1400,
+            sizing_mode="stretch_width",
+            text="<b>Per-amino-acid KLIFS dot plot.</b> Choose a residue; each dot is a "
+            "kinase carrying it at that KLIFS column, ordered by the conservation "
+            "dendrogram.",
+        )
+
+        return column(header, select, legend, p, sizing_mode="stretch_width")
+
+    def save_app(self, output_path: str, filename: str | None = None) -> None:
+        """Build the dot-plot explorer and write a self-contained HTML file.
+
+        Parameters
+        ----------
+        output_path : str
+            Directory to write the HTML file into.
+        filename : str | None, optional
+            Output filename; defaults to :data:`STR_FILE_RESIDUE_DOT_APP`.
+        """
+        import os
+
+        layout = self.build_layout()
+        html = file_html(
+            layout, resources=INLINE, title="KLIFS residue dot plot explorer"
+        )
+        if filename is None:
+            filename = STR_FILE_RESIDUE_DOT_APP
+        filepath = os.path.join(output_path, filename)
+        with open(filepath, "w") as f:
+            f.write(html)
+        logger.info("saved KLIFS residue dot-plot explorer -> %s", filepath)

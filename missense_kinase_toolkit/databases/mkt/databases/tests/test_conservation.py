@@ -15,9 +15,13 @@ from mkt.databases.conservation import (
     INT_KLIFS_POCKET_LENGTH,
     KLIFSConservationTreeFigure,
     KLIFSHierarchicalConservation,
+    KLIFSResidueDotApp,
     KLIFSTreeConservationApp,
+    rebuild_tree_from_data,
 )
 from mkt.databases.pssm import column_conservation
+from scipy.cluster.hierarchy import leaves_list
+from scipy.spatial.distance import squareform
 
 
 def _panel():
@@ -289,3 +293,102 @@ def test_tree_conservation_app_builds_and_saves(tmp_path):
     assert out.exists()
     html = out.read_text()
     assert "Bokeh" in html and len(html) > 1000
+
+
+def test_to_conservation_data_roundtrips_distances_and_tree():
+    # the persisted artifact must losslessly capture the distances + dendrogram
+    names, pockets, groups = _panel()
+    engine = KLIFSHierarchicalConservation(names=names, pockets=pockets, groups=groups)
+    data = engine.to_conservation_data(min_cluster_size=2)
+
+    n = len(names)
+    assert data.n_kinases == n
+    assert len(data.distances_condensed) == n * (n - 1) // 2
+    # condensed vector round-trips to the engine's square distance matrix
+    assert np.allclose(
+        squareform(np.array(data.distances_condensed)), engine.distance_matrix
+    )
+    # stored linkage reproduces the engine's leaf order
+    assert data.leaves_order == list(leaves_list(engine.linkage_matrix))
+    assert rebuild_tree_from_data(data).get_count() == n
+    # display leaves cover every kinase exactly once
+    covered = sorted(m for leaf in data.display_leaves for m in leaf["members"])
+    assert covered == list(range(n))
+
+
+def test_from_conservation_data_injects_without_recompute():
+    # rebuilding a renderer from the default-panel artifact must match the engine and
+    # skip the clustering recompute (names resolve against the shipped DICT_KINASE)
+    engine = KLIFSHierarchicalConservation()
+    data = engine.to_conservation_data()
+    rebuilt = KLIFSConservationTreeFigure.from_conservation_data(data)
+    assert rebuilt.names == engine.names
+    assert np.allclose(rebuilt.distance_matrix, engine.distance_matrix)
+    assert np.allclose(rebuilt.linkage_matrix, engine.linkage_matrix)
+
+
+def test_residue_dot_app_builds_and_saves(tmp_path):
+    # the interactive dot-plot explorer is panel-only; a synthetic panel suffices
+    tail = INT_KLIFS_POCKET_LENGTH - 1
+    pockets = ["C" + "A" * tail] * 4 + ["G" + "C" * tail] * 4
+    names = [f"k{i}" for i in range(8)]
+    groups = ["TK"] * 4 + ["CMGC"] * 4
+    app = KLIFSResidueDotApp(
+        names=names, pockets=pockets, groups=groups, min_cluster_size=2
+    )
+    assert app.build_layout() is not None
+
+    app.save_app(str(tmp_path))
+    out = tmp_path / "conservation_residue_dotplot.html"
+    assert out.exists()
+    html = out.read_text()
+    assert "Bokeh" in html and len(html) > 1000
+
+
+def test_residue_dot_figure_builds(tmp_path):
+    # the static dot-plot companion is panel-only; render + save as a PDF
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    tail = INT_KLIFS_POCKET_LENGTH - 1
+    pockets = ["C" + "A" * tail] * 4 + ["G" + "C" * tail] * 4
+    names = [f"k{i}" for i in range(8)]
+    groups = ["TK"] * 4 + ["CMGC"] * 4
+    obj = KLIFSConservationTreeFigure(
+        names=names, pockets=pockets, groups=groups, min_cluster_size=2
+    )
+    fig, ax = obj.build_residue_dot_figure(aa="C")
+    assert fig is not None and ax.get_legend() is not None
+    plt.close(fig)
+
+    obj.plot_residue_dot(str(tmp_path), aa="C", formats=("pdf",))
+    assert (tmp_path / "conservation_residue_dotplot.pdf").exists()
+
+
+def test_split_detail_panels_have_group_legend():
+    # the top/bottom detail panels carry a kinase-group legend; the full page does not
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    tail = INT_KLIFS_POCKET_LENGTH - 1
+    pockets = ["G" + "A" * tail] * 4 + ["G" + "C" * tail] * 4 + ["G" + "D" * tail] * 4
+    names = [f"k{i}" for i in range(12)]
+    groups = ["TK"] * 4 + ["CMGC"] * 4 + ["CAMK"] * 4
+    obj = KLIFSConservationTreeFigure(
+        names=names, pockets=pockets, groups=groups, min_cluster_size=2
+    )
+    n = len(obj.build_display_tree().order)
+    split = max(1, n // 2)
+    figs = dict(obj.build_split_figures(split_index=split))
+    assert figs["klifs_conservation_tree_top"].axes[0].get_legend() is not None
+    assert figs["klifs_conservation_tree_bottom"].axes[0].get_legend() is not None
+    for fig in figs.values():
+        plt.close(fig)
+
+    full, ax = obj.build_figure()
+    assert ax.get_legend() is None
+    plt.close(full)
