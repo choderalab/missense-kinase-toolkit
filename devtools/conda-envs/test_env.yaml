@@ -25,6 +25,7 @@ dependencies:
   - biopython
   - pymol-open-source
   - matplotlib
+  - bokeh
   - seaborn
   - matplotlib-venn
   - scipy
