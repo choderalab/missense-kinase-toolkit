@@ -227,7 +227,10 @@ FLOAT_TREE_DETAIL_ROW_IN = 0.18
 """float: Inches of page height per leaf row in a split detail panel."""
 FLOAT_TREE_DETAIL_LEGEND_IN = 0.4
 """float: Inches of page height reserved beneath a split detail panel for its
-kinase-group legend (matching the summary dendrogram's legend)."""
+kinase-group legend."""
+FLOAT_TREE_DETAIL_LEGEND_FS = 13.0
+"""float: Font size for the top/bottom detail-panel kinase-group legend (much larger
+than the table font so it is legible in the supplement)."""
 TUP_TREE_SUMMARY_PAGE = (11.0, 5.0)
 """tuple[float, float]: Figure size (inches) of the horizontal summary dendrogram."""
 FLOAT_TREE_SUMMARY_LEGEND_FS = 7.0
@@ -1849,9 +1852,9 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
                 bbox_to_anchor=(0.5, -0.005),
                 ncol=len(handles),
                 frameon=False,
-                fontsize=fs,
-                handlelength=1.0,
-                handletextpad=0.4,
+                fontsize=FLOAT_TREE_DETAIL_LEGEND_FS,
+                handlelength=1.4,
+                handletextpad=0.5,
                 columnspacing=1.3,
             )
         return fig, ax
