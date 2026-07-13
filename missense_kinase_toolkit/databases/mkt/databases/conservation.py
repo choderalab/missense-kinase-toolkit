@@ -283,14 +283,16 @@ DICT_DOT_AA_LABEL["-"] = "Gap (-)"
 """dict[str, str]: Full amino-acid label (e.g. ``"Cysteine (C)"``) per dot-plot symbol,
 used for the interactive selector options and heading."""
 LIST_RESIDUE_DOT_KINASES = ["EGFR", "BTK", "FGFR1", "FGFR2", "FGFR3", "FGFR4"]
-"""list[str]: Clinically relevant kinases of interest whose shared covalent-targetable
-residue is called out on the static dot plot. Columns are not hardcoded: for each KLIFS
-column, the ones where at least :data:`INT_RESIDUE_DOT_MIN_SHARED` of these kinases carry
-the plotted residue are boxed together (:meth:`_annotation_callouts`), so any two sharing
-a homologous cysteine land in one box and the callouts track the current KLIFS mapping.
-For cysteine this recovers EGFR C797 / BTK C481 at linker:52 and FGFR1-4 at g.l:7, VI:66."""
-INT_RESIDUE_DOT_MIN_SHARED = 2
-"""int: Minimum kinases-of-interest sharing a residue at a column to draw a callout box."""
+"""list[str]: Clinically relevant kinases of interest whose covalent-targetable residues
+are called out on the static dot plot. Columns are not hardcoded: every KLIFS column where
+at least :data:`INT_RESIDUE_DOT_MIN_SHARED` of these kinases carry the plotted residue is
+boxed (:meth:`_annotation_callouts`), with kinases sharing a homologous column grouped in
+one box. For cysteine this captures all of these kinases' pocket cysteines -- FGFR1-4 at
+g.l:7 and VI:66, EGFR C797 / BTK C481 at linker:52, plus the singletons EGFR C775 (b.l:36),
+FGFR4 C552 (hinge:47), and BTK C527 (VII:76) -- and tracks the current KLIFS mapping."""
+INT_RESIDUE_DOT_MIN_SHARED = 1
+"""int: Minimum kinases-of-interest carrying a residue at a column to draw a callout box
+(1 = annotate every cysteine of the kinases of interest, grouping any that share a column)."""
 
 
 def _build_klifs_panel(
@@ -2397,34 +2399,60 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
         )
 
         # curated conserved-cysteine callouts: a labeled box (kinase + residue number)
-        # above each column (found by searching the alignment) with an arrow to its stack
-        if highlight_targets:
-            for kinases, pos in self._annotation_callouts(aa):
-                top = col_count[pos]
-                text = "\n".join(self._annotation_lines(kinases, pos, labels[pos]))
-                ax.annotate(
-                    text,
-                    xy=(pos, top + 1.0),
-                    xytext=(pos, top + 12.0),
-                    ha="center",
-                    va="bottom",
-                    fontsize=8,
-                    bbox=dict(
-                        boxstyle="round,pad=0.4",
-                        facecolor="white",
-                        edgecolor=COLOR_TREE_PSEUDO,
-                        linewidth=1.0,
-                    ),
-                    arrowprops=dict(
-                        arrowstyle="-|>", color="black", lw=2.0, mutation_scale=20
-                    ),
-                    annotation_clip=False,
-                    zorder=6,
-                )
+        # per column found by searching the alignment. Boxes sit on their own column and
+        # are bottom-aligned at a common height (~3/4 up); a box whose span would cover a
+        # taller neighbouring stack (e.g. hinge:47 next to the tall hinge:48) is lifted to
+        # just above that stack instead, so it never clashes with the dots.
+        callouts = sorted(
+            self._annotation_callouts(aa) if highlight_targets else [],
+            key=lambda kp: kp[1],
+        )
+        anno_fontsize = 13
+        base_top = max(max_count + 1, 90)
+        tail_y = 0.72 * base_top
+        pt_per_unit = fig_w * 0.92 * 72.0 / ncol  # x-axis points per data column
+
+        boxes, y_top = [], base_top
+        for kinases, pos in callouts:
+            lines = self._annotation_lines(kinases, pos, labels[pos])
+            max_chars = max((len(s) for s in lines), default=1)
+            half = (max_chars * 0.6 + 0.8) * anno_fontsize / pt_per_unit / 2.0
+            lo, hi = max(0, round(pos - half)), min(ncol - 1, round(pos + half))
+            tallest = max(col_count[c] for c in range(lo, hi + 1))
+            box_bottom = tail_y if tallest <= tail_y else tallest + 4.0
+            boxes.append((pos, "\n".join(lines), box_bottom))
+            # ~7.5 counts per text line + padding, to keep the box below the axis top
+            y_top = max(y_top, box_bottom + len(lines) * 7.5 + 6.0)
+
+        for pos, text, box_bottom in boxes:
+            # outline the box in its KLIFS region color for clarity
+            region_edge = DICT_POCKET_KLIFS_REGIONS[labels[pos].split(":")[0]]["color"]
+            ax.annotate(
+                text,
+                xy=(pos, col_count[pos] + 1.0),  # arrowhead at the stack top
+                xytext=(
+                    pos,
+                    box_bottom,
+                ),  # box bottom-aligned at the common tail height
+                ha="center",
+                va="bottom",
+                fontsize=anno_fontsize,
+                bbox=dict(
+                    boxstyle="round,pad=0.4",
+                    facecolor="white",
+                    edgecolor=region_edge,
+                    linewidth=1.5,
+                ),
+                arrowprops=dict(
+                    arrowstyle="-|>", color="black", lw=2.0, mutation_scale=20
+                ),
+                annotation_clip=False,
+                zorder=6,
+            )
 
         ax.set_xlim(-0.6, ncol - 0.4)
         # extra bottom margin so the y=0 dots are not clipped; y ticks 0-90 by 15
-        ax.set_ylim(-1.5, max(max_count + 1, 90))
+        ax.set_ylim(-1.5, y_top)
         ax.set_yticks(list(range(0, 91, 15)))
         ax.tick_params(axis="y", labelsize=14)
         ax.set_xticks([])
