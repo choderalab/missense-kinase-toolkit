@@ -49,8 +49,8 @@ jobs:
         # branch, so this smoke-tests the deployed dependency set, not the PR's
         # checked-out sub-packages.
         run: |
-          uv pip install --system -r missense_kinase_toolkit/app/requirements.txt
-          uv pip install --system pytest
+          uv pip install -r missense_kinase_toolkit/app/requirements.txt
+          uv pip install pytest
           uv pip list
 
       - name: Run headless app smoke test
