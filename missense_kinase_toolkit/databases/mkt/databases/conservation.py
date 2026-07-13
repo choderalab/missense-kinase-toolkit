@@ -27,14 +27,15 @@ from bokeh.models import (
     ColumnDataSource,
     CustomJS,
     Div,
-    FixedTicker,
     HoverTool,
     Select,
     TapTool,
 )
 from bokeh.plotting import figure
 from bokeh.resources import INLINE
-from matplotlib.patches import Ellipse, Patch, Rectangle
+from matplotlib.legend_handler import HandlerPatch
+from matplotlib.lines import Line2D
+from matplotlib.patches import FancyBboxPatch, Patch, Rectangle
 from mkt.databases.colors import (
     AA_MAPPING,
     CMAP_CRITICAL_DEPTH,
@@ -273,12 +274,23 @@ STR_FILE_RESIDUE_DOT = "conservation_residue_dotplot"
 STR_RESIDUE_DOT_DEFAULT_AA = "C"
 """str: Default amino acid for the static dot-plot figure (cysteine)."""
 INT_RESIDUE_DOT_MIN_ENCLOSE = 2
-"""int: Minimum same-clade dots at a position for a clade enclosure to be drawn."""
-FLOAT_RESIDUE_DOT_PX_PER_ROW = 7.0
-"""float: Interactive dot-plot pixel height allotted per kinase row."""
+"""int: Minimum same-clade dots stacked in a column for a clade enclosure to be drawn."""
 LIST_DOT_ALPHABET = [aa for _, aa, _ in AA_MAPPING] + ["-"]
 """list[str]: The 20 amino-acid single-letter codes plus the gap symbol, for the
 dot-plot amino-acid selector."""
+DICT_DOT_AA_LABEL = {aa: f"{name.capitalize()} ({aa})" for name, aa, _ in AA_MAPPING}
+DICT_DOT_AA_LABEL["-"] = "Gap (-)"
+"""dict[str, str]: Full amino-acid label (e.g. ``"Cysteine (C)"``) per dot-plot symbol,
+used for the interactive selector options and heading."""
+LIST_RESIDUE_DOT_KINASES = ["EGFR", "BTK", "FGFR1", "FGFR2", "FGFR3", "FGFR4"]
+"""list[str]: Clinically relevant kinases of interest whose shared covalent-targetable
+residue is called out on the static dot plot. Columns are not hardcoded: for each KLIFS
+column, the ones where at least :data:`INT_RESIDUE_DOT_MIN_SHARED` of these kinases carry
+the plotted residue are boxed together (:meth:`_annotation_callouts`), so any two sharing
+a homologous cysteine land in one box and the callouts track the current KLIFS mapping.
+For cysteine this recovers EGFR C797 / BTK C481 at linker:52 and FGFR1-4 at g.l:7, VI:66."""
+INT_RESIDUE_DOT_MIN_SHARED = 2
+"""int: Minimum kinases-of-interest sharing a residue at a column to draw a callout box."""
 
 
 def _build_klifs_panel(
@@ -322,6 +334,27 @@ def _build_klifs_panel(
 
 _KLIFS_PANEL = _build_klifs_panel()
 """tuple[list[str], list[str], list[str]]: cached (names, pockets, groups) KLIFS panel."""
+
+
+class _HandlerRoundedBox(HandlerPatch):
+    """Legend handler that renders a :class:`~matplotlib.patches.Patch` handle as a
+    rounded box (matching the dot-plot clade enclosures) rather than a sharp rectangle.
+    """
+
+    def create_artists(
+        self, legend, orig_handle, xdescent, ydescent, width, height, fontsize, trans
+    ):
+        box = FancyBboxPatch(
+            (-xdescent + 1.0, -ydescent + 1.0),
+            width - 2.0,
+            height - 2.0,
+            boxstyle="round,pad=0,rounding_size=2.5",
+            facecolor=orig_handle.get_facecolor(),
+            edgecolor=orig_handle.get_edgecolor(),
+            linewidth=orig_handle.get_linewidth(),
+            transform=trans,
+        )
+        return [box]
 
 
 @dataclass
@@ -1348,15 +1381,73 @@ class KLIFSHierarchicalConservation(BaseModel):
             return None
         return info.KLIFS2UniProtIdx.get(self.position_labels[pos])
 
+    @staticmethod
+    def _family_name(value) -> str:
+        """Label for a family field, which may be a ``Family`` enum or a bare string."""
+        if value is None:
+            return ""
+        # Family enums expose ``.name``; deserialized fields can arrive as plain strings
+        return getattr(value, "name", None) or str(value)
+
     def _hover_families(self, i: int) -> tuple[str, str]:
         """``(kinhub_family, klifs_family)`` labels for leaf ``i``'s dot hover."""
         info = DICT_KINASE.get(self.names[i])
-        kinhub_family = rgetattr(info, "kinhub.family")
-        klifs_family = rgetattr(info, "klifs.family")
         return (
-            getattr(kinhub_family, "name", "") or "",
-            getattr(klifs_family, "name", "") or "",
+            self._family_name(rgetattr(info, "kinhub.family")),
+            self._family_name(rgetattr(info, "klifs.family")),
         )
+
+    def _annotation_callouts(self, aa: str) -> list[tuple[list[str], int]]:
+        """Find the shared-residue columns for the curated kinases of interest.
+
+        Searches every KLIFS column and, at each, collects the kinases from
+        :data:`LIST_RESIDUE_DOT_KINASES` that carry ``aa`` there; a column is called out
+        when at least :data:`INT_RESIDUE_DOT_MIN_SHARED` of them share it. There is no
+        pre-grouping, so any kinases sharing a homologous residue at one column are boxed
+        together, and the callouts are discovered from the current alignment (surviving a
+        shift in the KLIFS mapping) rather than hardcoded.
+
+        Parameters
+        ----------
+        aa : str
+            The plotted residue (e.g. ``"C"``).
+
+        Returns
+        -------
+        list[tuple[list[str], int]]
+            ``(shared_kinases, column_index)`` per discovered callout.
+        """
+        ncol = len(self.position_labels)
+        pockets = {}
+        for kinase in LIST_RESIDUE_DOT_KINASES:
+            pocket = rgetattr(DICT_KINASE.get(kinase), "klifs.pocket_seq")
+            if pocket and len(pocket) == ncol:
+                pockets[kinase] = pocket
+
+        callouts = []
+        for pos in range(ncol):
+            shared = [k for k, p in pockets.items() if p[pos] == aa]
+            if len(shared) >= INT_RESIDUE_DOT_MIN_SHARED:
+                callouts.append((shared, pos))
+        return callouts
+
+    def _annotation_lines(self, kinases: list[str], pos: int, label: str) -> list[str]:
+        """``"{kinase} {residue}{uniprot_idx}"`` per kinase at KLIFS column ``pos``.
+
+        Used for the curated conserved-residue callout boxes; the residue letter and
+        UniProt index are read from each kinase's pocket and ``KLIFS2UniProtIdx`` in
+        :data:`DICT_KINASE`, so the numbers stay correct without hardcoding.
+        """
+        lines = []
+        for kinase in kinases:
+            info = DICT_KINASE.get(kinase)
+            pocket = rgetattr(info, "klifs.pocket_seq")
+            residue = pocket[pos] if pocket else "?"
+            idx = (info.KLIFS2UniProtIdx or {}).get(label) if info is not None else None
+            lines.append(
+                f"{kinase} {residue}{idx}" if idx is not None else f"{kinase} {residue}"
+            )
+        return lines
 
     def residue_dot_layout(
         self, min_cluster_size: int = INT_TREE_MIN_CLUSTER_DISPLAY
@@ -2195,22 +2286,29 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
         self,
         aa: str = STR_RESIDUE_DOT_DEFAULT_AA,
         figsize: tuple[float, float] | None = None,
+        highlight_targets: bool = False,
     ) -> tuple[plt.Figure, plt.Axes]:
         """Static companion to :class:`KLIFSResidueDotApp` for a single amino acid.
 
-        Draws one dot per (KLIFS column, kinase) where the kinase carries ``aa`` at that
-        column, with kinases in dendrogram leaf order (y) and the 85 KLIFS columns on x.
-        Dots are colored by Manning group / Lipid (black outline for pseudokinases);
-        same-clade dots sharing the residue at a column are enclosed
-        (:data:`INT_RESIDUE_DOT_MIN_ENCLOSE`+). A KLIFS region color bar and rotated
-        position labels run beneath, and the kinase-group legend sits above.
+        A frequency dot plot: within each of the 85 KLIFS columns (x) the kinases
+        carrying ``aa`` are stacked one dot per kinase (y = count) in dendrogram leaf
+        order, so empty columns simply have no dots. Dots are colored by Manning group /
+        Lipid (black outline for pseudokinases); runs of
+        :data:`INT_RESIDUE_DOT_MIN_ENCLOSE`+ consecutive same-clade dots within a column
+        are enclosed in a light-grey rounded box. A KLIFS region color bar and rotated
+        position labels run beneath, and the kinase-group legend sits below.
 
         Parameters
         ----------
         aa : str
             Amino-acid single-letter code (or ``"-"``) to plot, by default cysteine.
         figsize : tuple[float, float] | None, optional
-            Figure size; by default sized to the row count.
+            Figure size; by default sized to the tallest column stack.
+        highlight_targets : bool, optional
+            If True, draw the curated conserved-cysteine callout boxes for the kinases in
+            :data:`LIST_RESIDUE_DOT_KINASES` -- a labeled box of kinases + residue numbers
+            with an arrow to each shared-residue column found by searching the alignment
+            (:meth:`_annotation_callouts`) -- by default False.
 
         Returns
         -------
@@ -2219,101 +2317,181 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
         (
             _tree,
             ordered_members,
-            row_of_member,
+            _row_of_member,
             leaf_of_member,
-            leaf_members,
+            _leaf_members,
         ) = self.residue_dot_layout(min_cluster_size=self.min_cluster_size)
-        n_rows = len(ordered_members)
         labels = self.position_labels
         ncol = len(labels)
 
+        # per-column stacks in dendrogram leaf order (y = count); collect dots +
+        # same-clade enclosure runs
+        xs, ys, fills, lines = [], [], [], []
+        enclosures = []
+        col_count = {}
+        max_count = 0
+        for pos in range(ncol):
+            stack = [i for i in ordered_members if self.pockets[i][pos] == aa]
+            col_count[pos] = len(stack)
+            max_count = max(max_count, len(stack))
+            for height, i in enumerate(stack):
+                fill, edge, _ = self._member_style(i)
+                xs.append(pos)
+                ys.append(height)
+                fills.append(fill)
+                lines.append(COLOR_TREE_PSEUDO if edge == "#000000" else fill)
+            start = 0
+            for end in range(1, len(stack) + 1):
+                same = (
+                    end < len(stack)
+                    and leaf_of_member[stack[end]] == leaf_of_member[stack[start]]
+                )
+                if not same:
+                    if end - start >= INT_RESIDUE_DOT_MIN_ENCLOSE:
+                        lo, hi = start, end - 1
+                        enclosures.append((pos, (lo + hi) / 2.0, (hi - lo) + 1.0))
+                    start = end
+
+        # wide, low-aspect figure sized to the placement slot; a fixed strip below
+        # carries the KLIFS region bar + rotated labels
+        fig_w = 15.5
+        count_in = 0.04  # inches of dot-panel height per stacked kinase
+        region_in = 1.0  # inches reserved for the region bar + rotated labels
+        dot_in = max(2.5, max_count * count_in)
         if figsize is None:
-            figsize = (12.0, max(6.0, n_rows * 0.06))
-        fig, ax = plt.subplots(figsize=figsize, facecolor="white")
+            figsize = (fig_w, dot_in + region_in + 0.3)
+        fig, (ax, axr) = plt.subplots(
+            2,
+            1,
+            figsize=figsize,
+            facecolor="white",
+            sharex=True,
+            height_ratios=[dot_in, region_in],
+            layout="constrained",
+        )
+        fig.get_layout_engine().set(hspace=0.0, h_pad=0.0)
         ax.set_facecolor("white")
 
-        # clade enclosures (drawn under the dots)
-        for members in leaf_members:
-            for pos in range(ncol):
-                rows = [row_of_member[m] for m in members if self.pockets[m][pos] == aa]
-                if len(rows) < INT_RESIDUE_DOT_MIN_ENCLOSE:
-                    continue
-                lo, hi = min(rows), max(rows)
-                ax.add_patch(
-                    Ellipse(
-                        (pos, (lo + hi) / 2.0),
-                        width=0.8,
-                        height=(hi - lo) + 1.0,
-                        fill=False,
+        # marker size: with the panel height fixed, let dots grow to slightly overlap
+        # vertically (the wide layout leaves ample horizontal room) so the stacks read
+        # bolder / more prominent without making the figure taller
+        pts_per_count = dot_in * 72.0 / (max_count + 2)
+        marker_s = float(min(60.0, max(9.0, (1.15 * pts_per_count) ** 2)))
+
+        # clade enclosures (light-grey rounded rectangles, drawn under the dots)
+        for x, y_center, height in enclosures:
+            ax.add_patch(
+                FancyBboxPatch(
+                    (x - 0.32, y_center - height / 2.0),
+                    0.64,
+                    height,
+                    boxstyle="round,pad=0,rounding_size=0.18",
+                    facecolor=COLOR_TREE_TABLE_NO_CONSENSUS,
+                    edgecolor=COLOR_TREE_PSEUDO,
+                    lw=0.6,
+                    zorder=1,
+                )
+            )
+        ax.scatter(
+            xs, ys, s=marker_s, c=fills, edgecolors=lines, linewidths=0.3, zorder=4
+        )
+
+        # curated conserved-cysteine callouts: a labeled box (kinase + residue number)
+        # above each column (found by searching the alignment) with an arrow to its stack
+        if highlight_targets:
+            for kinases, pos in self._annotation_callouts(aa):
+                top = col_count[pos]
+                text = "\n".join(self._annotation_lines(kinases, pos, labels[pos]))
+                ax.annotate(
+                    text,
+                    xy=(pos, top + 1.0),
+                    xytext=(pos, top + 12.0),
+                    ha="center",
+                    va="bottom",
+                    fontsize=8,
+                    bbox=dict(
+                        boxstyle="round,pad=0.4",
+                        facecolor="white",
                         edgecolor=COLOR_TREE_PSEUDO,
-                        lw=0.5,
-                        zorder=3,
-                    )
+                        linewidth=1.0,
+                    ),
+                    arrowprops=dict(
+                        arrowstyle="-|>", color="black", lw=2.0, mutation_scale=20
+                    ),
+                    annotation_clip=False,
+                    zorder=6,
                 )
 
-        # dots, one kinase row at a time
-        for i in ordered_members:
-            fill, edge, _ = self._member_style(i)
-            line = COLOR_TREE_PSEUDO if edge == "#000000" else fill
-            xs = [pos for pos in range(ncol) if self.pockets[i][pos] == aa]
-            if not xs:
-                continue
-            ax.scatter(
-                xs,
-                [row_of_member[i]] * len(xs),
-                s=7,
-                c=fill,
-                edgecolors=line,
-                linewidths=0.3,
-                zorder=4,
-            )
+        ax.set_xlim(-0.6, ncol - 0.4)
+        # extra bottom margin so the y=0 dots are not clipped; y ticks 0-90 by 15
+        ax.set_ylim(-1.5, max(max_count + 1, 90))
+        ax.set_yticks(list(range(0, 91, 15)))
+        ax.tick_params(axis="y", labelsize=14)
+        ax.set_xticks([])
+        remove_spines(ax)
+        ax.set_ylabel("Count", fontsize=17)
 
-        # KLIFS region color bar + rotated position labels beneath the dot field
-        bar_y = n_rows + 0.5
+        # region bar (top of strip) + rotated labels below it, in a blended transform
+        # (x = data column, y = axes fraction) so label height is independent of scale
+        xtrans = axr.get_xaxis_transform()
         for pos, label in enumerate(labels):
             region_color = DICT_POCKET_KLIFS_REGIONS[label.split(":")[0]]["color"]
-            ax.add_patch(
+            axr.add_patch(
                 Rectangle(
-                    (pos - 0.5, bar_y),
+                    (pos - 0.5, 0.88),
                     1,
-                    1.0,
+                    0.12,
                     facecolor=region_color,
                     edgecolor="white",
                     linewidth=0.4,
-                    zorder=2,
+                    transform=xtrans,
+                    clip_on=False,
                 )
             )
-            ax.text(
+            axr.text(
                 pos,
-                bar_y + 1.3,
+                0.83,
                 label,
                 rotation=90,
                 ha="center",
                 va="top",
-                fontsize=5,
+                fontsize=11,
+                transform=xtrans,
             )
-
-        ax.set_xlim(-0.6, ncol - 0.4)
-        ax.set_ylim(-1.0, bar_y + 6.0)
-        ax.invert_yaxis()
-        ax.set_xticks([])
-        ax.set_yticks([])
-        remove_spines(ax)
-        ax.set_ylabel("kinases in dendrogram leaf order")
+        axr.set_ylim(0.0, 1.0)
+        axr.axis("off")
 
         fams = {self._family_label(m) for m in ordered_members}
-        ax.legend(
-            handles=self._group_legend_handles(fams),
-            loc="lower center",
-            bbox_to_anchor=(0.5, 1.005),
-            ncol=len(fams),
+        # kinase-group swatches plus the pseudokinase-outline and clade-enclosure keys
+        pseudo_handle = Line2D(
+            [0],
+            [0],
+            marker="o",
+            linestyle="none",
+            markerfacecolor="white",
+            markeredgecolor=COLOR_TREE_PSEUDO,
+            markeredgewidth=1.3,
+            markersize=9,
+            label="Pseudokinase",
+        )
+        shared_handle = Patch(
+            facecolor=COLOR_TREE_TABLE_NO_CONSENSUS,
+            edgecolor=COLOR_TREE_PSEUDO,
+            linewidth=0.8,
+            label="Shared kinase family",
+        )
+        handles = self._group_legend_handles(fams) + [pseudo_handle, shared_handle]
+        fig.legend(
+            handles=handles,
+            loc="outside lower center",
+            ncol=len(handles),
             frameon=False,
-            fontsize=6,
+            fontsize=12,
             handlelength=1.0,
             handletextpad=0.4,
             columnspacing=1.3,
+            handler_map={shared_handle: _HandlerRoundedBox()},
         )
-        fig.tight_layout()
         return fig, ax
 
     def plot_residue_dot(
@@ -2321,6 +2499,7 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
         output_path: str,
         aa: str = STR_RESIDUE_DOT_DEFAULT_AA,
         formats: tuple[str, ...] = ("pdf",),
+        highlight_targets: bool = False,
     ) -> None:
         """Render and save the static per-amino-acid dot-plot figure to ``output_path``.
 
@@ -2332,8 +2511,13 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
             Amino-acid single-letter code (or ``"-"``) to plot, by default cysteine.
         formats : tuple[str, ...], optional
             File extensions to write, by default ``("pdf",)``.
+        highlight_targets : bool, optional
+            If True, draw target arrows beneath the conserved inhibitor-targetable
+            columns, by default False.
         """
-        fig, _ = self.build_residue_dot_figure(aa=aa)
+        fig, _ = self.build_residue_dot_figure(
+            aa=aa, highlight_targets=highlight_targets
+        )
         save_plot(
             fig,
             STR_FILE_RESIDUE_DOT,
@@ -2911,8 +3095,6 @@ class KLIFSResidueDotApp(KLIFSHierarchicalConservation):
     """Display-tree collapse threshold (sets the display-leaf clades that are enclosed)."""
     default_aa: str = STR_RESIDUE_DOT_DEFAULT_AA
     """Amino acid shown on first load (default: cysteine)."""
-    px_per_row: float = FLOAT_RESIDUE_DOT_PX_PER_ROW
-    """Pixel height allotted per kinase row."""
 
     def _dot_style(self, i: int) -> tuple[str, str]:
         """``(fill, line)`` colors for leaf ``i``'s dot (black outline if pseudokinase)."""
@@ -2920,20 +3102,36 @@ class KLIFSResidueDotApp(KLIFSHierarchicalConservation):
         line = "#000000" if edge == "#000000" else fill
         return fill, line
 
+    def _column_stack(
+        self, aa: str, pos: int, ordered_members: list[int], meta: dict
+    ) -> list[dict]:
+        """Kinases carrying ``aa`` at KLIFS column ``pos``, in dendrogram leaf order.
+
+        Each entry is the precomputed per-kinase ``meta`` dict; the list order is the
+        bottom-to-top stacking order for the frequency dot plot (so same-clade dots are
+        contiguous and can be enclosed).
+        """
+        return [meta[i] for i in ordered_members if self.pockets[i][pos] == aa]
+
     def _precompute_aa_data(
         self,
         ordered_members: list[int],
-        row_of_member: dict[int, int],
         leaf_of_member: dict[int, int],
-        leaf_members: list[list[int]],
-    ) -> tuple[dict, dict]:
-        """Per-amino-acid dot and clade-enclosure payloads for the CustomJS switch.
+    ) -> tuple[dict, dict, dict]:
+        """Per-amino-acid stacked-dot and clade-enclosure payloads for the CustomJS switch.
+
+        For each amino acid this builds a frequency dot plot: within each KLIFS column
+        the kinases carrying the residue are stacked (y = 0, 1, 2, ...) in dendrogram
+        leaf order, so a column's dot count is its frequency and empty columns simply
+        have no dots. Runs of >= :data:`INT_RESIDUE_DOT_MIN_ENCLOSE` consecutive
+        same-clade dots within a column are enclosed.
 
         Returns
         -------
-        tuple[dict, dict]
-            ``(aa_data, enc_data)`` keyed by amino-acid symbol; each value is a dict of
-            parallel arrays ready to become a ``ColumnDataSource``.
+        tuple[dict, dict, dict]
+            ``(aa_data, enc_data, max_count)`` keyed by amino-acid symbol; the first two
+            are dicts of parallel arrays ready to become a ``ColumnDataSource``, and
+            ``max_count`` is the tallest column stack (for the y-range).
         """
         labels = self.position_labels
         ncol = len(labels)
@@ -2945,6 +3143,7 @@ class KLIFSResidueDotApp(KLIFSHierarchicalConservation):
             fill, line = self._dot_style(i)
             kinhub_family, klifs_family = self._hover_families(i)
             meta[i] = {
+                "idx": i,
                 "fill": fill,
                 "line": line,
                 "name": self.names[i],
@@ -2954,7 +3153,7 @@ class KLIFSResidueDotApp(KLIFSHierarchicalConservation):
                 "uniprot": [self._uniprot_index_at(i, pos) for pos in range(ncol)],
             }
 
-        aa_data, enc_data = {}, {}
+        aa_data, enc_data, max_count = {}, {}, {}
         for aa in LIST_DOT_ALPHABET:
             dots = dict(
                 x=[],
@@ -2968,18 +3167,18 @@ class KLIFSResidueDotApp(KLIFSHierarchicalConservation):
                 kinhub=[],
                 klifs_fam=[],
             )
-            for i in ordered_members:
-                pocket = self.pockets[i]
-                info = meta[i]
-                for pos in range(ncol):
-                    if pocket[pos] != aa:
-                        continue
+            enc = dict(x=[], y=[], width=[], height=[])
+            tallest = 0
+            for pos in range(ncol):
+                stack = self._column_stack(aa, pos, ordered_members, meta)
+                tallest = max(tallest, len(stack))
+                for height, info in enumerate(stack):
                     uniprot_idx = info["uniprot"][pos]
                     residue = (
                         f"{aa}{uniprot_idx}" if uniprot_idx is not None else f"{aa}?"
                     )
                     dots["x"].append(pos)
-                    dots["y"].append(row_of_member[i])
+                    dots["y"].append(height)
                     dots["color"].append(info["fill"])
                     dots["line"].append(info["line"])
                     dots["name"].append(info["name"])
@@ -2988,24 +3187,23 @@ class KLIFSResidueDotApp(KLIFSHierarchicalConservation):
                     dots["klifs"].append(labels[pos])
                     dots["kinhub"].append(info["kinhub"])
                     dots["klifs_fam"].append(info["klifs"])
+
+                # enclose maximal runs of >=MIN consecutive same-clade dots in the stack
+                start = 0
+                for end in range(1, len(stack) + 1):
+                    if end == len(stack) or stack[end]["leaf"] != stack[start]["leaf"]:
+                        if end - start >= INT_RESIDUE_DOT_MIN_ENCLOSE:
+                            lo, hi = start, end - 1
+                            enc["x"].append(pos)
+                            enc["y"].append((lo + hi) / 2.0)
+                            enc["width"].append(0.7)
+                            enc["height"].append((hi - lo) + 0.9)
+                        start = end
             aa_data[aa] = dots
-
-            enc = dict(x=[], y=[], width=[], height=[])
-            for members in leaf_members:
-                for pos in range(ncol):
-                    rows = [
-                        row_of_member[m] for m in members if self.pockets[m][pos] == aa
-                    ]
-                    if len(rows) < INT_RESIDUE_DOT_MIN_ENCLOSE:
-                        continue
-                    lo, hi = min(rows), max(rows)
-                    enc["x"].append(pos)
-                    enc["y"].append((lo + hi) / 2.0)
-                    enc["width"].append(0.7)
-                    enc["height"].append((hi - lo) + 0.9)
             enc_data[aa] = enc
+            max_count[aa] = tallest
 
-        return aa_data, enc_data
+        return aa_data, enc_data, max_count
 
     def build_layout(self):
         """Assemble the Bokeh dot-plot layout with an amino-acid selector.
@@ -3024,14 +3222,13 @@ class KLIFSResidueDotApp(KLIFSHierarchicalConservation):
         (
             _tree,
             ordered_members,
-            row_of_member,
+            _row_of_member,
             leaf_of_member,
-            leaf_members,
+            _leaf_members,
         ) = self.residue_dot_layout(min_cluster_size=self.min_cluster_size)
-        n_rows = len(ordered_members)
 
-        aa_data, enc_data = self._precompute_aa_data(
-            ordered_members, row_of_member, leaf_of_member, leaf_members
+        aa_data, enc_data, max_count = self._precompute_aa_data(
+            ordered_members, leaf_of_member
         )
         default_aa = (
             self.default_aa if self.default_aa in aa_data else LIST_DOT_ALPHABET[0]
@@ -3040,30 +3237,32 @@ class KLIFSResidueDotApp(KLIFSHierarchicalConservation):
         dot_src = ColumnDataSource(dict(aa_data[default_aa]))
         enc_src = ColumnDataSource(dict(enc_data[default_aa]))
 
-        height_px = int(60 + n_rows * self.px_per_row)
-        # y increases downward: leaf order runs top (row 0) to bottom, with a top margin
-        # reserved for the KLIFS region strip
+        # frequency dot plot: each column stacks one dot per kinase (y = count), so the
+        # y-range follows the tallest stack of the selected residue and the region strip
+        # sits below the zero baseline
+        top = max(max_count[default_aa], 1) + 1
         p = figure(
             width=1400,
-            height=height_px,
+            height=520,
             sizing_mode="stretch_width",
             x_range=(-0.6, ncol - 0.4),
-            y_range=(n_rows - 0.5, -3.5),
+            y_range=(-3.5, top),
             tools="pan,wheel_zoom,box_zoom,reset,save",
             toolbar_location="above",
-            title=f"KLIFS residue dot plot — {default_aa}",
+            title=f"KLIFS residue dot plot — {DICT_DOT_AA_LABEL[default_aa]}",
         )
 
-        # clade enclosures (drawn under the dots)
-        p.ellipse(
+        # clade enclosures (light-grey rounded rectangles, drawn under the dots)
+        p.rect(
             x="x",
             y="y",
             width="width",
             height="height",
             source=enc_src,
-            fill_color=None,
+            fill_color=COLOR_TREE_TABLE_NO_CONSENSUS,
             line_color=COLOR_TREE_PSEUDO,
             line_width=1.0,
+            border_radius=5,
         )
         dot_glyph = p.scatter(
             x="x",
@@ -3089,7 +3288,7 @@ class KLIFSResidueDotApp(KLIFSHierarchicalConservation):
             )
         )
 
-        # KLIFS region color strip + block labels along the top
+        # KLIFS region color strip + block labels below the zero baseline
         region_src = ColumnDataSource(
             dict(x=list(range(ncol)), color=region_colors, y=[-1.6] * ncol)
         )
@@ -3122,17 +3321,7 @@ class KLIFSResidueDotApp(KLIFSHierarchicalConservation):
             text_color=COLOR_DARK_TEXT,
         )
 
-        # y-axis shows display-leaf (clade) numbers at each clade's row center
-        tick_positions, tick_labels = [], {}
-        for members in leaf_members:
-            rows = [row_of_member[m] for m in members]
-            center = sum(rows) / len(rows)
-            tick_positions.append(center)
-            tick_labels[center] = str(leaf_of_member[members[0]])
-        p.yaxis.ticker = FixedTicker(ticks=tick_positions)
-        p.yaxis.major_label_overrides = tick_labels
-        p.yaxis.axis_label = "dendrogram leaf (clade) number"
-        p.yaxis.major_label_text_font_size = "6px"
+        p.yaxis.axis_label = "Counts"
         p.xaxis.visible = False
         p.xgrid.visible = False
         p.ygrid.visible = False
@@ -3140,8 +3329,8 @@ class KLIFSResidueDotApp(KLIFSHierarchicalConservation):
         select = Select(
             title="Amino acid",
             value=default_aa,
-            options=list(LIST_DOT_ALPHABET),
-            width=160,
+            options=[(aa, DICT_DOT_AA_LABEL[aa]) for aa in LIST_DOT_ALPHABET],
+            width=200,
         )
         callback = CustomJS(
             args=dict(
@@ -3149,6 +3338,8 @@ class KLIFSResidueDotApp(KLIFSHierarchicalConservation):
                 enc_src=enc_src,
                 aa_data=aa_data,
                 enc_data=enc_data,
+                max_count=max_count,
+                aa_label=DICT_DOT_AA_LABEL,
                 select=select,
                 fig=p,
             ),
@@ -3158,7 +3349,8 @@ class KLIFSResidueDotApp(KLIFSHierarchicalConservation):
             dot_src.change.emit();
             enc_src.data = enc_data[aa];
             enc_src.change.emit();
-            fig.title.text = "KLIFS residue dot plot — " + aa;
+            fig.y_range.end = Math.max(max_count[aa], 1) + 1;
+            fig.title.text = "KLIFS residue dot plot — " + aa_label[aa];
             """,
         )
         select.js_on_change("value", callback)

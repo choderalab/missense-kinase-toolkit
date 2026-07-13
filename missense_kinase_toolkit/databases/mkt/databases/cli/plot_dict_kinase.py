@@ -102,7 +102,10 @@ def _plot_residue_dot(
         KLIFSConservationTreeFigure,
         min_cluster_size=dot_cfg.min_cluster_size,
     ).plot_residue_dot(
-        output_dir, aa=dot_cfg.amino_acid, formats=tuple(dot_cfg.formats)
+        output_dir,
+        aa=dot_cfg.amino_acid,
+        formats=tuple(dot_cfg.formats),
+        highlight_targets=dot_cfg.highlight_targets,
     )
 
 

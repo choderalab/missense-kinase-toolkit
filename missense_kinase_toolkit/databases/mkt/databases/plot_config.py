@@ -505,6 +505,7 @@ class ResidueDotConfig:
 
     amino_acid: str = "C"
     min_cluster_size: int = 12
+    highlight_targets: bool = False
     formats: list[str] = field(default_factory=lambda: ["pdf"])
 
 

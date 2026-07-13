@@ -359,8 +359,9 @@ def test_residue_dot_figure_builds(tmp_path):
     obj = KLIFSConservationTreeFigure(
         names=names, pockets=pockets, groups=groups, min_cluster_size=2
     )
-    fig, ax = obj.build_residue_dot_figure(aa="C")
-    assert fig is not None and ax.get_legend() is not None
+    fig, ax = obj.build_residue_dot_figure(aa="C", highlight_targets=True)
+    # the kinase-group legend is attached at the figure level (bottom)
+    assert fig is not None and len(fig.legends) == 1
     plt.close(fig)
 
     obj.plot_residue_dot(str(tmp_path), aa="C", formats=("pdf",))
