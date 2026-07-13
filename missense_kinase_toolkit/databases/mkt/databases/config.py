@@ -1,3 +1,10 @@
+"""Environment-variable configuration for cBioPortal, OncoKB, and the requests cache.
+
+Module-level ``get_*``/``set_*`` functions read and write ``os.environ`` for the
+cBioPortal instance and token, OncoKB token, and requests-cache path, re-exporting the
+output-directory helpers from :mod:`mkt.schema.config`.
+"""
+
 import os
 import sys
 

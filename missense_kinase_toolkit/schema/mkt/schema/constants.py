@@ -1,3 +1,10 @@
+"""Constants for KLIFS regions, Pfam kinase domains, and kinase groups/families.
+
+Defines the canonical KLIFS region orderings, Pfam kinase-domain accessions, and the
+controlled vocabularies for kinase groups and families referenced throughout the
+schema and databases packages.
+"""
+
 import logging
 from itertools import chain
 
@@ -174,6 +181,78 @@ LIST_KLIFS_REGION = list(
     )
 )
 """list[str]: List of string of all KLIFS pocket regions in format region:idx."""
+
+# --- pseudokinase catalytic-residue heuristic ---
+# A (predicted) pseudokinase lacks at least one of the three canonical catalytic
+# residues of the protein-kinase fold. We read these from the gapless 85-residue
+# KLIFS pocket by their region:idx label (indexed via LIST_KLIFS_REGION):
+#   - VAIK beta3 lysine       (III:17) -- orients the ATP alpha/beta phosphates
+#   - HRD catalytic aspartate (c.l:70) -- the catalytic base
+#   - DFG aspartate           (xDFG:81) -- chelates the Mg2+ ion
+# Catalytic-residue definitions: Hanks & Hunter, FASEB J 1995; Taylor & Kornev,
+# Trends Biochem Sci 2011. Pseudokinase concept/threshold (~10% of the kinome):
+# Manning et al., Science 2002; Boudeau et al., Trends Cell Biol 2006; Murphy et
+# al., Biochem J 2014; Kwon/Eyers et al., Sci Signal 2019.
+STR_KLIFS_BETA3_LYSINE = "III:17"
+"""str: KLIFS region:idx of the canonical VAIK beta3 catalytic lysine."""
+STR_KLIFS_BETA2_LYSINE = "II:13"
+"""str: KLIFS region:idx of the beta2 lysine used as the catalytic lysine by the WNK
+("With No K [lysine]") family in place of the absent beta3 lysine -- Xu et al., J Biol
+Chem 2000 (WNK1 lacks the subdomain-II lysine); Min et al., Structure 2004 (WNK1 Lys233
+sits in beta2). Verified to rescue WNK1/2/3 (K at II:13) without rescuing the genuine
+pseudokinases KSR1/2 or STRADA, which carry no beta2 lysine."""
+STR_KLIFS_CATALYTIC_ASP = "c.l:70"
+"""str: KLIFS region:idx of the HRD catalytic aspartate. Note the catalytic loop is
+reverse-ordered in lipid/PIKK-like kinases (DRH rather than HRD), but the aspartate stays
+at c.l:70 -- so this column is robust to that reversal."""
+STR_KLIFS_DFG_ASP = "xDFG:81"
+"""str: KLIFS region:idx of the DFG-motif aspartate."""
+
+LIST_PSEUDOKINASE_TRIAD_INTACT = [
+    "BUB1B",
+    "PDIK1L",
+    "ROR1",
+    "ROR2",
+    "RYK",
+    "SBK3",
+]
+"""list[str]: Curated pseudokinases that retain an intact VAIK-K / HRD-D / DFG-D triad and
+are therefore NOT caught by the catalytic-residue heuristic (false negatives); they are
+catalytically dead for other reasons (degraded regulatory spine, glycine-rich loop, or
+nucleotide binding). is_pseudokinase() force-returns True for these.
+
+Citations:
+  - BUB1B (BUBR1) -- a bona fide pseudokinase despite an intact catalytic triad:
+    Suijkerbuijk et al., Dev Cell 2012; Murphy et al., Biochem J 2014.
+  - ROR1, ROR2, RYK -- Wnt-receptor pseudokinases that retain catalytic residues but
+    lack activity: Boudeau et al., Trends Cell Biol 2006; Reiterer et al., Trends Cell
+    Biol 2014; Mendrola et al., Biochem Soc Trans 2013.
+  - PDIK1L, SBK3 -- annotated pseudokinases with intact triads; classified pseudo on
+    nucleotide-binding / catalytic grounds (Murphy et al., Biochem J 2014). Lower
+    confidence than the above; revisit if a more authoritative list is adopted."""
+
+LIST_PSEUDOKINASE_HEURISTIC_FALSE_POSITIVE = [
+    "CAMKK1",
+    "STYK1",
+]
+"""list[str]: Kinases the catalytic-residue heuristic flags as pseudokinases but that are
+(debatably) catalytically active -- false positives held out for review. is_pseudokinase()
+force-returns False for these. Status is genuinely contested in the literature.
+
+Citations / rationale:
+  - STYK1 (NOK, "Novel Oncogene with Kinase domain") -- fails only DFG-D (xDFG:81 = G);
+    reported as an active oncogenic kinase by some and as catalytically deficient by
+    others, i.e. unresolved: Reiterer et al., Trends Cell Biol 2014; Kung & Jura,
+    Structure 2016.
+  - CAMKK1 -- a well-established active Ca2+/calmodulin-dependent kinase kinase (Haribabu
+    et al., EMBO J 1995) whose KLIFS pocket is anomalously degraded here (III:17=M,
+    c.l:70=R, xDFG:81=A), most consistent with a pocket alignment/annotation artifact
+    rather than true loss of catalysis.
+
+NOTE (WNK4): WNK4 also trips the heuristic (no beta3 or beta2 lysine; III:17=C, II:13=R)
+and is NOT rescued by the beta2-lysine alternative, unlike WNK1/2/3. WNK4 is the most
+divergent, weakly/debatably active WNK -- left flagged pending review rather than added
+here."""
 
 DICT_KINASE_GROUP_COLORS = {
     "AGC": "#5B8DBE",  # Muted steel blue

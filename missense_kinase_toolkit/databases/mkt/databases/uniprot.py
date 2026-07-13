@@ -1,3 +1,9 @@
+"""UniProt clients for FASTA sequences and JSON records.
+
+Provides :class:`UniProtFASTA` and :class:`UniProtJSON` clients (with RefSeq
+cross-reference support) and :func:`query_uniprotbulk_api` for bulk UniProt retrieval.
+"""
+
 import ast
 import logging
 import time

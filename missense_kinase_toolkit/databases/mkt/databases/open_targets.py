@@ -1,3 +1,9 @@
+"""Open Targets GraphQL client for drug mechanism-of-action data.
+
+Provides :class:`OpenTargetsDrugMoA`, a GraphQL client that retrieves drug
+mechanism-of-action annotations from Open Targets.
+"""
+
 import logging
 from dataclasses import dataclass, field
 from itertools import chain

@@ -1,3 +1,10 @@
+"""Serialize and deserialize :class:`KinaseInfo` objects to/from json/yaml/toml and tar archives.
+
+Provides :func:`serialize_kinase_dict` and :func:`deserialize_kinase_dict` for
+round-tripping per-kinase files, plus helpers for reading packaged ``.tar.gz`` data
+in memory. TOML serialization is skipped on Windows.
+"""
+
 import glob
 import json
 import logging
@@ -344,6 +351,18 @@ def deserialize_kinase_dict(
             logger.info(f"Loading KinaseInfo object from variable {str_name}...")
         return _deserialization_cache[str_name]
 
+    # callers that only need the modules importable (e.g. a Sphinx docs build or
+    # a CLI printing usage text) can set MKT_SKIP_KINASE_DICT to skip the
+    # expensive deserialization; cache the empty result so repeat calls are cheap
+    if os.environ.get("MKT_SKIP_KINASE_DICT"):
+        if bool_verbose:
+            logger.info(
+                "MKT_SKIP_KINASE_DICT set; skipping KinaseInfo deserialization."
+            )
+        if str_name is not None:
+            _deserialization_cache[str_name] = {}
+        return {}
+
     if suffix not in DICT_FUNCS:
         logger.error(
             f"Serialization type ({suffix}) not supported; must be json, yaml, or toml."
@@ -403,6 +422,117 @@ def deserialize_kinase_dict(
     return dict_import
 
 
+STR_CONSERVATION_FILENAME = "KLIFSConservationData"
+"""str: Basename (no suffix) of the persisted KLIFS conservation-data artifact."""
+
+_conservation_cache = {}
+"""dict: Module-level cache of loaded :class:`KLIFSConservationData` objects keyed by
+``str_name`` (mirrors :data:`_deserialization_cache`)."""
+
+
+def serialize_conservation_data(
+    conservation_data: BaseModel,
+    suffix: str = "json",
+    str_path: str | None = None,
+) -> str | None:
+    """Serialize a :class:`KLIFSConservationData` artifact to a single file.
+
+    Unlike :func:`serialize_kinase_dict` (one file per kinase), this writes the whole
+    single-object artifact to ``{str_path}/KLIFSConservationData.{suffix}``, reusing the
+    :data:`DICT_FUNCS` serialization registry.
+
+    Parameters
+    ----------
+    conservation_data : BaseModel
+        The :class:`mkt.schema.conservation_schema.KLIFSConservationData` object.
+    suffix : str
+        Serialization type supported: json, yaml, toml.
+    str_path : str | None
+        Directory to write into, by default None (the ``mkt.schema`` package directory).
+
+    Returns
+    -------
+    str | None
+        Path written, or None if the suffix is unsupported.
+    """
+    if suffix not in DICT_FUNCS:
+        logger.error(
+            f"Serialization type ({suffix}) not supported; must be json, yaml, or toml."
+        )
+        return None
+
+    if os.name == "nt" and suffix == "toml":
+        logger.info("TOML serialization is not supported on Windows.")
+        return None
+
+    if str_path is None:
+        str_path = str(resources.files("mkt.schema"))
+    os.makedirs(str_path, exist_ok=True)
+
+    filepath = os.path.join(str_path, f"{STR_CONSERVATION_FILENAME}.{suffix}")
+    with open(filepath, "w") as outfile:
+        outfile.write(
+            DICT_FUNCS[suffix]["serialize"](
+                conservation_data.model_dump(),
+                **DICT_FUNCS[suffix]["kwargs_serialize"],
+            )
+        )
+    logger.info(f"Serialized KLIFSConservationData to {filepath}")
+    return filepath
+
+
+def load_conservation_data(
+    suffix: str = "json",
+    str_path: str | None = None,
+    str_name: str | None = None,
+):
+    """Load a :class:`KLIFSConservationData` artifact from a single file.
+
+    Parameters
+    ----------
+    suffix : str
+        Deserialization type supported: json, yaml, toml.
+    str_path : str | None
+        Path to the artifact file, by default None (the packaged
+        ``mkt/schema/KLIFSConservationData.json``).
+    str_name : str | None
+        If provided, cache the loaded object under this name in
+        :data:`_conservation_cache` to prevent reloading.
+
+    Returns
+    -------
+    KLIFSConservationData
+        The deserialized conservation-data object.
+    """
+    if str_name is not None and str_name in _conservation_cache:
+        logger.info(f"Loading KLIFSConservationData from variable {str_name}...")
+        return _conservation_cache[str_name]
+
+    if suffix not in DICT_FUNCS:
+        logger.error(
+            f"Serialization type ({suffix}) not supported; must be json, yaml, or toml."
+        )
+        return None
+
+    from mkt.schema.conservation_schema import KLIFSConservationData
+
+    if str_path is None:
+        str_path = os.path.join(
+            str(resources.files("mkt.schema")), f"{STR_CONSERVATION_FILENAME}.{suffix}"
+        )
+
+    with open(str_path) as openfile:
+        val_deserialized = DICT_FUNCS[suffix]["deserialize_file"](
+            openfile,
+            **DICT_FUNCS[suffix]["kwargs_deserialize"],
+        )
+    obj = KLIFSConservationData.model_validate(val_deserialized)
+
+    if str_name is not None:
+        _conservation_cache[str_name] = obj
+    return obj
+
+
 def save_plot(
     fig,
     output_filename: str,
@@ -410,17 +540,20 @@ def save_plot(
     bool_force_local: bool = True,
     bool_image_subdir=True,
     output_path: str | None = None,
+    bool_svg: bool = True,
+    bool_png: bool = True,
+    bool_pdf: bool = False,
     **kwargs,
 ) -> None:
-    """Save the current matplotlib figure in both SVG and PNG formats.
+    """Save the current matplotlib figure in the requested vector/raster formats.
 
     Parameters:
     -----------
     fig : matplotlib.figure.Figure
         The figure object to save.
     output_filename : str
-        Name of the output file to save the plot. If it ends with .png, will be converted to .svg.
-        Otherwise assumed to be .svg already.
+        Name of the output file to save the plot. Any extension is stripped; the
+        format suffixes are appended per the ``bool_svg``/``bool_png``/``bool_pdf`` flags.
     plot_type : str
         Description of the plot type for logging purposes (e.g., "Dynamic range plot")
     bool_force_local : bool
@@ -429,6 +562,12 @@ def save_plot(
         If True, saves images to a subdirectory named "images" within the output path; default is True.
     output_path : str | None
         Optional path to save the plot. If None, saves to the current working directory.
+    bool_svg : bool
+        If True, write an SVG copy; default is True.
+    bool_png : bool
+        If True, write a PNG copy; default is True.
+    bool_pdf : bool
+        If True, write a PDF copy; default is False.
     **kwargs
         Additional keyword arguments to pass to plt.savefig (e.g., {"dpi": 300}). Default is empty dict.
     """
@@ -453,7 +592,12 @@ def save_plot(
     # update with any user-provided kwargs
     savefig_params.update(kwargs)
 
-    for suffix in ["svg", "png"]:
+    suffixes = [
+        suffix
+        for suffix, flag in (("svg", bool_svg), ("png", bool_png), ("pdf", bool_pdf))
+        if flag
+    ]
+    for suffix in suffixes:
         if bool_image_subdir:
             file_path = os.path.join(
                 output_path, "images", f"{output_filename}.{suffix}"

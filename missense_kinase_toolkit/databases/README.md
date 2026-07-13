@@ -44,6 +44,4 @@ extract_cbioportal_missense_kinases \
     --studyId               # required study ID within given instance; if not provided logger will return options in instance
     --cache                 # path to requests cache; otherwise will use root repo or current working directory if not Github repo
     --outputPath            # path to save extracted missense kinase data; otherwise will use root repo or current working directory if not Github repo
-    --generateHeatmap       # use this flag to generate heatmap figure (store True)
-    --dictHeatmap           # pass heatmap dict as a string for ast.literal_eval
 ```

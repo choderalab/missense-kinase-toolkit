@@ -1,3 +1,9 @@
+"""Color palettes and colormap helpers for amino acids and percentile-based plotting.
+
+Defines the :class:`AminoAcidPalette`, amino-acid-to-color mapping helpers, and
+utilities for interpolating colors and building percentile colormaps with legends.
+"""
+
 from enum import Enum
 
 import matplotlib.colors as mcolors
@@ -587,3 +593,58 @@ DICT_BIOCHEM_PROP_COLORS = {
 Keys are property names (e.g., "Charge", "Volume", "Polarity"), and values are hex color codes.
 This dictionary can be used to look up colors for biochemical properties in visualizations.
 """
+
+
+def readable_text_color(color) -> str:
+    """Return ``"black"`` or ``"white"`` for legible text on a background color.
+
+    Parameters
+    ----------
+    color : str | tuple
+        Any matplotlib-recognized color (hex string, named color, or RGB tuple).
+
+    Returns
+    -------
+    str
+        ``"black"`` for light backgrounds, ``"white"`` for dark ones, chosen by
+        perceived luminance (0.299 R + 0.587 G + 0.114 B).
+    """
+    r, g, b = mcolors.to_rgb(color)
+    return "black" if (0.299 * r + 0.587 * g + 0.114 * b) > 0.55 else "white"
+
+
+# --- KLIFS hierarchical-conservation figures / interactive explorer ---
+COLOR_DARK_TEXT = "#2E2E2E"
+"""Near-black grey for axis labels, ticks, and logo text."""
+COLOR_CONSERVATION_PRIMARY = "#2E5B9C"
+"""Primary conservation accent (>=threshold line; breakpoint node fill)."""
+COLOR_CONSERVATION_SECONDARY = "#7B3F8D"
+"""Secondary conservation accent."""
+CMAP_CRITICAL_DEPTH = "plasma"
+"""Colormap for the per-KLIFS-column critical-depth track."""
+COLOR_DEPTH_NA = "#D9D9D9"
+"""Grey for KLIFS columns that never survive up (no finite critical depth)."""
+COLOR_TREE_BREAK = COLOR_CONSERVATION_PRIMARY
+"""Tree node fill for a split that carries >=1 fixed-difference breakpoint."""
+COLOR_TREE_NO_BREAK = "#C9C9C9"
+"""Tree node fill for a split with no fixed difference (structural only)."""
+COLOR_TREE_MIXED_FAMILY = "#CFCFCF"
+"""Branch color once a clade mixes families (not monophyletic)."""
+COLOR_TREE_PSEUDO = "#000000"
+"""Family color for a pseudokinase-pure clade (and inherited-conserved logo letters)."""
+COLOR_LOGO_BAR = "#EFEFEF"
+"""Neutral fill for the per-column logo frequency bars."""
+COLOR_LOGO_SUBTHRESHOLD = "#C9C9C9"
+"""Logo letter color for residues present but below the conservation threshold."""
+COLOR_TREE_TABLE_NO_CONSENSUS = "#EAEAEA"
+"""Static conservation-table cell fill where no residue is >=80% conserved in a leaf row."""
+COLOR_TREE_TABLE_GAP = "#BDBDBD"
+"""Static conservation-table cell fill where a gap ('-') is the >=80% consensus -- a mid
+grey distinct from the blank no-consensus cell and from the amino-acid palette greys
+(I = #808080, E = #191919); paired with a '-' glyph to disambiguate."""
+COLOR_TREE_GUIDE = "#777777"
+"""Thin guide line linking each dendrogram leaf to its conservation-table row."""
+COLOR_TREE_FALLBACK = "#999999"
+"""Fallback fill for a tree leaf whose kinase has no group/family color."""
+COLOR_TREE_SPLIT_MARKER = "#D00000"
+"""Dashed marker on the summary dendrogram showing the top/bottom detail-panel split."""

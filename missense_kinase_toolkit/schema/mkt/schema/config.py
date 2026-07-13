@@ -1,3 +1,10 @@
+"""Output-directory configuration via the ``OUTPUT_DIR`` environment variable.
+
+Provides :func:`get_output_dir`/:func:`set_output_dir`, which read and write the
+``OUTPUT_DIR`` environment variable used across the toolkit to locate the output
+directory.
+"""
+
 import os
 import sys
 

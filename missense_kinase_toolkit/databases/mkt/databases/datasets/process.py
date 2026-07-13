@@ -1,15 +1,23 @@
+"""Base dataset configuration and processing pipeline for kinase profiling datasets.
+
+Defines :class:`DatasetConfig` and the abstract :class:`ProcessDataset` pipeline shared
+by the Davis, PKIS2, and DiscoverX datasets, plus helpers for building ridgeline and
+stacked-barchart dataframes.
+"""
+
 import logging
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from os import path
+from os import environ, path
 
 import pandas as pd
 from mkt.databases import config
 from mkt.databases.aligners import ClustalOmegaAligner
 from mkt.databases.datasets.constants import KinaseGroupSource
 from mkt.databases.datasets.discoverx import DiscoverXInfoGenerator
+from mkt.databases.io_utils import return_kinase_dict
 from mkt.databases.log_config import configure_logging
-from mkt.schema.io_utils import deserialize_kinase_dict, get_repo_root
+from mkt.schema.io_utils import get_repo_root
 from mkt.schema.utils import TQDM_BAR_FORMAT, rgetattr
 from pydantic import BaseModel, Field
 from rdkit import Chem
@@ -18,7 +26,7 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 
-DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE")
+DICT_KINASE = return_kinase_dict()
 
 configure_logging()
 
@@ -28,74 +36,85 @@ except Exception as e:
     logger.warning(f"Failed to set request cache, using current directory: {e}")
     config.set_request_cache(path.join(".", "requests_cache.sqlite"))
 
-obj_discoverx = DiscoverXInfoGenerator()
-DICT_DISCOVERX = obj_discoverx.dict_discoverx_info
+# DiscoverXInfoGenerator() queries UniProt over the network in its
+# __post_init__, and DICT_PROCESS_STRATEGIES below derives from that data plus
+# the kinase dict; skip both during docs builds (autodoc only needs the module
+# importable) so the build doesn't hang on a module-level request or fail on
+# the (intentionally empty) kinase dict
+if environ.get("SPHINX_BUILD"):
+    obj_discoverx = None
+    DICT_DISCOVERX = {}
+    DICT_PROCESS_STRATEGIES = {}
+else:
+    obj_discoverx = DiscoverXInfoGenerator()
+    DICT_DISCOVERX = obj_discoverx.dict_discoverx_info
 
-
-DICT_PROCESS_STRATEGIES = {
-    # align only KD region with KLIFS residues
-    "kd_klifs_aligned": {
-        "dict_unaligned": {
-            k1: {
-                k2: v2
-                for k2, v2 in v1.dict_construct_sequences.items()
-                if k2 not in ["kd_pre", "kd_post"]
-            }
-            for k1, v1 in DICT_DISCOVERX.items()
-            if (
-                (v1.dict_construct_sequences is not None)
-                and (v1.bool_has_klifs)
-                and (v1.bool_has_kd)
-                and (
-                    (v1.bool_mutations_in_kd_region is None)
-                    or (v1.bool_mutations_in_kd_region)
+    DICT_PROCESS_STRATEGIES = {
+        # align only KD region with KLIFS residues
+        "kd_klifs_aligned": {
+            "dict_unaligned": {
+                k1: {
+                    k2: v2
+                    for k2, v2 in v1.dict_construct_sequences.items()
+                    if k2 not in ["kd_pre", "kd_post"]
+                }
+                for k1, v1 in DICT_DISCOVERX.items()
+                if (
+                    (v1.dict_construct_sequences is not None)
+                    and (v1.bool_has_klifs)
+                    and (v1.bool_has_kd)
+                    and (
+                        (v1.bool_mutations_in_kd_region is None)
+                        or (v1.bool_mutations_in_kd_region)
+                    )
                 )
-            )
+            },
+            "list_region_include": None,
+            "list_region_align": ["kd_start", "kd_end", ":", "intra", "inter"],
         },
-        "list_region_include": None,
-        "list_region_align": ["kd_start", "kd_end", ":", "intra", "inter"],
-    },
-    # align only KLIFS region (no KD)
-    "klifs_region_aligned": {
-        "dict_unaligned": {
-            k1: {k2: v2 for k2, v2 in v1.dict_construct_sequences.items()}
-            for k1, v1 in DICT_DISCOVERX.items()
-            if (
-                (v1.dict_construct_sequences is not None)
-                and (v1.bool_has_klifs)
-                and (
-                    (v1.bool_mutations_in_klifs_region is None)
-                    or (v1.bool_mutations_in_klifs_region)
+        # align only KLIFS region (no KD)
+        "klifs_region_aligned": {
+            "dict_unaligned": {
+                k1: {k2: v2 for k2, v2 in v1.dict_construct_sequences.items()}
+                for k1, v1 in DICT_DISCOVERX.items()
+                if (
+                    (v1.dict_construct_sequences is not None)
+                    and (v1.bool_has_klifs)
+                    and (
+                        (v1.bool_mutations_in_klifs_region is None)
+                        or (v1.bool_mutations_in_klifs_region)
+                    )
                 )
-            )
+            },
+            "list_region_include": DICT_KINASE[
+                list(DICT_KINASE.keys())[0]
+            ].KLIFS2UniProtSeq.keys(),
+            "list_region_align": [":", "intra", "inter"],
         },
-        "list_region_include": DICT_KINASE[
-            list(DICT_KINASE.keys())[0]
-        ].KLIFS2UniProtSeq.keys(),
-        "list_region_align": [":", "intra", "inter"],
-    },
-    # align only KLIFS residues (no KD or alignment of flanking regions)
-    "klifs_residues_only": {
-        "dict_unaligned": {
-            k1: {k2: v2 for k2, v2 in v1.dict_construct_sequences.items()}
-            for k1, v1 in DICT_DISCOVERX.items()
-            if (
-                (v1.dict_construct_sequences is not None)
-                and (v1.bool_has_klifs)
-                and (
-                    (v1.bool_mutations_in_klifs_residues is None)
-                    or (v1.bool_mutations_in_klifs_residues)
+        # align only KLIFS residues (no KD or alignment of flanking regions)
+        "klifs_residues_only": {
+            "dict_unaligned": {
+                k1: {k2: v2 for k2, v2 in v1.dict_construct_sequences.items()}
+                for k1, v1 in DICT_DISCOVERX.items()
+                if (
+                    (v1.dict_construct_sequences is not None)
+                    and (v1.bool_has_klifs)
+                    and (
+                        (v1.bool_mutations_in_klifs_residues is None)
+                        or (v1.bool_mutations_in_klifs_residues)
+                    )
                 )
-            )
+            },
+            "list_region_include": [
+                i
+                for i in DICT_KINASE[
+                    list(DICT_KINASE.keys())[0]
+                ].KLIFS2UniProtSeq.keys()
+                if all([j not in i for j in [":", "intra", "inter"]])
+            ],
+            "list_region_align": [":", "intra", "inter"],
         },
-        "list_region_include": [
-            i
-            for i in DICT_KINASE[list(DICT_KINASE.keys())[0]].KLIFS2UniProtSeq.keys()
-            if all([j not in i for j in [":", "intra", "inter"]])
-        ],
-        "list_region_align": [":", "intra", "inter"],
-    },
-}
+    }
 
 
 class DatasetConfig(BaseModel):
