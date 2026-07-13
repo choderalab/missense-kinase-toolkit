@@ -2,5 +2,10 @@ git+https://github.com/choderalab/missense-kinase-toolkit.git#subdirectory=misse
 git+https://github.com/choderalab/missense-kinase-toolkit.git#subdirectory=missense_kinase_toolkit/databases
 git+https://github.com/tansey-lab/nf-rnaseq
 py3dmol
-streamlit==1.54.0
+# pyarrow 25.0.0 segfaults (SIGSEGV in bundled mimalloc 3.3.x) on Streamlit Cloud
+# when libarrow loads on a worker thread that exits; pin below it.
+# see https://discuss.streamlit.io/t/segmentation-issue/121923
+pyarrow<25.0.0
+# streamlit >=1.59.2 ships the mitigation for the same pyarrow crash
+streamlit>=1.59.2
 streamlit-bokeh==3.7.1
