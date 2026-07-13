@@ -233,8 +233,9 @@ FLOAT_TREE_DETAIL_LEGEND_FS = 13.0
 than the table font so it is legible in the supplement)."""
 TUP_TREE_SUMMARY_PAGE = (11.0, 5.0)
 """tuple[float, float]: Figure size (inches) of the horizontal summary dendrogram."""
-FLOAT_TREE_SUMMARY_LEGEND_FS = 7.0
-"""float: Font size for the summary dendrogram's kinase-group legend."""
+FLOAT_TREE_SUMMARY_LEGEND_FS = 13.0
+"""float: Font size for the summary dendrogram's kinase-group legend (matches the
+top/bottom detail panels' :data:`FLOAT_TREE_DETAIL_LEGEND_FS`)."""
 INT_TREE_SPLIT_INDEX = 47
 """int: Default leaf-order index splitting the top/bottom detail panels of the
 human-kinome KLIFS conservation tree -- the boundary between the mostly-CMGC clade
