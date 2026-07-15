@@ -7,7 +7,6 @@ Matplotlib RC configuration helpers.
 
 import logging
 import os
-from os import path
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -189,7 +188,14 @@ def plot_dict_kinase_upset(
                 ax.set_position([p.x0 - shift, p.y0, p.width + shift, p.height])
 
     # tight-crop so the saved file tracks the (element_size-driven) plot area
-    plt.savefig(path.join(path_save, f"{cfg.filename}.pdf"), bbox_inches="tight")
+    save_plot(
+        fig,
+        cfg.filename,
+        "Source-coverage upset plot",
+        bool_force_local=False,
+        bool_image_subdir=False,
+        output_path=path_save,
+    )
 
 
 def _collect_region_gap_specs(
