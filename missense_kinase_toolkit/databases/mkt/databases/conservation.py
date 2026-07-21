@@ -59,7 +59,7 @@ from mkt.databases.colors import (
     readable_text_color,
 )
 from mkt.databases.klifs import DICT_POCKET_KLIFS_REGIONS, LIST_KLIFS_REGION
-from mkt.databases.plot import remove_spines
+from mkt.databases.plot import kinase_group_legend_handles, remove_spines
 from mkt.databases.pssm import (
     DICT_AA20_INDEX,
     STR_GAP_CHARS,
@@ -1682,27 +1682,7 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
         list[matplotlib.patches.Patch]
             One color swatch per present family, in display order.
         """
-        fam_order = [
-            "TK",
-            "TKL",
-            "STE",
-            "CK1",
-            "AGC",
-            "CAMK",
-            "CMGC",
-            "NEK",
-            "RGC",
-            "Other",
-            "Atypical",
-            "Lipid",
-        ]
-        present = [g for g in fam_order if g in fams] + sorted(fams - set(fam_order))
-        return [
-            Patch(
-                facecolor=DICT_KINASE_GROUP_COLORS.get(g, COLOR_TREE_FALLBACK), label=g
-            )
-            for g in present
-        ]
+        return kinase_group_legend_handles(fams, fallback=COLOR_TREE_FALLBACK)
 
     def build_figure(self) -> tuple[plt.Figure, plt.Axes]:
         """Render the full conservation tree + per-leaf table on a US-letter portrait page.
