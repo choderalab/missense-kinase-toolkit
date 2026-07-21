@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from mkt.databases.colors import COLOR_TREE_FALLBACK
 from mkt.databases.plot_config import (
     ColKinaseColorConfig,
     DynamicRangePlotConfig,
@@ -26,10 +27,107 @@ from mkt.databases.plot_config import (
     UpsetPlotConfig,
     VennDiagramConfig,
 )
+from mkt.schema.constants import DICT_KINASE_GROUP_COLORS
 from mkt.schema.io_utils import save_plot
 from pydantic.dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+LIST_KINASE_GROUP_ORDER = [
+    "TK",
+    "TKL",
+    "STE",
+    "CK1",
+    "AGC",
+    "CAMK",
+    "CMGC",
+    "NEK",
+    "RGC",
+    "Other",
+    "Atypical",
+    "Lipid",
+]
+"""list[str]: canonical Manning kinome-tree ordering for kinase-group legends."""
+
+
+def order_kinase_groups(fams: set[str] | None = None) -> list[str]:
+    """Order kinase-group labels by the canonical Manning kinome-tree grouping.
+
+    Parameters
+    ----------
+    fams : set[str] | None
+        Family labels to order (Manning group or Lipid). When None, all groups
+        in :data:`DICT_KINASE_GROUP_COLORS` are used. Families outside the
+        curated order are appended alphabetically.
+
+    Returns
+    -------
+    list[str]
+        Family labels in display order.
+    """
+    if fams is None:
+        fams = set(DICT_KINASE_GROUP_COLORS)
+    fams = set(fams)
+    return [g for g in LIST_KINASE_GROUP_ORDER if g in fams] + sorted(
+        fams - set(LIST_KINASE_GROUP_ORDER)
+    )
+
+
+def kinase_group_legend_handles(
+    fams: set[str] | None = None,
+    *,
+    style: str = "patch",
+    markersize: float = 8,
+    edgecolor: str = "none",
+    fallback: str = COLOR_TREE_FALLBACK,
+) -> list:
+    """Build kinase-group legend handles in the canonical kinome-tree order.
+
+    Shared across every figure that carries a kinase-group color legend so their
+    ordering and colors stay consistent.
+
+    Parameters
+    ----------
+    fams : set[str] | None
+        Family labels present in the drawn subset; None uses all groups in
+        :data:`DICT_KINASE_GROUP_COLORS`.
+    style : str
+        Handle style: ``"patch"`` for a filled swatch
+        (:class:`matplotlib.patches.Patch`) or ``"marker"`` for a square-marker
+        :class:`matplotlib.lines.Line2D`; default ``"patch"``.
+    markersize : float
+        Marker size when ``style="marker"``; default 8.
+    edgecolor : str
+        Swatch edge color when ``style="patch"``; default ``"none"``.
+    fallback : str
+        Color for families absent from :data:`DICT_KINASE_GROUP_COLORS`.
+
+    Returns
+    -------
+    list
+        One handle per family, in display order, each labeled with its family.
+    """
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+
+    handles = []
+    for g in order_kinase_groups(fams):
+        color = DICT_KINASE_GROUP_COLORS.get(g, fallback)
+        if style == "marker":
+            handles.append(
+                Line2D(
+                    [],
+                    [],
+                    color=color,
+                    marker="s",
+                    linestyle="None",
+                    markersize=markersize,
+                    label=g,
+                )
+            )
+        else:
+            handles.append(Patch(facecolor=color, edgecolor=edgecolor, label=g))
+    return handles
 
 
 def remove_spines(ax):
