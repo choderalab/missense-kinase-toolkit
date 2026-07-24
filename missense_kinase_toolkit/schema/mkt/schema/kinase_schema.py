@@ -642,3 +642,68 @@ class KinaseInfo(BaseModel):
 
         # a pseudokinase is missing at least one of the three catalytic residues
         return not (has_lysine and has_catalytic_asp and has_dfg_asp)
+
+    def return_molecular_brake_residues(self) -> dict[str, str | None] | None:
+        """Return this kinase's residues at the molecular brake KLIFS positions.
+
+        The molecular brake is a network of conserved residues in the KLIFS pocket
+        (see ``DICT_MOLECULAR_BRAKE`` in ``mkt.schema.constants`` for the region:idx
+        labels and their canonical identities). This reads the residue at each of
+        those positions from the KLIFS-to-UniProt index mapping, i.e.
+        ``canonical_seq[KLIFS2UniProtIdx[label] - 1 + offset]``, where the per-position
+        offset comes from ``DICT_MOLECULAR_BRAKE_OFFSET`` (the brake lysine sits one
+        residue N-terminal to its VIII:79 KLIFS-aligned position).
+
+        Returns
+        -------
+        dict[str, str | None] | None
+            Dictionary mapping each molecular brake KLIFS region:idx label to the
+            residue found at that position in this kinase, or None where the position
+            is unmapped. Returns None entirely when no KLIFS pocket mapping is
+            available (``KLIFS2UniProtIdx`` is None).
+        """
+        from mkt.schema.constants import (
+            DICT_MOLECULAR_BRAKE,
+            DICT_MOLECULAR_BRAKE_OFFSET,
+        )
+
+        if self.KLIFS2UniProtIdx is None:
+            return None
+
+        seq = self.uniprot.canonical_seq
+        dict_residues: dict[str, str | None] = {}
+        for label in DICT_MOLECULAR_BRAKE:
+            idx = self.KLIFS2UniProtIdx.get(label)
+            if idx is None:
+                dict_residues[label] = None
+                continue
+            offset = DICT_MOLECULAR_BRAKE_OFFSET.get(label, 0)
+            dict_residues[label] = seq[idx - 1 + offset]
+        return dict_residues
+
+    def check_molecular_brake_against_canonical(
+        self,
+    ) -> tuple[bool, bool, bool] | None:
+        """Check this kinase's molecular brake residues against the canonical identities.
+
+        Compares the residue at each molecular brake position (see
+        ``return_molecular_brake_residues``) against the conserved canonical residue in
+        ``DICT_MOLECULAR_BRAKE``. An unmapped position (None) is treated as not matching.
+
+        Returns
+        -------
+        tuple[bool, bool, bool] | None
+            One boolean per molecular brake position -- in ``DICT_MOLECULAR_BRAKE`` order
+            -- indicating whether this kinase's residue matches the canonical identity.
+            Returns None when no KLIFS pocket mapping is available.
+        """
+        from mkt.schema.constants import DICT_MOLECULAR_BRAKE
+
+        dict_residues = self.return_molecular_brake_residues()
+        if dict_residues is None:
+            return None
+
+        return tuple(
+            dict_residues[label] == canonical
+            for label, canonical in DICT_MOLECULAR_BRAKE.items()
+        )
