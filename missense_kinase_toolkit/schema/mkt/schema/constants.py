@@ -272,3 +272,13 @@ DICT_KINASE_GROUP_COLORS = {
 Keys are kinase group names, and values are hex color codes.
 This dictionary can be used to look up colors for kinase groups in visualizations.
 """
+
+DICT_MOLECULAR_BRAKE = {
+    "b.l:37": "N",
+    "hinge:46": "E",
+    "VIII:79": "K",
+}
+"""dict[str, str]: Dictionary mapping KLIFS pocket region:idx to the corresponding
+molecular brake residue (N, E, K). This dictionary can be used to identify the
+molecular brake residues in kinases based on their KLIFS pocket region and index.
+"""
