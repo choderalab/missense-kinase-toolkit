@@ -2,8 +2,9 @@
 name: docs
 description: >-
   missense-kinase-toolkit Sphinx docs; extends my central `docs` skill. Use when
-  adding/removing public API, fixing docstrings, or regenerating the
-  docs/generated stubs (then rebuild with make clean && make html).
+  adding/removing public API, fixing docstrings, or previewing the docs locally
+  (docs/generated stubs are gitignored and regenerated at build time, so RTD picks
+  up new API automatically — no committed docs change needed).
 ---
 
 # missense-kinase-toolkit documentation
@@ -48,6 +49,14 @@ baseline.
 - `docs/generated/*.rst` are untracked autosummary output; `build_docs.sh`
   deletes and regenerates them, so removed/renamed API drops out automatically.
   Never hand-edit them.
+- **Adding/removing public API needs no committed docs change.** `docs/generated/`
+  is gitignored and `docs/conf.py` sets `autosummary_generate = True`, so RTD
+  regenerates every stub from source on each build. `autodoc_default_options` uses
+  `members: True` (and `undoc-members: True`), so a new method on an
+  already-documented class (e.g. a new `KinaseInfo` method) renders automatically
+  once merged — only its docstring matters. Building/regenerating stubs locally is
+  for **preview only**, never a prerequisite for the rendered RTD output. Reach for
+  autosummary edits (`docs/api.rst`) only when adding a whole new top-level package.
 - Custom templates: `docs/_templates/custom-{module,class}-template.rst`.
 - Read the Docs config is `readthedocs.yml` at the **repo root** (not
   `.readthedocs.yaml`); RTD installs doc deps from `docs/requirements.yaml`.
