@@ -87,3 +87,58 @@ def test_adjudicate_kd_verbose_logs_expansion(dict_kinase, caplog):
     caplog.set_level(logging.INFO)
     assert dict_kinase["BUB1B"].adjudicate_kd_start(bool_verbose=True) == 759
     assert "expanding start to 759" in caplog.text
+
+
+def test_molecular_brake_residues(dict_kinase):
+    """Brake residues are read via KLIFS2UniProtIdx with the VIII:79 -1 offset.
+
+    FGFR2 carries the full canonical N-E-K triad; EGFR keeps only the conserved
+    VIII:79 lysine. The brake lysine sits one residue N-terminal to its VIII:79
+    KLIFS-aligned index, so the -1 offset must be applied -- the raw mapped index
+    resolves to a non-conserved residue.
+    """
+    obj = dict_kinase["FGFR2"]
+    assert obj.return_molecular_brake_residues() == {
+        "b.l:37": "N",
+        "hinge:46": "E",
+        "VIII:79": "K",
+    }
+    # the -1 offset recovers the lysine; the raw mapped index does not
+    idx = obj.KLIFS2UniProtIdx["VIII:79"]
+    seq = obj.uniprot.canonical_seq
+    assert seq[idx - 1] != "K" and seq[idx - 2] == "K"
+
+    assert dict_kinase["EGFR"].return_molecular_brake_residues() == {
+        "b.l:37": "R",
+        "hinge:46": "Q",
+        "VIII:79": "K",
+    }
+
+
+@pytest.mark.parametrize(
+    "hgnc_name, expected",
+    [
+        ("FGFR2", (True, True, True)),  # canonical FGFR brake
+        ("FGFR1", (True, True, True)),
+        ("KIT", (True, True, True)),
+        ("PDGFRA", (True, True, True)),
+        ("EGFR", (False, False, True)),  # only the VIII:79 lysine is conserved
+    ],
+)
+def test_molecular_brake_against_canonical(dict_kinase, hgnc_name, expected):
+    """Brake residues are compared position-wise against the canonical N-E-K."""
+    assert dict_kinase[hgnc_name].check_molecular_brake_against_canonical() == expected
+
+
+def test_molecular_brake_missing_mapping(mutable_kinase):
+    """Absent or unmapped KLIFS positions yield None rather than raising."""
+    obj = mutable_kinase("FGFR2")
+    obj.KLIFS2UniProtIdx = None
+    assert obj.return_molecular_brake_residues() is None
+    assert obj.check_molecular_brake_against_canonical() is None
+
+    obj = mutable_kinase("FGFR2")
+    obj.KLIFS2UniProtIdx["b.l:37"] = None
+    assert obj.return_molecular_brake_residues()["b.l:37"] is None
+    # the unmapped position no longer matches; the other two still do
+    assert obj.check_molecular_brake_against_canonical() == (False, True, True)
