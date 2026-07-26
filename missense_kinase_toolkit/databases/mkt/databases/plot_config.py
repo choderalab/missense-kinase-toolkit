@@ -522,6 +522,18 @@ class ResidueDotExplorerConfig:
 
 
 @dataclass
+class CladeMembershipTableConfig:
+    """Params for the LaTeX clade-membership table.
+
+    Rendered by :func:`mkt.databases.plot.write_clade_membership_table`: the named
+    conservation clades within ``str_group`` and their member kinases.
+    """
+
+    str_group: str = "TK"
+    filename: str = "clade_membership_table"
+
+
+@dataclass
 class DictKinaseFiguresConfig:
     """Top-level config for the DICT_KINASE figures (upset + region-gap map/violin).
 
@@ -544,6 +556,9 @@ class DictKinaseFiguresConfig:
     residue_dot: ResidueDotConfig = field(default_factory=ResidueDotConfig)
     residue_dot_explorer: ResidueDotExplorerConfig = field(
         default_factory=ResidueDotExplorerConfig
+    )
+    clade_membership_table: CladeMembershipTableConfig = field(
+        default_factory=CladeMembershipTableConfig
     )
     output: OutputConfig = field(default_factory=OutputConfig)
 
@@ -582,6 +597,10 @@ class DictKinaseFiguresConfig:
         if "residue_dot_explorer" in raw:
             cfg.residue_dot_explorer = ResidueDotExplorerConfig(
                 **raw["residue_dot_explorer"]
+            )
+        if "clade_membership_table" in raw:
+            cfg.clade_membership_table = CladeMembershipTableConfig(
+                **raw["clade_membership_table"]
             )
         if "output" in raw:
             cfg.output = OutputConfig(**raw["output"])
