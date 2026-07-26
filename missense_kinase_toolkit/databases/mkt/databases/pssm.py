@@ -353,3 +353,84 @@ def column_information_content(
         scorer = SubstitutionPseudocounts()
     counts = column_counts(sequences, gap_chars=gap_chars, weights=weights)
     return [scorer.column_information(column) for column in counts]
+
+
+def consurf_grade_boundaries(
+    scores: list[float | None],
+    n_bins: int = 9,
+) -> np.ndarray:
+    """Interior quantile boundaries splitting ``scores`` into ``n_bins`` grades.
+
+    The ConSurf grading is equal-frequency (quantile) binning of a continuous
+    conservation score. This returns the ``n_bins - 1`` interior score cut points
+    (ascending), so a caller can map a specific grade cutoff back to a score
+    threshold (e.g. the score at the grade 6|7 boundary). ``None``/NaN scores are
+    ignored when estimating the quantiles.
+
+    Parameters
+    ----------
+    scores : list[float | None]
+        Per-position conservation scores (any continuous scale).
+    n_bins : int
+        Number of grades (default 9, the ConSurf convention).
+
+    Returns
+    -------
+    numpy.ndarray
+        Ascending array of the ``n_bins - 1`` interior quantile boundaries;
+        empty if no finite scores are supplied.
+    """
+    arr = np.array([np.nan if s is None else s for s in scores], dtype=float)
+    vals = arr[np.isfinite(arr)]
+    if vals.size == 0:
+        return np.empty(0)
+    return np.quantile(vals, np.linspace(0.0, 1.0, n_bins + 1)[1:-1])
+
+
+def consurf_grades(
+    scores: list[float | None],
+    n_bins: int = 9,
+    bool_ascending: bool = True,
+) -> list[int | None]:
+    """Assign ConSurf-style discrete conservation grades to continuous scores.
+
+    Bins the finite scores into ``n_bins`` equal-frequency (quantile) grades -- the
+    scheme ConSurf uses to turn a continuous conservation score into a small
+    ordinal scale. With ``bool_ascending`` (higher score = more conserved, e.g.
+    information content or percent identity) the most-conserved bin is grade
+    ``n_bins`` and the most-variable is grade 1; pass ``bool_ascending=False`` for
+    rate-type scores where lower = more conserved (e.g. Rate4Site). Grade
+    ``n_bins`` is always the most conserved end regardless.
+
+    Parameters
+    ----------
+    scores : list[float | None]
+        Per-position conservation scores; ``None``/NaN entries get grade ``None``.
+    n_bins : int
+        Number of grades (default 9, the ConSurf convention).
+    bool_ascending : bool
+        Whether a higher score means more conserved (default True).
+
+    Returns
+    -------
+    list[int | None]
+        One grade in ``1..n_bins`` per input score (``None`` where the score was
+        missing).
+    """
+    arr = np.array([np.nan if s is None else s for s in scores], dtype=float)
+    finite = np.isfinite(arr)
+    grades: list[int | None] = [None] * len(scores)
+    if not finite.any():
+        return grades
+
+    edges = consurf_grade_boundaries(scores, n_bins=n_bins)
+    # np.digitize -> ascending-in-score bin index 0..n_bins-1
+    idx = np.digitize(arr[finite], edges, right=False)
+    ranks = idx + 1 if bool_ascending else n_bins - idx
+
+    j = 0
+    for i in range(len(scores)):
+        if finite[i]:
+            grades[i] = int(ranks[j])
+            j += 1
+    return grades
