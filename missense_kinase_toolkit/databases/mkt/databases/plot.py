@@ -2366,3 +2366,98 @@ def plot_sequence_input_schematic(
         bool_image_subdir=False,
         output_path=os.path.dirname(output_path),
     )
+
+
+def write_clade_membership_table(
+    conservation_data,
+    str_group: str = "TK",
+    str_filepath: str | None = None,
+    dict_anchors: dict[str, tuple[str, ...]] | None = None,
+) -> str:
+    """Build a LaTeX (booktabs) table of named clades and their member kinases.
+
+    Uses the curated anchor-based clade names
+    (:data:`mkt.schema.conservation_schema.DICT_CLADE_ANCHORS`) so the table is
+    keyed to stable clade names rather than fragile display-order numbers. Rows are
+    the named clades that fall within ``str_group`` (e.g. the TK sub-families),
+    ordered by descending membership.
+
+    Parameters
+    ----------
+    conservation_data : KLIFSConservationData
+        Persisted KLIFS clustering artifact (e.g. from
+        :func:`mkt.schema.io_utils.load_conservation_data`).
+    str_group : str
+        Kinase group to restrict membership to (default ``"TK"``). Pass None to
+        keep every member regardless of group.
+    str_filepath : str | None
+        If given, write the LaTeX source to this path.
+    dict_anchors : dict[str, tuple[str, ...]] | None
+        Clade-name -> anchor-kinase mapping; defaults to
+        :data:`DICT_CLADE_ANCHORS`.
+
+    Returns
+    -------
+    str
+        The LaTeX table source.
+    """
+    from mkt.schema.conservation_schema import DICT_CLADE_ANCHORS
+    from mkt.schema.utils import adjudicate_kinase_group
+
+    dict_anchors = dict_anchors or DICT_CLADE_ANCHORS
+    leaf_names = conservation_data.display_leaf_names(dict_anchors)
+
+    rows: list[tuple[str, list[str]]] = []
+    for leaf_idx, clade_name in enumerate(leaf_names):
+        if clade_name is None:
+            continue
+        members = [
+            conservation_data.names[i]
+            for i in conservation_data.display_leaves[leaf_idx]["members"]
+        ]
+        if str_group is not None:
+            members = [m for m in members if adjudicate_kinase_group(m) == str_group]
+        if members:
+            rows.append((clade_name, sorted(members)))
+    rows.sort(key=lambda row: (-len(row[1]), row[0]))
+
+    def _escape(text: str) -> str:
+        for char, repl in (("&", r"\&"), ("%", r"\%"), ("_", r"\_")):
+            text = text.replace(char, repl)
+        return text
+
+    str_group_label = "all groups" if str_group is None else str_group
+    caption = (
+        f"{_escape(str_group_label)} conservation clades from KLIFS-pocket "
+        "hierarchical clustering, named by curated anchor kinases and listed with "
+        "their member kinases (ordered by descending membership)."
+    )
+    body_rows = [
+        rf"{_escape(clade_name)} & {len(members)} & "
+        rf"{_escape(', '.join(members))} \\"
+        for clade_name, members in rows
+    ]
+    lines = [
+        "% Requires \\usepackage{booktabs}.",
+        r"{\footnotesize",
+        r"\begin{table}[htbp]",
+        r"\centering",
+        r"\begin{tabular}{llp{0.6\textwidth}}",
+        r"\toprule",
+        r"\textbf{Clade} & \textbf{$n$} & \textbf{Kinases} \\",
+        r"\midrule",
+        *body_rows,
+        r"\bottomrule",
+        r"\end{tabular}",
+        rf"\caption{{{caption}}}\label{{tab:clade-membership}}",
+        r"\end{table}",
+        r"}",
+        "",
+    ]
+    str_tex = "\n".join(lines)
+
+    if str_filepath is not None:
+        with open(str_filepath, "w") as file_out:
+            file_out.write(str_tex)
+        logger.info(f"Wrote clade membership table to {str_filepath}.")
+    return str_tex
