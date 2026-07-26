@@ -12,6 +12,26 @@ importing scipy).
 
 from pydantic import BaseModel, Field
 
+DICT_CLADE_ANCHORS: dict[str, tuple[str, ...]] = {
+    "PDGFR/VEGFR": ("KDR", "KIT"),
+    "SRC/ABL": ("SRC", "ABL1"),
+    "INSR/ALK": ("INSR", "ALK"),
+    "ERBB": ("EGFR", "ERBB2"),
+    "EPH": ("EPHA3", "EPHB1"),
+    "TRK/DDR": ("NTRK1", "DDR2"),
+    "FGFR": ("FGFR2", "FGFR3"),
+    "MET/AXL": ("MET", "AXL"),
+    "RET/TIE": ("RET", "TEK"),
+    "TEC": ("BTK", "TEC"),
+}
+"""Curated clade names keyed to a minimal set of *anchor* kinases that uniquely
+identify each clade by membership (not by display-order number, which is fragile to
+re-clustering). A display leaf is given a name only if it contains all of that
+name's anchors, so a name silently disappears rather than mislabels if a clade
+splits. The SYK/ZAP70 pair is deliberately omitted -- it clusters inside an EphA
+subclade rather than forming a clean Syk clade, and is excluded from the clade
+analysis."""
+
 
 class KLIFSConservationData(BaseModel):
     """Persisted distances + dendrogram from the KLIFS conservation clustering.
@@ -69,6 +89,58 @@ class KLIFSConservationData(BaseModel):
     ``{"members": list[int], "kind": str}`` (indices into :attr:`names`)."""
     display_order: list[int] = Field(default_factory=list)
     """In-order (top-to-bottom) display order as indices into :attr:`display_leaves`."""
+
+    def name_for_members(
+        self,
+        member_idx: list[int],
+        dict_anchors: dict[str, tuple[str, ...]] = DICT_CLADE_ANCHORS,
+    ) -> str | None:
+        """Return the curated clade name for a set of member indices.
+
+        A clade name applies only when the members contain *all* of that name's
+        anchor kinases (see :data:`DICT_CLADE_ANCHORS`), so the mapping is robust to
+        display-order renumbering and never mislabels a split clade.
+
+        Parameters
+        ----------
+        member_idx : list[int]
+            Member indices into :attr:`names` (e.g. a ``display_leaves`` entry's
+            ``"members"``).
+        dict_anchors : dict[str, tuple[str, ...]]
+            Clade-name -> anchor-kinase mapping. Defaults to
+            :data:`DICT_CLADE_ANCHORS`.
+
+        Returns
+        -------
+        str | None
+            The matching clade name, or None if no anchor set is fully contained.
+        """
+        members = {self.names[i] for i in member_idx}
+        for name, anchors in dict_anchors.items():
+            if all(anchor in members for anchor in anchors):
+                return name
+        return None
+
+    def display_leaf_names(
+        self, dict_anchors: dict[str, tuple[str, ...]] = DICT_CLADE_ANCHORS
+    ) -> list[str | None]:
+        """Return the curated clade name per display leaf (aligned to display_leaves).
+
+        Parameters
+        ----------
+        dict_anchors : dict[str, tuple[str, ...]]
+            Clade-name -> anchor-kinase mapping. Defaults to
+            :data:`DICT_CLADE_ANCHORS`.
+
+        Returns
+        -------
+        list[str | None]
+            One name (or None) per entry of :attr:`display_leaves`, in that order.
+        """
+        return [
+            self.name_for_members(leaf["members"], dict_anchors)
+            for leaf in self.display_leaves
+        ]
 
     def to_long_form(self) -> list[tuple[str, str, float]]:
         """Expand the condensed distances into ``(kin1, kin2, distance)`` triples.
