@@ -648,3 +648,43 @@ COLOR_TREE_FALLBACK = "#999999"
 """Fallback fill for a tree leaf whose kinase has no group/family color."""
 COLOR_TREE_SPLIT_MARKER = "#D00000"
 """Dashed marker on the summary dendrogram showing the top/bottom detail-panel split."""
+
+DICT_CONSURF_GRADE_COLORS = {
+    1: "#10C8D1",  # most variable — teal
+    2: "#8CFFFF",
+    3: "#D7FFFF",
+    4: "#EAFFFF",
+    5: "#FFFFFF",  # average — white
+    6: "#FCEDF4",
+    7: "#FAC9DE",
+    8: "#F07DAB",
+    9: "#A02560",  # most conserved — maroon
+}
+"""Canonical ConSurf 9-grade conservation palette (grade 1 = most variable teal,
+grade 9 = most conserved maroon). Hex values are the exact RGB tuples from the
+ConSurf server's ``rasmol_gradesPE_and_pipe.pm`` (github.com/Rostlab/ConSurf), so
+they carry over to PyMOL/Chimera structure coloring unchanged."""
+
+COLOR_CONSURF_UNGRADED = "#FFFF96"
+"""ConSurf's 'insufficient data' color (RGB 255,255,150) for positions with no
+grade — an all-gap alignment column, or a group below the minimum size for
+grading. Matches the grade-0 color in the ConSurf ``rasmol_gradesPE_and_pipe.pm``."""
+
+
+def get_consurf_grade_color(grade: int | None) -> str:
+    """Return the ConSurf palette color for a conservation grade.
+
+    Parameters
+    ----------
+    grade : int | None
+        ConSurf grade (1-9), or None for an ungraded position.
+
+    Returns
+    -------
+    str
+        Hex color from :data:`DICT_CONSURF_GRADE_COLORS`, or
+        :data:`COLOR_CONSURF_UNGRADED` when ``grade`` is None.
+    """
+    if grade is None:
+        return COLOR_CONSURF_UNGRADED
+    return DICT_CONSURF_GRADE_COLORS.get(grade, COLOR_CONSURF_UNGRADED)
