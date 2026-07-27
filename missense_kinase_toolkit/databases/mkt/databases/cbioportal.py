@@ -879,9 +879,12 @@ class Treatment(StudyData):
         return treatment
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Clinical(StudyData):
     """Class to get clinical information from a cBioPortal study."""
+
+    bool_sample: bool
+    """If True, return sample-level clinical data; if False, return patient-level clinical data."""
 
     def __post_init__(self):
         """Post-initialization to get clinical info from cBioPortal."""
@@ -895,18 +898,53 @@ class Clinical(StudyData):
         list | None
             cBioPortal data as list of Abstract Base Classes
                 objects if successful, otherwise None.
+        bool_sample : bool
+            If True, return sample-level clinical data; if False, return patient-level clinical data
 
         """
         try:
-            clinical = self._cbioportal.Clinical_Data.getAllClinicalDataInStudyUsingGET(
-                studyId=self.study_id
-            ).result()
+            if self.bool_sample:
+                clinical = (
+                    self._cbioportal.Clinical_Data.getAllClinicalDataInStudyUsingGET(
+                        studyId=self.study_id,
+                        clinicalDataType="SAMPLE",
+                    ).result()
+                )
+            else:
+                clinical = (
+                    self._cbioportal.Clinical_Data.getAllClinicalDataInStudyUsingGET(
+                        studyId=self.study_id,
+                        clinicalDataType="PATIENT",
+                    ).result()
+                )
         except Exception as e:
             logger.error(
                 f"Error retrieving clinical data for study {self.study_id}: {e}"
             )
             clinical = None
         return clinical
+
+
+@dataclass
+class ClinicalSample(Clinical):
+    """Class to get sample-level clinical information from a cBioPortal study."""
+
+    bool_sample: bool = field(init=False, default=True)
+    """If True, return sample-level clinical data; if False, return patient-level clinical data"""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+
+@dataclass
+class ClinicalPatient(Clinical):
+    """Class to get patient-level clinical information from a cBioPortal study."""
+
+    bool_sample: bool = field(init=False, default=False)
+    """If True, return sample-level clinical data; if False, return patient-level clinical data"""
+
+    def __post_init__(self):
+        super().__post_init__()
 
 
 @dataclass
