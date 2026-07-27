@@ -102,7 +102,10 @@ def _plot_residue_dot(
         KLIFSConservationTreeFigure,
         min_cluster_size=dot_cfg.min_cluster_size,
     ).plot_residue_dot(
-        output_dir, aa=dot_cfg.amino_acid, formats=tuple(dot_cfg.formats)
+        output_dir,
+        aa=dot_cfg.amino_acid,
+        formats=tuple(dot_cfg.formats),
+        highlight_targets=dot_cfg.highlight_targets,
     )
 
 
@@ -123,6 +126,21 @@ def _plot_residue_dot_explorer(
     ).save_app(output_dir, filename=app_cfg.filename)
 
 
+def _write_clade_membership_table(
+    dict_kinase: dict, output_dir: str, cfg: DictKinaseFiguresConfig
+) -> None:
+    """LaTeX table of named conservation clades and their member kinases."""
+    from mkt.databases.plot import write_clade_membership_table
+    from mkt.schema.io_utils import load_conservation_data
+
+    table_cfg = cfg.clade_membership_table
+    write_clade_membership_table(
+        load_conservation_data(),
+        str_group=table_cfg.str_group,
+        str_filepath=os.path.join(output_dir, f"{table_cfg.filename}.tex"),
+    )
+
+
 # registry of figure steps keyed by config section, rendered in this order
 _PLOT_STEPS: dict[str, Callable[[dict, str, DictKinaseFiguresConfig], None]] = {
     "upset_plot": _plot_upset,
@@ -131,6 +149,7 @@ _PLOT_STEPS: dict[str, Callable[[dict, str, DictKinaseFiguresConfig], None]] = {
     "conservation_tree_explorer": _plot_conservation_tree_explorer,
     "residue_dot": _plot_residue_dot,
     "residue_dot_explorer": _plot_residue_dot_explorer,
+    "clade_membership_table": _write_clade_membership_table,
 }
 
 # figures rendered when no --config is provided (the non-tree, always-cheap ones)

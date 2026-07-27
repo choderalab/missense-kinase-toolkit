@@ -294,3 +294,14 @@ index) to reach the molecular brake residue in ``DICT_MOLECULAR_BRAKE``. The bra
 one residue N-terminal to the VIII:79 KLIFS-aligned position, so a -1 offset is applied there
 (e.g. FGFR2 K641 maps to VIII:79 idx 642). Positions absent from this dict use no offset.
 """
+
+DICT_CONSURF_GRADE_BANDS = {
+    "Variable": (1, 3),
+    "Intermediate": (4, 6),
+    "Conserved": (7, 9),
+}
+"""dict[str, tuple[int, int]]: ConSurf conservation-grade bands as inclusive
+(low, high) grade ranges. The nine ConSurf nonile grades collapse into three
+qualitative bands -- variable (1-3), intermediate (4-6), conserved (7-9) -- used to
+bracket-label the grade legend on the conservation dot heatmap.
+"""
