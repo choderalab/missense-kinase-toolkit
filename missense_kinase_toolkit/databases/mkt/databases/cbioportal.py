@@ -938,7 +938,7 @@ class ClinicalSample(Clinical):
 
 @dataclass
 class ClinicalPatient(Clinical):
-    """Class to get sample-level clinical information from a cBioPortal study."""
+    """Class to get patient-level clinical information from a cBioPortal study."""
 
     bool_sample: bool = field(init=False, default=False)
     """If True, return sample-level clinical data; if False, return patient-level clinical data"""
