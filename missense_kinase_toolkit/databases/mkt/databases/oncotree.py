@@ -31,6 +31,14 @@ META_COLS = ["metamaintype", "metacolor", "metanci", "metaumls", "history"]
 CODE_RE = re.compile(r"\s*\(([^()]+)\)\s*$")
 """Regex capturing the trailing ``(CODE)`` suffix on every OncoTree label."""
 
+DICT_ONCOTREE_LEGACY_ALIAS = {
+    # Glioblastoma Multiforme (retired in the WHO-2021 CNS reclassification) is
+    # still stored in older clinical exports; map it to the current node.
+    "GBM": "GB",  # -> Glioblastoma, IDH-Wildtype (CNS/Brain > Diffuse Glioma)
+}
+"""Curated map of retired/renamed OncoTree codes still present in clinical data
+to their current equivalents. Extend as further legacy codes are encountered."""
+
 DICT_TISSUE_COLOR = {
     # nervous system
     "CNS/Brain (BRAIN)": "LightGray",
@@ -141,10 +149,12 @@ class OncoTree(BaseModel):
     filepath: str | None = None
 
     _df: pd.DataFrame = PrivateAttr()
+    _level_code_map: dict[str, list[str | None]] = PrivateAttr(default_factory=dict)
 
     def model_post_init(self, __context: any) -> None:
         """Load and clean the OncoTree TSV into ``self._df``."""
         self._df = self._load()
+        self._level_code_map = self._build_level_code_map()
 
     def _resolve_source(self) -> str:
         """Resolve the source path or URL to read.
@@ -255,6 +265,117 @@ class OncoTree(BaseModel):
     def return_df_tissue_drop(self) -> pd.DataFrame:
         """Return the OncoTree DataFrame with the tissue-level rows dropped."""
         return self._df[self._df["depth"] > 1].reset_index(drop=True)
+
+    def _build_level_code_map(self) -> dict[str, list[str | None]]:
+        """Map every OncoTree code -> the codes of its ancestors, level 1 first.
+
+        For each row, walk its populated ``level_*`` cells and capture the
+        ``(CODE)`` from each, giving that node's full lineage (its own code is
+        the last entry). Used by :meth:`ancestor_code_at_level` to roll a code
+        up to a coarser level.
+
+        Returns
+        -------
+        dict[str, list[str | None]]
+            ``{code: [level_1_code, ..., level_depth_code]}``.
+        """
+        level_cols = [c for c in self._df.columns if c.startswith(LEVEL_PREFIX)]
+        mapping: dict[str, list[str | None]] = {}
+        for row in self._df.itertuples(index=False):
+            depth = int(getattr(row, "depth"))
+            lineage: list[str | None] = []
+            for col in level_cols[:depth]:
+                label = getattr(row, col)
+                match = CODE_RE.search(label) if label else None
+                lineage.append(match.group(1) if match else None)
+            mapping[getattr(row, "code")] = lineage
+        return mapping
+
+    @property
+    def dict_code_name(self) -> dict[str, str]:
+        """Map every OncoTree code -> its display name (``(CODE)`` suffix stripped).
+
+        Covers all nodes (each code is the deepest label of exactly one row), so
+        it resolves both leaf and internal (rolled-up) codes to a label.
+
+        Returns
+        -------
+        dict[str, str]
+            ``{code: name}``.
+        """
+        return dict(zip(self._df["code"], self._df["name"]))
+
+    @property
+    def known_codes(self) -> set[str]:
+        """Set of every OncoTree code in the loaded snapshot."""
+        return set(self._level_code_map)
+
+    def resolve_code(self, code: str) -> str:
+        """Map a retired/renamed OncoTree code to its current equivalent.
+
+        Applies :data:`DICT_ONCOTREE_LEGACY_ALIAS` (e.g. ``GBM -> GB``); codes
+        already current, or absent from the alias map, are returned unchanged.
+        This does not guarantee the result exists in the snapshot -- check
+        :attr:`known_codes` for that.
+
+        Parameters
+        ----------
+        code : str
+            OncoTree code as stored (possibly legacy).
+
+        Returns
+        -------
+        str
+            The current-equivalent code.
+        """
+        return DICT_ONCOTREE_LEGACY_ALIAS.get(code, code)
+
+    def ancestor_code_at_level(self, code: str, level: int) -> str | None:
+        """Roll an OncoTree ``code`` up to its ancestor at ``level``.
+
+        Levels are 1-indexed (``level=1`` is the tissue root). A node shallower
+        than ``level`` has no ancestor there, so its own (deepest) code is
+        returned instead.
+
+        Parameters
+        ----------
+        code : str
+            OncoTree code to roll up.
+        level : int
+            Target hierarchy level (>= 1).
+
+        Returns
+        -------
+        str | None
+            The ancestor code at ``level`` (or the node's own code if it is
+            shallower than ``level``); ``None`` if ``code`` is unknown.
+        """
+        if level < 1:
+            raise ValueError(f"level must be >= 1, got {level}")
+        lineage = self._level_code_map.get(code)
+        if not lineage:
+            return None
+        return lineage[level - 1] if level <= len(lineage) else lineage[-1]
+
+    def roll_up_map(
+        self, level: int, codes: list[str] | None = None
+    ) -> dict[str, str | None]:
+        """Build a ``{code: ancestor_code_at_level}`` map for many codes.
+
+        Parameters
+        ----------
+        level : int
+            Target hierarchy level (>= 1); see :meth:`ancestor_code_at_level`.
+        codes : list[str] | None
+            Codes to roll up; when None, every known OncoTree code is used.
+
+        Returns
+        -------
+        dict[str, str | None]
+            ``{code: ancestor_code}`` (value ``None`` for unknown codes).
+        """
+        keys = codes if codes is not None else list(self._level_code_map)
+        return {code: self.ancestor_code_at_level(code, level) for code in keys}
 
     @property
     def dict_code_metacolor(self) -> dict[str, str]:
