@@ -22,6 +22,11 @@ DEFAULT_FILENAME = "tumor_types.txt"
 DEFAULT_URL = "https://oncotree.mskcc.org/api/tumor_types.txt"
 """Upstream URL for the OncoTree dump; used when no local file is found."""
 
+API_TUMOR_TYPES_URL = "https://oncotree.mskcc.org/api/tumorTypes"
+"""OncoTree JSON tumor-types endpoint; exposes per-node ``precursors`` /
+``history`` / ``revocations`` (the bundled TSV does not), used to derive the
+retired-code rename map."""
+
 LEVEL_PREFIX = "level_"
 """Prefix used by OncoTree's hierarchy columns; count varies by snapshot."""
 
@@ -32,12 +37,69 @@ CODE_RE = re.compile(r"\s*\(([^()]+)\)\s*$")
 """Regex capturing the trailing ``(CODE)`` suffix on every OncoTree label."""
 
 DICT_ONCOTREE_LEGACY_ALIAS = {
-    # Glioblastoma Multiforme (retired in the WHO-2021 CNS reclassification) is
-    # still stored in older clinical exports; map it to the current node.
-    "GBM": "GB",  # -> Glioblastoma, IDH-Wildtype (CNS/Brain > Diffuse Glioma)
+    # retired/renamed codes (from OncoTree's precursors/history) still stored in
+    # older clinical exports, mapped to their current node
+    "GBM": "GB",  # Glioblastoma, IDH-Wildtype
+    "AODG": "ODG",  # Oligodendroglioma, IDH-mutant and 1p/19q-codeleted
+    "BCL": "MBN",  # Mature B-Cell Neoplasms
+    "ETC": "ET",  # Essential Thrombocythemia
+    "TALL": "TLL",  # T-Lymphoblastic Leukemia/Lymphoma
+    "DIPG": "DMG",  # Diffuse Midline Glioma, H3 K27-Altered
+    "RD": "RDD",  # Rosai-Dorfman Disease
+    "TNKL": "MTNN",  # Mature T and NK Neoplasms
+    "PCV": "PV",  # Polycythemia Vera
+    "AOAST": "GNOS",  # (anaplastic astrocytoma) -> Glioma, NOS
+    "OAST": "GNOS",  # (oligoastrocytoma) -> Glioma, NOS
+    "LGLL": "TLGL",  # T-Cell Large Granular Lymphocytic Leukemia
+    "aCML": "ACML",  # Atypical Chronic Myeloid Leukemia, BCR-ABL1-
+    "SEZS": "SS",  # Sezary Syndrome
+    "MBCL": "PMBL",  # Primary Mediastinal (Thymic) Large B-Cell Lymphoma
+    "SLL": "CLLSLL",  # Chronic Lymphocytic Leukemia/Small Lymphocytic Lymphoma
+    # cBioPortal truncates ONCOTREE_CODE to 10 chars; restore the full codes
+    "AMLMLLT3KM": "AMLMLLT3KMT2A",  # AML with t(9;11); MLLT3-KMT2A
+    "MLNPCM1JAK": "MLNPCM1JAK2",  # Myeloid/Lymphoid Neoplasms with PCM1-JAK2
+    "BLLETV6RUN": "BLLETV6RUNX1",  # B-Lymphoblastic Leukemia with ETV6-RUNX1
 }
-"""Curated map of retired/renamed OncoTree codes still present in clinical data
-to their current equivalents. Extend as further legacy codes are encountered."""
+"""Curated map of retired/renamed (or client-truncated) OncoTree codes still
+present in clinical data to their current equivalents. Curated from OncoTree's
+precursors/history; extend as further legacy codes are encountered."""
+
+
+def fetch_oncotree_rename_map(url: str = API_TUMOR_TYPES_URL) -> dict[str, str]:
+    """Query the OncoTree API for a ``retired_code -> current_code`` rename map.
+
+    Builds the map from each node's ``precursors``, ``history`` and
+    ``revocations`` (exposed by the JSON API but not the bundled TSV), so
+    :data:`DICT_ONCOTREE_LEGACY_ALIAS` can be refreshed reliably when OncoTree
+    reclassifies codes. Client-side quirks the API can't know about -- e.g.
+    cBioPortal truncating ``ONCOTREE_CODE`` to 10 characters -- are not covered
+    and stay hand-curated in the alias map.
+
+    Parameters
+    ----------
+    url : str
+        OncoTree tumor-types JSON endpoint; defaults to
+        :data:`API_TUMOR_TYPES_URL`.
+
+    Returns
+    -------
+    dict[str, str]
+        ``{retired_code: current_code}``; the first mapping seen wins if a code
+        is referenced by more than one node.
+    """
+    res = requests_wrapper.get_cached_session().get(url)
+    res.raise_for_status()
+    rename: dict[str, str] = {}
+    for node in res.json():
+        current = node.get("code")
+        if not current:
+            continue
+        for field in ("precursors", "history", "revocations"):
+            for old in node.get(field) or []:
+                if old and old != current:
+                    rename.setdefault(old, current)
+    return rename
+
 
 DICT_TISSUE_COLOR = {
     # nervous system
