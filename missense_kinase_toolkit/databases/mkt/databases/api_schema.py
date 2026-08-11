@@ -15,8 +15,20 @@ import requests
 from bravado.client import SwaggerClient
 from bravado.requests_client import RequestsClient
 from mkt.databases.requests_wrapper import get_cached_session
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
+
+
+INT_RETRY_TOTAL = 5
+"""int: number of retries for transient HTTP errors in Swagger API clients."""
+
+FLOAT_RETRY_BACKOFF = 1.0
+"""float: exponential backoff factor between retries, in seconds."""
+
+TUPLE_RETRY_STATUS = (429, 500, 502, 503, 504)
+"""tuple[int, ...]: HTTP status codes treated as transient and retried."""
 
 
 @dataclass
@@ -104,6 +116,9 @@ class APIKeySwaggerClient(SwaggerAPIClient, ABC):
     def set_api_key(self) -> RequestsClient:
         """Set API key for cBioPortal API.
 
+        Retries transient HTTP errors so a brief upstream outage does not leave
+        the client unusable; this also covers the initial Swagger spec fetch.
+
         Returns
         -------
         RequestsClient
@@ -112,6 +127,14 @@ class APIKeySwaggerClient(SwaggerAPIClient, ABC):
         """
         token = self.maybe_get_token()
         http_client = RequestsClient()
+        retry = Retry(
+            total=INT_RETRY_TOTAL,
+            backoff_factor=FLOAT_RETRY_BACKOFF,
+            status_forcelist=TUPLE_RETRY_STATUS,
+            # cBioPortal mutation queries use POST, which is not retried by default
+            allowed_methods=frozenset({"GET", "POST"}),
+        )
+        http_client.session.mount("https://", HTTPAdapter(max_retries=retry))
         if token is not None:
             http_client.set_api_key(
                 self.instance,

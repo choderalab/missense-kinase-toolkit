@@ -314,6 +314,11 @@ class StudyData(cBioPortalQuery):
         bool
             True if the study ID is valid, False otherwise
         """
+        if self._cbioportal is None:
+            logger.warning(
+                f"No cBioPortal client available to check study ID {self.study_id}."
+            )
+            return False
         try:
             studies = self._cbioportal.Studies.getAllStudiesUsingGET().result()
             study_ids = [study.studyId for study in studies]
@@ -1047,9 +1052,18 @@ class PanelData(cBioPortalQuery):
         bool
             True if the panel ID is valid, False otherwise
         """
-        panels = self._cbioportal.Gene_Panels.getAllGenePanelsUsingGET().result()
-        panel_ids = [panel.genePanelId for panel in panels]
-        return self.panel_id in panel_ids
+        if self._cbioportal is None:
+            logger.warning(
+                f"No cBioPortal client available to check panel ID {self.panel_id}."
+            )
+            return False
+        try:
+            panels = self._cbioportal.Gene_Panels.getAllGenePanelsUsingGET().result()
+            panel_ids = [panel.genePanelId for panel in panels]
+            return self.panel_id in panel_ids
+        except Exception as e:
+            logger.warning(f"Error checking panel ID {self.panel_id}: {e}")
+            return False
 
 
 @dataclass

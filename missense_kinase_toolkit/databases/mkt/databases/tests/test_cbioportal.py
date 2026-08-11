@@ -15,7 +15,11 @@ def mutations_instance():
     """Query MSK-IMPACT 2017 mutations once."""
     config.set_cbioportal_instance("www.cbioportal.org")
     config.set_output_dir(".")
-    return cbioportal.Mutations(study_id="msk_impact_2017")
+    instance = cbioportal.Mutations(study_id="msk_impact_2017")
+    # transient cBioPortal outages leave _df as None; skip rather than fail
+    if instance._df is None:
+        pytest.skip("cBioPortal unavailable; skipping live mutation tests")
+    return instance
 
 
 @pytest.fixture(scope="module")
@@ -23,7 +27,11 @@ def gene_panel_instance():
     """Query IMPACT341 gene panel once."""
     config.set_cbioportal_instance("www.cbioportal.org")
     config.set_output_dir(".")
-    return cbioportal.GenePanel(panel_id="IMPACT341")
+    instance = cbioportal.GenePanel(panel_id="IMPACT341")
+    # transient cBioPortal outages leave _df as None; skip rather than fail
+    if instance._df is None:
+        pytest.skip("cBioPortal unavailable; skipping live gene panel tests")
+    return instance
 
 
 @pytest.mark.network
