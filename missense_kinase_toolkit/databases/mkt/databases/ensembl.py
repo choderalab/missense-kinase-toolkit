@@ -27,6 +27,18 @@ DICT_ENSEMBL_REST_HOST = {
 }
 """dict[str, str]: Ensembl REST host per genome build; GRCh38 uses the default host."""
 
+DICT_BUILD_ALIAS = {
+    "GRCH37": "GRCh37",
+    "37": "GRCh37",
+    "HG19": "GRCh37",
+    "B37": "GRCh37",
+    "GRCH38": "GRCh38",
+    "38": "GRCh38",
+    "HG38": "GRCh38",
+}
+"""dict[str, str]: Upper-cased genome-build aliases to the canonical assembly name
+(cBioPortal ``ncbiBuild`` is inconsistent -- ``"37"``/``"hg19"`` also mean GRCh37)."""
+
 ENSEMBL_POST_REGION_MAX = 50
 """int: Maximum number of regions accepted per ``/sequence/region`` POST request."""
 
@@ -37,8 +49,9 @@ def rest_host(build: str) -> str:
     Parameters
     ----------
     build : str
-        Genome build/assembly name (e.g. ``"GRCh37"`` or ``"GRCh38"``), as found in
-        the ``ncbiBuild`` column of cBioPortal mutations.
+        Genome build/assembly name as found in the ``ncbiBuild`` column of
+        cBioPortal mutations; common aliases (e.g. ``"37"``, ``"hg19"``) are
+        normalized via :data:`DICT_BUILD_ALIAS`.
 
     Returns
     -------
@@ -48,15 +61,16 @@ def rest_host(build: str) -> str:
     Raises
     ------
     ValueError
-        If the build is not one of :data:`DICT_ENSEMBL_REST_HOST`.
+        If the build (after alias normalization) is not one of
+        :data:`DICT_ENSEMBL_REST_HOST`.
     """
-    try:
-        return DICT_ENSEMBL_REST_HOST[build]
-    except KeyError:
-        raise ValueError(
-            f"Unsupported genome build {build!r}; expected one of "
-            f"{sorted(DICT_ENSEMBL_REST_HOST)}."
-        )
+    canonical = DICT_BUILD_ALIAS.get(str(build).upper())
+    if canonical in DICT_ENSEMBL_REST_HOST:
+        return DICT_ENSEMBL_REST_HOST[canonical]
+    raise ValueError(
+        f"Unsupported genome build {build!r}; expected one of "
+        f"{sorted(DICT_ENSEMBL_REST_HOST)} (aliases: {sorted(DICT_BUILD_ALIAS)})."
+    )
 
 
 DICT_COMPLEMENT = {"A": "T", "T": "A", "C": "G", "G": "C", "N": "N"}
@@ -241,6 +255,7 @@ def get_trinucleotide_contexts(
     build: str = "GRCh37",
     species: str = "human",
     chunk_size: int = ENSEMBL_POST_REGION_MAX,
+    progress: bool = True,
 ) -> dict[tuple[str, int], str | None]:
     """Batch-fetch plus-strand trinucleotide contexts for many genomic sites.
 
@@ -261,6 +276,9 @@ def get_trinucleotide_contexts(
         Ensembl species name.
     chunk_size : int
         Regions per POST request; capped at :data:`ENSEMBL_POST_REGION_MAX`.
+    progress : bool
+        Show the per-chunk progress bar; set False when called inside a caller's
+        own progress loop to avoid a nested bar per call.
 
     Returns
     -------
@@ -278,6 +296,7 @@ def get_trinucleotide_contexts(
         range(0, len(sites), chunk_size),
         desc="Querying trinucleotide context in Ensembl",
         bar_format=TQDM_BAR_FORMAT,
+        disable=not progress,
     ):
         chunk = sites[idx : idx + chunk_size]
         regions = [f"{chrom}:{pos - 1}..{pos + 1}" for chrom, pos in chunk]
