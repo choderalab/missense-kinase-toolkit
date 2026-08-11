@@ -55,6 +55,10 @@ DICT_ONCOTREE_LEGACY_ALIAS = {
     "SEZS": "SS",  # Sezary Syndrome
     "MBCL": "PMBL",  # Primary Mediastinal (Thymic) Large B-Cell Lymphoma
     "SLL": "CLLSLL",  # Chronic Lymphocytic Leukemia/Small Lymphocytic Lymphoma
+    "CLL": "CLLSLL",  # Chronic Lymphocytic Leukemia -> CLL/SLL
+    "AASTR": "ASTR",  # (anaplastic astrocytoma) -> Astrocytoma
+    "MM": "PCM",  # Multiple Myeloma -> Plasma Cell Myeloma
+    "ALL": "BLL",  # Acute Lymphoblastic Leukemia -> B-Lymphoblastic Leukemia/Lymphoma
     # cBioPortal truncates ONCOTREE_CODE to 10 chars; restore the full codes
     "AMLMLLT3KM": "AMLMLLT3KMT2A",  # AML with t(9;11); MLLT3-KMT2A
     "MLNPCM1JAK": "MLNPCM1JAK2",  # Myeloid/Lymphoid Neoplasms with PCM1-JAK2
