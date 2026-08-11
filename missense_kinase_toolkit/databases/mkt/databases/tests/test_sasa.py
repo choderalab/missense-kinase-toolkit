@@ -1,5 +1,6 @@
 import logging
 import os
+from dataclasses import asdict
 
 import pandas as pd
 import pytest
@@ -71,7 +72,8 @@ class TestResidueSASAConfig:
 
 class TestResidueSASABiopython:
     @pytest.fixture(scope="class")
-    def df_sasa(self, akt1_kinase):
+    @classmethod
+    def df_sasa(cls, akt1_kinase):
         return _run_df(
             sasa.ResidueSASA(dict_kinase={"AKT1": akt1_kinase}, bool_pymol=False)
         )
@@ -256,18 +258,27 @@ class TestSASAConfigs:
         assert calc.bool_include_hydrogens is True
         assert calc.bool_relative is False
 
-    def test_from_dataclass_suppresses_compat_warning(self, akt1_kinase, caplog):
+    def test_valid_direct_construction_is_silent(self, akt1_kinase, caplog):
+        """A valid config warns from neither constructor; only bad options warn."""
         with caplog.at_level(logging.WARNING):
+            sasa.ResidueSASA(dict_kinase={"AKT1": akt1_kinase}, bool_pymol=False)
             sasa.ResidueSASA.from_dataclass(
                 sasa.StandardSASAConfigs.BIOPYTHON_HEAVY,
                 dict_kinase={"AKT1": akt1_kinase},
             )
-        assert "constructed directly" not in caplog.text
+        assert caplog.text == ""
 
-    def test_direct_construction_warns(self, akt1_kinase, caplog):
-        with caplog.at_level(logging.WARNING):
-            sasa.ResidueSASA(dict_kinase={"AKT1": akt1_kinase}, bool_pymol=False)
-        assert "constructed directly" in caplog.text
+    def test_from_dataclass_matches_equivalent_direct_construction(self, akt1_kinase):
+        """from_dataclass is a convenience wrapper, not a different code path."""
+        config = sasa.StandardSASAConfigs.BIOPYTHON_HEAVY.value
+        from_preset = sasa.ResidueSASA.from_dataclass(
+            sasa.StandardSASAConfigs.BIOPYTHON_HEAVY,
+            dict_kinase={"AKT1": akt1_kinase},
+        )
+        direct = sasa.ResidueSASA(dict_kinase={"AKT1": akt1_kinase}, **asdict(config))
+        assert from_preset.model_dump(exclude={"dict_kinase"}) == direct.model_dump(
+            exclude={"dict_kinase"}
+        )
 
     def test_hydrogen_with_relative_raises(self, akt1_kinase):
         with pytest.raises(ValueError):

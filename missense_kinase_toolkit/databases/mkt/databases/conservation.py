@@ -1143,6 +1143,11 @@ class KLIFSHierarchicalConservation(BaseModel):
                     idx = DICT_AA20_INDEX.get(char)
                     if idx is not None:
                         counts[idx] += 1.0
+            # a residue absent from every pocket would give q_a = 0 and an infinite
+            # KL term downstream, so Laplace-smooth only in that degenerate case
+            # (a full panel observes all 20 and is left numerically untouched)
+            if not counts.all():
+                counts = counts + 1.0
             self._kinome_bg_cache = counts / counts.sum()
         return self._kinome_bg_cache
 
