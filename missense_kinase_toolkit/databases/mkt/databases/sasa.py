@@ -10,7 +10,6 @@ import os
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import ClassVar
 
 import pandas as pd
 from Bio.PDB.SASA import ShrakeRupley
@@ -373,9 +372,11 @@ class ResidueSASA(BaseModel):
     by UniProt sequence position (the CIF ``auth_seq_id``), and hydrogens are
     removed by default so SASA reflects conventional heavy atoms.
 
-    Prefer :meth:`from_dataclass` with a :class:`StandardSASAConfigs` preset for
-    vetted, backend-compatible options; direct construction is allowed but warns
-    that option compatibility is the caller's responsibility.
+    :meth:`from_dataclass` with a :class:`StandardSASAConfigs` preset is a
+    convenient way to get vetted, backend-compatible options; constructing
+    directly is equally supported, since incompatible options are rejected or
+    flagged by the field constraints and :meth:`_validate_config` regardless of
+    which constructor is used.
 
     Parameters:
     -----------
@@ -416,10 +417,6 @@ class ResidueSASA(BaseModel):
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    # toggled True by from_dataclass so model_post_init skips the "verify config
-    # compatibility" nudge for vetted presets; ClassVar -> not a model field
-    _building_from_dataclass: ClassVar[bool] = False
 
     dict_kinase: dict[str, KinaseInfo] | None = None
     """Mapping of HGNC name to ``KinaseInfo``; deserialized on demand if None."""
@@ -494,15 +491,7 @@ class ResidueSASA(BaseModel):
         return self
 
     def model_post_init(self, __context) -> None:
-        """Warn on direct construction and resolve ``dict_kinase``."""
-        if not type(self)._building_from_dataclass:
-            logger.warning(
-                "ResidueSASA was constructed directly; backend-compatible options "
-                "are your responsibility. Prefer ResidueSASA.from_dataclass(...) "
-                "with a StandardSASAConfigs preset to avoid incompatible settings "
-                "(e.g. hydrogen/relative, probe radius, n_points/dot_density)."
-            )
-
+        """Resolve ``dict_kinase``."""
         if self.dict_kinase is None:
             if self.list_ids is None:
                 # whole proteome: one bulk deserialization
@@ -525,9 +514,10 @@ class ResidueSASA(BaseModel):
     ) -> "ResidueSASA":
         """Build a ResidueSASA from a vetted config dataclass or standard preset.
 
-        This is the recommended constructor: presets in
-        :class:`StandardSASAConfigs` carry backend-compatible options, so the
-        direct-construction compatibility warning is suppressed.
+        A convenience constructor: presets in :class:`StandardSASAConfigs` carry
+        backend-compatible options, so they are the easiest way to get a valid
+        configuration. Constructing :class:`ResidueSASA` directly is equally
+        supported and validated identically.
 
         Parameters:
         -----------
@@ -545,11 +535,7 @@ class ResidueSASA(BaseModel):
         if isinstance(config, StandardSASAConfigs):
             config = config.value
 
-        cls._building_from_dataclass = True
-        try:
-            return cls(**asdict(config), **kwargs)
-        finally:
-            cls._building_from_dataclass = False
+        return cls(**asdict(config), **kwargs)
 
     @property
     def df(self) -> pd.DataFrame | None:
