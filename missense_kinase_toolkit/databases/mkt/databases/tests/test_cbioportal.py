@@ -3,11 +3,16 @@ from mkt.databases import cbioportal, config
 
 
 @pytest.fixture(scope="module")
-def cbioportal_instance():
+def cbioportal_instance(cbioportal_probe):
     """Create a cBioPortal client once for this module."""
     config.set_cbioportal_instance("www.cbioportal.org")
     config.set_output_dir(".")
-    return cbioportal.cBioPortal()
+    instance = cbioportal.cBioPortal()
+    # a None client means either an upstream outage or a broken client here; only
+    # skip for the former, so a genuine regression still fails loudly
+    if instance._cbioportal is None and not cbioportal_probe(instance.url):
+        pytest.skip("cBioPortal unreachable; skipping live client tests")
+    return instance
 
 
 @pytest.fixture(scope="module")

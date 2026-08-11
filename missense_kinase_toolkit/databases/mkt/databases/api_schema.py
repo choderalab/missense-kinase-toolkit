@@ -21,10 +21,11 @@ from urllib3.util.retry import Retry
 logger = logging.getLogger(__name__)
 
 
-INT_RETRY_TOTAL = 5
-"""int: number of retries for transient HTTP errors in Swagger API clients."""
+INT_RETRY_TOTAL = 3
+"""int: number of retries for transient HTTP errors in Swagger API clients; kept
+small so a sustained outage fails fast rather than stalling CI."""
 
-FLOAT_RETRY_BACKOFF = 1.0
+FLOAT_RETRY_BACKOFF = 0.5
 """float: exponential backoff factor between retries, in seconds."""
 
 TUPLE_RETRY_STATUS = (429, 500, 502, 503, 504)

@@ -7,6 +7,7 @@ mutations restricted to kinase genes.
 
 import logging
 import os
+import time
 from abc import abstractmethod
 from dataclasses import dataclass, field
 
@@ -32,6 +33,15 @@ logger = logging.getLogger(__name__)
 
 DICT_KINASE = return_kinase_dict()
 
+INT_CLIENT_RETRIES = 2
+"""int: attempts made to construct the cBioPortal Swagger client before giving up;
+the session already retries at the HTTP level, so this only covers a failure that
+survives the response (e.g. an unparseable Swagger spec)."""
+
+FLOAT_CLIENT_BACKOFF = 2.0
+"""float: seconds to wait before the second client-construction attempt, doubling
+thereafter."""
+
 
 @dataclass
 class cBioPortal(APIKeySwaggerClient):
@@ -45,16 +55,27 @@ class cBioPortal(APIKeySwaggerClient):
     """cBioPortal API object (post-init)."""
 
     def __post_init__(self):
-        """Post-initialization to set up cBioPortal API client."""
+        """Post-initialization to set up cBioPortal API client.
+
+        Retries client construction so a transient failure on first contact -- one
+        the session-level retries cannot cover, such as a truncated or unparseable
+        Swagger spec -- does not leave the client permanently unusable.
+        """
         self.instance = get_cbioportal_instance()
         self.url = f"https://{self.instance}/api/v2/api-docs"
-        try:
-            self._cbioportal = self.query_api()
-        except Exception as e:
-            logger.warning(
-                f"Error initializing cBioPortal API client: {e}\n"
-                "Can still load data from CSV files if pathfile(s) provided."
-            )
+        for int_attempt in range(1, INT_CLIENT_RETRIES + 1):
+            try:
+                self._cbioportal = self.query_api()
+                break
+            except Exception as e:
+                logger.warning(
+                    f"Error initializing cBioPortal API client "
+                    f"(attempt {int_attempt} of {INT_CLIENT_RETRIES}): {e}\n"
+                    "Can still load data from CSV files if pathfile(s) provided.",
+                    exc_info=True,
+                )
+                if int_attempt < INT_CLIENT_RETRIES:
+                    time.sleep(FLOAT_CLIENT_BACKOFF * 2 ** (int_attempt - 1))
 
     def maybe_get_token(self):
         return maybe_get_cbioportal_token()
