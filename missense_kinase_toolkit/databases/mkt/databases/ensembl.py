@@ -14,6 +14,11 @@ from dataclasses import field
 
 from mkt.databases import requests_wrapper
 from mkt.databases.api_schema import RESTAPIClient
+from mkt.databases.constants import (
+    DICT_HEADER_JSON,
+    DICT_HEADER_JSON_POST,
+    resolve_rest_host,
+)
 from mkt.schema.utils import TQDM_BAR_FORMAT
 from pydantic.dataclasses import dataclass
 from tqdm import tqdm
@@ -27,18 +32,6 @@ DICT_ENSEMBL_REST_HOST = {
 }
 """dict[str, str]: Ensembl REST host per genome build; GRCh38 uses the default host."""
 
-DICT_BUILD_ALIAS = {
-    "GRCH37": "GRCh37",
-    "37": "GRCh37",
-    "HG19": "GRCh37",
-    "B37": "GRCh37",
-    "GRCH38": "GRCh38",
-    "38": "GRCh38",
-    "HG38": "GRCh38",
-}
-"""dict[str, str]: Upper-cased genome-build aliases to the canonical assembly name
-(cBioPortal ``ncbiBuild`` is inconsistent -- ``"37"``/``"hg19"`` also mean GRCh37)."""
-
 ENSEMBL_POST_REGION_MAX = 50
 """int: Maximum number of regions accepted per ``/sequence/region`` POST request."""
 
@@ -51,7 +44,7 @@ def rest_host(build: str) -> str:
     build : str
         Genome build/assembly name as found in the ``ncbiBuild`` column of
         cBioPortal mutations; common aliases (e.g. ``"37"``, ``"hg19"``) are
-        normalized via :data:`DICT_BUILD_ALIAS`.
+        normalized via :data:`mkt.databases.constants.DICT_BUILD_ALIAS`.
 
     Returns
     -------
@@ -64,13 +57,7 @@ def rest_host(build: str) -> str:
         If the build (after alias normalization) is not one of
         :data:`DICT_ENSEMBL_REST_HOST`.
     """
-    canonical = DICT_BUILD_ALIAS.get(str(build).upper())
-    if canonical in DICT_ENSEMBL_REST_HOST:
-        return DICT_ENSEMBL_REST_HOST[canonical]
-    raise ValueError(
-        f"Unsupported genome build {build!r}; expected one of "
-        f"{sorted(DICT_ENSEMBL_REST_HOST)} (aliases: {sorted(DICT_BUILD_ALIAS)})."
-    )
+    return resolve_rest_host(build, DICT_ENSEMBL_REST_HOST)
 
 
 DICT_COMPLEMENT = {"A": "T", "T": "A", "C": "G", "G": "C", "N": "N"}
@@ -152,7 +139,7 @@ class EnsemblSequence(RESTAPIClient):
     """Ensembl species name."""
     strand: int = 1
     """Strand to return (``1`` plus, ``-1`` minus); MAF coordinates are plus-strand."""
-    header: dict = field(default_factory=lambda: {"Accept": "application/json"})
+    header: dict = field(default_factory=lambda: dict(DICT_HEADER_JSON))
     """Header for the API request."""
 
     def __post_init__(self):
@@ -206,7 +193,7 @@ def get_cds_sequence(
     res = requests_wrapper.get_cached_session().get(
         f"{rest_host(build)}/sequence/id/{transcript_id}",
         params={"type": "cds"},
-        headers={"Accept": "application/json"},
+        headers=DICT_HEADER_JSON,
     )
     if not res.ok:
         logger.error("Error: %s", res.status_code)
@@ -288,7 +275,7 @@ def get_trinucleotide_contexts(
     """
     chunk_size = min(chunk_size, ENSEMBL_POST_REGION_MAX)
     url = f"{rest_host(build)}/sequence/region/{species}"
-    header = {"Content-Type": "application/json", "Accept": "application/json"}
+    header = DICT_HEADER_JSON_POST
     session = requests_wrapper.get_cached_session()
 
     dict_context: dict[tuple[str, int], str | None] = {}

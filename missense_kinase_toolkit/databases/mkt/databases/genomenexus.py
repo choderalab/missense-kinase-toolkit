@@ -20,6 +20,7 @@ import json
 import logging
 
 from mkt.databases import requests_wrapper
+from mkt.databases.constants import DICT_HEADER_JSON_POST, resolve_rest_host
 from mkt.schema.utils import TQDM_BAR_FORMAT
 from tqdm import tqdm
 
@@ -45,8 +46,9 @@ def rest_host(build: str) -> str:
     Parameters
     ----------
     build : str
-        Genome build/assembly name (e.g. ``"GRCh37"`` or ``"GRCh38"``), as found in
-        the ``ncbiBuild`` column of cBioPortal mutations.
+        Genome build/assembly name as found in the ``ncbiBuild`` column of
+        cBioPortal mutations; common aliases (e.g. ``"37"``, ``"hg19"``) are
+        normalized via :data:`mkt.databases.constants.DICT_BUILD_ALIAS`.
 
     Returns
     -------
@@ -56,15 +58,10 @@ def rest_host(build: str) -> str:
     Raises
     ------
     ValueError
-        If the build is not one of :data:`DICT_GENOME_NEXUS_HOST`.
+        If the build (after alias normalization) is not one of
+        :data:`DICT_GENOME_NEXUS_HOST`.
     """
-    try:
-        return DICT_GENOME_NEXUS_HOST[build]
-    except KeyError:
-        raise ValueError(
-            f"Unsupported genome build {build!r}; expected one of "
-            f"{sorted(DICT_GENOME_NEXUS_HOST)}."
-        )
+    return resolve_rest_host(build, DICT_GENOME_NEXUS_HOST)
 
 
 def _post_chunks(url, params, payload, chunk_size, desc):
@@ -89,7 +86,7 @@ def _post_chunks(url, params, payload, chunk_size, desc):
         The parsed JSON list returned for each chunk (empty on a failed chunk).
     """
     chunk_size = min(chunk_size, GENOME_NEXUS_POST_MAX)
-    header = {"Content-Type": "application/json", "Accept": "application/json"}
+    header = DICT_HEADER_JSON_POST
     session = requests_wrapper.get_cached_session()
     for idx in tqdm(
         range(0, len(payload), chunk_size),
