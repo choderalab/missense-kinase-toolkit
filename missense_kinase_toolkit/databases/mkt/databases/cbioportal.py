@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
+import requests
 from Bio import Align
 from bravado.client import SwaggerClient
 from mkt.databases import properties
@@ -351,6 +352,83 @@ class Mutations(StudyData):
             logger.error(f"Error retrieving mutations for study {self.study_id}: {e}")
             muts = None
         return muts
+
+
+@dataclass
+class StructuralVariant(StudyData):
+    """Class to get structural variants (gene fusions) from a cBioPortal study.
+
+    Fetches from the ``{study_id}_structural_variants`` molecular profile via the
+    cBioPortal ``StructuralVariants`` POST endpoint. Pass ``list_entrez`` to restrict
+    to specific genes (e.g. FGFR2 / FGFR3 for fusion candidacy) — cBioPortal's
+    ``StructuralVariantFilter`` requires either ``entrezGeneIds`` or
+    ``sampleMolecularIdentifiers``, so a gene filter is the efficient path; leave it
+    ``None`` only if the study is small.
+    """
+
+    list_entrez: list[int] | None = None
+    """Entrez gene IDs to restrict the fetch to (e.g. FGFR2=2263, FGFR3=2261). None
+    fetches across all genes (may require the study to expose a default sample list)."""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+    def query_sub_api(self) -> list | None:
+        """Get structural-variant cBioPortal data.
+
+        The ``/api/v2/api-docs`` swagger spec used by the base client predates
+        structural-variant support (its resource list has no ``StructuralVariants``),
+        so this queries the REST endpoint ``POST /api/structural-variant/fetch``
+        directly. Response rows are already flat (``site1*`` / ``site2*`` scalar
+        fields), so no ABC flattening is required downstream.
+
+        Returns
+        -------
+        list | None
+            cBioPortal structural variants as a list of dicts if successful,
+            otherwise None.
+        """
+        sv_filter: dict = {
+            "molecularProfileIds": [f"{self.study_id}_structural_variants"],
+        }
+        if self.list_entrez is not None:
+            sv_filter["entrezGeneIds"] = self.list_entrez
+        token = maybe_get_cbioportal_token()
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        try:
+            resp = requests.post(
+                f"https://{self.instance}/api/structural-variant/fetch",
+                json=sv_filter,
+                headers=headers,
+                timeout=120,
+            )
+            resp.raise_for_status()
+            svs = resp.json()
+        except Exception as e:
+            logger.error(
+                f"Error retrieving structural variants for study {self.study_id}: {e}"
+            )
+            svs = None
+        return svs
+
+    def convert_api_query_to_dataframe(self) -> pd.DataFrame | None:
+        """Build a flat DataFrame from the REST response (a list of dicts).
+
+        Overrides the ABC-flattening base implementation: the structural-variant
+        REST payload is already flat, so a direct ``pd.DataFrame`` is sufficient.
+
+        Returns
+        -------
+        pd.DataFrame | None
+            DataFrame of structural variants if successful, otherwise None.
+        """
+        try:
+            return pd.DataFrame(self._data)
+        except Exception as e:
+            logger.error(f"Error converting structural variants to DataFrame: {e}")
+            return None
 
 
 @dataclass
