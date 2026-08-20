@@ -388,7 +388,7 @@ class KinaseInfo(BaseModel):
         bound: int,
         klifs_bound: int,
         is_start: bool,
-        int_max_gap: int,
+        int_max_gap: float,
         bool_verbose: bool,
     ) -> int | None:
         """Reconcile an adjudicated kinase domain bound with the KLIFS pocket.
@@ -396,8 +396,18 @@ class KinaseInfo(BaseModel):
         The KLIFS pocket should fall within the kinase domain, i.e. the minimum
         KLIFS index should be >= the kinase domain start and the maximum KLIFS
         index should be <= the kinase domain end. When this is violated, the gap
-        is compared against ``int_max_gap``: small gaps expand the bound to the
-        KLIFS index, larger gaps return None since the mapping is unreliable.
+        is compared against ``int_max_gap``: gaps within the cutoff expand the
+        bound to the KLIFS index, larger gaps return None since the mapping is
+        treated as unreliable.
+
+        A finite cutoff was originally required because the MTOR kinase domain
+        was incorrectly annotated by Pfam (the "Serine/threonine-protein kinase
+        mTOR domain" region rather than the catalytic PI3/4-kinase domain), which
+        produced a spurious multi-hundred-residue gap. Once the atypical families
+        were re-annotated (PIKKs, PI3/4-kinases, etc.), the remaining large gaps
+        were found to be genuine kinase-domain inserts missed by Pfam but present
+        in KLIFS, so ``int_max_gap`` now defaults to ``float("inf")`` (no cutoff)
+        and the KLIFS index is trusted as the better-annotated bound.
 
         Parameters
         ----------
@@ -407,7 +417,7 @@ class KinaseInfo(BaseModel):
             The corresponding KLIFS pocket bound (min for start, max for end).
         is_start : bool
             Whether ``bound`` is the kinase domain start (True) or end (False).
-        int_max_gap : int
+        int_max_gap : float
             Maximum allowed gap between the kinase domain bound and the KLIFS
             bound before the bound is treated as unreliable and None is returned.
         bool_verbose : bool
@@ -440,16 +450,18 @@ class KinaseInfo(BaseModel):
         return None
 
     def adjudicate_kd_start(
-        self, int_max_gap: int = 15, bool_verbose: bool = False
+        self, int_max_gap: float = float("inf"), bool_verbose: bool = False
     ) -> int | None:
         """Adjudicate kinase domain start based on available data.
 
         Parameters
         ----------
-        int_max_gap : int, optional
+        int_max_gap : float, optional
             Maximum allowed gap between the kinase domain start and the minimum
             KLIFS pocket index before the start is treated as unreliable and None
-            is returned, by default 15.
+            is returned, by default ``float("inf")`` (no cutoff; the KLIFS index
+            is always trusted). See :meth:`_reconcile_kd_bound_with_klifs` for why
+            the historical finite cutoff was relaxed.
         bool_verbose : bool, optional
             Whether to log verbose messages, by default False.
 
@@ -483,16 +495,18 @@ class KinaseInfo(BaseModel):
         return start
 
     def adjudicate_kd_end(
-        self, int_max_gap: int = 15, bool_verbose: bool = False
+        self, int_max_gap: float = float("inf"), bool_verbose: bool = False
     ) -> int | None:
         """Adjudicate kinase domain end based on available data.
 
         Parameters
         ----------
-        int_max_gap : int, optional
+        int_max_gap : float, optional
             Maximum allowed gap between the kinase domain end and the maximum
             KLIFS pocket index before the end is treated as unreliable and None
-            is returned, by default 15.
+            is returned, by default ``float("inf")`` (no cutoff; the KLIFS index
+            is always trusted). See :meth:`_reconcile_kd_bound_with_klifs` for why
+            the historical finite cutoff was relaxed.
         bool_verbose : bool, optional
             Whether to log verbose messages, by default False.
 

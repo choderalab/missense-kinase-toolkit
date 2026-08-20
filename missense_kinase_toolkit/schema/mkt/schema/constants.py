@@ -18,6 +18,42 @@ LIST_PFAM_KD = [
 ]
 """list[str]: List of Pfam kinase domain names."""
 
+LIST_LEGACY_KINASES = [
+    # GCK: hexokinase (sugar kinase, EC 2.7.1.2), out of scope
+    "GCK",
+    # BET family - historically contested Ser/Thr activity
+    "BRD2",
+    "BRD3",
+    "BRD4",
+    "BRDT",
+    # E3 ligases/transcription co-factors
+    "TRIM24",
+    "TRIM28",
+    "TRIM33",
+    "TRIM66",
+    # other bromodomain-containing proteins
+    "BAZ1A",
+    "BAZ1B",
+    "TAF1",
+    "TAF1L",
+    # RhoGEF/GAPs
+    "ABR",
+    "BCR",
+    # conflated with ATR in KLIFS as also sometimes abbreviated ATR
+    "ANTXR1",
+    # Ephrin ligand - not Ephrin
+    "EFNA2",
+    # reclassified as a winged-helix domain protein in 2024
+    "WHR1",
+    # not kinases - holdovers from Manning et al. 2002
+    "BLVRA",
+    "CERT1",
+    "GTF2F1",
+    "FASTK",
+    "HSPB8",
+]
+"""list[str]: List of legacy (mostly Manning) kinases that should not be included in canonical kinases."""
+
 LIST_FULL_KLIFS_REGION = [
     "I",
     "g.l",
