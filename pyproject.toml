@@ -3,3 +3,17 @@ max-line-length = 88
 extend-ignore = ['E203','E501']
 [tool.isort]
 profile = "black"
+
+[tool.pytest.ini_options]
+markers = ["network: marks tests requiring network access"]
+filterwarnings = [
+    # bravado/swagger_spec_validator import jsonschema.RefResolver at module scope,
+    # so this fires before any of our code runs and cannot be configured away;
+    # both packages would need to migrate to the referencing library upstream
+    "ignore:jsonschema\\.RefResolver is deprecated:DeprecationWarning",
+    "ignore:jsonschema\\.RefResolver\\.in_scope is deprecated:DeprecationWarning",
+]
+# surface our own logger.warning calls (e.g. failed API client init) in CI output
+log_cli = true
+log_cli_level = "WARNING"
+log_cli_format = "%(levelname)s %(name)s: %(message)s"

@@ -28,6 +28,35 @@ def configured_cbioportal(configured_output_dir):
     config.set_cbioportal_instance("www.cbioportal.org")
 
 
+def is_cbioportal_reachable(str_url: str) -> bool:
+    """Probe the cBioPortal Swagger spec endpoint directly.
+
+    Lets the live tests tell an upstream outage (skip) apart from a broken client
+    in this package (fail), since both surface as a None client.
+
+    Parameters
+    ----------
+    str_url : str
+        cBioPortal Swagger spec URL to probe.
+
+    Returns
+    -------
+    bool
+        True if the endpoint answers with a 2xx, False otherwise
+    """
+    try:
+        response = requests.get(str_url, timeout=30)
+        return response.ok
+    except Exception:
+        return False
+
+
+@pytest.fixture(scope="session")
+def cbioportal_probe():
+    """Expose :func:`is_cbioportal_reachable` so it is only called on failure."""
+    return is_cbioportal_reachable
+
+
 # ---------------------------------------------------------------------------
 # EGFR fixtures (shared by test_kincore, test_klifs, test_uniprot)
 # ---------------------------------------------------------------------------

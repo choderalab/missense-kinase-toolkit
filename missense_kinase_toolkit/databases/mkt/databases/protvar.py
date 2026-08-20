@@ -26,6 +26,7 @@ class ScoreDatabase(str, Enum):
     ESM1b = "ESM"
     AlphaMissense = "AM"
     popEVE = "POPEVE"
+    Missense3D = "M3D"
 
 
 DICT_SCORE_KEY = {
@@ -40,18 +41,24 @@ DICT_SCORE_KEY = {
 DICT_CLASS_KEY = {
     ScoreDatabase.EVE: "eveClass",
     ScoreDatabase.AlphaMissense: "amClass",
+    ScoreDatabase.Missense3D: "prediction",
 }
-"""dict[ScoreDatabase, str]: Key holding the categorical classification; only EVE \
-    and AlphaMissense have one."""
+"""dict[ScoreDatabase, str]: Key holding the categorical classification; EVE, \
+    AlphaMissense, and Missense3D (whose prediction also carries a companion \
+    ``damagingFeature`` string) have one."""
 
 TUPLE_VARIANT_DATABASES = (
     ScoreDatabase.EVE,
     ScoreDatabase.ESM1b,
     ScoreDatabase.AlphaMissense,
     ScoreDatabase.popEVE,
+    ScoreDatabase.Missense3D,
 )
-"""tuple[ScoreDatabase, ...]: Variant-level databases (one score per substitution); \
-    Conservation is excluded as it is residue- rather than variant-level."""
+"""tuple[ScoreDatabase, ...]: Known variant-level databases (one score per \
+    substitution); Conservation is excluded as it is residue- rather than \
+    variant-level. Informational only -- :meth:`ProtvarScoreQuery._build_variants` \
+    treats every non-Conservation database as variant-level, so unknown/future \
+    databases are handled without being listed here."""
 
 
 def _coerce_database(database: "ScoreDatabase | str | None") -> "ScoreDatabase | None":
@@ -76,7 +83,8 @@ class ProtvarVariant:
     mt: str | None
     """Mutant residue (1-letter code) this variant represents; None if unknown."""
     scores: dict = field(default_factory=dict)
-    """Mapping of ScoreDatabase to its raw score dict for this variant."""
+    """Mapping of ScoreDatabase (or the raw ``type`` string for a database not yet \
+        in :class:`ScoreDatabase`) to its raw score dict for this variant."""
 
     def get_score(self, database: "ScoreDatabase | str"):
         """Return the numeric score for a database, or None if not present.
@@ -111,9 +119,11 @@ class ProtvarVariant:
         Returns
         -------
         str | None
-            The classification ("eveClass" for EVE, "amClass" for AlphaMissense);
-            None for databases without one (Conservation, ESM1b, popEVE) or when
-            the database is absent for this variant.
+            The classification ("eveClass" for EVE, "amClass" for AlphaMissense,
+            "prediction" for Missense3D); None for databases without one
+            (Conservation, ESM1b, popEVE) or when the database is absent for this
+            variant. For Missense3D the companion ``damagingFeature`` string is
+            retained in the raw score dict (:attr:`scores`).
         """
         db = _coerce_database(database)
         key = DICT_CLASS_KEY.get(db) if db is not None else None
@@ -139,8 +149,8 @@ class ProtvarScoreQuery(RESTAPIClient):
     """Class to interact with the ProtVar score API.
 
     A single query returns scores for every available database
-    (Conservation, EVE, ESM1b, AlphaMissense, popEVE). The response is parsed
-    into :class:`ProtvarVariant` objects exposed via :attr:`variants`:
+    (Conservation, EVE, ESM1b, AlphaMissense, popEVE, Missense3D). The response
+    is parsed into :class:`ProtvarVariant` objects exposed via :attr:`variants`:
 
     - ``mut`` supplied -> a single variant keyed by that residue.
     - ``mut`` is None  -> one variant per possible substitution (keyed by residue).
@@ -203,16 +213,31 @@ class ProtvarScoreQuery(RESTAPIClient):
         self._build_variants()
 
     def _build_variants(self) -> None:
-        """Parse the flat score list into per-variant ProtvarVariant objects."""
+        """Parse the flat score list into per-variant ProtvarVariant objects.
+
+        Robust to databases ProtVar adds in future: an entry is grouped by its
+        :class:`ScoreDatabase` when recognized and by its raw ``type`` string
+        otherwise, so an unknown database is retained on the variant (in
+        :attr:`ProtvarVariant.scores`, keyed by its type string) rather than
+        dropped. Only its typed scalar accessors (:meth:`ProtvarVariant.get_score`
+        / :meth:`ProtvarVariant.get_classification`) are unavailable until it is
+        added to :data:`DICT_SCORE_KEY` / :data:`DICT_CLASS_KEY`.
+        """
+        # group by ScoreDatabase when known, else by the raw type string so
+        # future/unknown databases are retained rather than dropped
         grouped = defaultdict(list)
         for score in self._protvar_scores_query or []:
-            db = _coerce_database(score.get("type"))
-            if db is not None:
-                grouped[db].append(score)
+            raw_type = score.get("type")
+            if raw_type is None:
+                continue
+            db = _coerce_database(raw_type)
+            grouped[db if db is not None else raw_type].append(score)
 
-        # conservation is residue-level: a single entry shared by every variant
+        # conservation is residue-level (a single entry shared by every variant);
+        # every other database -- known or unknown -- is variant-level
         conserv = grouped.get(ScoreDatabase.Conservation)
         conserv_entry = conserv[0] if conserv else None
+        variant_level_keys = [k for k in grouped if k != ScoreDatabase.Conservation]
 
         # recover the residue order; popEVE is the only variant-level database
         # whose payload carries the mutant residue (mt)
@@ -223,9 +248,7 @@ class ProtvarScoreQuery(RESTAPIClient):
             order = [self.mut]
         else:
             order = list(
-                range(
-                    max((len(grouped[db]) for db in TUPLE_VARIANT_DATABASES), default=0)
-                )
+                range(max((len(grouped[k]) for k in variant_level_keys), default=0))
             )
             if order:
                 logger.warning(
@@ -240,10 +263,10 @@ class ProtvarScoreQuery(RESTAPIClient):
             scores = {}
             if conserv_entry is not None:
                 scores[ScoreDatabase.Conservation] = conserv_entry
-            for db in TUPLE_VARIANT_DATABASES:
-                entries = grouped.get(db, [])
+            for key in variant_level_keys:
+                entries = grouped[key]
                 if idx < len(entries):
-                    scores[db] = entries[idx]
+                    scores[key] = entries[idx]
             variants[mt] = ProtvarVariant(mt=mt, scores=scores)
         self.variants = variants
 

@@ -299,6 +299,13 @@ class SubstitutionPseudocounts:
         :attr:`background`); >= 0, higher = more conserved-and-surprising. An empty column
         returns ``None`` rather than scoring the bare pseudocount against the background.
 
+        Where ``q_a == 0`` the KL term is formally infinite, but such a zero only
+        arises from an empirically estimated background that never observed that
+        residue, so an infinite score would be a sampling artifact. Those residues
+        are dropped and ``p`` is renormalized over the background's support, which
+        keeps the result a KL between two distributions on that support -- and so
+        still ``>= 0``. A background with no zeros (the default) is unaffected.
+
         Parameters
         ----------
         counts : np.ndarray
@@ -307,13 +314,22 @@ class SubstitutionPseudocounts:
         Returns
         -------
         float | None
-            Information content in bits, or ``None`` for an empty column.
+            Information content in bits, or ``None`` for an empty column, or when
+            the column and the background share no support.
         """
         p = self.smoothed_freqs(counts)
         if p is None:
             return None
-        mask = p > 0
-        return float(np.sum(p[mask] * np.log2(p[mask] / self.background[mask])))
+        mask_bg = self.background > 0
+        p_support, q_support = p[mask_bg], self.background[mask_bg]
+        float_total = p_support.sum()
+        if float_total <= 0:
+            return None
+        p_support = p_support / float_total
+        mask = p_support > 0
+        return float(
+            np.sum(p_support[mask] * np.log2(p_support[mask] / q_support[mask]))
+        )
 
 
 def column_information_content(
