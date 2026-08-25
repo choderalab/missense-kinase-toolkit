@@ -37,6 +37,8 @@ the baseline.
   plain classes with class-level attributes alike. Modeled on `SequenceAlignment`
   in `mkt.databases.app.sequences` (dataclass) and `KLIFSConservationData` /
   `BaseSASAConfig` in `mkt.databases.conservation` / `mkt.databases.sasa`
-  (Pydantic). Some older Pydantic models (e.g. in `mkt.schema.kinase_schema`)
-  predate this and use bare fields — follow the trailing-docstring style for new
-  code and when touching those.
+  (Pydantic). Exception: the core `mkt.schema.kinase_schema` models intentionally
+  use **bare fields** (self-explanatory names) — keep them bare, including new
+  fields added to them, and match the surrounding model rather than backfilling
+  docstrings. Only add a trailing docstring there for a genuinely non-obvious
+  field.
