@@ -710,8 +710,18 @@ def find_alternative_hgnc(
         return list_out
 
 
-def generate_dict_obj_from_api_or_scraper() -> dict[str, pd.DataFrame]:
+def generate_dict_obj_from_api_or_scraper(
+    subset_uniprot: set[str] | None = None,
+) -> dict[str, pd.DataFrame]:
     """Generate dataframes for KinHub, KLIFS, and Pfam databases.
+
+    Parameters
+    ----------
+    subset_uniprot : set[str] | None, optional
+        If provided, restrict the expensive per-UniProt HGNC/UniProt/Pfam queries to
+        this set of UniProt IDs (intersected with the full KinHub/KLIFS/KinCore union),
+        by default None (build the entire kinome). Used by the ``--kinase`` one-off
+        update path to rebuild only targeted entries.
 
     Returns
     -------
@@ -736,6 +746,15 @@ def generate_dict_obj_from_api_or_scraper() -> dict[str, pd.DataFrame]:
     set_uniprot = set(
         list(dict_kinhub.keys()) + list(dict_klifs.keys()) + list(dict_kincore.keys())
     )
+
+    # restrict to the requested subset (one-off --kinase update) if provided
+    if subset_uniprot is not None:
+        set_uniprot &= set(subset_uniprot)
+        if len(set_uniprot) == 0:
+            logger.warning(
+                "subset_uniprot matched no UniProt IDs in the KinHub/KLIFS/KinCore "
+                "union; no objects will be built."
+            )
 
     # collect HGNC, UniProt, and Pfam data from API
     dict_hgnc, dict_uniprot, dict_pfam = {}, {}, {}
