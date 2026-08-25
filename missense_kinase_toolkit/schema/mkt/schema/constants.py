@@ -14,9 +14,23 @@ logger = logging.getLogger(__name__)
 LIST_PFAM_KD = [
     "Protein kinase domain",
     "Protein tyrosine and serine/threonine kinase",
-    "Serine/threonine-protein kinase mTOR domain",
+    # ADCK1/2/5, COQ8A/B
+    "ABC1 atypical kinase-like domain",
+    # ALPK1/2/3, EEF2K, TRPM6/7
+    "Alpha-kinase family",
+    # PIKK (ATM, ATR, MTOR, PRKDC, SMG1, TRRAP), PI3/4K
+    "Phosphatidylinositol 3- and 4-kinase",
+    # PIP5K/PI4P5K
+    "Phosphatidylinositol-4-phosphate 5-Kinase",
+    # RIOK1/2/3
+    "RIO domain",
+    # GHKL kinases: BCKDK, PDK1-4
+    "Histidine kinase-, DNA gyrase B-, and HSP90-like ATPase",
 ]
-"""list[str]: List of Pfam kinase domain names."""
+"""list[str]: List of Pfam kinase domain names, including lipid and atypical kinase
+domains. Note MTOR's catalytic kinase domain is the C-terminal
+"Phosphatidylinositol 3- and 4-kinase" region, not the regulatory
+"Serine/threonine-protein kinase mTOR domain"."""
 
 LIST_LEGACY_KINASES = [
     # GCK: hexokinase (sugar kinase, EC 2.7.1.2), out of scope
@@ -246,16 +260,15 @@ STR_KLIFS_DFG_ASP = "xDFG:81"
 
 LIST_PSEUDOKINASE_TRIAD_INTACT = [
     "BUB1B",
-    "PDIK1L",
     "ROR1",
     "ROR2",
     "RYK",
-    "SBK3",
 ]
 """list[str]: Curated pseudokinases that retain an intact VAIK-K / HRD-D / DFG-D triad and
 are therefore NOT caught by the catalytic-residue heuristic (false negatives); they are
 catalytically dead for other reasons (degraded regulatory spine, glycine-rich loop, or
-nucleotide binding). is_pseudokinase() force-returns True for these.
+nucleotide binding). is_pseudokinase() force-returns True for these, unless the kinase has
+a KinCore active-state CIF (which takes precedence and marks it catalytically active).
 
 Citations:
   - BUB1B (BUBR1) -- a bona fide pseudokinase despite an intact catalytic triad:
@@ -263,9 +276,10 @@ Citations:
   - ROR1, ROR2, RYK -- Wnt-receptor pseudokinases that retain catalytic residues but
     lack activity: Boudeau et al., Trends Cell Biol 2006; Reiterer et al., Trends Cell
     Biol 2014; Mendrola et al., Biochem Soc Trans 2013.
-  - PDIK1L, SBK3 -- annotated pseudokinases with intact triads; classified pseudo on
-    nucleotide-binding / catalytic grounds (Murphy et al., Biochem J 2014). Lower
-    confidence than the above; revisit if a more authoritative list is adopted."""
+
+NOTE: PDIK1L and SBK3 were previously listed here (annotated pseudo on nucleotide-binding
+grounds, Murphy et al., Biochem J 2014, but lower confidence) -- both now carry KinCore
+active-state CIFs and are treated as catalytically active, so they were removed."""
 
 LIST_PSEUDOKINASE_HEURISTIC_FALSE_POSITIVE = [
     "CAMKK1",
@@ -286,9 +300,9 @@ Citations / rationale:
     rather than true loss of catalysis.
 
 NOTE (WNK4): WNK4 also trips the heuristic (no beta3 or beta2 lysine; III:17=C, II:13=R)
-and is NOT rescued by the beta2-lysine alternative, unlike WNK1/2/3. WNK4 is the most
-divergent, weakly/debatably active WNK -- left flagged pending review rather than added
-here."""
+and is NOT rescued by the beta2-lysine alternative, unlike WNK1/2/3. It is not listed here
+because it carries a KinCore active-state CIF, which is_pseudokinase() treats as
+catalytically active (taking precedence over the heuristic)."""
 
 DICT_KINASE_GROUP_COLORS = {
     "AGC": "#5B8DBE",  # Muted steel blue

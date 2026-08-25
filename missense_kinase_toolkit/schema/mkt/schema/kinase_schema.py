@@ -326,19 +326,12 @@ class KinaseInfo(BaseModel):
         str | None
             The sequence from the CIF if available, otherwise None.
         """
-        key_seq = "_entity_poly.pdbx_seq_one_letter_code"
+        from mkt.schema.utils import extract_sequence_from_cif
 
-        try:
-            if self.kincore is not None and self.kincore.cif is not None:
-                return self.kincore.cif.cif[key_seq][0].replace("\n", "")
-            else:
-                if bool_verbose:
-                    logger.info(f"No CIF sequence for {self.hgnc_name}")
-                return None
-        except Exception as e:
-            if bool_verbose:
-                logger.info(f"No Kincore entry for {self.hgnc_name}: {e}")
-            return None
+        seq = extract_sequence_from_cif(self.kincore)
+        if seq is None and bool_verbose:
+            logger.info(f"No CIF sequence for {self.hgnc_name}")
+        return seq
 
     def adjudicate_kd_sequence(self, bool_verbose: bool = False) -> str | None:
         """Adjudicate kinase domain sequence based on available data.
@@ -609,9 +602,11 @@ class KinaseInfo(BaseModel):
         canonical catalytic residues -- the VAIK beta3 lysine (III:17), the HRD
         catalytic aspartate (c.l:70) and the DFG aspartate (xDFG:81); a kinase missing
         any one is called a pseudokinase. The catalytic lysine may instead sit in beta2
-        (II:13) in the WNK family, which is accepted as present. Two hand-curated
-        overrides correct the known failure modes of the heuristic (see
-        ``LIST_PSEUDOKINASE_TRIAD_INTACT`` and
+        (II:13) in the WNK family, which is accepted as present. A KinCore active-state
+        CIF takes precedence over everything else: it marks an experimentally/AF2-
+        validated catalytically active kinase, so such a kinase is never a pseudokinase.
+        Two hand-curated overrides then correct the known failure modes of the heuristic
+        (see ``LIST_PSEUDOKINASE_TRIAD_INTACT`` and
         ``LIST_PSEUDOKINASE_HEURISTIC_FALSE_POSITIVE`` in ``mkt.schema.constants`` for
         membership and citations). Returns False when no KLIFS pocket is available.
 
@@ -629,6 +624,11 @@ class KinaseInfo(BaseModel):
             STR_KLIFS_CATALYTIC_ASP,
             STR_KLIFS_DFG_ASP,
         )
+
+        # a KinCore active-state CIF marks a catalytically active kinase, so it is never
+        # a pseudokinase -- this overrides both the curated lists and the heuristic
+        if self.kincore is not None and self.kincore.cif is not None:
+            return False
 
         # curated literature overrides take precedence over the sequence heuristic
         if self.hgnc_name in LIST_PSEUDOKINASE_TRIAD_INTACT:

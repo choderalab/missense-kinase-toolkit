@@ -6,22 +6,22 @@ import pytest
 def test_adjudicate_group(mutable_kinase, caplog):
     """Test kinase group adjudication across data-source priorities.
 
-    Uses ``mutable_kinase`` because the final case sets ``ANTXR1.klifs = None``
+    Uses ``mutable_kinase`` because the final case sets ``PI4KA.klifs = None``
     to exercise the no-group-found path.
     """
     caplog.set_level(logging.INFO)
 
     assert mutable_kinase("ABL1").adjudicate_group() == "TK"  # Kincore
-    assert mutable_kinase("ABR").adjudicate_group() == "Atypical"  # KinHub
+    assert mutable_kinase("ADCK1").adjudicate_group() == "Atypical"  # KinHub
 
-    obj_antxr1 = mutable_kinase("ANTXR1")
-    assert obj_antxr1.adjudicate_group() == "Atypical"  # KLIFS
+    obj_pi4ka = mutable_kinase("PI4KA")
+    assert obj_pi4ka.adjudicate_group() == "Atypical"  # KLIFS
 
     # remove KLIFS so no source can supply a group
-    obj_antxr1.klifs = None
+    obj_pi4ka.klifs = None
     caplog.clear()
-    assert obj_antxr1.adjudicate_group(bool_verbose=True) is None
-    assert "No group found for ANTXR1" in caplog.text
+    assert obj_pi4ka.adjudicate_group(bool_verbose=True) is None
+    assert "No group found for PI4KA" in caplog.text
 
 
 def test_adjudicate_kd_clean_bounds(dict_kinase):
@@ -68,8 +68,8 @@ def test_adjudicate_kd_large_gap_expands_by_default(dict_kinase):
     """
     # EIF2AK4_2 start gap of 46 expands to the KLIFS minimum
     assert dict_kinase["EIF2AK4_2"].adjudicate_kd_start() == 284
-    # MTOR end gap of 1337 expands to the KLIFS maximum
-    assert dict_kinase["MTOR"].adjudicate_kd_end() == 2361
+    # ADCK2 end gap (Pfam end 218 -> KLIFS max) expands to the KLIFS maximum
+    assert dict_kinase["ADCK2"].adjudicate_kd_end() == 497
 
 
 def test_adjudicate_kd_finite_cutoff_returns_none(dict_kinase, caplog):
@@ -81,8 +81,8 @@ def test_adjudicate_kd_finite_cutoff_returns_none(dict_kinase, caplog):
     assert "Kinase domain start found for EIF2AK4_2" in caplog.text
     assert "larger than cut-off 15" in caplog.text
 
-    # a large-but-finite cut-off still expands the MTOR end bound
-    assert dict_kinase["MTOR"].adjudicate_kd_end(int_max_gap=2000) == 2361
+    # a large-but-finite cut-off still expands the ADCK2 end bound
+    assert dict_kinase["ADCK2"].adjudicate_kd_end(int_max_gap=2000) == 497
 
 
 def test_adjudicate_kd_verbose_logs_expansion(dict_kinase, caplog):
