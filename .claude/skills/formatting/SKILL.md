@@ -29,3 +29,14 @@ the baseline.
   `pre-commit run --all-files` before committing.
 - The trailing-docstring constant pattern is modeled on the constants in
   `mkt.databases.klifs` — match that style.
+- Classes document their fields the same way constants do: a one-line class
+  docstring, then a **trailing docstring per field** (`"""..."""` immediately
+  after each field/attribute declaration) — not a NumPy-style `Attributes:`
+  block. Include the default in the field's docstring (e.g. `..., by default
+  None`). This applies to `@dataclass` classes, Pydantic `BaseModel` classes, and
+  plain classes with class-level attributes alike. Modeled on `SequenceAlignment`
+  in `mkt.databases.app.sequences` (dataclass) and `KLIFSConservationData` /
+  `BaseSASAConfig` in `mkt.databases.conservation` / `mkt.databases.sasa`
+  (Pydantic). Some older Pydantic models (e.g. in `mkt.schema.kinase_schema`)
+  predate this and use bare fields — follow the trailing-docstring style for new
+  code and when touching those.

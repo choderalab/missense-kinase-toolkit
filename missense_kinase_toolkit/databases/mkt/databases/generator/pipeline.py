@@ -40,29 +40,18 @@ DEFAULT_PATH_REPORTS = "images"
 
 @dataclass
 class BuildContext:
-    """Mutable state threaded through the build pipeline and its steps.
-
-    Attributes
-    ----------
-    dict_kinaseinfo : dict[str, Any]
-        Assembled KinaseInfo objects keyed by ``hgnc_name`` (incl. ``_1``/``_2``
-        multi-kinase-domain suffixes).
-    path_objects : str
-        Absolute path to the per-kinase serialization directory.
-    path_reports : str
-        Absolute path to the reports/figures directory.
-    path_tar : str
-        Absolute path to the ``KinaseInfo.tar.gz`` archive.
-    subset_hgnc : set[str] | None
-        When not None, the ``hgnc_name`` keys targeted by a subset (``--kinase``) build;
-        enrichment steps iterate only these and report steps are skipped.
-    """
+    """Mutable state threaded through the build pipeline and its steps."""
 
     dict_kinaseinfo: dict[str, Any]
+    """Assembled KinaseInfo objects keyed by ``hgnc_name`` (incl. ``_1``/``_2`` multi-kinase-domain suffixes)."""
     path_objects: str
+    """Absolute path to the per-kinase serialization directory."""
     path_reports: str
+    """Absolute path to the reports/figures directory."""
     path_tar: str
+    """Absolute path to the ``KinaseInfo.tar.gz`` archive."""
     subset_hgnc: set[str] | None = None
+    """If not None, the ``hgnc_name`` keys targeted by a subset (``--kinase``) build; enrichment steps iterate only these and report steps are skipped, by default None."""
 
 
 def run_base_build(
