@@ -79,6 +79,34 @@ def random_uuid():
     return uuid.UUID(bytes=bytes(random.getrandbits(8) for _ in range(16)), version=4)
 
 
+def extract_sequence_from_cif(kincore) -> str | None:
+    """Extract the one-letter sequence from a KinCore CIF, if present.
+
+    Shared by ``KinaseInfo.extract_sequence_from_cif`` and the
+    ``KinaseInfoKinaseDomainGenerator`` FASTA-to-CIF alignment validator so both read
+    the CIF sequence the same way. Duck-typed on ``kincore.cif.cif`` to avoid importing
+    the schema models here.
+
+    Parameters
+    ----------
+    kincore : KinCore | None
+        A ``KinCore`` object (or None); the sequence is read from
+        ``kincore.cif.cif["_entity_poly.pdbx_seq_one_letter_code"]``.
+
+    Returns
+    -------
+    str | None
+        The one-letter CIF sequence with newlines stripped, or None if unavailable.
+    """
+    key_seq = "_entity_poly.pdbx_seq_one_letter_code"
+    try:
+        if kincore is not None and kincore.cif is not None:
+            return kincore.cif.cif[key_seq][0].replace("\n", "")
+    except Exception:
+        pass
+    return None
+
+
 def split_domain_suffix(name: str) -> tuple[str, str]:
     """Split a trailing multi-domain index suffix off a kinase name.
 
