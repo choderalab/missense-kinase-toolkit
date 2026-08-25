@@ -18,7 +18,7 @@ from mkt.databases.colors import map_aa_to_single_letter_code
 from mkt.databases.config import set_request_cache
 from mkt.databases.kincore import align_kincore2uniprot, harmonize_kincore_fasta_cif
 from mkt.databases.utils import return_bool_at_index
-from mkt.schema.constants import LIST_PFAM_KD
+from mkt.schema.constants import LIST_LEGACY_KINASES, LIST_PFAM_KD
 from mkt.schema.io_utils import get_repo_root
 from mkt.schema.kinase_schema import (
     KLIFS,
@@ -31,7 +31,12 @@ from mkt.schema.kinase_schema import (
     Pfam,
     UniProt,
 )
-from mkt.schema.utils import TQDM_BAR_FORMAT, rgetattr, rsetattr
+from mkt.schema.utils import (
+    TQDM_BAR_FORMAT,
+    extract_sequence_from_cif,
+    rgetattr,
+    rsetattr,
+)
 from pydantic import ValidationError, model_validator
 from tqdm import tqdm
 from typing_extensions import Self
@@ -168,7 +173,7 @@ class KinaseInfoKinaseDomainGenerator(KinaseInfoKinaseDomain):
 
             # all non-None entries will have fastas
             fasta = self.kincore.fasta.seq
-            cif = self.extract_sequence_from_cif()
+            cif = extract_sequence_from_cif(self.kincore)
 
             if cif is not None:
                 # KinCoreFASTA2CIF
@@ -994,6 +999,13 @@ def combine_kinaseinfo(
     for uniprot_id, kd_temp in dict_kd.items():
 
         uniprot_temp = dict_uniprot[uniprot_id.split("_")[0]]
+
+        # exclude legacy (mostly Manning) entries that are not canonical kinases
+        if uniprot_temp.hgnc_name in LIST_LEGACY_KINASES:
+            logger.info(
+                f"Skipping legacy kinase {uniprot_temp.hgnc_name} ({uniprot_id})..."
+            )
+            continue
 
         list_uniprot_attr = ["hgnc_name", "uniprot", "pfam"]
         list_kd_attr = ["uniprot_id", "kinhub", "klifs", "kincore"]
