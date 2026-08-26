@@ -124,3 +124,75 @@ def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
     assert after["EGFR"].uniprot.header == sentinel
     assert after["ABL1"].uniprot.header == seed["ABL1"].uniprot.header
     assert not path_objects.exists()
+
+
+def test_reconstruct_dict_obj_groups_multidomain():
+    """The raw dict_obj is keyed by Source, single-valued for hgnc/uniprot/pfam, and
+    lists for kinhub/klifs/kincore with multi-domain entries grouped by base UniProt."""
+    from mkt.databases.kinase_schema import Source
+
+    seed = deserialize_kinase_dict(
+        list_ids=["EGFR", "JAK1_1", "JAK1_2"], bool_verbose=False
+    )
+    if not {"EGFR", "JAK1_1", "JAK1_2"} <= set(seed):
+        pytest.skip("packaged KinaseInfo.tar.gz missing EGFR/JAK1")
+
+    dict_obj = pipeline._reconstruct_dict_obj(seed)
+    assert set(dict_obj) == {source.value for source in Source}
+    # single-valued sources
+    assert dict_obj["hgnc"]["P00533"] == "EGFR"
+    assert not isinstance(dict_obj["uniprot"]["P00533"], list)
+    # list sources; single-domain -> length 1, multi-domain grouped to base UniProt
+    assert isinstance(dict_obj["kinhub"]["P00533"], list)
+    assert len(dict_obj["kinhub"]["P00533"]) == 1
+    assert len(dict_obj["kincore"]["P23458"]) == 2  # JAK1 two kinase domains
+
+
+def test_run_dispatches_source_only(monkeypatch, tmp_path):
+    """--only <source> routes to the source-rebuild path, not full regen / per-entry."""
+    calls = {}
+    monkeypatch.setattr(
+        pipeline, "_resolve_dir", lambda repo, rel, default: str(tmp_path)
+    )
+    monkeypatch.setattr(
+        pipeline, "_run_source_only", lambda *a: calls.__setitem__("source", a)
+    )
+    monkeypatch.setattr(pipeline, "_run_full", lambda *a: calls.__setitem__("full", a))
+    monkeypatch.setattr(
+        pipeline, "_run_update", lambda *a: calls.__setitem__("update", a)
+    )
+
+    pipeline.run(only=["kincore"])
+    assert set(calls) == {"source"}
+    assert calls["source"][0] == ["kincore"]
+
+
+def test_run_source_with_skip_raises(monkeypatch, tmp_path):
+    """--only <source> combined with --skip is rejected."""
+    monkeypatch.setattr(pipeline, "_resolve_dir", lambda *a: str(tmp_path))
+    with pytest.raises(ValueError, match="skip"):
+        pipeline.run(only=["kincore"], skip=["alphafold"])
+
+
+def test_fetch_source_unknown_raises():
+    """fetch_source rejects a name outside the Source enum before any fetch."""
+    from mkt.databases.kinase_schema import fetch_source
+
+    with pytest.raises(ValueError):
+        fetch_source("notasource", set())
+
+
+def test_source_only_no_dict_falls_back_to_full(monkeypatch, tmp_path):
+    """With no existing dict, --only <source> falls back to a full regen."""
+    monkeypatch.setattr(pipeline, "deserialize_kinase_dict", lambda **k: {})
+    calls = {}
+    monkeypatch.setattr(pipeline, "_run_full", lambda *a: calls.__setitem__("full", a))
+
+    pipeline._run_source_only(
+        ["kincore"],
+        [],
+        str(tmp_path / "objects"),
+        str(tmp_path / "reports"),
+        str(tmp_path / "absent.tar.gz"),
+    )
+    assert "full" in calls

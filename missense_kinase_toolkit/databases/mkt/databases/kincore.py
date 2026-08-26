@@ -4,11 +4,11 @@ Reads KinCore FASTA and CIF files, extracts kinase-domain metadata, aligns KinCo
 sequences to UniProt, and harmonizes the FASTA- and CIF-derived records.
 """
 
-import glob
+import io
 import logging
 import os
 import re
-import shutil
+import zipfile
 from collections import Counter
 from itertools import chain
 
@@ -22,7 +22,7 @@ from mkt.databases.utils import (
     split_on_first_only,
     try_except_split_concat_str,
 )
-from mkt.schema.io_utils import extract_tarfiles, get_repo_root, untar_files_in_memory
+from mkt.schema.io_utils import get_repo_root, untar_files_in_memory
 from mkt.schema.kinase_schema import KinCore, KinCoreCIF, KinCoreFASTA
 from mkt.schema.utils import TQDM_BAR_FORMAT
 from tqdm import tqdm
@@ -37,6 +37,14 @@ PATH_ORIG_CIF = os.path.join(
 PATH_ALIGN_CIF = os.path.join(
     PATH_DATA, "Kincore_AlphaFold2_ActiveHumanCatalyticKinases_v2_aligned.tar.gz"
 )
+
+KINCORE_CIF_URL = (
+    "https://dunbrack.fccc.edu/kincore/static/downloads/af2activemodels/"
+    "AF2_Active_Models_v2.zip"
+)
+"""str: Dunbrack KinCore AF2 active-model v2 archive (one active-state CIF per kinase domain)."""
+PATH_CIF_ZIP = os.path.join(PATH_DATA, "AF2_Active_Models_v2.zip")
+"""str: Local (gitignored) cache path for the downloaded v2 CIF archive."""
 
 
 def return_fasta_contents(path_filename=str) -> SeqIO.FastaIO.FastaIterator:
@@ -233,75 +241,87 @@ LIST_CIF_KEYS = [
     "cif",
     "group",
     "hgnc",
-    "min_aloop_pLDDT",
-    "template_source",
-    "msa_size",
-    "msa_source",
-    "model_no",
+    "model_confidence",
+    "species",
+    "state",
+    "dfg_conf",
+    "dihedral",
+    "snc",
+    "af_id",
 ]
-"""list[str]: List of CIF keys for KinCore CIF file."""
+"""list[str]: Metadata keys parsed from an AF2_Active_Models_v2 CIF filename
+(``group_hgnc_confidence_species_state_dfg_dihedral_snc_afid.cif``), with ``cif``
+prepended for the parsed mmCIF dict. ``species``/``state`` are constant (HUMAN/Active)
+and dropped before building :class:`KinCoreCIF`."""
+
+
+def _resolve_kincore_cif_zip() -> str:
+    """Return the local v2 CIF archive path, downloading it on demand if absent.
+
+    Mirrors the local-else-fetch pattern in :mod:`mkt.databases.oncotree`; the ~90 MB
+    archive is streamed to a gitignored file under ``data/`` so it is fetched at most
+    once rather than cached in the requests store.
+
+    Returns
+    -------
+    str
+        Path to the local ``AF2_Active_Models_v2.zip``.
+    """
+    if not os.path.exists(PATH_CIF_ZIP):
+        import requests
+
+        os.makedirs(PATH_DATA, exist_ok=True)
+        logger.info(
+            f"No local KinCore CIF archive at {PATH_CIF_ZIP}; downloading from "
+            f"{KINCORE_CIF_URL}..."
+        )
+        with requests.get(KINCORE_CIF_URL, stream=True) as res:
+            res.raise_for_status()
+            with open(PATH_CIF_ZIP, "wb") as f:
+                for chunk in res.iter_content(chunk_size=1 << 20):
+                    f.write(chunk)
+    return PATH_CIF_ZIP
 
 
 def extract_pk_cif_files_as_list() -> list[KinCoreCIF]:
-    """Extract all cif files from KinCore directory.
+    """Extract all CIF files from the KinCore AF2_Active_Models_v2 archive.
 
     Returns
     -------
     list[KinCoreCIF]
-        List of KinCoreCIF objects
+        List of KinCoreCIF objects (one active-state model per kinase domain).
     """
-    # http://dunbrack.fccc.edu/kincore/static/downloads/af2activemodels/Kincore_AlphaFold2_ActiveHumanCatalyticKinases_v2.tar.gz
-    path_data = os.path.join(get_repo_root(), "data")
-    path_targzip = os.path.join(
-        path_data, "Kincore_AlphaFold2_ActiveHumanCatalyticKinases_v2.tar.gz"
-    )
-
-    if not os.path.exists(path_data):
-        os.makedirs(path_data)
-    if not os.path.exists(path_targzip):
-        logger.error(
-            f"KinCore tar.gz file not found in {path_targzip}..."
-            "File can be downloaded from: http://dunbrack.fccc.edu/kincore/static/downloads/af2activemodels/Kincore_AlphaFold2_ActiveHumanCatalyticKinases_v2.tar.gz"
-        )
-    extract_tarfiles(path_targzip, path_data)
-
-    list_file = glob.glob(os.path.join(path_data, "*", "*.cif"))
+    path_zip = _resolve_kincore_cif_zip()
 
     list_out = []
-    for file in tqdm(
-        list_file,
-        desc="Extracting and processing CIF files...",
-        bar_format=TQDM_BAR_FORMAT,
-    ):
-        # use the filename to extract metadata as dict
-        filename = os.path.basename(file)
-        if filename == "TYR_LMTK2_38.37_tea2MSA_AF2tholog_model1.cif":
-            # TODO: confirm this is the correct filename with Dunbrack lab
-            filename = "TYR_LMTK2_38.37_activeAF2_2MSA_ortholog_model1.cif"
-        list_filename = filename.replace(".cif", "").replace("__", "_").split("_")
-        # cif_file = CIFFile.read(file)
-        dict_temp = dict(
-            zip(
-                LIST_CIF_KEYS,
-                # [cif_file.serialize()] + list_filename
-                [MMCIF2Dict(file)] + list_filename,
-            )
-        )
-        list_out.append(dict_temp)
+    with zipfile.ZipFile(path_zip) as zf:
+        # the archive holds the descriptive per-domain models at the top level plus a
+        # redundant flat copy of the same structures under a nested <author>/ subdir
+        # (e.g. awar04/AF-P08631-K3.cif); keep only the descriptive top-level CIFs (one
+        # nesting level below the archive root), skipping macOS AppleDouble (._) sidecars
+        list_name = [
+            n
+            for n in zf.namelist()
+            if n.endswith(".cif")
+            and n.count("/") == 1
+            and not os.path.basename(n).startswith("._")
+        ]
+        for name in tqdm(
+            list_name,
+            desc="Extracting and processing CIF files...",
+            bar_format=TQDM_BAR_FORMAT,
+        ):
+            list_token = os.path.basename(name)[:-4].split("_")
+            cif = MMCIF2Dict(io.StringIO(zf.read(name).decode("utf-8")))
+            dict_temp = dict(zip(LIST_CIF_KEYS, [cif] + list_token))
+            dict_temp["group"] = DICT_GROUP_KINCORE[dict_temp["group"]]
+            dict_temp["model_confidence"] = float(dict_temp["model_confidence"])
+            # species/state are constant (HUMAN/Active) and not KinCoreCIF fields
+            dict_temp.pop("species")
+            dict_temp.pop("state")
+            list_out.append(dict_temp)
 
-    for v in list_out:
-        v["group"] = DICT_GROUP_KINCORE[v["group"]]
-        v["min_aloop_pLDDT"] = float(v["min_aloop_pLDDT"])
-        v["msa_size"] = int(v["msa_size"].replace("MSA", ""))
-        v["model_no"] = int(v["model_no"].replace("model", ""))
-
-    list_out = [KinCoreCIF.model_validate(v) for v in list_out]
-
-    # remove unzipped directory and all contents
-    paths_remove = {os.path.dirname(i) for i in list_file}
-    [shutil.rmtree(i) for i in paths_remove if os.path.isdir(i)]
-
-    return list_out
+    return [KinCoreCIF.model_validate(v) for v in list_out]
 
 
 def align_kincore2uniprot(

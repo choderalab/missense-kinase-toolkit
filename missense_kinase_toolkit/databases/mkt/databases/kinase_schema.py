@@ -38,6 +38,7 @@ from mkt.schema.utils import (
     rsetattr,
 )
 from pydantic import ValidationError, model_validator
+from strenum import StrEnum
 from tqdm import tqdm
 from typing_extensions import Self
 
@@ -838,6 +839,88 @@ def generate_dict_obj_from_api_or_scraper(
             logger.info(f"\t{k}: {len(v)} entries\n")
 
     return dict_out
+
+
+class Source(StrEnum):
+    """Base-build source selectable via the ``--only`` partial rebuild."""
+
+    hgnc = "hgnc"
+    uniprot = "uniprot"
+    kinhub = "kinhub"
+    klifs = "klifs"
+    pfam = "pfam"
+    kincore = "kincore"
+
+
+def fetch_source(
+    source: "Source | str",
+    set_uniprot: set[str],
+) -> dict[str, Any]:
+    """Fetch raw data for a single base-build source over the given UniProt IDs.
+
+    Backs the ``--only <source>`` partial rebuild, refreshing one source without
+    re-fetching the rest. Returns the same per-source structure consumed by
+    :func:`combine_kinaseinfo_uniprot` / :func:`combine_kinaseinfo_kd`: hgnc/uniprot/pfam
+    keyed to a single value, kinhub/klifs/kincore keyed to a list.
+
+    Parameters
+    ----------
+    source : Source | str
+        A :class:`Source` member (or its string value).
+    set_uniprot : set[str]
+        Base UniProt IDs to fetch; the result is restricted to this set.
+
+    Returns
+    -------
+    dict[str, Any]
+        Mapping of UniProt ID to the fetched object(s).
+    """
+    source = Source(source)
+    set_request_cache(os.path.join(get_repo_root(), "requests_cache.sqlite"))
+
+    if source is Source.kinhub:
+        dict_src = convert_df2dictobj(scrapers.kinhub(), "kinhub")
+    elif source is Source.klifs:
+        df_klifs = pd.DataFrame(klifs.KinaseInfo().get_kinase_info())
+        dict_src = convert_df2dictobj(df_klifs, "klifs")
+    elif source is Source.kincore:
+        dict_src = harmonize_kincore_fasta_cif()
+    elif source is Source.hgnc:
+        dict_src = {}
+        for uniprot_id in tqdm(
+            set_uniprot, desc="Querying HGNC...", bar_format=TQDM_BAR_FORMAT
+        ):
+            obj_temp = hgnc.HGNC(uniprot_id)
+            obj_temp.maybe_get_symbol_from_hgnc_search(
+                custom_field="uniprot_ids", custom_term=uniprot_id
+            )
+            dict_src[uniprot_id] = obj_temp.hgnc
+    elif source is Source.uniprot:
+        dict_src = {}
+        for uniprot_id in tqdm(
+            set_uniprot, desc="Querying UniProt...", bar_format=TQDM_BAR_FORMAT
+        ):
+            fasta = uniprot.UniProtFASTA(uniprot_id)
+            json = uniprot.UniProtJSON(uniprot_id)
+            dict_temp = {
+                "header": fasta._header,
+                "canonical_seq": fasta._sequence,
+            } | json.dict_mod_res
+            dict_src[uniprot_id] = UniProt.model_validate(dict_temp)
+    else:  # Source.pfam
+        dict_src = {}
+        for uniprot_id in tqdm(
+            set_uniprot, desc="Querying Pfam...", bar_format=TQDM_BAR_FORMAT
+        ):
+            df_pfam = pfam.Pfam(uniprot_id)._pfam
+            if df_pfam is None:
+                continue
+            dict_temp = convert_df2dictobj(df_pfam, "pfam")
+            if dict_temp is None or len(dict_temp.get(uniprot_id, [])) == 0:
+                continue
+            dict_src[uniprot_id] = dict_temp[uniprot_id][0]
+
+    return {k: v for k, v in dict_src.items() if k in set_uniprot}
 
 
 def combine_kinaseinfo_uniprot(

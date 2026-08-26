@@ -17,9 +17,11 @@ from typing import Any
 from mkt.databases.generator import steps as build_steps
 from mkt.databases.io_utils import create_tar_without_metadata
 from mkt.databases.kinase_schema import (
+    Source,
     combine_kinaseinfo,
     combine_kinaseinfo_kd,
     combine_kinaseinfo_uniprot,
+    fetch_source,
     generate_dict_obj_from_api_or_scraper,
 )
 from mkt.schema.io_utils import (
@@ -71,6 +73,76 @@ def run_base_build(
         KinaseInfoGenerator objects keyed by ``hgnc_name``.
     """
     dict_obj = generate_dict_obj_from_api_or_scraper(subset_uniprot=subset_uniprot)
+    dict_uniprot = combine_kinaseinfo_uniprot(dict_obj)
+    dict_kd = combine_kinaseinfo_kd(dict_obj)
+    return combine_kinaseinfo(dict_uniprot, dict_kd)
+
+
+def _reconstruct_dict_obj(dict_kinase: dict[str, Any]) -> dict[str, Any]:
+    """Rebuild the raw per-source dict_obj from an assembled KinaseInfo dict.
+
+    Groups multi-kinase-domain (``_1``/``_2``) entries back to their base UniProt so the
+    combine_* functions see the same structure as a fresh base build; hgnc/uniprot/pfam are
+    single-valued, kinhub/klifs/kincore are per-domain lists.
+
+    Parameters
+    ----------
+    dict_kinase : dict[str, Any]
+        Assembled KinaseInfo objects keyed by ``hgnc_name``.
+
+    Returns
+    -------
+    dict[str, Any]
+        Raw per-source dict keyed by the :class:`Source` values.
+    """
+    from collections import defaultdict
+
+    grouped = defaultdict(list)
+    for obj in dict_kinase.values():
+        grouped[obj.uniprot_id.split("_")[0]].append(obj)
+
+    dict_obj = {source.value: {} for source in Source}
+    for base, list_obj in grouped.items():
+        first = list_obj[0]
+        dict_obj[Source.hgnc][base] = first.hgnc_name.split("_")[0]
+        dict_obj[Source.uniprot][base] = first.uniprot
+        if first.pfam is not None:
+            dict_obj[Source.pfam][base] = first.pfam
+        dict_obj[Source.kinhub][base] = [o.kinhub for o in list_obj]
+        dict_obj[Source.klifs][base] = [o.klifs for o in list_obj]
+        dict_obj[Source.kincore][base] = [o.kincore for o in list_obj]
+    return dict_obj
+
+
+def run_source_rebuild(
+    sources: list[str],
+    dict_existing: dict[str, Any],
+) -> dict[str, Any]:
+    """Rebuild the dict refreshing only the named base-build source(s).
+
+    Reconstructs the raw dict_obj from ``dict_existing``, replaces each named source with a
+    fresh :func:`fetch_source`, and re-runs the combine_* pipeline so every cross-source
+    validator (KinCore alignments, KLIFS2UniProt mapping) recomputes.
+
+    Parameters
+    ----------
+    sources : list[str]
+        Source names (subset of :class:`Source`) to refresh.
+    dict_existing : dict[str, Any]
+        The currently serialized KinaseInfo dict.
+
+    Returns
+    -------
+    dict[str, Any]
+        The rebuilt KinaseInfo dict.
+    """
+    dict_obj = _reconstruct_dict_obj(dict_existing)
+    set_uniprot = set(dict_obj[Source.uniprot].keys())
+    for source in sources:
+        logger.info(
+            f"refreshing source '{source}' for {len(set_uniprot)} UniProt IDs..."
+        )
+        dict_obj[source] = fetch_source(source, set_uniprot)
     dict_uniprot = combine_kinaseinfo_uniprot(dict_obj)
     dict_kd = combine_kinaseinfo_kd(dict_obj)
     return combine_kinaseinfo(dict_uniprot, dict_kd)
@@ -285,6 +357,69 @@ def _run_update(
     shutil.rmtree(path_objects)
 
 
+def _run_source_only(
+    sources: list[str],
+    names: list[str],
+    path_objects: str,
+    path_reports: str,
+    path_tar: str,
+) -> None:
+    """Partial rebuild refreshing only the named source(s) on the existing dict.
+
+    Loads the existing archive, rebuilds the named base-build source(s) via
+    :func:`run_source_rebuild`, runs any enrichment steps, and re-serializes (reports
+    skipped -- this is a targeted source update, not a full re-characterization).
+
+    Parameters
+    ----------
+    sources : list[str]
+        Base-build source names (:class:`Source`) to refresh.
+    names : list[str]
+        Enrichment step names to run after the source refresh.
+    path_objects : str
+        Absolute path to the per-kinase serialization directory.
+    path_reports : str
+        Absolute path to the reports directory.
+    path_tar : str
+        Absolute path to the ``KinaseInfo.tar.gz`` archive.
+
+    Returns
+    -------
+    None
+    """
+    if os.path.exists(path_tar):
+        dict_existing = deserialize_kinase_dict(str_path=path_tar)
+    else:
+        logger.info(
+            f"no existing archive at {path_tar}; reading packaged KinaseInfo.tar.gz."
+        )
+        dict_existing = deserialize_kinase_dict()
+
+    # a partial source rebuild needs an existing dict; with none, build everything fresh
+    if not dict_existing:
+        logger.warning(
+            "no existing dict found; falling back to a full regeneration "
+            f"(requested source(s) {sorted(sources)} will be built fresh)."
+        )
+        _run_full(names, path_objects, path_reports, path_tar)
+        return
+
+    dict_new = run_source_rebuild(sources, dict_existing)
+    logger.info(
+        f"source rebuild ({sorted(sources)}) produced {len(dict_new)} entries "
+        f"(was {len(dict_existing)}); re-archiving."
+    )
+
+    # splice rebuilt entries over the existing dict (retains any entry the rebuild dropped)
+    dict_existing.update(dict_new)
+    ctx = BuildContext(
+        dict_existing, path_objects, path_reports, path_tar, subset_hgnc=set(dict_new)
+    )
+    build_steps._run_steps(names, ctx)
+    _serialize_and_tar(ctx)
+    shutil.rmtree(path_objects)
+
+
 def run(
     only: list[str] | None = None,
     skip: list[str] | None = None,
@@ -297,9 +432,12 @@ def run(
     Parameters
     ----------
     only : list[str] | None, optional
-        Run only these enrichment steps; mutually exclusive with ``skip``.
+        Components to rebuild: base-build sources (:class:`Source` values --
+        hgnc/uniprot/kinhub/klifs/pfam/kincore) and/or enrichment steps. A source triggers
+        a partial rebuild on the existing dict (re-fetch that source, re-run dependent
+        validators, overwrite); mutually exclusive with ``skip``.
     skip : list[str] | None, optional
-        Skip these enrichment steps; all other default-on steps run.
+        Skip these enrichment steps in a full regen; all other default-on steps run.
     list_kinase : list[str] | None, optional
         HGNC name(s) to update one-off; when given, only these entries are rebuilt and
         spliced into the existing archive (reports skipped). None runs a full regen.
@@ -307,15 +445,29 @@ def run(
         Objects directory relative to the repo root, by default the package-data layout.
     path_reports : str | None, optional
         Reports directory relative to the repo root, by default ``images``.
+
+    Returns
+    -------
+    None
     """
     path_repo = get_repo_root()
     path_objects = _resolve_dir(path_repo, path_objects, DEFAULT_PATH_OBJECTS)
     path_reports = _resolve_dir(path_repo, path_reports, DEFAULT_PATH_REPORTS)
     path_tar = os.path.normpath(os.path.join(path_objects, "..", "KinaseInfo.tar.gz"))
 
-    names = build_steps.resolve_step_names(only, skip)
+    # partition --only into base-build sources vs enrichment steps
+    set_source = {source.value for source in Source}
+    sources = [name for name in (only or []) if name in set_source]
+    only_steps = [name for name in (only or []) if name not in set_source]
 
-    if list_kinase:
+    if sources and skip:
+        raise ValueError("--skip cannot be combined with a --only source rebuild.")
+
+    names = build_steps.resolve_step_names(only_steps or None, skip)
+
+    if sources:
+        _run_source_only(sources, names, path_objects, path_reports, path_tar)
+    elif list_kinase:
         _run_update(names, list_kinase, path_objects, path_reports, path_tar)
     else:
         _run_full(names, path_objects, path_reports, path_tar)

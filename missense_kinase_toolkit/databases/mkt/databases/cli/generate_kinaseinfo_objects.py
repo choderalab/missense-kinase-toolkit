@@ -29,7 +29,9 @@ def main(
         Optional[list[str]],
         typer.Option(
             "--only",
-            help="Run only these enrichment step(s); repeatable. Mutually exclusive "
+            help="Rebuild only these component(s); repeatable. A base-build source "
+            "(hgnc/uniprot/kinhub/klifs/pfam/kincore) does a partial rebuild on the "
+            "existing dict; an enrichment step name runs that step. Mutually exclusive "
             "with --skip.",
         ),
     ] = None,
