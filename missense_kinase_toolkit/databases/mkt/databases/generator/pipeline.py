@@ -1,11 +1,13 @@
 """Orchestration for the compositional KinaseInfo build pipeline.
 
-Implements the three run modes of ``generate_kinaseinfo_objects``: a full kinome
-regeneration, a per-step run (``--only``/``--skip`` over the enrichment registry), and a
-per-entry one-off update (``--kinase``) that rebuilds targeted entries and splices them
-back into the existing ``KinaseInfo.tar.gz`` without a full rebuild. The base build (API
-fetch + harmonization) is a mandatory prerequisite; enrichment steps only mutate additive
-optional fields on the assembled objects.
+The :class:`Pipeline` class runs ``generate_kinaseinfo_objects`` in one of three modes: a
+full kinome regeneration; a partial per-source rebuild (``--only <source>``) that re-fetches
+one base-build source and re-runs the dependent validators on the existing dict; and a
+per-entry one-off update (``--kinase``) that rebuilds targeted entries and splices them back
+into the existing ``KinaseInfo.tar.gz``. Each mode produces or updates the assembled dict and
+then shares one finalize step (enrich -> serialize -> tar -> reports -> cleanup). The base
+build (API fetch + harmonization) is a mandatory prerequisite; enrichment steps only mutate
+additive optional fields on the assembled objects.
 """
 
 import logging
@@ -266,158 +268,256 @@ def _resolve_dir(path_repo: str, path_rel: str | None, default_rel: str) -> str:
     return path_out
 
 
-def _serialize_and_tar(ctx: BuildContext) -> None:
-    """Serialize the KinaseInfo dict to per-kinase files and (re)build the tar archive.
+@dataclass
+class Pipeline:
+    """Orchestrates the KinaseInfo build across its run modes.
 
-    Parameters
-    ----------
-    ctx : BuildContext
-        The build context holding the dict and output paths.
+    Holds the resolved output paths and exposes one method per mode (:meth:`full`,
+    :meth:`update`, :meth:`source_rebuild`); each produces or updates the dict and hands off
+    to the shared :meth:`_finalize` (enrich -> serialize -> tar -> reports -> cleanup).
+    :meth:`run` dispatches to the right mode from the CLI arguments.
     """
-    serialize_kinase_dict(ctx.dict_kinaseinfo, str_path=ctx.path_objects)
-    if os.path.exists(ctx.path_tar):
-        os.remove(ctx.path_tar)
-    create_tar_without_metadata(
-        path_source=ctx.path_objects,
-        filename_tar=ctx.path_tar,
-    )
 
+    path_objects: str
+    """Absolute path to the per-kinase serialization directory."""
+    path_reports: str
+    """Absolute path to the reports/figures directory."""
+    path_tar: str
+    """Absolute path to the ``KinaseInfo.tar.gz`` archive."""
 
-def _run_full(
-    names: list[str],
-    path_objects: str,
-    path_reports: str,
-    path_tar: str,
-) -> None:
-    """Full kinome regeneration: base build -> enrichments -> serialize -> reports."""
-    dict_ki = run_base_build(subset_uniprot=None)
-    ctx = BuildContext(dict_ki, path_objects, path_reports, path_tar, subset_hgnc=None)
-    build_steps._run_steps(names, ctx)
-    _serialize_and_tar(ctx)
-    build_steps._run_reports(ctx)
-    shutil.rmtree(path_objects)
+    @classmethod
+    def from_paths(
+        cls,
+        path_objects: str | None = None,
+        path_reports: str | None = None,
+    ) -> "Pipeline":
+        """Build a Pipeline, resolving the objects/reports dirs and the tar path.
 
+        Parameters
+        ----------
+        path_objects : str | None, optional
+            Objects directory relative to the repo root, by default the package-data layout.
+        path_reports : str | None, optional
+            Reports directory relative to the repo root, by default ``images``.
 
-def _run_update(
-    names: list[str],
-    list_kinase: list[str],
-    path_objects: str,
-    path_reports: str,
-    path_tar: str,
-) -> None:
-    """One-off per-entry update: rebuild targeted kinases and splice into the archive."""
-    if os.path.exists(path_tar):
-        dict_full = deserialize_kinase_dict(str_path=path_tar)
-    else:
+        Returns
+        -------
+        Pipeline
+            A pipeline with resolved, created output directories.
+        """
+        path_repo = get_repo_root()
+        path_objects = _resolve_dir(path_repo, path_objects, DEFAULT_PATH_OBJECTS)
+        path_reports = _resolve_dir(path_repo, path_reports, DEFAULT_PATH_REPORTS)
+        path_tar = os.path.normpath(
+            os.path.join(path_objects, "..", "KinaseInfo.tar.gz")
+        )
+        return cls(path_objects, path_reports, path_tar)
+
+    def _load_existing(self) -> dict[str, Any]:
+        """Deserialize the existing dict from the target archive or the packaged tar.
+
+        Returns
+        -------
+        dict[str, Any]
+            The existing KinaseInfo dict (empty if none is found).
+        """
+        if os.path.exists(self.path_tar):
+            return deserialize_kinase_dict(str_path=self.path_tar)
         logger.info(
-            f"no existing archive at {path_tar}; reading packaged KinaseInfo.tar.gz."
+            f"no existing archive at {self.path_tar}; reading packaged KinaseInfo.tar.gz."
         )
-        dict_full = deserialize_kinase_dict()
+        return deserialize_kinase_dict()
 
-    subset_uniprot, set_unresolved = _resolve_targets(list_kinase, dict_full)
-    if set_unresolved:
-        logger.warning(
-            f"kinase(s) not in current set (attempting to add as new): "
-            f"{sorted(set_unresolved)}"
+    def _serialize_and_tar(self, dict_kinaseinfo: dict[str, Any]) -> None:
+        """Serialize the dict to per-kinase files and (re)build the tar archive.
+
+        Parameters
+        ----------
+        dict_kinaseinfo : dict[str, Any]
+            The KinaseInfo dict to serialize.
+
+        Returns
+        -------
+        None
+        """
+        serialize_kinase_dict(dict_kinaseinfo, str_path=self.path_objects)
+        if os.path.exists(self.path_tar):
+            os.remove(self.path_tar)
+        create_tar_without_metadata(
+            path_source=self.path_objects, filename_tar=self.path_tar
         )
-        new_uniprot, set_missing = _resolve_new_kinases(set_unresolved)
-        subset_uniprot |= new_uniprot
-        if set_missing:
+
+    def _finalize(
+        self,
+        dict_kinaseinfo: dict[str, Any],
+        names: list[str],
+        subset_hgnc: set[str] | None,
+    ) -> None:
+        """Run enrichment steps, serialize + tar, generate reports, and clean up.
+
+        Shared tail of every mode: only the way the dict is produced differs.
+
+        Parameters
+        ----------
+        dict_kinaseinfo : dict[str, Any]
+            The assembled/updated dict to finalize.
+        names : list[str]
+            Enrichment step names to run.
+        subset_hgnc : set[str] | None
+            Targeted ``hgnc_name`` keys for a subset build (steps iterate these and reports
+            are skipped); None for a full build (all entries; reports run).
+
+        Returns
+        -------
+        None
+        """
+        ctx = BuildContext(
+            dict_kinaseinfo,
+            self.path_objects,
+            self.path_reports,
+            self.path_tar,
+            subset_hgnc=subset_hgnc,
+        )
+        build_steps._run_steps(names, ctx)
+        self._serialize_and_tar(dict_kinaseinfo)
+        build_steps._run_reports(ctx)
+        shutil.rmtree(self.path_objects)
+
+    def full(self, names: list[str]) -> None:
+        """Full kinome regeneration: base build -> finalize.
+
+        Parameters
+        ----------
+        names : list[str]
+            Enrichment step names to run.
+
+        Returns
+        -------
+        None
+        """
+        dict_ki = run_base_build(subset_uniprot=None)
+        self._finalize(dict_ki, names, subset_hgnc=None)
+
+    def update(self, names: list[str], list_kinase: list[str]) -> None:
+        """One-off per-entry update: rebuild targeted kinases and splice into the archive.
+
+        Parameters
+        ----------
+        names : list[str]
+            Enrichment step names to run on the rebuilt entries.
+        list_kinase : list[str]
+            HGNC name(s) to rebuild; unknown names are resolved as new kinases or skipped.
+
+        Returns
+        -------
+        None
+        """
+        dict_full = self._load_existing()
+        subset_uniprot, set_unresolved = _resolve_targets(list_kinase, dict_full)
+        if set_unresolved:
             logger.warning(
-                f"could not resolve to UniProt IDs; skipping: {sorted(set_missing)}"
+                f"kinase(s) not in current set (attempting to add as new): "
+                f"{sorted(set_unresolved)}"
             )
+            new_uniprot, set_missing = _resolve_new_kinases(set_unresolved)
+            subset_uniprot |= new_uniprot
+            if set_missing:
+                logger.warning(
+                    f"could not resolve to UniProt IDs; skipping: {sorted(set_missing)}"
+                )
 
-    if not subset_uniprot:
-        logger.warning(
-            "no requested kinases resolved to UniProt IDs; nothing to update."
-        )
-        return
+        if not subset_uniprot:
+            logger.warning(
+                "no requested kinases resolved to UniProt IDs; nothing to update."
+            )
+            return
 
-    dict_sub = run_base_build(subset_uniprot=subset_uniprot)
-    if not dict_sub:
-        logger.warning("base build produced no objects for the requested subset.")
-        return
+        dict_sub = run_base_build(subset_uniprot=subset_uniprot)
+        if not dict_sub:
+            logger.warning("base build produced no objects for the requested subset.")
+            return
 
-    subset_hgnc = set(dict_sub.keys())
-    ctx_sub = BuildContext(
-        dict_sub, path_objects, path_reports, path_tar, subset_hgnc=subset_hgnc
-    )
-    build_steps._run_steps(names, ctx_sub)
-
-    # splice the updated entries into the full dict and re-serialize/re-tar
-    dict_full.update(dict_sub)
-    logger.info(
-        f"spliced {len(dict_sub)} updated entr(ies) ({sorted(subset_hgnc)}) into "
-        f"{len(dict_full)} total; re-archiving."
-    )
-    ctx_full = BuildContext(
-        dict_full, path_objects, path_reports, path_tar, subset_hgnc=subset_hgnc
-    )
-    _serialize_and_tar(ctx_full)
-    shutil.rmtree(path_objects)
-
-
-def _run_source_only(
-    sources: list[str],
-    names: list[str],
-    path_objects: str,
-    path_reports: str,
-    path_tar: str,
-) -> None:
-    """Partial rebuild refreshing only the named source(s) on the existing dict.
-
-    Loads the existing archive, rebuilds the named base-build source(s) via
-    :func:`run_source_rebuild`, runs any enrichment steps, and re-serializes (reports
-    skipped -- this is a targeted source update, not a full re-characterization).
-
-    Parameters
-    ----------
-    sources : list[str]
-        Base-build source names (:class:`Source`) to refresh.
-    names : list[str]
-        Enrichment step names to run after the source refresh.
-    path_objects : str
-        Absolute path to the per-kinase serialization directory.
-    path_reports : str
-        Absolute path to the reports directory.
-    path_tar : str
-        Absolute path to the ``KinaseInfo.tar.gz`` archive.
-
-    Returns
-    -------
-    None
-    """
-    if os.path.exists(path_tar):
-        dict_existing = deserialize_kinase_dict(str_path=path_tar)
-    else:
+        subset_hgnc = set(dict_sub)
+        dict_full.update(dict_sub)
         logger.info(
-            f"no existing archive at {path_tar}; reading packaged KinaseInfo.tar.gz."
+            f"spliced {len(dict_sub)} updated entr(ies) ({sorted(subset_hgnc)}) into "
+            f"{len(dict_full)} total; re-archiving."
         )
-        dict_existing = deserialize_kinase_dict()
+        self._finalize(dict_full, names, subset_hgnc=subset_hgnc)
 
-    # a partial source rebuild needs an existing dict; with none, build everything fresh
-    if not dict_existing:
-        logger.warning(
-            "no existing dict found; falling back to a full regeneration "
-            f"(requested source(s) {sorted(sources)} will be built fresh)."
+    def source_rebuild(self, sources: list[str], names: list[str]) -> None:
+        """Partial rebuild refreshing only the named source(s) on the existing dict.
+
+        Loads the existing archive, rebuilds the named base-build source(s), splices them
+        over the existing dict, and finalizes (reports skipped). Falls back to a full regen
+        when no existing dict is found.
+
+        Parameters
+        ----------
+        sources : list[str]
+            Base-build source names (:class:`Source`) to refresh.
+        names : list[str]
+            Enrichment step names to run after the source refresh.
+
+        Returns
+        -------
+        None
+        """
+        dict_existing = self._load_existing()
+        if not dict_existing:
+            logger.warning(
+                "no existing dict found; falling back to a full regeneration "
+                f"(requested source(s) {sorted(sources)} will be built fresh)."
+            )
+            self.full(names)
+            return
+
+        dict_new = run_source_rebuild(sources, dict_existing)
+        logger.info(
+            f"source rebuild ({sorted(sources)}) produced {len(dict_new)} entries "
+            f"(was {len(dict_existing)}); re-archiving."
         )
-        _run_full(names, path_objects, path_reports, path_tar)
-        return
+        dict_existing.update(dict_new)
+        self._finalize(dict_existing, names, subset_hgnc=set(dict_new))
 
-    dict_new = run_source_rebuild(sources, dict_existing)
-    logger.info(
-        f"source rebuild ({sorted(sources)}) produced {len(dict_new)} entries "
-        f"(was {len(dict_existing)}); re-archiving."
-    )
+    def run(
+        self,
+        only: list[str] | None = None,
+        skip: list[str] | None = None,
+        list_kinase: list[str] | None = None,
+    ) -> None:
+        """Dispatch to the run mode implied by the arguments.
 
-    # splice rebuilt entries over the existing dict (retains any entry the rebuild dropped)
-    dict_existing.update(dict_new)
-    ctx = BuildContext(
-        dict_existing, path_objects, path_reports, path_tar, subset_hgnc=set(dict_new)
-    )
-    build_steps._run_steps(names, ctx)
-    _serialize_and_tar(ctx)
-    shutil.rmtree(path_objects)
+        Parameters
+        ----------
+        only : list[str] | None, optional
+            Components to rebuild: base-build sources (:class:`Source` values --
+            hgnc/uniprot/kinhub/klifs/pfam/kincore) and/or enrichment steps. A source
+            triggers a partial rebuild; mutually exclusive with ``skip``.
+        skip : list[str] | None, optional
+            Skip these enrichment steps in a full regen; all other default-on steps run.
+        list_kinase : list[str] | None, optional
+            HGNC name(s) to update one-off; None (with no source) runs a full regen.
+
+        Returns
+        -------
+        None
+        """
+        set_source = {source.value for source in Source}
+        sources = [name for name in (only or []) if name in set_source]
+        only_steps = [name for name in (only or []) if name not in set_source]
+
+        if sources and skip:
+            raise ValueError("--skip cannot be combined with a --only source rebuild.")
+
+        names = build_steps.resolve_step_names(only_steps or None, skip)
+
+        if sources:
+            self.source_rebuild(sources, names)
+        elif list_kinase:
+            self.update(names, list_kinase)
+        else:
+            self.full(names)
 
 
 def run(
@@ -427,20 +527,17 @@ def run(
     path_objects: str | None = None,
     path_reports: str | None = None,
 ) -> None:
-    """Run the KinaseInfo build pipeline in the mode implied by the arguments.
+    """Build a :class:`Pipeline` from the given paths and run it (CLI entry point).
 
     Parameters
     ----------
     only : list[str] | None, optional
-        Components to rebuild: base-build sources (:class:`Source` values --
-        hgnc/uniprot/kinhub/klifs/pfam/kincore) and/or enrichment steps. A source triggers
-        a partial rebuild on the existing dict (re-fetch that source, re-run dependent
-        validators, overwrite); mutually exclusive with ``skip``.
+        Components to rebuild (base-build sources and/or enrichment steps); mutually
+        exclusive with ``skip``.
     skip : list[str] | None, optional
-        Skip these enrichment steps in a full regen; all other default-on steps run.
+        Enrichment steps to skip in a full regen.
     list_kinase : list[str] | None, optional
-        HGNC name(s) to update one-off; when given, only these entries are rebuilt and
-        spliced into the existing archive (reports skipped). None runs a full regen.
+        HGNC name(s) to update one-off; None (with no source) runs a full regen.
     path_objects : str | None, optional
         Objects directory relative to the repo root, by default the package-data layout.
     path_reports : str | None, optional
@@ -450,24 +547,4 @@ def run(
     -------
     None
     """
-    path_repo = get_repo_root()
-    path_objects = _resolve_dir(path_repo, path_objects, DEFAULT_PATH_OBJECTS)
-    path_reports = _resolve_dir(path_repo, path_reports, DEFAULT_PATH_REPORTS)
-    path_tar = os.path.normpath(os.path.join(path_objects, "..", "KinaseInfo.tar.gz"))
-
-    # partition --only into base-build sources vs enrichment steps
-    set_source = {source.value for source in Source}
-    sources = [name for name in (only or []) if name in set_source]
-    only_steps = [name for name in (only or []) if name not in set_source]
-
-    if sources and skip:
-        raise ValueError("--skip cannot be combined with a --only source rebuild.")
-
-    names = build_steps.resolve_step_names(only_steps or None, skip)
-
-    if sources:
-        _run_source_only(sources, names, path_objects, path_reports, path_tar)
-    elif list_kinase:
-        _run_update(names, list_kinase, path_objects, path_reports, path_tar)
-    else:
-        _run_full(names, path_objects, path_reports, path_tar)
+    Pipeline.from_paths(path_objects, path_reports).run(only, skip, list_kinase)

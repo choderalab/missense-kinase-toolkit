@@ -155,11 +155,19 @@ def test_run_dispatches_source_only(monkeypatch, tmp_path):
         pipeline, "_resolve_dir", lambda repo, rel, default: str(tmp_path)
     )
     monkeypatch.setattr(
-        pipeline, "_run_source_only", lambda *a: calls.__setitem__("source", a)
+        pipeline.Pipeline,
+        "source_rebuild",
+        lambda self, sources, names: calls.__setitem__("source", (sources, names)),
     )
-    monkeypatch.setattr(pipeline, "_run_full", lambda *a: calls.__setitem__("full", a))
     monkeypatch.setattr(
-        pipeline, "_run_update", lambda *a: calls.__setitem__("update", a)
+        pipeline.Pipeline, "full", lambda self, names: calls.__setitem__("full", names)
+    )
+    monkeypatch.setattr(
+        pipeline.Pipeline,
+        "update",
+        lambda self, names, list_kinase: calls.__setitem__(
+            "update", (names, list_kinase)
+        ),
     )
 
     pipeline.run(only=["kincore"])
@@ -186,13 +194,14 @@ def test_source_only_no_dict_falls_back_to_full(monkeypatch, tmp_path):
     """With no existing dict, --only <source> falls back to a full regen."""
     monkeypatch.setattr(pipeline, "deserialize_kinase_dict", lambda **k: {})
     calls = {}
-    monkeypatch.setattr(pipeline, "_run_full", lambda *a: calls.__setitem__("full", a))
+    monkeypatch.setattr(
+        pipeline.Pipeline, "full", lambda self, names: calls.__setitem__("full", names)
+    )
 
-    pipeline._run_source_only(
-        ["kincore"],
-        [],
+    pl = pipeline.Pipeline(
         str(tmp_path / "objects"),
         str(tmp_path / "reports"),
         str(tmp_path / "absent.tar.gz"),
     )
+    pl.source_rebuild(["kincore"], [])
     assert "full" in calls
