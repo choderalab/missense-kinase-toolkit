@@ -56,7 +56,7 @@ dev = ["black>=26.3.1", "flake8==7.0.0", "sphinx==7.3.7", "sphinx-rtd-theme==2.0
 test = ["pytest>=9.0.3", "pytest-runner==6.0.1", "pytest-cov>=4.0", "filelock>=3.0"]
 
 [project.scripts]
-generate_kinaseinfo_objects = "mkt.databases.cli.generate_kinaseinfo_objects:main"
+generate_kinaseinfo_objects = "mkt.databases.cli.generate_kinaseinfo_objects:app"
 extract_cbioportal_missense_kinases = "mkt.databases.cli.extract_cbioportal_missense_kinases:main"
 generate_dataset_csv_files = "mkt.databases.cli.generate_dataset_csv_files:main"
 generate_conservation_data = "mkt.databases.cli.generate_conservation_data:app"

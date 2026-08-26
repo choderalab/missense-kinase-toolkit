@@ -18,7 +18,7 @@ from mkt.databases.colors import map_aa_to_single_letter_code
 from mkt.databases.config import set_request_cache
 from mkt.databases.kincore import align_kincore2uniprot, harmonize_kincore_fasta_cif
 from mkt.databases.utils import return_bool_at_index
-from mkt.schema.constants import LIST_PFAM_KD
+from mkt.schema.constants import LIST_LEGACY_KINASES, LIST_PFAM_KD
 from mkt.schema.io_utils import get_repo_root
 from mkt.schema.kinase_schema import (
     KLIFS,
@@ -31,8 +31,14 @@ from mkt.schema.kinase_schema import (
     Pfam,
     UniProt,
 )
-from mkt.schema.utils import TQDM_BAR_FORMAT, rgetattr, rsetattr
+from mkt.schema.utils import (
+    TQDM_BAR_FORMAT,
+    extract_sequence_from_cif,
+    rgetattr,
+    rsetattr,
+)
 from pydantic import ValidationError, model_validator
+from strenum import StrEnum
 from tqdm import tqdm
 from typing_extensions import Self
 
@@ -168,7 +174,7 @@ class KinaseInfoKinaseDomainGenerator(KinaseInfoKinaseDomain):
 
             # all non-None entries will have fastas
             fasta = self.kincore.fasta.seq
-            cif = self.extract_sequence_from_cif()
+            cif = extract_sequence_from_cif(self.kincore)
 
             if cif is not None:
                 # KinCoreFASTA2CIF
@@ -710,8 +716,18 @@ def find_alternative_hgnc(
         return list_out
 
 
-def generate_dict_obj_from_api_or_scraper() -> dict[str, pd.DataFrame]:
+def generate_dict_obj_from_api_or_scraper(
+    subset_uniprot: set[str] | None = None,
+) -> dict[str, pd.DataFrame]:
     """Generate dataframes for KinHub, KLIFS, and Pfam databases.
+
+    Parameters
+    ----------
+    subset_uniprot : set[str] | None, optional
+        If provided, restrict the expensive per-UniProt HGNC/UniProt/Pfam queries to
+        this set of UniProt IDs (intersected with the full KinHub/KLIFS/KinCore union),
+        by default None (build the entire kinome). Used by the ``--kinase`` one-off
+        update path to rebuild only targeted entries.
 
     Returns
     -------
@@ -736,6 +752,15 @@ def generate_dict_obj_from_api_or_scraper() -> dict[str, pd.DataFrame]:
     set_uniprot = set(
         list(dict_kinhub.keys()) + list(dict_klifs.keys()) + list(dict_kincore.keys())
     )
+
+    # restrict to the requested subset (one-off --kinase update) if provided
+    if subset_uniprot is not None:
+        set_uniprot &= set(subset_uniprot)
+        if len(set_uniprot) == 0:
+            logger.warning(
+                "subset_uniprot matched no UniProt IDs in the KinHub/KLIFS/KinCore "
+                "union; no objects will be built."
+            )
 
     # collect HGNC, UniProt, and Pfam data from API
     dict_hgnc, dict_uniprot, dict_pfam = {}, {}, {}
@@ -814,6 +839,88 @@ def generate_dict_obj_from_api_or_scraper() -> dict[str, pd.DataFrame]:
             logger.info(f"\t{k}: {len(v)} entries\n")
 
     return dict_out
+
+
+class Source(StrEnum):
+    """Base-build source selectable via the ``--only`` partial rebuild."""
+
+    hgnc = "hgnc"
+    uniprot = "uniprot"
+    kinhub = "kinhub"
+    klifs = "klifs"
+    pfam = "pfam"
+    kincore = "kincore"
+
+
+def fetch_source(
+    source: "Source | str",
+    set_uniprot: set[str],
+) -> dict[str, Any]:
+    """Fetch raw data for a single base-build source over the given UniProt IDs.
+
+    Backs the ``--only <source>`` partial rebuild, refreshing one source without
+    re-fetching the rest. Returns the same per-source structure consumed by
+    :func:`combine_kinaseinfo_uniprot` / :func:`combine_kinaseinfo_kd`: hgnc/uniprot/pfam
+    keyed to a single value, kinhub/klifs/kincore keyed to a list.
+
+    Parameters
+    ----------
+    source : Source | str
+        A :class:`Source` member (or its string value).
+    set_uniprot : set[str]
+        Base UniProt IDs to fetch; the result is restricted to this set.
+
+    Returns
+    -------
+    dict[str, Any]
+        Mapping of UniProt ID to the fetched object(s).
+    """
+    source = Source(source)
+    set_request_cache(os.path.join(get_repo_root(), "requests_cache.sqlite"))
+
+    if source is Source.kinhub:
+        dict_src = convert_df2dictobj(scrapers.kinhub(), "kinhub")
+    elif source is Source.klifs:
+        df_klifs = pd.DataFrame(klifs.KinaseInfo().get_kinase_info())
+        dict_src = convert_df2dictobj(df_klifs, "klifs")
+    elif source is Source.kincore:
+        dict_src = harmonize_kincore_fasta_cif()
+    elif source is Source.hgnc:
+        dict_src = {}
+        for uniprot_id in tqdm(
+            set_uniprot, desc="Querying HGNC...", bar_format=TQDM_BAR_FORMAT
+        ):
+            obj_temp = hgnc.HGNC(uniprot_id)
+            obj_temp.maybe_get_symbol_from_hgnc_search(
+                custom_field="uniprot_ids", custom_term=uniprot_id
+            )
+            dict_src[uniprot_id] = obj_temp.hgnc
+    elif source is Source.uniprot:
+        dict_src = {}
+        for uniprot_id in tqdm(
+            set_uniprot, desc="Querying UniProt...", bar_format=TQDM_BAR_FORMAT
+        ):
+            fasta = uniprot.UniProtFASTA(uniprot_id)
+            json = uniprot.UniProtJSON(uniprot_id)
+            dict_temp = {
+                "header": fasta._header,
+                "canonical_seq": fasta._sequence,
+            } | json.dict_mod_res
+            dict_src[uniprot_id] = UniProt.model_validate(dict_temp)
+    else:  # Source.pfam
+        dict_src = {}
+        for uniprot_id in tqdm(
+            set_uniprot, desc="Querying Pfam...", bar_format=TQDM_BAR_FORMAT
+        ):
+            df_pfam = pfam.Pfam(uniprot_id)._pfam
+            if df_pfam is None:
+                continue
+            dict_temp = convert_df2dictobj(df_pfam, "pfam")
+            if dict_temp is None or len(dict_temp.get(uniprot_id, [])) == 0:
+                continue
+            dict_src[uniprot_id] = dict_temp[uniprot_id][0]
+
+    return {k: v for k, v in dict_src.items() if k in set_uniprot}
 
 
 def combine_kinaseinfo_uniprot(
@@ -975,6 +1082,13 @@ def combine_kinaseinfo(
     for uniprot_id, kd_temp in dict_kd.items():
 
         uniprot_temp = dict_uniprot[uniprot_id.split("_")[0]]
+
+        # exclude legacy (mostly Manning) entries that are not canonical kinases
+        if uniprot_temp.hgnc_name in LIST_LEGACY_KINASES:
+            logger.info(
+                f"Skipping legacy kinase {uniprot_temp.hgnc_name} ({uniprot_id})..."
+            )
+            continue
 
         list_uniprot_attr = ["hgnc_name", "uniprot", "pfam"]
         list_kd_attr = ["uniprot_id", "kinhub", "klifs", "kincore"]
