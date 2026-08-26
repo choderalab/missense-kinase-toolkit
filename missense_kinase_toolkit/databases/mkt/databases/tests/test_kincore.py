@@ -1,26 +1,30 @@
-import tarfile
+import os
+import zipfile
 from itertools import chain
 
 import pytest
-from mkt.databases.kincore import PATH_ORIG_CIF
+from mkt.databases.kincore import _resolve_kincore_cif_zip
 
 
 @pytest.mark.network
 class TestKinCoreHarmonization:
     def test_cif_hgnc_count_matches_cif_file_count(self, kincore_harmonized_dict):
-        """Number of non-None CIF entries matches .cif count in tar.gz archive."""
+        """Number of non-None CIF entries matches the descriptive .cif count in the zip."""
         list_dict_cif_hgnc = [
             [entry.cif.hgnc for entry in v if entry.cif is not None]
             for v in kincore_harmonized_dict.values()
         ]
         list_dict_cif_hgnc = list(chain(*list_dict_cif_hgnc))
-        # count .cif members from the archive index (no extraction);
-        # exclude macOS resource fork entries (._*.cif)
-        with tarfile.open(PATH_ORIG_CIF, "r:gz") as tar:
+        # count the descriptive top-level .cif members as the parser selects them: one
+        # nesting level below the archive root, excluding macOS ._ sidecars and the
+        # redundant flat copies under the nested <author>/ subdir
+        with zipfile.ZipFile(_resolve_kincore_cif_zip()) as zf:
             n_cif_files = sum(
                 1
-                for m in tar.getmembers()
-                if m.name.endswith(".cif") and "/._" not in m.name
+                for n in zf.namelist()
+                if n.endswith(".cif")
+                and n.count("/") == 1
+                and not os.path.basename(n).startswith("._")
             )
         assert len(list_dict_cif_hgnc) == n_cif_files
 

@@ -206,3 +206,4 @@ configs/
 # data files that should be regenerated locally
 data/3d_hotspots.xls
 data/tumor_types.txt
+data/AF2_Active_Models_v2.zip
