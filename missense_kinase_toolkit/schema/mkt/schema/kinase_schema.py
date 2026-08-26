@@ -11,7 +11,7 @@ from enum import Enum
 
 from mkt.schema.constants import LIST_FULL_KLIFS_REGION, LIST_KLIFS_REGION, LIST_PFAM_KD
 from mkt.schema.utils import rgetattr
-from pydantic import BaseModel, ConfigDict, Field, constr, field_validator
+from pydantic import BaseModel, ConfigDict, constr, field_validator
 from strenum import StrEnum
 
 logger = logging.getLogger(__name__)
@@ -126,6 +126,47 @@ class MSASource(StrEnum):
     uniref90 = "uniref90"
 
 
+class DFGConf(StrEnum):
+    """Enum class for the DFG-motif spatial conformation (Modi & Dunbrack, PNAS 2019).
+
+    The AF2 active-model set is all ``DFGin``; the inactive spatial groups are included
+    for forward compatibility.
+    """
+
+    DFGin = "DFGin"
+    DFGinter = "DFGinter"
+    DFGout = "DFGout"
+
+
+class DihedralCluster(StrEnum):
+    """Enum class for the backbone-dihedral cluster (Modi & Dunbrack, PNAS 2019).
+
+    The AF2 active-model set uses ``BLAminus``/``ABAminus``; the remaining clusters are
+    included for forward compatibility.
+    """
+
+    BLAminus = "BLAminus"
+    BLAplus = "BLAplus"
+    ABAminus = "ABAminus"
+    BLBminus = "BLBminus"
+    BLBplus = "BLBplus"
+    BLBtrans = "BLBtrans"
+    BABtrans = "BABtrans"
+    BBAminus = "BBAminus"
+
+
+class SNC(StrEnum):
+    """Enum class for the KinCore SNC (spine/salt-bridge) state label.
+
+    Values observed in the AF2 active-model set; extend if a future release adds more.
+    """
+
+    SNCiii = "SNCiii"
+    SNCiin = "SNCiin"
+    SNCnii = "SNCnii"
+    SNCoii = "SNCoii"
+
+
 class KinHub(BaseModel):
     """Pydantic model for KinHub information."""
 
@@ -208,11 +249,21 @@ class KinCoreCIF(BaseModel):
     cif: dict[str, str | list[str]]
     group: Group
     hgnc: str
-    min_aloop_pLDDT: float
-    template_source: TemplateSource
-    msa_size: int
-    msa_source: MSASource
-    model_no: int = Field(..., ge=1, lt=6)
+    # v1 (Kincore_AlphaFold2_ActiveHumanCatalyticKinases_v2) fields
+    min_aloop_pLDDT: float | None = None
+    template_source: TemplateSource | None = None
+    msa_size: int | None = None
+    msa_source: MSASource | None = None
+    model_no: int | None = None
+    # v2 (AF2_Active_Models_v2) fields
+    model_confidence: float | None = None  # _ma_qa_metric_global mean pLDDT (0-1)
+    dfg_conf: DFGConf | None = None
+    dihedral: DihedralCluster | None = None
+    snc: SNC | None = None
+    af_id: str | None = (
+        None  # KinCore active-model id: AF-<uniprot>-K{3,4}A (K4 = 2nd KD, A = active)
+    )
+    # calculated fields
     start: int | None = None  # cif2uniprot
     end: int | None = None  # cif2uniprot
     mismatch: list[int] | None = None  # cif2uniprot

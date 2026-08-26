@@ -196,6 +196,52 @@ def test_adjudicate_kd_sequence(dict_kinase, caplog):
     assert "No kinase domain sequence found for PI4KAP1" in caplog.text
 
 
+def test_kincore_cif_backward_compatible():
+    """KinCoreCIF loads both the pre-v2 (v1) and v2 KinCore CIF layouts.
+
+    Every field that differs between the two Dunbrack releases is optional, so a v1
+    record (with template_source/msa_size/msa_source/model_no/min_aloop_pLDDT) and a v2
+    record (with model_confidence/dfg_conf/dihedral/snc/af_id) both validate, and each
+    leaves the other release's fields as None. Guards against a future required-field
+    regression breaking deserialization of the archived dict.
+    """
+    from mkt.schema.kinase_schema import KinCoreCIF
+
+    cif = {"_entity_poly.pdbx_seq_one_letter_code": ["ABCDEF"]}
+
+    # v1 (pre-AF2_Active_Models_v2) record
+    v1 = KinCoreCIF.model_validate(
+        {
+            "cif": cif,
+            "group": "TK",
+            "hgnc": "ABL1",
+            "min_aloop_pLDDT": 92.61,
+            "template_source": "activeAF2",
+            "msa_size": 5,
+            "msa_source": "family",
+            "model_no": 1,
+        }
+    )
+    assert v1.min_aloop_pLDDT == 92.61 and v1.template_source == "activeAF2"
+    assert v1.model_confidence is None and v1.dfg_conf is None and v1.af_id is None
+
+    # v2 (AF2_Active_Models_v2) record
+    v2 = KinCoreCIF.model_validate(
+        {
+            "cif": cif,
+            "group": "TK",
+            "hgnc": "ABL1",
+            "model_confidence": 0.89,
+            "dfg_conf": "DFGin",
+            "dihedral": "BLAminus",
+            "snc": "SNCiii",
+            "af_id": "AF-P00519-K3A",
+        }
+    )
+    assert v2.model_confidence == 0.89 and v2.dfg_conf == "DFGin"
+    assert v2.min_aloop_pLDDT is None and v2.template_source is None
+
+
 def test_no_legacy_kinases(dict_kinase):
     """Legacy (mostly Manning) kinases are excluded from the canonical dict."""
     from mkt.schema.constants import LIST_LEGACY_KINASES
