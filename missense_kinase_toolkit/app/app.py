@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 import streamlit as st
 from constants import DICT_RESOURCE_URLS, LIST_CAPTIONS, LIST_OPTIONS
+from mkt.databases.alphafold import adjudicate_structure
 from mkt.databases.app.properties import PropertyTables
 from mkt.databases.app.schema import (
     DefaultConfig,
@@ -171,10 +172,13 @@ class Dashboard:
 
         with col1:
             with st.expander("Structure", expanded=True):
-                if obj_temp.kincore is None:
-                    st.error("No KinCore objects available for this kinase.", icon="⚠️")
+                # adjudicate the structure source (KinCore CIF preferred, AF fallback)
+                _, structure_source = adjudicate_structure(obj_temp)
+
+                if structure_source is None:
+                    st.error("No structure available for this kinase.", icon="⚠️")
                 else:
-                    st.markdown("### KinCore active structure\n")
+                    st.markdown(f"### Kinase Domain — {structure_source}\n")
                     try:
                         plot_spot = st.empty()
 
