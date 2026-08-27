@@ -185,11 +185,11 @@ def test_adjudicate_kd_sequence(dict_kinase, caplog):
     )
     assert (
         dict_kinase["BUB1B"].adjudicate_kd_sequence()
-        == "YCIKREYLICEDYKLFWVAPRNSAELTVIKVSSQPVPWDFYINLKLKERLNEDFDHFCSCYQYQDGCIVWHQYINCFTLQDLLQHSEYITHEITVLIIYNLLTIVEMLHKAEIVHGDLSPRCLILRNRIHDPYDCNKNNQALKIVDFSYSVDLRVQLDVFTLSGFRTVQILEGQKILANCSSPYQVDLFGIADLAHLLLFKEHLQVFWDGSFWKLSQNISELKDGELWNKFFVRILNANDEATVSVLGELAAEMNG"
+        == "IELGNEDYCIKREYLICEDYKLFWVAPRNSAELTVIKVSSQPVPWDFYINLKLKERLNEDFDHFCSCYQYQDGCIVWHQYINCFTLQDLLQHSEYITHEITVLIIYNLLTIVEMLHKAEIVHGDLSPRCLILRNRIHDPYDCNKNNQALKIVDFSYSVDLRVQLDVFTLSGFRTVQILEGQKILANCSSPYQVDLFGIADLAHLLLFKEHLQVFWDGSFWKLSQNISELKDGELWNKFFVRILNANDEATVSVLGELAAEMNG"
     )
     assert (
         dict_kinase["MTOR"].adjudicate_kd_sequence()
-        == "FVFLLKGHEDLRQDERVMQLFGLVNTLLANDPTSLRKNLSIQRYAVIPLSTNSGLIGWVPHCDTLHALIRDYREKKKILLNIEHRIMLRMAPDYDHLTLMQKVEVFEHAVNNTAGDDLAKLLWLKSPSSEVWFDRRTNYTRSLAVMSMVGYILGLGDRHPSNLMLDRLSGKILHIDFGDCFEVAMTREKFPEKIPFRLTRMLTNAMEVTGLDGNYRITCHTVMEVLREHKDSVMAVLEAFVYDPLLNWR"
+        == "LQVITSKQRPRKLTLMGSNGHEFVFLLKGHEDLRQDERVMQLFGLVNTLLANDPTSLRKNLSIQRYAVIPLSTNSGLIGWVPHCDTLHALIRDYREKKKILLNIEHRIMLRMAPDYDHLTLMQKVEVFEHAVNNTAGDDLAKLLWLKSPSSEVWFDRRTNYTRSLAVMSMVGYILGLGDRHPSNLMLDRLSGKILHIDFGDCFEVAMTREKFPEKIPFRLTRMLTNAMEVTGLDGNYRITCHTVMEVLREHKDSVMAVLEAFVYDPLLNWR"
     )
     caplog.clear()
     assert dict_kinase["PI4KAP1"].adjudicate_kd_sequence(bool_verbose=True) is None
@@ -272,3 +272,32 @@ def test_pseudokinase_kincore_cif_invariant(dict_kinase):
 
     # a genuine pseudokinase without a CIF is still flagged
     assert dict_kinase["BUB1B"].is_pseudokinase() is True
+
+
+def test_alphafold_fallback_invariants(dict_kinase):
+    """AlphaFold structures are stored only as the fallback for KinCore-less entries.
+
+    A stored ``alphafold`` is mutually exclusive with a KinCore CIF (the KinCore
+    active-state model is preferred), and the KD-sliced AF sequence is 1-to-1 with
+    ``adjudicate_kd_sequence`` by construction.
+    """
+    both = [
+        name
+        for name, info in dict_kinase.items()
+        if info.alphafold is not None
+        and info.kincore is not None
+        and info.kincore.cif is not None
+    ]
+    assert both == []
+
+    stored = [name for name, info in dict_kinase.items() if info.alphafold is not None]
+    assert stored, "expected AlphaFold-fallback entries in the dict"
+
+    for name in stored:
+        info = dict_kinase[name]
+        seq_slice = info.alphafold.cif["_entity_poly.pdbx_seq_one_letter_code"][0]
+        assert seq_slice == info.adjudicate_kd_sequence()
+
+    # BUB1B has no KinCore CIF, so it carries the AF2 fallback structure
+    assert dict_kinase["BUB1B"].alphafold is not None
+    assert dict_kinase["BUB1B"].alphafold.entry_id == "AF-O60566-F1"
