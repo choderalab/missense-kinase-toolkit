@@ -45,8 +45,15 @@ class StructureVisualizer:
     """
 
     def __init__(self, config: "StructureConfig"):
+        from mkt.databases.alphafold import adjudicate_structure
+
         self.config = config
         self.obj_kinase = config.seq_align.obj_kinase
+        self._dict_cif, self.structure_source = adjudicate_structure(
+            self.obj_kinase, prefer_alphafold=config.prefer_alphafold
+        )
+        if self._dict_cif is None:
+            raise ValueError(f"No structure available for {self.obj_kinase.hgnc_name}")
         self.structure = self._convert_mmcifdict2structure()
         self.pdb_text = self._convert_structure2string()
         self.residues = list(self.structure.get_residues())
@@ -91,7 +98,7 @@ class StructureVisualizer:
             Bio.PDB Structure object.
         """
         return convert_mmcifdict2structure(
-            self.obj_kinase.kincore.cif.cif,
+            self._dict_cif,
             structure_id=self.obj_kinase.hgnc_name,
         )
 

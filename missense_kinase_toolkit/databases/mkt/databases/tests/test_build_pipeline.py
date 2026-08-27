@@ -156,8 +156,8 @@ def test_run_dispatches_source_only(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         pipeline.Pipeline,
-        "source_rebuild",
-        lambda self, sources, names: calls.__setitem__("source", (sources, names)),
+        "partial",
+        lambda self, sources, names: calls.__setitem__("partial", (sources, names)),
     )
     monkeypatch.setattr(
         pipeline.Pipeline, "full", lambda self, names: calls.__setitem__("full", names)
@@ -171,8 +171,8 @@ def test_run_dispatches_source_only(monkeypatch, tmp_path):
     )
 
     pipeline.run(only=["kincore"])
-    assert set(calls) == {"source"}
-    assert calls["source"][0] == ["kincore"]
+    assert set(calls) == {"partial"}
+    assert calls["partial"][0] == ["kincore"]
 
 
 def test_run_source_with_skip_raises(monkeypatch, tmp_path):
@@ -203,5 +203,5 @@ def test_source_only_no_dict_falls_back_to_full(monkeypatch, tmp_path):
         str(tmp_path / "reports"),
         str(tmp_path / "absent.tar.gz"),
     )
-    pl.source_rebuild(["kincore"], [])
+    pl.partial(["kincore"], [])
     assert "full" in calls
