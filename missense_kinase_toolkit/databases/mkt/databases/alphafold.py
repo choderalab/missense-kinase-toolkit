@@ -6,8 +6,12 @@ UniProt accession.
 """
 
 import ast
+import io
 import logging
 
+from Bio.Data.PDBData import protein_letters_3to1
+from Bio.PDB import MMCIFIO, MMCIFParser, Select
+from Bio.PDB.MMCIF2Dict import MMCIF2Dict
 from mkt.databases import requests_wrapper
 from mkt.databases.api_schema import RESTAPIClient
 from pydantic.dataclasses import dataclass
@@ -118,3 +122,231 @@ class AlphaFoldStructure(AlphaFoldPrediction):
                 "Failed to download CIF for %s: %s", self.uniprot_id, res.status_code
             )
             self._cif = None
+
+
+def slice_alphafold_cif_to_kd(
+    cif_text: str,
+    start: int,
+    end: int,
+) -> dict[str, str | list[str]]:
+    """Slice a full-length AlphaFold mmCIF to the kinase-domain residue range.
+
+    Keeps residues whose UniProt (auth) number is within ``[start, end]`` and returns the
+    mmCIF dict, injecting the one-letter KD sequence under
+    ``_entity_poly.pdbx_seq_one_letter_code`` (which ``MMCIFIO`` does not emit) so the
+    CIF-sequence accessors work as they do for KinCore CIFs.
+
+    Parameters
+    ----------
+    cif_text : str
+        Full-length AlphaFold mmCIF content.
+    start : int
+        Inclusive kinase-domain start in UniProt numbering (from adjudication).
+    end : int
+        Inclusive kinase-domain end in UniProt numbering (from adjudication).
+
+    Returns
+    -------
+    dict[str, str | list[str]]
+        The KD-sliced mmCIF dictionary.
+    """
+    structure = MMCIFParser(QUIET=True).get_structure("af", io.StringIO(cif_text))
+
+    class _KinaseDomainSelect(Select):
+        def accept_residue(self, residue):
+            return start <= residue.id[1] <= end
+
+    mmcif_io = MMCIFIO()
+    mmcif_io.set_structure(structure)
+    buffer = io.StringIO()
+    mmcif_io.save(buffer, _KinaseDomainSelect())
+    buffer.seek(0)
+    dict_cif = MMCIF2Dict(buffer)
+
+    # MMCIFIO drops the one-letter sequence; rebuild it from the KD residues in order
+    seq = "".join(
+        protein_letters_3to1.get(residue.resname, "X")
+        for residue in structure[0].get_residues()
+        if start <= residue.id[1] <= end
+    )
+    dict_cif["_entity_poly.pdbx_seq_one_letter_code"] = [seq]
+    return dict_cif
+
+
+def fetch_alphafold_kd(
+    uniprot_id: str,
+    start: int,
+    end: int,
+    canonical_seq: str | None = None,
+):
+    """Fetch the AlphaFold structure for a UniProt ID and slice it to the kinase domain.
+
+    Parameters
+    ----------
+    uniprot_id : str
+        Base UniProt accession (no multi-domain suffix).
+    start : int
+        Inclusive kinase-domain start in UniProt numbering.
+    end : int
+        Inclusive kinase-domain end in UniProt numbering.
+    canonical_seq : str | None, optional
+        Canonical UniProt sequence to validate against; when provided, the KD-sliced
+        AlphaFold sequence must equal ``canonical_seq[start - 1 : end]`` (the AF DB model is
+        numbered in UniProt coordinates), else the structure is rejected (returns None). By
+        default None (no validation).
+
+    Returns
+    -------
+    AlphaFold | None
+        The KD-sliced AlphaFold model, or None if the structure could not be retrieved or
+        failed validation against the canonical UniProt sequence.
+    """
+    from mkt.schema.kinase_schema import AlphaFold
+
+    structure = AlphaFoldStructure(uniprot_id=uniprot_id)
+    if structure._cif is None or structure._json is None:
+        logger.warning("no AlphaFold structure for %s", uniprot_id)
+        return None
+
+    dict_cif = slice_alphafold_cif_to_kd(structure._cif, start, end)
+
+    if canonical_seq is not None:
+        seq_kd = dict_cif["_entity_poly.pdbx_seq_one_letter_code"][0]
+        seq_expected = canonical_seq[start - 1 : end]
+        if seq_kd != seq_expected:
+            n_mismatch = sum(a != b for a, b in zip(seq_kd, seq_expected)) + abs(
+                len(seq_kd) - len(seq_expected)
+            )
+            logger.error(
+                "AlphaFold KD sequence for %s does not match the canonical UniProt "
+                "sequence over [%d, %d] (%d mismatch(es)); rejecting structure.",
+                uniprot_id,
+                start,
+                end,
+                n_mismatch,
+            )
+            return None
+    tool_used = None
+    for line in structure._cif.splitlines():
+        if line.strip().startswith("_ma_model_list.model_group_name"):
+            tool_used = line.split(None, 1)[1].strip().strip('"')
+            break
+
+    json = structure._json
+    return AlphaFold(
+        cif=dict_cif,
+        start=start,
+        end=end,
+        entry_id=json.get("entryId"),
+        uniprot_accession=json.get("uniprotAccession"),
+        global_metric_value=json.get("globalMetricValue"),
+        model_created_date=json.get("modelCreatedDate"),
+        latest_version=json.get("latestVersion"),
+        tool_used=tool_used,
+    )
+
+
+def enrich_with_alphafold(obj_kinase) -> None:
+    """Populate ``obj_kinase.alphafold`` with the KD-sliced AlphaFold structure.
+
+    Only entries lacking a KinCore active-state CIF store an AlphaFold structure (the
+    KinCore CIF is the preferred active-state model); entries with a KinCore CIF fetch AF
+    on the fly via :func:`get_alphafold` when explicitly needed. The kinase-domain bounds
+    come from the object's adjudication, so ``kincore`` must already be in place.
+
+    Parameters
+    ----------
+    obj_kinase : KinaseInfo
+        The kinase object to enrich (mutated in place).
+
+    Returns
+    -------
+    None
+    """
+    if obj_kinase.kincore is not None and obj_kinase.kincore.cif is not None:
+        return  # has a KinCore active-state CIF; fetch AF on the fly if needed
+
+    if obj_kinase.alphafold is not None:
+        return  # already stored; query AF2 DB only for entries not yet stored
+
+    start = obj_kinase.adjudicate_kd_start()
+    end = obj_kinase.adjudicate_kd_end()
+    if start is None or end is None:
+        logger.warning(
+            "no kinase-domain bounds for %s; skipping AlphaFold", obj_kinase.hgnc_name
+        )
+        return
+
+    obj_kinase.alphafold = fetch_alphafold_kd(
+        obj_kinase.uniprot_id.split("_")[0],
+        start,
+        end,
+        canonical_seq=obj_kinase.uniprot.canonical_seq,
+    )
+
+
+def get_alphafold(obj_kinase):
+    """Return the AlphaFold structure for a kinase, fetching on the fly if not stored.
+
+    Entries without a KinCore CIF carry a stored ``alphafold``; entries with a KinCore CIF
+    do not, so this fetches + slices the AF structure on demand (e.g. for the force-AF
+    render override or AF-based rSASA).
+
+    Parameters
+    ----------
+    obj_kinase : KinaseInfo
+        The kinase object.
+
+    Returns
+    -------
+    AlphaFold | None
+        The stored or freshly fetched KD-sliced AlphaFold model, or None if unavailable.
+    """
+    if obj_kinase.alphafold is not None:
+        return obj_kinase.alphafold
+    start = obj_kinase.adjudicate_kd_start()
+    end = obj_kinase.adjudicate_kd_end()
+    if start is None or end is None:
+        return None
+    return fetch_alphafold_kd(
+        obj_kinase.uniprot_id.split("_")[0],
+        start,
+        end,
+        canonical_seq=obj_kinase.uniprot.canonical_seq,
+    )
+
+
+def adjudicate_structure(obj_kinase, prefer_alphafold: bool = False):
+    """Return the KD structure to render/compute over and a provenance label.
+
+    The KinCore active-state CIF is preferred; the AlphaFold structure (stored on
+    KinCore-less entries, or fetched on the fly via :func:`get_alphafold`) is the fallback,
+    or is forced when ``prefer_alphafold`` is True. Used by the app, PyMOL output, and rSASA.
+
+    Parameters
+    ----------
+    obj_kinase : KinaseInfo
+        The kinase object.
+    prefer_alphafold : bool, optional
+        Force the AlphaFold structure even when a KinCore CIF is present, by default False.
+
+    Returns
+    -------
+    tuple[dict | None, str | None]
+        ``(mmCIF dict, source label)`` where the label is ``"KinCore Active State"`` or
+        ``"AF2 Database"``; ``(None, None)`` when no structure is available.
+    """
+    dict_kincore = (
+        obj_kinase.kincore.cif.cif
+        if obj_kinase.kincore is not None and obj_kinase.kincore.cif is not None
+        else None
+    )
+    if dict_kincore is not None and not prefer_alphafold:
+        return dict_kincore, "KinCore Active State"
+
+    obj_alphafold = get_alphafold(obj_kinase)
+    if obj_alphafold is not None:
+        return obj_alphafold.cif, "AF2 Database"
+    if dict_kincore is not None:
+        return dict_kincore, "KinCore Active State"
+    return None, None

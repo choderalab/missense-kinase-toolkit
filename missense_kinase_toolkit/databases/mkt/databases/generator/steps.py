@@ -3,11 +3,10 @@
 Defines the ordered registry of enrichment steps (each mutating additive optional
 fields on the assembled :class:`KinaseInfo` objects in place), the terminal report
 steps, and the selection/validation helpers that back the ``--only``/``--skip`` CLI
-flags. Enrichment steps are added incrementally per workstream (alphafold, rsasa,
-activation_loop, alignment, exon); the registry is intentionally empty in this phase so
-a default run reproduces the pre-refactor output. Every step must be idempotent
-(overwrite its field, never append) so ``--only <step>`` and ``--kinase`` splicing are
-safe to re-run.
+flags. Enrichment steps are added incrementally per workstream (alphafold, then rsasa,
+activation_loop, alignment, exon). Heavy steps default off (see ``_DEFAULT_OFF``) and run
+via ``--only``; every step must be idempotent (overwrite its field, never append) so
+``--only <step>`` and ``--kinase`` splicing are safe to re-run.
 """
 
 import logging
@@ -19,16 +18,67 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _iter_targets(ctx: "BuildContext"):
+    """Yield ``(hgnc_name, KinaseInfo)`` for the targeted subset, or all entries.
+
+    Parameters
+    ----------
+    ctx : BuildContext
+        The build context; ``ctx.subset_hgnc`` (when not None) limits iteration to the
+        targeted entries.
+
+    Yields
+    ------
+    tuple[str, KinaseInfo]
+        Each targeted ``(hgnc_name, object)`` pair.
+    """
+    if ctx.subset_hgnc is None:
+        yield from ctx.dict_kinaseinfo.items()
+    else:
+        for hgnc_name in ctx.subset_hgnc:
+            if hgnc_name in ctx.dict_kinaseinfo:
+                yield hgnc_name, ctx.dict_kinaseinfo[hgnc_name]
+
+
+def _enrich_alphafold(ctx: "BuildContext") -> None:
+    """Store the KD-sliced AlphaFold structure on entries lacking a KinCore CIF.
+
+    Per-entry failures are logged and skipped so one kinase never aborts the batch.
+
+    Parameters
+    ----------
+    ctx : BuildContext
+        The build context.
+
+    Returns
+    -------
+    None
+    """
+    from mkt.databases.alphafold import enrich_with_alphafold
+
+    for hgnc_name, obj_kinase in _iter_targets(ctx):
+        try:
+            enrich_with_alphafold(obj_kinase)
+        except Exception as e:
+            logger.error(
+                f"alphafold enrichment failed for {hgnc_name}: {e}", exc_info=True
+            )
+
+
 # ordered enrichment-step registry; each step takes a BuildContext and mutates additive
 # optional fields on ctx.dict_kinaseinfo in place. steps run in this insertion order.
-_ENRICH_STEPS: dict[str, Callable[["BuildContext"], None]] = {}
+_ENRICH_STEPS: dict[str, Callable[["BuildContext"], None]] = {
+    "alphafold": _enrich_alphafold,
+}
 """dict[str, Callable]: Ordered enrichment-step registry (name -> step function)."""
 
-_DEFAULT_OFF: set[str] = set()
-"""set[str]: Enrichment steps skipped unless explicitly named via ``--only``."""
+_DEFAULT_OFF: set[str] = {"alphafold"}
+"""set[str]: Enrichment steps skipped in a full regen unless explicitly named via ``--only``
+(alphafold fetches an AlphaFold structure per KinCore-less entry -- heavy, opt-in)."""
 
-_STEP_DEPS: dict[str, set[str]] = {}
-"""dict[str, set[str]]: Enrichment-step name -> set of prerequisite step names."""
+_STEP_DEPS: dict[str, set[str]] = {"alphafold": set()}
+"""dict[str, set[str]]: Enrichment-step name -> prerequisite step names. (alphafold reads the
+base-build ``kincore`` field, which the pipeline always populates before steps run.)"""
 
 _DEFAULT_STEPS: list[str] = [name for name in _ENRICH_STEPS if name not in _DEFAULT_OFF]
 """list[str]: Steps run when neither ``--only`` nor ``--skip`` is given (registry order)."""

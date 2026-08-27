@@ -90,6 +90,15 @@ def main(
             "config (0 = opaque, 1 = invisible).",
         ),
     ] = 0.3,
+    force_alphafold: Annotated[
+        bool,
+        typer.Option(
+            "--force-alphafold",
+            "-f",
+            help="Render the AlphaFold DB structure even when a KinCore active-state "
+            "structure is available.",
+        ),
+    ] = False,
     verbose: Annotated[
         bool,
         typer.Option(
@@ -116,6 +125,9 @@ def main(
 
         # Generate KLIFS regions (semi-transparent cartoon) with custom stick residues
         generate_pymol_files --gene ABL1 --config KLIFS_CUSTOM --indices 315,317 --colors red,blue
+
+        # Force the AlphaFold structure even when a KinCore CIF is present
+        generate_pymol_files --gene ABL1 --config KLIFS_IMPORTANT --force-alphafold
     """
     configure_logging(verbose=verbose)
 
@@ -173,7 +185,7 @@ def main(
     config_class = StandardConfig[config_name].value
 
     # prepare config kwargs
-    config_kwargs: dict = {}
+    config_kwargs: dict = {"prefer_alphafold": force_alphafold}
     if config_name.startswith("MUTATIONS"):
         config_kwargs["str_filepath_json"] = str(json_mutations)
     elif config_name == "KLIFS_CUSTOM":

@@ -305,7 +305,12 @@ class Pipeline:
         Pipeline
             A pipeline with resolved, created output directories.
         """
+        from mkt.databases.config import set_request_cache
+
         path_repo = get_repo_root()
+        # persist HTTP responses (incl. AlphaFold) so every mode -- not just the base
+        # build -- reuses the SQLite cache rather than the per-run in-memory backend
+        set_request_cache(os.path.join(path_repo, "requests_cache.sqlite"))
         path_objects = _resolve_dir(path_repo, path_objects, DEFAULT_PATH_OBJECTS)
         path_reports = _resolve_dir(path_repo, path_reports, DEFAULT_PATH_REPORTS)
         path_tar = os.path.normpath(
@@ -445,19 +450,19 @@ class Pipeline:
         )
         self._finalize(dict_full, names, subset_hgnc=subset_hgnc)
 
-    def source_rebuild(self, sources: list[str], names: list[str]) -> None:
-        """Partial rebuild refreshing only the named source(s) on the existing dict.
+    def partial(self, sources: list[str], names: list[str]) -> None:
+        """Partial update on the existing dict: refresh source(s) and/or run step(s).
 
-        Loads the existing archive, rebuilds the named base-build source(s), splices them
-        over the existing dict, and finalizes (reports skipped). Falls back to a full regen
-        when no existing dict is found.
+        Loads the existing archive, optionally rebuilds the named base-build source(s), runs
+        the named enrichment steps, and re-serializes (reports skipped). Falls back to a full
+        regeneration when no existing dict is found.
 
         Parameters
         ----------
         sources : list[str]
-            Base-build source names (:class:`Source`) to refresh.
+            Base-build source names (:class:`Source`) to refresh; may be empty (steps only).
         names : list[str]
-            Enrichment step names to run after the source refresh.
+            Enrichment step names to run.
 
         Returns
         -------
@@ -467,18 +472,22 @@ class Pipeline:
         if not dict_existing:
             logger.warning(
                 "no existing dict found; falling back to a full regeneration "
-                f"(requested source(s) {sorted(sources)} will be built fresh)."
+                f"(requested {sorted(sources) + sorted(names)} built fresh)."
             )
             self.full(names)
             return
 
-        dict_new = run_source_rebuild(sources, dict_existing)
-        logger.info(
-            f"source rebuild ({sorted(sources)}) produced {len(dict_new)} entries "
-            f"(was {len(dict_existing)}); re-archiving."
-        )
-        dict_existing.update(dict_new)
-        self._finalize(dict_existing, names, subset_hgnc=set(dict_new))
+        if sources:
+            dict_new = run_source_rebuild(sources, dict_existing)
+            logger.info(
+                f"source rebuild ({sorted(sources)}) produced {len(dict_new)} entries "
+                f"(was {len(dict_existing)}); re-archiving."
+            )
+            dict_existing.update(dict_new)
+            subset_hgnc = set(dict_new)
+        else:
+            subset_hgnc = set(dict_existing)
+        self._finalize(dict_existing, names, subset_hgnc=subset_hgnc)
 
     def run(
         self,
@@ -491,13 +500,14 @@ class Pipeline:
         Parameters
         ----------
         only : list[str] | None, optional
-            Components to rebuild: base-build sources (:class:`Source` values --
-            hgnc/uniprot/kinhub/klifs/pfam/kincore) and/or enrichment steps. A source
-            triggers a partial rebuild; mutually exclusive with ``skip``.
+            Components to rebuild on the existing dict: base-build sources (:class:`Source`
+            values -- hgnc/uniprot/kinhub/klifs/pfam/kincore) and/or enrichment steps. Any
+            ``only`` triggers a partial update (load existing -> refresh sources -> run steps);
+            mutually exclusive with ``skip``.
         skip : list[str] | None, optional
             Skip these enrichment steps in a full regen; all other default-on steps run.
         list_kinase : list[str] | None, optional
-            HGNC name(s) to update one-off; None (with no source) runs a full regen.
+            HGNC name(s) to update one-off; None (with no ``only``) runs a full regen.
 
         Returns
         -------
@@ -512,8 +522,8 @@ class Pipeline:
 
         names = build_steps.resolve_step_names(only_steps or None, skip)
 
-        if sources:
-            self.source_rebuild(sources, names)
+        if only:
+            self.partial(sources, names)
         elif list_kinase:
             self.update(names, list_kinase)
         else:
