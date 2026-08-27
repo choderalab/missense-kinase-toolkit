@@ -64,6 +64,8 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+docs/generated/
+docs_env/
 
 # PyBuilder
 target/
@@ -200,3 +202,8 @@ configs/
 .claude/*
 # but keep version-controlled project skills so they're shared/reusable
 !.claude/skills/
+
+# data files that should be regenerated locally
+data/3d_hotspots.xls
+data/tumor_types.txt
+data/AF2_Active_Models_v2.zip

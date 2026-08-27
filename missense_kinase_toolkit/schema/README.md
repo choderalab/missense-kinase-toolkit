@@ -26,4 +26,4 @@ The `KinaseInfo` object contains the following relevant fields:
 | `pfam`       | Annotated kinase domain from [Pfam](https://www.ebi.ac.uk/interpro/entry/pfam) (includes "Protein kinase domain" and <br>"Protein tyrosine and serine/threonine kinase" only), aligned to UniProt canonical sequence |
 | `kincore`    | Annotated kinase domains and and active state structures from Dunbrack lab's [KinCore](http://dunbrack.fccc.edu/kincore/activemodels), aligned to UniProt canonical sequence |
 
-The code to generate these can be found in the `databases` pacakge. This sub-package is designed to
+The code to generate these can be found in the `databases` pacakge, which serves as the extract and transform components of the ETL pipeline. This sub-package is designed to act as the load component of the ETL pipeline.

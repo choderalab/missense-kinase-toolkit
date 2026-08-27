@@ -6,22 +6,22 @@ import pytest
 def test_adjudicate_group(mutable_kinase, caplog):
     """Test kinase group adjudication across data-source priorities.
 
-    Uses ``mutable_kinase`` because the final case sets ``ANTXR1.klifs = None``
+    Uses ``mutable_kinase`` because the final case sets ``PI4KA.klifs = None``
     to exercise the no-group-found path.
     """
     caplog.set_level(logging.INFO)
 
     assert mutable_kinase("ABL1").adjudicate_group() == "TK"  # Kincore
-    assert mutable_kinase("ABR").adjudicate_group() == "Atypical"  # KinHub
+    assert mutable_kinase("ADCK1").adjudicate_group() == "Atypical"  # KinHub
 
-    obj_antxr1 = mutable_kinase("ANTXR1")
-    assert obj_antxr1.adjudicate_group() == "Atypical"  # KLIFS
+    obj_pi4ka = mutable_kinase("PI4KA")
+    assert obj_pi4ka.adjudicate_group() == "Atypical"  # KLIFS
 
     # remove KLIFS so no source can supply a group
-    obj_antxr1.klifs = None
+    obj_pi4ka.klifs = None
     caplog.clear()
-    assert obj_antxr1.adjudicate_group(bool_verbose=True) is None
-    assert "No group found for ANTXR1" in caplog.text
+    assert obj_pi4ka.adjudicate_group(bool_verbose=True) is None
+    assert "No group found for PI4KA" in caplog.text
 
 
 def test_adjudicate_kd_clean_bounds(dict_kinase):
@@ -53,33 +53,36 @@ def test_adjudicate_kd_no_klifs(mutable_kinase):
 def test_adjudicate_kd_small_gap_expands(
     dict_kinase, hgnc_name, expected_start, expected_end
 ):
-    """Gaps within the default cut-off expand the bound to the KLIFS index."""
+    """A KLIFS pocket extending past the bound expands it to the KLIFS index."""
     obj = dict_kinase[hgnc_name]
     assert obj.adjudicate_kd_start() == expected_start
     assert obj.adjudicate_kd_end() == expected_end
 
 
-def test_adjudicate_kd_large_gap_returns_none(dict_kinase, caplog):
-    """Gaps beyond the cut-off return None and warn that the KD exists."""
+def test_adjudicate_kd_large_gap_expands_by_default(dict_kinase):
+    """With the default infinite cut-off, large gaps expand to the KLIFS index.
+
+    These bounds returned None under the historical finite cut-off; the KLIFS
+    pocket is now trusted as the better-annotated bound (large kinase-domain
+    inserts missed by Pfam but present in KLIFS).
+    """
+    # EIF2AK4_2 start gap of 46 expands to the KLIFS minimum
+    assert dict_kinase["EIF2AK4_2"].adjudicate_kd_start() == 284
+    # ADCK2 end gap (Pfam end 218 -> KLIFS max) expands to the KLIFS maximum
+    assert dict_kinase["ADCK2"].adjudicate_kd_end() == 497
+
+
+def test_adjudicate_kd_finite_cutoff_returns_none(dict_kinase, caplog):
+    """An explicit finite int_max_gap still returns None and warns."""
     caplog.set_level(logging.WARNING)
 
-    # EIF2AK4_2 start gap is 46 (> default 15)
-    assert dict_kinase["EIF2AK4_2"].adjudicate_kd_start() is None
+    # EIF2AK4_2 start gap is 46 (> explicit cut-off of 15)
+    assert dict_kinase["EIF2AK4_2"].adjudicate_kd_start(int_max_gap=15) is None
     assert "Kinase domain start found for EIF2AK4_2" in caplog.text
     assert "larger than cut-off 15" in caplog.text
 
-    # MTOR KLIFS pocket is disjoint from the KD; caught on the end bound
-    caplog.clear()
-    assert dict_kinase["MTOR"].adjudicate_kd_end() is None
-    assert "Kinase domain end found for MTOR" in caplog.text
-
-
-def test_adjudicate_kd_cutoff_parameter(dict_kinase):
-    """Raising int_max_gap expands bounds that would otherwise return None."""
-    # EIF2AK4_2 start gap of 46 expands once the cut-off allows it
-    assert dict_kinase["EIF2AK4_2"].adjudicate_kd_start(int_max_gap=50) == 284
-    # MTOR end gap of 1337 expands with a large enough cut-off
-    assert dict_kinase["MTOR"].adjudicate_kd_end(int_max_gap=2000) == 2361
+    # a large-but-finite cut-off still expands the ADCK2 end bound
+    assert dict_kinase["ADCK2"].adjudicate_kd_end(int_max_gap=2000) == 497
 
 
 def test_adjudicate_kd_verbose_logs_expansion(dict_kinase, caplog):
@@ -87,3 +90,58 @@ def test_adjudicate_kd_verbose_logs_expansion(dict_kinase, caplog):
     caplog.set_level(logging.INFO)
     assert dict_kinase["BUB1B"].adjudicate_kd_start(bool_verbose=True) == 759
     assert "expanding start to 759" in caplog.text
+
+
+def test_molecular_brake_residues(dict_kinase):
+    """Brake residues are read via KLIFS2UniProtIdx with the VIII:79 -1 offset.
+
+    FGFR2 carries the full canonical N-E-K triad; EGFR keeps only the conserved
+    VIII:79 lysine. The brake lysine sits one residue N-terminal to its VIII:79
+    KLIFS-aligned index, so the -1 offset must be applied -- the raw mapped index
+    resolves to a non-conserved residue.
+    """
+    obj = dict_kinase["FGFR2"]
+    assert obj.return_molecular_brake_residues() == {
+        "b.l:37": "N",
+        "hinge:46": "E",
+        "VIII:79": "K",
+    }
+    # the -1 offset recovers the lysine; the raw mapped index does not
+    idx = obj.KLIFS2UniProtIdx["VIII:79"]
+    seq = obj.uniprot.canonical_seq
+    assert seq[idx - 1] != "K" and seq[idx - 2] == "K"
+
+    assert dict_kinase["EGFR"].return_molecular_brake_residues() == {
+        "b.l:37": "R",
+        "hinge:46": "Q",
+        "VIII:79": "K",
+    }
+
+
+@pytest.mark.parametrize(
+    "hgnc_name, expected",
+    [
+        ("FGFR2", (True, True, True)),  # canonical FGFR brake
+        ("FGFR1", (True, True, True)),
+        ("KIT", (True, True, True)),
+        ("PDGFRA", (True, True, True)),
+        ("EGFR", (False, False, True)),  # only the VIII:79 lysine is conserved
+    ],
+)
+def test_molecular_brake_against_canonical(dict_kinase, hgnc_name, expected):
+    """Brake residues are compared position-wise against the canonical N-E-K."""
+    assert dict_kinase[hgnc_name].check_molecular_brake_against_canonical() == expected
+
+
+def test_molecular_brake_missing_mapping(mutable_kinase):
+    """Absent or unmapped KLIFS positions yield None rather than raising."""
+    obj = mutable_kinase("FGFR2")
+    obj.KLIFS2UniProtIdx = None
+    assert obj.return_molecular_brake_residues() is None
+    assert obj.check_molecular_brake_against_canonical() is None
+
+    obj = mutable_kinase("FGFR2")
+    obj.KLIFS2UniProtIdx["b.l:37"] = None
+    assert obj.return_molecular_brake_residues()["b.l:37"] is None
+    # the unmapped position no longer matches; the other two still do
+    assert obj.check_molecular_brake_against_canonical() == (False, True, True)

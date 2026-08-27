@@ -22,6 +22,11 @@ DEFAULT_FILENAME = "tumor_types.txt"
 DEFAULT_URL = "https://oncotree.mskcc.org/api/tumor_types.txt"
 """Upstream URL for the OncoTree dump; used when no local file is found."""
 
+API_TUMOR_TYPES_URL = "https://oncotree.mskcc.org/api/tumorTypes"
+"""OncoTree JSON tumor-types endpoint; exposes per-node ``precursors`` /
+``history`` / ``revocations`` (the bundled TSV does not), used to derive the
+retired-code rename map."""
+
 LEVEL_PREFIX = "level_"
 """Prefix used by OncoTree's hierarchy columns; count varies by snapshot."""
 
@@ -30,6 +35,75 @@ META_COLS = ["metamaintype", "metacolor", "metanci", "metaumls", "history"]
 
 CODE_RE = re.compile(r"\s*\(([^()]+)\)\s*$")
 """Regex capturing the trailing ``(CODE)`` suffix on every OncoTree label."""
+
+DICT_ONCOTREE_LEGACY_ALIAS = {
+    # retired/renamed codes (from OncoTree's precursors/history) still stored in
+    # older clinical exports, mapped to their current node
+    "GBM": "GB",  # Glioblastoma, IDH-Wildtype
+    "AODG": "ODG",  # Oligodendroglioma, IDH-mutant and 1p/19q-codeleted
+    "BCL": "MBN",  # Mature B-Cell Neoplasms
+    "ETC": "ET",  # Essential Thrombocythemia
+    "TALL": "TLL",  # T-Lymphoblastic Leukemia/Lymphoma
+    "DIPG": "DMG",  # Diffuse Midline Glioma, H3 K27-Altered
+    "RD": "RDD",  # Rosai-Dorfman Disease
+    "TNKL": "MTNN",  # Mature T and NK Neoplasms
+    "PCV": "PV",  # Polycythemia Vera
+    "AOAST": "GNOS",  # (anaplastic astrocytoma) -> Glioma, NOS
+    "OAST": "GNOS",  # (oligoastrocytoma) -> Glioma, NOS
+    "LGLL": "TLGL",  # T-Cell Large Granular Lymphocytic Leukemia
+    "aCML": "ACML",  # Atypical Chronic Myeloid Leukemia, BCR-ABL1-
+    "SEZS": "SS",  # Sezary Syndrome
+    "MBCL": "PMBL",  # Primary Mediastinal (Thymic) Large B-Cell Lymphoma
+    "SLL": "CLLSLL",  # Chronic Lymphocytic Leukemia/Small Lymphocytic Lymphoma
+    "CLL": "CLLSLL",  # Chronic Lymphocytic Leukemia -> CLL/SLL
+    "AASTR": "ASTR",  # (anaplastic astrocytoma) -> Astrocytoma
+    "MM": "PCM",  # Multiple Myeloma -> Plasma Cell Myeloma
+    "ALL": "BLL",  # Acute Lymphoblastic Leukemia -> B-Lymphoblastic Leukemia/Lymphoma
+    # cBioPortal truncates ONCOTREE_CODE to 10 chars; restore the full codes
+    "AMLMLLT3KM": "AMLMLLT3KMT2A",  # AML with t(9;11); MLLT3-KMT2A
+    "MLNPCM1JAK": "MLNPCM1JAK2",  # Myeloid/Lymphoid Neoplasms with PCM1-JAK2
+    "BLLETV6RUN": "BLLETV6RUNX1",  # B-Lymphoblastic Leukemia with ETV6-RUNX1
+}
+"""Curated map of retired/renamed (or client-truncated) OncoTree codes still
+present in clinical data to their current equivalents. Curated from OncoTree's
+precursors/history; extend as further legacy codes are encountered."""
+
+
+def fetch_oncotree_rename_map(url: str = API_TUMOR_TYPES_URL) -> dict[str, str]:
+    """Query the OncoTree API for a ``retired_code -> current_code`` rename map.
+
+    Builds the map from each node's ``precursors``, ``history`` and
+    ``revocations`` (exposed by the JSON API but not the bundled TSV), so
+    :data:`DICT_ONCOTREE_LEGACY_ALIAS` can be refreshed reliably when OncoTree
+    reclassifies codes. Client-side quirks the API can't know about -- e.g.
+    cBioPortal truncating ``ONCOTREE_CODE`` to 10 characters -- are not covered
+    and stay hand-curated in the alias map.
+
+    Parameters
+    ----------
+    url : str
+        OncoTree tumor-types JSON endpoint; defaults to
+        :data:`API_TUMOR_TYPES_URL`.
+
+    Returns
+    -------
+    dict[str, str]
+        ``{retired_code: current_code}``; the first mapping seen wins if a code
+        is referenced by more than one node.
+    """
+    res = requests_wrapper.get_cached_session().get(url)
+    res.raise_for_status()
+    rename: dict[str, str] = {}
+    for node in res.json():
+        current = node.get("code")
+        if not current:
+            continue
+        for field in ("precursors", "history", "revocations"):
+            for old in node.get(field) or []:
+                if old and old != current:
+                    rename.setdefault(old, current)
+    return rename
+
 
 DICT_TISSUE_COLOR = {
     # nervous system
@@ -141,10 +215,12 @@ class OncoTree(BaseModel):
     filepath: str | None = None
 
     _df: pd.DataFrame = PrivateAttr()
+    _level_code_map: dict[str, list[str | None]] = PrivateAttr(default_factory=dict)
 
     def model_post_init(self, __context: any) -> None:
         """Load and clean the OncoTree TSV into ``self._df``."""
         self._df = self._load()
+        self._level_code_map = self._build_level_code_map()
 
     def _resolve_source(self) -> str:
         """Resolve the source path or URL to read.
@@ -255,6 +331,117 @@ class OncoTree(BaseModel):
     def return_df_tissue_drop(self) -> pd.DataFrame:
         """Return the OncoTree DataFrame with the tissue-level rows dropped."""
         return self._df[self._df["depth"] > 1].reset_index(drop=True)
+
+    def _build_level_code_map(self) -> dict[str, list[str | None]]:
+        """Map every OncoTree code -> the codes of its ancestors, level 1 first.
+
+        For each row, walk its populated ``level_*`` cells and capture the
+        ``(CODE)`` from each, giving that node's full lineage (its own code is
+        the last entry). Used by :meth:`ancestor_code_at_level` to roll a code
+        up to a coarser level.
+
+        Returns
+        -------
+        dict[str, list[str | None]]
+            ``{code: [level_1_code, ..., level_depth_code]}``.
+        """
+        level_cols = [c for c in self._df.columns if c.startswith(LEVEL_PREFIX)]
+        mapping: dict[str, list[str | None]] = {}
+        for row in self._df.itertuples(index=False):
+            depth = int(getattr(row, "depth"))
+            lineage: list[str | None] = []
+            for col in level_cols[:depth]:
+                label = getattr(row, col)
+                match = CODE_RE.search(label) if label else None
+                lineage.append(match.group(1) if match else None)
+            mapping[getattr(row, "code")] = lineage
+        return mapping
+
+    @property
+    def dict_code_name(self) -> dict[str, str]:
+        """Map every OncoTree code -> its display name (``(CODE)`` suffix stripped).
+
+        Covers all nodes (each code is the deepest label of exactly one row), so
+        it resolves both leaf and internal (rolled-up) codes to a label.
+
+        Returns
+        -------
+        dict[str, str]
+            ``{code: name}``.
+        """
+        return dict(zip(self._df["code"], self._df["name"]))
+
+    @property
+    def known_codes(self) -> set[str]:
+        """Set of every OncoTree code in the loaded snapshot."""
+        return set(self._level_code_map)
+
+    def resolve_code(self, code: str) -> str:
+        """Map a retired/renamed OncoTree code to its current equivalent.
+
+        Applies :data:`DICT_ONCOTREE_LEGACY_ALIAS` (e.g. ``GBM -> GB``); codes
+        already current, or absent from the alias map, are returned unchanged.
+        This does not guarantee the result exists in the snapshot -- check
+        :attr:`known_codes` for that.
+
+        Parameters
+        ----------
+        code : str
+            OncoTree code as stored (possibly legacy).
+
+        Returns
+        -------
+        str
+            The current-equivalent code.
+        """
+        return DICT_ONCOTREE_LEGACY_ALIAS.get(code, code)
+
+    def ancestor_code_at_level(self, code: str, level: int) -> str | None:
+        """Roll an OncoTree ``code`` up to its ancestor at ``level``.
+
+        Levels are 1-indexed (``level=1`` is the tissue root). A node shallower
+        than ``level`` has no ancestor there, so its own (deepest) code is
+        returned instead.
+
+        Parameters
+        ----------
+        code : str
+            OncoTree code to roll up.
+        level : int
+            Target hierarchy level (>= 1).
+
+        Returns
+        -------
+        str | None
+            The ancestor code at ``level`` (or the node's own code if it is
+            shallower than ``level``); ``None`` if ``code`` is unknown.
+        """
+        if level < 1:
+            raise ValueError(f"level must be >= 1, got {level}")
+        lineage = self._level_code_map.get(code)
+        if not lineage:
+            return None
+        return lineage[level - 1] if level <= len(lineage) else lineage[-1]
+
+    def roll_up_map(
+        self, level: int, codes: list[str] | None = None
+    ) -> dict[str, str | None]:
+        """Build a ``{code: ancestor_code_at_level}`` map for many codes.
+
+        Parameters
+        ----------
+        level : int
+            Target hierarchy level (>= 1); see :meth:`ancestor_code_at_level`.
+        codes : list[str] | None
+            Codes to roll up; when None, every known OncoTree code is used.
+
+        Returns
+        -------
+        dict[str, str | None]
+            ``{code: ancestor_code}`` (value ``None`` for unknown codes).
+        """
+        keys = codes if codes is not None else list(self._level_code_map)
+        return {code: self.ancestor_code_at_level(code, level) for code in keys}
 
     @property
     def dict_code_metacolor(self) -> dict[str, str]:

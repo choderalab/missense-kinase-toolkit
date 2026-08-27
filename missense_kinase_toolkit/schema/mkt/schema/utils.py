@@ -1,7 +1,8 @@
 """Schema utility helpers: recursive attribute access, UUID generation, and kinase-group adjudication.
 
 Provides :func:`rgetattr`/:func:`rsetattr` for traversing nested Pydantic models,
-:func:`random_uuid`, and :func:`adjudicate_kinase_group`.
+:func:`random_uuid`, :func:`return_kinase_gene_set`, and
+:func:`adjudicate_kinase_group`.
 """
 
 import logging
@@ -78,6 +79,34 @@ def random_uuid():
     return uuid.UUID(bytes=bytes(random.getrandbits(8) for _ in range(16)), version=4)
 
 
+def extract_sequence_from_cif(kincore) -> str | None:
+    """Extract the one-letter sequence from a KinCore CIF, if present.
+
+    Shared by ``KinaseInfo.extract_sequence_from_cif`` and the
+    ``KinaseInfoKinaseDomainGenerator`` FASTA-to-CIF alignment validator so both read
+    the CIF sequence the same way. Duck-typed on ``kincore.cif.cif`` to avoid importing
+    the schema models here.
+
+    Parameters
+    ----------
+    kincore : KinCore | None
+        A ``KinCore`` object (or None); the sequence is read from
+        ``kincore.cif.cif["_entity_poly.pdbx_seq_one_letter_code"]``.
+
+    Returns
+    -------
+    str | None
+        The one-letter CIF sequence with newlines stripped, or None if unavailable.
+    """
+    key_seq = "_entity_poly.pdbx_seq_one_letter_code"
+    try:
+        if kincore is not None and kincore.cif is not None:
+            return kincore.cif.cif[key_seq][0].replace("\n", "")
+    except Exception:
+        pass
+    return None
+
+
 def split_domain_suffix(name: str) -> tuple[str, str]:
     """Split a trailing multi-domain index suffix off a kinase name.
 
@@ -98,6 +127,34 @@ def split_domain_suffix(name: str) -> tuple[str, str]:
     if len(name) >= 2 and name[-2] == "_" and name[-1].isdigit():
         return name[:-2], name[-2:]
     return name, ""
+
+
+def return_kinase_gene_set(dict_kinase: dict | None = None) -> set[str]:
+    """Return the set of kinase HGNC gene symbols for gene-level membership tests.
+
+    Multi-kinase-domain genes are keyed with a ``_1`` / ``_2`` domain suffix (see
+    :func:`split_domain_suffix`); those are collapsed to the base gene symbol
+    (e.g. ``JAK1_1`` / ``JAK1_2`` -> ``JAK1``) so a symbol like ``"JAK1"`` is not
+    missed when testing membership against cohort gene symbols.
+
+    Parameters
+    ----------
+    dict_kinase : dict | None
+        Mapping keyed by kinase name (optionally carrying a ``_<digit>`` domain
+        suffix). If None, the canonical ``DICT_KINASE`` is deserialized.
+
+    Returns
+    -------
+    set[str]
+        Base HGNC gene symbols of every kinase.
+    """
+    if dict_kinase is None:
+        from mkt.schema.io_utils import deserialize_kinase_dict
+
+        dict_kinase = deserialize_kinase_dict(
+            str_name="DICT_KINASE", bool_verbose=False
+        )
+    return {split_domain_suffix(name)[0] for name in dict_kinase}
 
 
 SET_HOMOLOG_DO_NOT_MERGE = frozenset([frozenset({"BUB1", "BUB1B"})])

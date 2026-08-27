@@ -11,7 +11,7 @@ from enum import Enum
 
 from mkt.schema.constants import LIST_FULL_KLIFS_REGION, LIST_KLIFS_REGION, LIST_PFAM_KD
 from mkt.schema.utils import rgetattr
-from pydantic import BaseModel, ConfigDict, Field, constr, field_validator
+from pydantic import BaseModel, ConfigDict, constr, field_validator
 from strenum import StrEnum
 
 logger = logging.getLogger(__name__)
@@ -126,6 +126,47 @@ class MSASource(StrEnum):
     uniref90 = "uniref90"
 
 
+class DFGConf(StrEnum):
+    """Enum class for the DFG-motif spatial conformation (Modi & Dunbrack, PNAS 2019).
+
+    The AF2 active-model set is all ``DFGin``; the inactive spatial groups are included
+    for forward compatibility.
+    """
+
+    DFGin = "DFGin"
+    DFGinter = "DFGinter"
+    DFGout = "DFGout"
+
+
+class DihedralCluster(StrEnum):
+    """Enum class for the backbone-dihedral cluster (Modi & Dunbrack, PNAS 2019).
+
+    The AF2 active-model set uses ``BLAminus``/``ABAminus``; the remaining clusters are
+    included for forward compatibility.
+    """
+
+    BLAminus = "BLAminus"
+    BLAplus = "BLAplus"
+    ABAminus = "ABAminus"
+    BLBminus = "BLBminus"
+    BLBplus = "BLBplus"
+    BLBtrans = "BLBtrans"
+    BABtrans = "BABtrans"
+    BBAminus = "BBAminus"
+
+
+class SNC(StrEnum):
+    """Enum class for the KinCore SNC (spine/salt-bridge) state label.
+
+    Values observed in the AF2 active-model set; extend if a future release adds more.
+    """
+
+    SNCiii = "SNCiii"
+    SNCiin = "SNCiin"
+    SNCnii = "SNCnii"
+    SNCoii = "SNCoii"
+
+
 class KinHub(BaseModel):
     """Pydantic model for KinHub information."""
 
@@ -208,11 +249,21 @@ class KinCoreCIF(BaseModel):
     cif: dict[str, str | list[str]]
     group: Group
     hgnc: str
-    min_aloop_pLDDT: float
-    template_source: TemplateSource
-    msa_size: int
-    msa_source: MSASource
-    model_no: int = Field(..., ge=1, lt=6)
+    # v1 (Kincore_AlphaFold2_ActiveHumanCatalyticKinases_v2) fields
+    min_aloop_pLDDT: float | None = None
+    template_source: TemplateSource | None = None
+    msa_size: int | None = None
+    msa_source: MSASource | None = None
+    model_no: int | None = None
+    # v2 (AF2_Active_Models_v2) fields
+    model_confidence: float | None = None  # _ma_qa_metric_global mean pLDDT (0-1)
+    dfg_conf: DFGConf | None = None
+    dihedral: DihedralCluster | None = None
+    snc: SNC | None = None
+    af_id: str | None = (
+        None  # KinCore active-model id: AF-<uniprot>-K{3,4}A (K4 = 2nd KD, A = active)
+    )
+    # calculated fields
     start: int | None = None  # cif2uniprot
     end: int | None = None  # cif2uniprot
     mismatch: list[int] | None = None  # cif2uniprot
@@ -326,19 +377,12 @@ class KinaseInfo(BaseModel):
         str | None
             The sequence from the CIF if available, otherwise None.
         """
-        key_seq = "_entity_poly.pdbx_seq_one_letter_code"
+        from mkt.schema.utils import extract_sequence_from_cif
 
-        try:
-            if self.kincore is not None and self.kincore.cif is not None:
-                return self.kincore.cif.cif[key_seq][0].replace("\n", "")
-            else:
-                if bool_verbose:
-                    logger.info(f"No CIF sequence for {self.hgnc_name}")
-                return None
-        except Exception as e:
-            if bool_verbose:
-                logger.info(f"No Kincore entry for {self.hgnc_name}: {e}")
-            return None
+        seq = extract_sequence_from_cif(self.kincore)
+        if seq is None and bool_verbose:
+            logger.info(f"No CIF sequence for {self.hgnc_name}")
+        return seq
 
     def adjudicate_kd_sequence(self, bool_verbose: bool = False) -> str | None:
         """Adjudicate kinase domain sequence based on available data.
@@ -388,7 +432,7 @@ class KinaseInfo(BaseModel):
         bound: int,
         klifs_bound: int,
         is_start: bool,
-        int_max_gap: int,
+        int_max_gap: float,
         bool_verbose: bool,
     ) -> int | None:
         """Reconcile an adjudicated kinase domain bound with the KLIFS pocket.
@@ -396,8 +440,18 @@ class KinaseInfo(BaseModel):
         The KLIFS pocket should fall within the kinase domain, i.e. the minimum
         KLIFS index should be >= the kinase domain start and the maximum KLIFS
         index should be <= the kinase domain end. When this is violated, the gap
-        is compared against ``int_max_gap``: small gaps expand the bound to the
-        KLIFS index, larger gaps return None since the mapping is unreliable.
+        is compared against ``int_max_gap``: gaps within the cutoff expand the
+        bound to the KLIFS index, larger gaps return None since the mapping is
+        treated as unreliable.
+
+        A finite cutoff was originally required because the MTOR kinase domain
+        was incorrectly annotated by Pfam (the "Serine/threonine-protein kinase
+        mTOR domain" region rather than the catalytic PI3/4-kinase domain), which
+        produced a spurious multi-hundred-residue gap. Once the atypical families
+        were re-annotated (PIKKs, PI3/4-kinases, etc.), the remaining large gaps
+        were found to be genuine kinase-domain inserts missed by Pfam but present
+        in KLIFS, so ``int_max_gap`` now defaults to ``float("inf")`` (no cutoff)
+        and the KLIFS index is trusted as the better-annotated bound.
 
         Parameters
         ----------
@@ -407,7 +461,7 @@ class KinaseInfo(BaseModel):
             The corresponding KLIFS pocket bound (min for start, max for end).
         is_start : bool
             Whether ``bound`` is the kinase domain start (True) or end (False).
-        int_max_gap : int
+        int_max_gap : float
             Maximum allowed gap between the kinase domain bound and the KLIFS
             bound before the bound is treated as unreliable and None is returned.
         bool_verbose : bool
@@ -440,16 +494,18 @@ class KinaseInfo(BaseModel):
         return None
 
     def adjudicate_kd_start(
-        self, int_max_gap: int = 15, bool_verbose: bool = False
+        self, int_max_gap: float = float("inf"), bool_verbose: bool = False
     ) -> int | None:
         """Adjudicate kinase domain start based on available data.
 
         Parameters
         ----------
-        int_max_gap : int, optional
+        int_max_gap : float, optional
             Maximum allowed gap between the kinase domain start and the minimum
             KLIFS pocket index before the start is treated as unreliable and None
-            is returned, by default 15.
+            is returned, by default ``float("inf")`` (no cutoff; the KLIFS index
+            is always trusted). See :meth:`_reconcile_kd_bound_with_klifs` for why
+            the historical finite cutoff was relaxed.
         bool_verbose : bool, optional
             Whether to log verbose messages, by default False.
 
@@ -483,16 +539,18 @@ class KinaseInfo(BaseModel):
         return start
 
     def adjudicate_kd_end(
-        self, int_max_gap: int = 15, bool_verbose: bool = False
+        self, int_max_gap: float = float("inf"), bool_verbose: bool = False
     ) -> int | None:
         """Adjudicate kinase domain end based on available data.
 
         Parameters
         ----------
-        int_max_gap : int, optional
+        int_max_gap : float, optional
             Maximum allowed gap between the kinase domain end and the maximum
             KLIFS pocket index before the end is treated as unreliable and None
-            is returned, by default 15.
+            is returned, by default ``float("inf")`` (no cutoff; the KLIFS index
+            is always trusted). See :meth:`_reconcile_kd_bound_with_klifs` for why
+            the historical finite cutoff was relaxed.
         bool_verbose : bool, optional
             Whether to log verbose messages, by default False.
 
@@ -595,9 +653,11 @@ class KinaseInfo(BaseModel):
         canonical catalytic residues -- the VAIK beta3 lysine (III:17), the HRD
         catalytic aspartate (c.l:70) and the DFG aspartate (xDFG:81); a kinase missing
         any one is called a pseudokinase. The catalytic lysine may instead sit in beta2
-        (II:13) in the WNK family, which is accepted as present. Two hand-curated
-        overrides correct the known failure modes of the heuristic (see
-        ``LIST_PSEUDOKINASE_TRIAD_INTACT`` and
+        (II:13) in the WNK family, which is accepted as present. A KinCore active-state
+        CIF takes precedence over everything else: it marks an experimentally/AF2-
+        validated catalytically active kinase, so such a kinase is never a pseudokinase.
+        Two hand-curated overrides then correct the known failure modes of the heuristic
+        (see ``LIST_PSEUDOKINASE_TRIAD_INTACT`` and
         ``LIST_PSEUDOKINASE_HEURISTIC_FALSE_POSITIVE`` in ``mkt.schema.constants`` for
         membership and citations). Returns False when no KLIFS pocket is available.
 
@@ -615,6 +675,11 @@ class KinaseInfo(BaseModel):
             STR_KLIFS_CATALYTIC_ASP,
             STR_KLIFS_DFG_ASP,
         )
+
+        # a KinCore active-state CIF marks a catalytically active kinase, so it is never
+        # a pseudokinase -- this overrides both the curated lists and the heuristic
+        if self.kincore is not None and self.kincore.cif is not None:
+            return False
 
         # curated literature overrides take precedence over the sequence heuristic
         if self.hgnc_name in LIST_PSEUDOKINASE_TRIAD_INTACT:
@@ -642,3 +707,68 @@ class KinaseInfo(BaseModel):
 
         # a pseudokinase is missing at least one of the three catalytic residues
         return not (has_lysine and has_catalytic_asp and has_dfg_asp)
+
+    def return_molecular_brake_residues(self) -> dict[str, str | None] | None:
+        """Return this kinase's residues at the molecular brake KLIFS positions.
+
+        The molecular brake is a network of conserved residues in the KLIFS pocket
+        (see ``DICT_MOLECULAR_BRAKE`` in ``mkt.schema.constants`` for the region:idx
+        labels and their canonical identities). This reads the residue at each of
+        those positions from the KLIFS-to-UniProt index mapping, i.e.
+        ``canonical_seq[KLIFS2UniProtIdx[label] - 1 + offset]``, where the per-position
+        offset comes from ``DICT_MOLECULAR_BRAKE_OFFSET`` (the brake lysine sits one
+        residue N-terminal to its VIII:79 KLIFS-aligned position).
+
+        Returns
+        -------
+        dict[str, str | None] | None
+            Dictionary mapping each molecular brake KLIFS region:idx label to the
+            residue found at that position in this kinase, or None where the position
+            is unmapped. Returns None entirely when no KLIFS pocket mapping is
+            available (``KLIFS2UniProtIdx`` is None).
+        """
+        from mkt.schema.constants import (
+            DICT_MOLECULAR_BRAKE,
+            DICT_MOLECULAR_BRAKE_OFFSET,
+        )
+
+        if self.KLIFS2UniProtIdx is None:
+            return None
+
+        seq = self.uniprot.canonical_seq
+        dict_residues: dict[str, str | None] = {}
+        for label in DICT_MOLECULAR_BRAKE:
+            idx = self.KLIFS2UniProtIdx.get(label)
+            if idx is None:
+                dict_residues[label] = None
+                continue
+            offset = DICT_MOLECULAR_BRAKE_OFFSET.get(label, 0)
+            dict_residues[label] = seq[idx - 1 + offset]
+        return dict_residues
+
+    def check_molecular_brake_against_canonical(
+        self,
+    ) -> tuple[bool, bool, bool] | None:
+        """Check this kinase's molecular brake residues against the canonical identities.
+
+        Compares the residue at each molecular brake position (see
+        ``return_molecular_brake_residues``) against the conserved canonical residue in
+        ``DICT_MOLECULAR_BRAKE``. An unmapped position (None) is treated as not matching.
+
+        Returns
+        -------
+        tuple[bool, bool, bool] | None
+            One boolean per molecular brake position -- in ``DICT_MOLECULAR_BRAKE`` order
+            -- indicating whether this kinase's residue matches the canonical identity.
+            Returns None when no KLIFS pocket mapping is available.
+        """
+        from mkt.schema.constants import DICT_MOLECULAR_BRAKE
+
+        dict_residues = self.return_molecular_brake_residues()
+        if dict_residues is None:
+            return None
+
+        return tuple(
+            dict_residues[label] == canonical
+            for label, canonical in DICT_MOLECULAR_BRAKE.items()
+        )

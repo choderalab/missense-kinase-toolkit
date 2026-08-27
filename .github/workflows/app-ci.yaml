@@ -1,0 +1,61 @@
+name: app-ci
+
+on:
+  # the app installs mkt-schema / mkt-databases (and the rest) unpinned, so run
+  # when the app itself or either upstream sub-package changes
+  push:
+    branches:
+      - "main"
+    paths:
+      - "missense_kinase_toolkit/app/**"
+      - "missense_kinase_toolkit/schema/**"
+      - "missense_kinase_toolkit/databases/**"
+  pull_request:
+    branches:
+      - "main"
+    paths:
+      - "missense_kinase_toolkit/app/**"
+      - "missense_kinase_toolkit/schema/**"
+      - "missense_kinase_toolkit/databases/**"
+  schedule:
+    # weekly run catches upstream dependency drift even when no code changed --
+    # the unpinned requirements.txt re-resolves exactly like Streamlit Cloud
+    # does on redeploy (this is how the pyarrow 25.0.0 segfault slipped in).
+    - cron: "0 0 * * 1"
+
+# cancel superseded in-progress runs for the same ref (e.g. rapid PR pushes)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    # mirror Streamlit Cloud, not the sub-package test matrix: Cloud is Linux +
+    # Python 3.12 + `uv pip install`, and the pyarrow/mimalloc segfault is
+    # Linux-only, so a macOS/Windows matrix would not reproduce it.
+    name: Streamlit app smoke test (mirrors Streamlit Cloud)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv + Python 3.12
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install app dependencies (same resolver + requirements as Cloud)
+        # requirements.txt pulls mkt-schema / mkt-databases from the default
+        # branch, so this smoke-tests the deployed dependency set, not the PR's
+        # checked-out sub-packages.
+        run: |
+          uv pip install -r missense_kinase_toolkit/app/requirements.txt
+          uv pip install pytest
+          uv pip list
+
+      - name: Run headless app smoke test
+        working-directory: missense_kinase_toolkit/app
+        run: pytest -v tests/

@@ -7,13 +7,13 @@ Matplotlib RC configuration helpers.
 
 import logging
 import os
-from os import path
 from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from mkt.databases.colors import COLOR_TREE_FALLBACK
 from mkt.databases.plot_config import (
     ColKinaseColorConfig,
     DynamicRangePlotConfig,
@@ -27,10 +27,107 @@ from mkt.databases.plot_config import (
     UpsetPlotConfig,
     VennDiagramConfig,
 )
+from mkt.schema.constants import DICT_KINASE_GROUP_COLORS
 from mkt.schema.io_utils import save_plot
 from pydantic.dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+LIST_KINASE_GROUP_ORDER = [
+    "TK",
+    "TKL",
+    "STE",
+    "CK1",
+    "AGC",
+    "CAMK",
+    "CMGC",
+    "NEK",
+    "RGC",
+    "Other",
+    "Atypical",
+    "Lipid",
+]
+"""list[str]: canonical Manning kinome-tree ordering for kinase-group legends."""
+
+
+def order_kinase_groups(fams: set[str] | None = None) -> list[str]:
+    """Order kinase-group labels by the canonical Manning kinome-tree grouping.
+
+    Parameters
+    ----------
+    fams : set[str] | None
+        Family labels to order (Manning group or Lipid). When None, all groups
+        in :data:`DICT_KINASE_GROUP_COLORS` are used. Families outside the
+        curated order are appended alphabetically.
+
+    Returns
+    -------
+    list[str]
+        Family labels in display order.
+    """
+    if fams is None:
+        fams = set(DICT_KINASE_GROUP_COLORS)
+    fams = set(fams)
+    return [g for g in LIST_KINASE_GROUP_ORDER if g in fams] + sorted(
+        fams - set(LIST_KINASE_GROUP_ORDER)
+    )
+
+
+def kinase_group_legend_handles(
+    fams: set[str] | None = None,
+    *,
+    style: str = "patch",
+    markersize: float = 8,
+    edgecolor: str = "none",
+    fallback: str = COLOR_TREE_FALLBACK,
+) -> list:
+    """Build kinase-group legend handles in the canonical kinome-tree order.
+
+    Shared across every figure that carries a kinase-group color legend so their
+    ordering and colors stay consistent.
+
+    Parameters
+    ----------
+    fams : set[str] | None
+        Family labels present in the drawn subset; None uses all groups in
+        :data:`DICT_KINASE_GROUP_COLORS`.
+    style : str
+        Handle style: ``"patch"`` for a filled swatch
+        (:class:`matplotlib.patches.Patch`) or ``"marker"`` for a square-marker
+        :class:`matplotlib.lines.Line2D`; default ``"patch"``.
+    markersize : float
+        Marker size when ``style="marker"``; default 8.
+    edgecolor : str
+        Swatch edge color when ``style="patch"``; default ``"none"``.
+    fallback : str
+        Color for families absent from :data:`DICT_KINASE_GROUP_COLORS`.
+
+    Returns
+    -------
+    list
+        One handle per family, in display order, each labeled with its family.
+    """
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+
+    handles = []
+    for g in order_kinase_groups(fams):
+        color = DICT_KINASE_GROUP_COLORS.get(g, fallback)
+        if style == "marker":
+            handles.append(
+                Line2D(
+                    [],
+                    [],
+                    color=color,
+                    marker="s",
+                    linestyle="None",
+                    markersize=markersize,
+                    label=g,
+                )
+            )
+        else:
+            handles.append(Patch(facecolor=color, edgecolor=edgecolor, label=g))
+    return handles
 
 
 def remove_spines(ax):
@@ -189,7 +286,14 @@ def plot_dict_kinase_upset(
                 ax.set_position([p.x0 - shift, p.y0, p.width + shift, p.height])
 
     # tight-crop so the saved file tracks the (element_size-driven) plot area
-    plt.savefig(path.join(path_save, f"{cfg.filename}.pdf"), bbox_inches="tight")
+    save_plot(
+        fig,
+        cfg.filename,
+        "Source-coverage upset plot",
+        bool_force_local=False,
+        bool_image_subdir=False,
+        output_path=path_save,
+    )
 
 
 def _collect_region_gap_specs(
@@ -2262,3 +2366,98 @@ def plot_sequence_input_schematic(
         bool_image_subdir=False,
         output_path=os.path.dirname(output_path),
     )
+
+
+def write_clade_membership_table(
+    conservation_data,
+    str_group: str = "TK",
+    str_filepath: str | None = None,
+    dict_anchors: dict[str, tuple[str, ...]] | None = None,
+) -> str:
+    """Build a LaTeX (booktabs) table of named clades and their member kinases.
+
+    Uses the curated anchor-based clade names
+    (:data:`mkt.schema.conservation_schema.DICT_CLADE_ANCHORS`) so the table is
+    keyed to stable clade names rather than fragile display-order numbers. Rows are
+    the named clades that fall within ``str_group`` (e.g. the TK sub-families),
+    ordered by descending membership.
+
+    Parameters
+    ----------
+    conservation_data : KLIFSConservationData
+        Persisted KLIFS clustering artifact (e.g. from
+        :func:`mkt.schema.io_utils.load_conservation_data`).
+    str_group : str
+        Kinase group to restrict membership to (default ``"TK"``). Pass None to
+        keep every member regardless of group.
+    str_filepath : str | None
+        If given, write the LaTeX source to this path.
+    dict_anchors : dict[str, tuple[str, ...]] | None
+        Clade-name -> anchor-kinase mapping; defaults to
+        :data:`DICT_CLADE_ANCHORS`.
+
+    Returns
+    -------
+    str
+        The LaTeX table source.
+    """
+    from mkt.schema.conservation_schema import DICT_CLADE_ANCHORS
+    from mkt.schema.utils import adjudicate_kinase_group
+
+    dict_anchors = dict_anchors or DICT_CLADE_ANCHORS
+    leaf_names = conservation_data.display_leaf_names(dict_anchors)
+
+    rows: list[tuple[str, list[str]]] = []
+    for leaf_idx, clade_name in enumerate(leaf_names):
+        if clade_name is None:
+            continue
+        members = [
+            conservation_data.names[i]
+            for i in conservation_data.display_leaves[leaf_idx]["members"]
+        ]
+        if str_group is not None:
+            members = [m for m in members if adjudicate_kinase_group(m) == str_group]
+        if members:
+            rows.append((clade_name, sorted(members)))
+    rows.sort(key=lambda row: (-len(row[1]), row[0]))
+
+    def _escape(text: str) -> str:
+        for char, repl in (("&", r"\&"), ("%", r"\%"), ("_", r"\_")):
+            text = text.replace(char, repl)
+        return text
+
+    str_group_label = "all groups" if str_group is None else str_group
+    caption = (
+        f"{_escape(str_group_label)} conservation clades from KLIFS-pocket "
+        "hierarchical clustering, named by curated anchor kinases and listed with "
+        "their member kinases (ordered by descending membership)."
+    )
+    body_rows = [
+        rf"{_escape(clade_name)} & {len(members)} & "
+        rf"{_escape(', '.join(members))} \\"
+        for clade_name, members in rows
+    ]
+    lines = [
+        "% Requires \\usepackage{booktabs}.",
+        r"{\footnotesize",
+        r"\begin{table}[htbp]",
+        r"\centering",
+        r"\begin{tabular}{llp{0.6\textwidth}}",
+        r"\toprule",
+        r"\textbf{Clade} & \textbf{$n$} & \textbf{Kinases} \\",
+        r"\midrule",
+        *body_rows,
+        r"\bottomrule",
+        r"\end{tabular}",
+        rf"\caption{{{caption}}}\label{{tab:clade-membership}}",
+        r"\end{table}",
+        r"}",
+        "",
+    ]
+    str_tex = "\n".join(lines)
+
+    if str_filepath is not None:
+        with open(str_filepath, "w") as file_out:
+            file_out.write(str_tex)
+        logger.info(f"Wrote clade membership table to {str_filepath}.")
+    return str_tex

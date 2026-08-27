@@ -14,9 +14,59 @@ logger = logging.getLogger(__name__)
 LIST_PFAM_KD = [
     "Protein kinase domain",
     "Protein tyrosine and serine/threonine kinase",
-    "Serine/threonine-protein kinase mTOR domain",
+    # ADCK1/2/5, COQ8A/B
+    "ABC1 atypical kinase-like domain",
+    # ALPK1/2/3, EEF2K, TRPM6/7
+    "Alpha-kinase family",
+    # PIKK (ATM, ATR, MTOR, PRKDC, SMG1, TRRAP), PI3/4K
+    "Phosphatidylinositol 3- and 4-kinase",
+    # PIP5K/PI4P5K
+    "Phosphatidylinositol-4-phosphate 5-Kinase",
+    # RIOK1/2/3
+    "RIO domain",
+    # GHKL kinases: BCKDK, PDK1-4
+    "Histidine kinase-, DNA gyrase B-, and HSP90-like ATPase",
 ]
-"""list[str]: List of Pfam kinase domain names."""
+"""list[str]: List of Pfam kinase domain names, including lipid and atypical kinase
+domains. Note MTOR's catalytic kinase domain is the C-terminal
+"Phosphatidylinositol 3- and 4-kinase" region, not the regulatory
+"Serine/threonine-protein kinase mTOR domain"."""
+
+LIST_LEGACY_KINASES = [
+    # GCK: hexokinase (sugar kinase, EC 2.7.1.2), out of scope
+    "GCK",
+    # BET family - historically contested Ser/Thr activity
+    "BRD2",
+    "BRD3",
+    "BRD4",
+    "BRDT",
+    # E3 ligases/transcription co-factors
+    "TRIM24",
+    "TRIM28",
+    "TRIM33",
+    "TRIM66",
+    # other bromodomain-containing proteins
+    "BAZ1A",
+    "BAZ1B",
+    "TAF1",
+    "TAF1L",
+    # RhoGEF/GAPs
+    "ABR",
+    "BCR",
+    # conflated with ATR in KLIFS as also sometimes abbreviated ATR
+    "ANTXR1",
+    # Ephrin ligand - not Ephrin
+    "EFNA2",
+    # reclassified as a winged-helix domain protein in 2024
+    "WHR1",
+    # not kinases - holdovers from Manning et al. 2002
+    "BLVRA",
+    "CERT1",
+    "GTF2F1",
+    "FASTK",
+    "HSPB8",
+]
+"""list[str]: List of legacy (mostly Manning) kinases that should not be included in canonical kinases."""
 
 LIST_FULL_KLIFS_REGION = [
     "I",
@@ -210,16 +260,15 @@ STR_KLIFS_DFG_ASP = "xDFG:81"
 
 LIST_PSEUDOKINASE_TRIAD_INTACT = [
     "BUB1B",
-    "PDIK1L",
     "ROR1",
     "ROR2",
     "RYK",
-    "SBK3",
 ]
 """list[str]: Curated pseudokinases that retain an intact VAIK-K / HRD-D / DFG-D triad and
 are therefore NOT caught by the catalytic-residue heuristic (false negatives); they are
 catalytically dead for other reasons (degraded regulatory spine, glycine-rich loop, or
-nucleotide binding). is_pseudokinase() force-returns True for these.
+nucleotide binding). is_pseudokinase() force-returns True for these, unless the kinase has
+a KinCore active-state CIF (which takes precedence and marks it catalytically active).
 
 Citations:
   - BUB1B (BUBR1) -- a bona fide pseudokinase despite an intact catalytic triad:
@@ -227,9 +276,10 @@ Citations:
   - ROR1, ROR2, RYK -- Wnt-receptor pseudokinases that retain catalytic residues but
     lack activity: Boudeau et al., Trends Cell Biol 2006; Reiterer et al., Trends Cell
     Biol 2014; Mendrola et al., Biochem Soc Trans 2013.
-  - PDIK1L, SBK3 -- annotated pseudokinases with intact triads; classified pseudo on
-    nucleotide-binding / catalytic grounds (Murphy et al., Biochem J 2014). Lower
-    confidence than the above; revisit if a more authoritative list is adopted."""
+
+NOTE: PDIK1L and SBK3 were previously listed here (annotated pseudo on nucleotide-binding
+grounds, Murphy et al., Biochem J 2014, but lower confidence) -- both now carry KinCore
+active-state CIFs and are treated as catalytically active, so they were removed."""
 
 LIST_PSEUDOKINASE_HEURISTIC_FALSE_POSITIVE = [
     "CAMKK1",
@@ -250,9 +300,9 @@ Citations / rationale:
     rather than true loss of catalysis.
 
 NOTE (WNK4): WNK4 also trips the heuristic (no beta3 or beta2 lysine; III:17=C, II:13=R)
-and is NOT rescued by the beta2-lysine alternative, unlike WNK1/2/3. WNK4 is the most
-divergent, weakly/debatably active WNK -- left flagged pending review rather than added
-here."""
+and is NOT rescued by the beta2-lysine alternative, unlike WNK1/2/3. It is not listed here
+because it carries a KinCore active-state CIF, which is_pseudokinase() treats as
+catalytically active (taking precedence over the heuristic)."""
 
 DICT_KINASE_GROUP_COLORS = {
     "AGC": "#5B8DBE",  # Muted steel blue
@@ -271,4 +321,37 @@ DICT_KINASE_GROUP_COLORS = {
 """dict[str, str]: Dictionary mapping kinase groups to colors.
 Keys are kinase group names, and values are hex color codes.
 This dictionary can be used to look up colors for kinase groups in visualizations.
+"""
+
+DICT_MOLECULAR_BRAKE = {
+    "b.l:37": "N",
+    "hinge:46": "E",
+    "VIII:79": "K",
+}
+"""dict[str, str]: Dictionary mapping KLIFS pocket region:idx to the corresponding
+canonical molecular brake residue (N, E, K). The molecular brake is a conserved triad
+that latches the active site into an autoinhibited state, characterized in FGFR (Asn-Glu-Lys;
+Chen et al., Mol Cell 2007). This dictionary can be used to identify the molecular brake
+residues in kinases based on their KLIFS pocket region and index. Some positions require an
+index offset before lookup -- see ``DICT_MOLECULAR_BRAKE_OFFSET``.
+"""
+
+DICT_MOLECULAR_BRAKE_OFFSET = {
+    "VIII:79": -1,
+}
+"""dict[str, int]: Per-position UniProt index offset (relative to the KLIFS2UniProt-mapped
+index) to reach the molecular brake residue in ``DICT_MOLECULAR_BRAKE``. The brake lysine sits
+one residue N-terminal to the VIII:79 KLIFS-aligned position, so a -1 offset is applied there
+(e.g. FGFR2 K641 maps to VIII:79 idx 642). Positions absent from this dict use no offset.
+"""
+
+DICT_CONSURF_GRADE_BANDS = {
+    "Variable": (1, 3),
+    "Intermediate": (4, 6),
+    "Conserved": (7, 9),
+}
+"""dict[str, tuple[int, int]]: ConSurf conservation-grade bands as inclusive
+(low, high) grade ranges. The nine ConSurf nonile grades collapse into three
+qualitative bands -- variable (1-3), intermediate (4-6), conserved (7-9) -- used to
+bracket-label the grade legend on the conservation dot heatmap.
 """
