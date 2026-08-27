@@ -279,6 +279,20 @@ class KinCore(BaseModel):
     mismatch: list[int] | None = None  # fasta2cif
 
 
+class AlphaFold(BaseModel):
+    """Pydantic model for an AlphaFold DB structure sliced to the kinase domain."""
+
+    cif: dict[str, str | list[str]]
+    start: int | None = None  # kinase-domain slice bounds (UniProt, from adjudication)
+    end: int | None = None
+    entry_id: str
+    uniprot_accession: str
+    global_metric_value: float | None = None  # global mean pLDDT (0-100)
+    model_created_date: str | None = None
+    latest_version: int | None = None
+    tool_used: str | None = None
+
+
 class KinaseInfoUniProt(BaseModel):
     """Pydantic model for kinase information at the level of the UniProt ID."""
 
@@ -307,6 +321,7 @@ class KinaseInfo(BaseModel):
     klifs: KLIFS | None = None
     pfam: Pfam | None = None
     kincore: KinCore | None = None
+    alphafold: AlphaFold | None = None
     KLIFS2UniProtIdx: dict[str, int | None] | None = None
     KLIFS2UniProtSeq: dict[str, str | None] | None = None
 
@@ -385,7 +400,12 @@ class KinaseInfo(BaseModel):
         return seq
 
     def adjudicate_kd_sequence(self, bool_verbose: bool = False) -> str | None:
-        """Adjudicate kinase domain sequence based on available data.
+        """Adjudicate the kinase domain sequence as the canonical UniProt KD slice.
+
+        Returns ``canonical_seq[start - 1 : end]`` using the adjudicated kinase-domain
+        bounds (:meth:`adjudicate_kd_start` / :meth:`adjudicate_kd_end`) so the sequence is
+        1-to-1 with those bounds. This also makes the sequence match the KD-sliced AlphaFold
+        structure by construction (both are canonical UniProt over ``[start, end]``).
 
         Parameters
         ----------
@@ -395,21 +415,15 @@ class KinaseInfo(BaseModel):
         Returns
         -------
         str | None
-            The kinase domain sequence if available, otherwise None.
+            The canonical kinase-domain sequence if bounds are available, otherwise None.
         """
-        if self.kincore is not None:
-            seq = self.extract_sequence_from_cif(bool_verbose=bool_verbose)
-            if seq is not None:
-                return seq
-            else:
-                # all non-None entries will have fastas
-                return self.kincore.fasta.seq
-        elif self.pfam is not None:
-            return self.uniprot.canonical_seq[self.pfam.start - 1 : self.pfam.end]
-        else:
+        start = self.adjudicate_kd_start(bool_verbose=bool_verbose)
+        end = self.adjudicate_kd_end(bool_verbose=bool_verbose)
+        if start is None or end is None:
             if bool_verbose:
                 logger.info(f"No kinase domain sequence found for {self.hgnc_name}")
             return None
+        return self.uniprot.canonical_seq[start - 1 : end]
 
     def _klifs_uniprot_idx_bounds(self) -> tuple[int, int] | None:
         """Return the min and max non-None UniProt indices in KLIFS2UniProtIdx.

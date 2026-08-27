@@ -145,3 +145,20 @@ def test_molecular_brake_missing_mapping(mutable_kinase):
     assert obj.return_molecular_brake_residues()["b.l:37"] is None
     # the unmapped position no longer matches; the other two still do
     assert obj.check_molecular_brake_against_canonical() == (False, True, True)
+
+
+def test_adjudicate_kd_sequence_one_to_one_with_bounds(dict_kinase):
+    """adjudicate_kd_sequence is exactly the canonical UniProt slice over the KD bounds.
+
+    Guards the invariant that the KD sequence, the KD start/end, and (by construction) the
+    KD-sliced AlphaFold structure are 1-to-1: ``seq == canonical_seq[start - 1 : end]`` and
+    ``len(seq) == end - start + 1``.
+    """
+    for obj in dict_kinase.values():
+        seq = obj.adjudicate_kd_sequence()
+        start, end = obj.adjudicate_kd_start(), obj.adjudicate_kd_end()
+        if seq is None:
+            assert start is None or end is None
+            continue
+        assert len(seq) == end - start + 1
+        assert seq == obj.uniprot.canonical_seq[start - 1 : end]
