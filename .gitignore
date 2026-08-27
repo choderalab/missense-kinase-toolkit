@@ -207,3 +207,7 @@ configs/
 data/3d_hotspots.xls
 data/tumor_types.txt
 data/AF2_Active_Models_v2.zip
+
+# stray KinCore CIFs from a legacy disk-extract; the pipeline reads the v2 zip
+# in memory (extract_pk_cif_files_as_list), so these are never shipped as package data
+missense_kinase_toolkit/databases/mkt/databases/KinCore/

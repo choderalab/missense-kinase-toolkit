@@ -54,6 +54,8 @@ class StructureConfig(ABC):
     """Whether to draw leader/connector lines from each residue to its label."""
     highlight_cartoon_transparency: float = 0.0
     """Cartoon transparency applied to colored/highlighted residues (0 = opaque, 1 = invisible)."""
+    prefer_alphafold: bool = False
+    """Force the AlphaFold structure even when a KinCore CIF is present (default False)."""
 
     def __post_init__(self):
         list_idx, list_color, list_style = self.return_list_intersect_color_style()
@@ -113,12 +115,17 @@ class StructureConfig(ABC):
     def return_list_cif_idx(self) -> list[int]:
         """Return list of 0-indexed positions corresponding to the CIF sequence.
 
+        Uses the adjudicated structure alignment (KinCore or AlphaFold).
+
         Returns
         -------
         list[int]
-            List of 0-indexed positions where CIF sequence has residues (not gaps).
+            List of 0-indexed positions where the structure sequence has residues (not gaps).
         """
-        str_seq_cif = self.seq_align.dict_align["KinCore, CIF"]["str_seq"]
+        str_key = self.seq_align.str_structure_key
+        if str_key is None:
+            return []
+        str_seq_cif = self.seq_align.dict_align[str_key]["str_seq"]
         list_cif_idx = [idx for idx, i in enumerate(str_seq_cif) if i != "-"]
         return list_cif_idx
 
@@ -131,8 +138,13 @@ class StructureConfig(ABC):
             List of 0-indexed positions where attribute sequence has residues,
             or None if attribute not found in dict_align.
         """
+        # a config that references the structure ("KinCore, CIF"/"AF2, CIF") resolves to
+        # whichever structure (KinCore or AlphaFold) is present for this kinase
+        str_attr = self.str_attr
+        if str_attr in ("KinCore, CIF", "AF2, CIF"):
+            str_attr = self.seq_align.str_structure_key or str_attr
         try:
-            str_seq_attr = self.seq_align.dict_align[self.str_attr]["str_seq"]
+            str_seq_attr = self.seq_align.dict_align[str_attr]["str_seq"]
             list_attr_idx = [idx for idx, i in enumerate(str_seq_attr) if i != "-"]
             return list_attr_idx
         except KeyError:

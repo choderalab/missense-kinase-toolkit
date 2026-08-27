@@ -37,6 +37,11 @@ DICT_ALIGNMENT = {
         "start": "kincore.cif.start",
         "end": "kincore.cif.end",
     },
+    "AF2, CIF": {
+        "seq": "alphafold.cif",  # KD-sliced AlphaFold CIF; populated only when no KinCore CIF
+        "start": "alphafold.start",
+        "end": "alphafold.end",
+    },
     "Phosphosites": {
         "seq": "uniprot.phospho_sites",
         "start": None,
@@ -81,6 +86,28 @@ class SequenceAlignment:
             self.list_sequences = self.list_sequences[::-1]
             self.list_ids = self.list_ids[::-1]
             self.list_colors = self.list_colors[::-1]
+
+    @property
+    def str_structure_key(self) -> str | None:
+        """DICT_ALIGNMENT key for the adjudicated structure alignment.
+
+        A KinCore active-state CIF is preferred, else the KD-sliced AlphaFold structure;
+        the two are mutually exclusive, and (being 1-to-1 in bounds/sequence) the same
+        alignment serves a KinCore- or AF-rendered structure.
+
+        Returns
+        -------
+        str | None
+            ``"KinCore, CIF"``, ``"AF2, CIF"``, or None if no structure is available.
+        """
+        if (
+            self.obj_kinase.kincore is not None
+            and self.obj_kinase.kincore.cif is not None
+        ):
+            return "KinCore, CIF"
+        if self.obj_kinase.alphafold is not None:
+            return "AF2, CIF"
+        return None
 
     @staticmethod
     def _map_single_alignment(
@@ -191,15 +218,29 @@ class SequenceAlignment:
         """
         uniprot_seq = self.obj_kinase.uniprot.canonical_seq
 
-        dict_out = {
-            k: dict.fromkeys(["str_seq", "list_colors"]) for k in DICT_ALIGNMENT.keys()
+        # the AlphaFold DB is queried only as a fallback when no KinCore CIF is present, so
+        # the AF2 row is shown only then: present for the fallback entries, missing (with the
+        # KinCore CIF row) for entries lacking both; it is dropped for KinCore-CIF entries
+        # (never queried, so "missing" would misrepresent them)
+        has_kincore_cif = (
+            self.obj_kinase.kincore is not None
+            and self.obj_kinase.kincore.cif is not None
+        )
+        dict_alignment = {
+            k: v
+            for k, v in DICT_ALIGNMENT.items()
+            if not (k == "AF2, CIF" and has_kincore_cif)
         }
 
-        for key, value in DICT_ALIGNMENT.items():
+        dict_out = {
+            k: dict.fromkeys(["str_seq", "list_colors"]) for k in dict_alignment.keys()
+        }
+
+        for key, value in dict_alignment.items():
             seq = rgetattr(self.obj_kinase, value["seq"])
 
-            # KinCore CIF sequence needs to be extracted from dict and have linebreaks removed
-            if key == "KinCore, CIF" and seq is not None:
+            # CIF sequences (KinCore or AlphaFold) are extracted from the mmCIF dict
+            if key in ("KinCore, CIF", "AF2, CIF") and seq is not None:
                 seq = seq["_entity_poly.pdbx_seq_one_letter_code"][0].replace("\n", "")
 
             # CDKL1 KinCore FASTA and CIF have an extra M at the start - remove and add back
