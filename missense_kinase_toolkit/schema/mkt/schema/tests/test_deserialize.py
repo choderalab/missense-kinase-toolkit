@@ -274,30 +274,57 @@ def test_pseudokinase_kincore_cif_invariant(dict_kinase):
     assert dict_kinase["BUB1B"].is_pseudokinase() is True
 
 
-def test_alphafold_fallback_invariants(dict_kinase):
-    """AlphaFold structures are stored only as the fallback for KinCore-less entries.
+def test_alphafold_invariants(dict_kinase):
+    """AlphaFold structures are stored for every kinase with KD bounds and an AF2 model.
 
-    A stored ``alphafold`` is mutually exclusive with a KinCore CIF (the KinCore
-    active-state model is preferred), and the KD-sliced AF sequence is 1-to-1 with
-    ``adjudicate_kd_sequence`` by construction.
+    An AF2 structure now coexists with a KinCore CIF (AF-for-all, for structure/SASA
+    comparison), and the KD-sliced AF sequence matches ``adjudicate_kd_sequence`` except at the
+    positions recorded in ``alphafold.mismatch``.
     """
-    both = [
-        name
-        for name, info in dict_kinase.items()
-        if info.alphafold is not None
-        and info.kincore is not None
-        and info.kincore.cif is not None
-    ]
-    assert both == []
-
     stored = [name for name, info in dict_kinase.items() if info.alphafold is not None]
-    assert stored, "expected AlphaFold-fallback entries in the dict"
+    assert stored, "expected stored AlphaFold structures in the dict"
 
     for name in stored:
         info = dict_kinase[name]
         seq_slice = info.alphafold.cif["_entity_poly.pdbx_seq_one_letter_code"][0]
-        assert seq_slice == info.adjudicate_kd_sequence()
+        expected = info.adjudicate_kd_sequence()
+        assert len(seq_slice) == len(expected)
+        # the AF slice differs from canonical only at the recorded mismatch positions
+        diffs = [i for i, (a, b) in enumerate(zip(seq_slice, expected)) if a != b]
+        assert diffs == (info.alphafold.mismatch or [])
 
-    # BUB1B has no KinCore CIF, so it carries the AF2 fallback structure
+    # AF-for-all: a KinCore-CIF kinase (ABL1) also carries an AF2 structure
+    abl1 = dict_kinase["ABL1"]
+    assert abl1.kincore is not None and abl1.kincore.cif is not None
+    assert abl1.alphafold is not None
+
+    # BUB1B has no KinCore CIF, so AF2 is its only structure
     assert dict_kinase["BUB1B"].alphafold is not None
     assert dict_kinase["BUB1B"].alphafold.entry_id == "AF-O60566-F1"
+
+
+def test_sasa_per_structure_klifs_pocket(dict_kinase):
+    """Each structure carries its own KLIFS-pocket SASA/RSA, keyed by KLIFS region:idx.
+
+    SASA is nested on the structure it was computed over (``kincore.cif.sasa`` /
+    ``alphafold.sasa``); a kinase with both structures carries both, over the same KLIFS keys.
+    """
+    # ABL1 has a KinCore CIF (and, with AF-for-all, an AlphaFold structure too)
+    abl1 = dict_kinase["ABL1"]
+    sasas = [
+        abl1.kincore.cif.sasa if abl1.kincore and abl1.kincore.cif else None,
+        abl1.alphafold.sasa if abl1.alphafold else None,
+    ]
+    sasas = [s for s in sasas if s is not None]
+    assert sasas, "ABL1 has no per-structure SASA"
+    for s in sasas:
+        assert set(s.rsa) == set(abl1.KLIFS2UniProtIdx)
+        assert set(s.sasa) == set(abl1.KLIFS2UniProtIdx)
+        rsa_vals = [v for v in s.rsa.values() if v is not None]
+        assert rsa_vals and all(0.0 <= v < 2.0 for v in rsa_vals)
+        assert s.method and s.n_points > 0 and s.max_asa_reference
+
+    # BUB1B has no KinCore CIF but an AlphaFold structure -> AF SASA present
+    bub1b = dict_kinase["BUB1B"]
+    assert bub1b.kincore is None or bub1b.kincore.cif is None
+    assert bub1b.alphafold is not None and bub1b.alphafold.sasa is not None

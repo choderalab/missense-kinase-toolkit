@@ -326,23 +326,17 @@ This dictionary can be used to look up colors for kinase groups in visualization
 DICT_MOLECULAR_BRAKE = {
     "b.l:37": "N",
     "hinge:46": "E",
-    "VIII:79": "K",
+    "VIII:79-1": "K",
 }
-"""dict[str, str]: Dictionary mapping KLIFS pocket region:idx to the corresponding
-canonical molecular brake residue (N, E, K). The molecular brake is a conserved triad
-that latches the active site into an autoinhibited state, characterized in FGFR (Asn-Glu-Lys;
-Chen et al., Mol Cell 2007). This dictionary can be used to identify the molecular brake
-residues in kinases based on their KLIFS pocket region and index. Some positions require an
-index offset before lookup -- see ``DICT_MOLECULAR_BRAKE_OFFSET``.
-"""
-
-DICT_MOLECULAR_BRAKE_OFFSET = {
-    "VIII:79": -1,
-}
-"""dict[str, int]: Per-position UniProt index offset (relative to the KLIFS2UniProt-mapped
-index) to reach the molecular brake residue in ``DICT_MOLECULAR_BRAKE``. The brake lysine sits
-one residue N-terminal to the VIII:79 KLIFS-aligned position, so a -1 offset is applied there
-(e.g. FGFR2 K641 maps to VIII:79 idx 642). Positions absent from this dict use no offset.
+"""dict[str, str]: Dictionary mapping KLIFS pocket region:idx (with an optional index
+offset) to the corresponding canonical molecular brake residue (N, E, K). The molecular brake
+is a conserved triad that latches the active site into an autoinhibited state, characterized in
+FGFR (Asn-Glu-Lys; Chen et al., Mol Cell 2007). This dictionary can be used to identify the
+molecular brake residues in kinases based on their KLIFS pocket region and index. A key may
+carry a trailing signed offset (``+n``/``-n``) applied to the KLIFS2UniProt-mapped index before
+lookup: the brake lysine sits one residue N-terminal to its VIII:79 KLIFS-aligned position, so
+``"VIII:79-1"`` applies a -1 offset (e.g. FGFR2 K641 maps to VIII:79 idx 642). A key with no
+trailing sign (e.g. ``"b.l:37"``) uses no offset.
 """
 
 DICT_CONSURF_GRADE_BANDS = {
