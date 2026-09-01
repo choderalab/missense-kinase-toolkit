@@ -4,6 +4,48 @@ import pytest
 from mkt.schema import io_utils
 
 
+def _assert_kinase_dicts_equal(expected, actual):
+    """Assert two kinase dicts are equal, failing with a compact (value-free) message.
+
+    A plain ``assert expected == actual`` on unequal ``KinaseInfo`` objects makes pytest
+    render a diff of the full objects -- which embed large CIF strings and per-residue
+    SASA/RSA dicts -- and effectively hangs. Instead compare per kinase and report only the
+    differing kinase names and their differing top-level field names (never the values), so
+    a round-trip regression fails fast with an actionable pointer.
+
+    Parameters
+    ----------
+    expected : dict[str, KinaseInfo]
+        The original kinase dictionary.
+    actual : dict[str, KinaseInfo]
+        The round-tripped kinase dictionary.
+    """
+    if set(expected) != set(actual):
+        pytest.fail(
+            "kinase key mismatch after round-trip: "
+            f"{sorted(set(expected) ^ set(actual))}"
+        )
+
+    diffs = []
+    for key in expected:
+        if expected[key] == actual[key]:
+            continue
+        dump_expected = expected[key].model_dump()
+        dump_actual = actual[key].model_dump()
+        fields = sorted(
+            name
+            for name in dump_expected
+            if dump_expected.get(name) != dump_actual.get(name)
+        )
+        diffs.append(f"{key}: {fields}")
+
+    if diffs:
+        pytest.fail(
+            "serde round-trip mismatch (kinase: differing top-level fields):\n"
+            + "\n".join(diffs)
+        )
+
+
 @pytest.fixture(scope="session")
 def serde_sample(dict_kinase):
     """Curated subset of kinases for serialization round-trip tests.
@@ -59,4 +101,4 @@ def test_serde_roundtrip(serde_sample, tmp_path, suffix):
     io_utils.serialize_kinase_dict(dict_sample, suffix=suffix, str_path=str_path)
     dict_temp = io_utils.deserialize_kinase_dict(suffix=suffix, str_path=str_path)
 
-    assert dict_sample == dict_temp
+    _assert_kinase_dicts_equal(dict_sample, dict_temp)
