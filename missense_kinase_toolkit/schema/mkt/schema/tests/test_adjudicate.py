@@ -66,8 +66,9 @@ def test_adjudicate_kd_large_gap_expands_by_default(dict_kinase):
     pocket is now trusted as the better-annotated bound (large kinase-domain
     inserts missed by Pfam but present in KLIFS).
     """
-    # EIF2AK4_2 start gap of 46 expands to the KLIFS minimum
-    assert dict_kinase["EIF2AK4_2"].adjudicate_kd_start() == 284
+    # PIK3CA Pfam start (798) gap to the KLIFS minimum (769) expands to the KLIFS index
+    # (a lipid kinase, so no KinCoRe/MSA overrides Pfam here)
+    assert dict_kinase["PIK3CA"].adjudicate_kd_start() == 769
     # ADCK2 end gap (Pfam end 218 -> KLIFS max) expands to the KLIFS maximum
     assert dict_kinase["ADCK2"].adjudicate_kd_end() == 497
 
@@ -76,9 +77,9 @@ def test_adjudicate_kd_finite_cutoff_returns_none(dict_kinase, caplog):
     """An explicit finite int_max_gap still returns None and warns."""
     caplog.set_level(logging.WARNING)
 
-    # EIF2AK4_2 start gap is 46 (> explicit cut-off of 15)
-    assert dict_kinase["EIF2AK4_2"].adjudicate_kd_start(int_max_gap=15) is None
-    assert "Kinase domain start found for EIF2AK4_2" in caplog.text
+    # PIK3CA start gap is 29 (> explicit cut-off of 15)
+    assert dict_kinase["PIK3CA"].adjudicate_kd_start(int_max_gap=15) is None
+    assert "Kinase domain start found for PIK3CA" in caplog.text
     assert "larger than cut-off 15" in caplog.text
 
     # a large-but-finite cut-off still expands the ADCK2 end bound

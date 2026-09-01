@@ -489,7 +489,7 @@ def convert_mmcifdict2structure(
     -------
     Structure
         Bio.PDB Structure object parsed from the CIF dictionary. Residues are
-        numbered by ``auth_seq_id``, which for KinCore CIFs corresponds to the
+        numbered by ``auth_seq_id``, which for KinCoRe CIFs corresponds to the
         UniProt sequence position.
 
     """
@@ -524,7 +524,7 @@ def convert_structure2string(structure: Structure) -> str:
     -------
     str
         Structure in PDB string format; residue numbering is preserved from
-        ``auth_seq_id`` (UniProt position for KinCore CIFs).
+        ``auth_seq_id`` (UniProt position for KinCoRe CIFs).
 
     """
     pdb_io = PDBIO()

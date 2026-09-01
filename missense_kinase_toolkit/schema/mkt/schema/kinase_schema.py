@@ -1,7 +1,7 @@
 """Core Pydantic models representing a kinase at the kinase-domain level.
 
 Defines :class:`KinaseInfo` and its component models (:class:`UniProt`,
-:class:`KinHub`, :class:`KLIFS`, :class:`Pfam`, :class:`KinCore`) along with the
+:class:`KinHub`, :class:`KLIFS`, :class:`Pfam`, :class:`KinCoRe`) along with the
 :class:`Group`/:class:`Family` enumerations. :class:`KinaseInfo` exposes adjudication
 helpers for kinase-domain sequence and group assignment.
 """
@@ -9,8 +9,14 @@ helpers for kinase-domain sequence and group assignment.
 import logging
 from enum import Enum
 
-from mkt.schema.constants import LIST_FULL_KLIFS_REGION, LIST_KLIFS_REGION, LIST_PFAM_KD
-from mkt.schema.utils import rgetattr
+from mkt.schema.constants import (
+    LIST_FULL_KLIFS_REGION,
+    LIST_KLIFS_REGION,
+    LIST_MSA_APE,
+    LIST_MSA_REGION,
+    LIST_PFAM_KD,
+)
+from mkt.schema.utils import fill_missing_none, rgetattr
 from pydantic import BaseModel, ConfigDict, constr, field_validator
 from strenum import StrEnum
 
@@ -25,7 +31,7 @@ class Group(StrEnum):
     CAMK = "CAMK"  # Calcium/calmodulin-dependent protein kinase family
     CK1 = "CK1"  # Casein kinase 1 family
     CMGC = "CMGC"  # Cyclin-dependent kinase, Mitogen-activated protein kinase, Glycogen synthase kinase, and CDK-like kinase families
-    NEK = "NEK"  # NIMA (Never in Mitosis Gene A)-related kinase family - KinCore treats as group
+    NEK = "NEK"  # NIMA (Never in Mitosis Gene A)-related kinase family - KinCoRe treats as group
     RGC = "RGC"  # Receptor guanylate cyclase family
     STE = "STE"  # Homologs of yeast Sterile 7, Sterile 11, Sterile 20 kinases
     TK = "TK"  # Tyrosine kinase family
@@ -156,7 +162,7 @@ class DihedralCluster(StrEnum):
 
 
 class SNC(StrEnum):
-    """Enum class for the KinCore SNC (spine/salt-bridge) state label.
+    """Enum class for the KinCoRe SNC (spine/salt-bridge) state label.
 
     Values observed in the AF2 active-model set; extend if a future release adds more.
     """
@@ -218,8 +224,8 @@ class Pfam(BaseModel):
     in_alphafold: bool
 
 
-class KinCoreSeqSource(str, Enum):
-    """KinCore kinase-domain sequence source, in fallback priority order (latest first)."""
+class KinCoReSeqSource(str, Enum):
+    """KinCoRe kinase-domain sequence source, in fallback priority order (latest first)."""
 
     GIZZIO_2026 = (
         "Gizzio-Dunbrack_2026"  # kinasedomainfasta.tar.gz (current AF2 active models)
@@ -228,8 +234,8 @@ class KinCoreSeqSource(str, Enum):
     MODI_2019 = "Modi-Dunbrack_2019"  # Human-PK.fasta (no active-state structure)
 
 
-class KinCoreStructureSource(str, Enum):
-    """KinCore active-state structure source, in fallback priority order (latest first)."""
+class KinCoReStructureSource(str, Enum):
+    """KinCoRe active-state structure source, in fallback priority order (latest first)."""
 
     GIZZIO_2026 = "Gizzio-Dunbrack_2026"  # AF2_Active_Models_v2.zip (current)
     FAEZOV_2023 = (
@@ -251,11 +257,11 @@ class Provenance(BaseModel):
 class SASA(BaseModel):
     """KLIFS-pocket solvent accessibility over one kinase-domain structure.
 
-    Nested on the structure it was computed over (a KinCore active-state CIF or an AlphaFold DB
-    model), so a kinase can carry both a KinCore and an AF2 SASA for comparison; the parent
+    Nested on the structure it was computed over (a KinCoRe active-state CIF or an AlphaFold DB
+    model), so a kinase can carry both a KinCoRe and an AF2 SASA for comparison; the parent
     structure determines the provenance. Absolute SASA (Å^2) and relative solvent accessibility
     (RSA) are computed **heavy-atom** (``include_hydrogens=False``) so the two structure sources
-    are directly comparable: KinCore v2 CIFs carry explicit hydrogens (which are stripped before
+    are directly comparable: KinCoRe v2 CIFs carry explicit hydrogens (which are stripped before
     the calculation), whereas AlphaFold DB CIFs are heavy-atom only. RSA normalizes SASA by the
     ``max_asa_reference`` maxima, which are themselves a heavy-atom reference (so relative
     accessibility is only defined heavy-atom). The ``method``/``probe_radius``/``n_points``/
@@ -276,35 +282,12 @@ class SASA(BaseModel):
         cls,
         value: dict[str, float | None],
     ) -> dict[str, float | None]:
-        """Validate SASA/RSA dictionaries to include all regions since TOML doesn't save None.
-
-        Serializing to TOML omits keys whose value is None (TOML has no null type), so a
-        residue with no SASA/RSA would be dropped on a round-trip. Rebuild the full KLIFS
-        label set (missing entries defaulted to None), mirroring
-        :meth:`KinaseInfo.validate_klifs2uniprotidx`. Applies to both nested sites
-        (``kincore.cif.sasa`` and ``alphafold.sasa``) via Pydantic nested validation.
-
-        Parameters
-        ----------
-        value : dict[str, float | None]
-            Dictionary mapping KLIFS residue to SASA/RSA value.
-
-        Returns
-        -------
-        dict[str, float | None]
-            Dictionary mapping every KLIFS residue to its SASA/RSA value (missing -> None).
-        """
-        dict_temp = dict.fromkeys(LIST_KLIFS_REGION, None)
-
-        if isinstance(value, dict):
-            for key, val in value.items():
-                dict_temp[key] = val
-
-        return dict_temp
+        """Fill all KLIFS positions on the SASA/RSA maps (see :func:`fill_missing_none`)."""
+        return fill_missing_none(value, LIST_KLIFS_REGION)
 
 
-class KinCoreFASTA(BaseModel):
-    """Pydantic model for KinCore FASTA information."""
+class KinCoReFASTA(BaseModel):
+    """Pydantic model for KinCoRe FASTA information."""
 
     model_config = ConfigDict(use_enum_values=True)
 
@@ -321,15 +304,15 @@ class KinCoreFASTA(BaseModel):
     length_af2: int | None = None  # AF2 active state
     length_uniprot: int | None = None  # AF2 active state
     source: Provenance | None = (
-        None  # sequence source provenance (see KinCoreSeqSource)
+        None  # sequence source provenance (see KinCoReSeqSource)
     )
     start: int | None = None  # fasta2uniprot
     end: int | None = None  # fasta2uniprot
     mismatch: list[int] | None = None  # fasta2uniprot
 
 
-class KinCoreCIF(BaseModel):
-    """Pydantic model for KinCore CIF information."""
+class KinCoReCIF(BaseModel):
+    """Pydantic model for KinCoRe CIF information."""
 
     model_config = ConfigDict(use_enum_values=True)
 
@@ -348,25 +331,62 @@ class KinCoreCIF(BaseModel):
     dihedral: DihedralCluster | None = None
     snc: SNC | None = None
     af_id: str | None = (
-        None  # KinCore active-model id: AF-<uniprot>-K{3,4}A (K4 = 2nd KD, A = active)
+        None  # KinCoRe active-model id: AF-<uniprot>-K{3,4}A (K4 = 2nd KD, A = active)
     )
     # calculated fields
     source: Provenance | None = (
-        None  # structure source provenance (see KinCoreStructureSource)
+        None  # structure source provenance (see KinCoReStructureSource)
     )
     sasa: SASA | None = (
-        None  # KLIFS-pocket SASA over this KinCore active-state structure
+        None  # KLIFS-pocket SASA over this KinCoRe active-state structure
     )
     start: int | None = None  # cif2uniprot
     end: int | None = None  # cif2uniprot
     mismatch: list[int] | None = None  # cif2uniprot
 
 
-class KinCore(BaseModel):
-    """Pydantic model for KinCore information."""
+class MSA(BaseModel):
+    """Per-domain slice of the Modi & Dunbrack (2019) structure-based kinase MSA.
 
-    fasta: KinCoreFASTA
-    cif: KinCoreCIF | None = None
+    Stores this domain's row of the Human-PK alignment (497 canonical protein-kinase
+    domains) as ordered aligned/unaligned regions, plus a per-aligned-column map to UniProt
+    canonical indices -- mirroring the KLIFS2UniProt maps -- so the activation loop (DFG in
+    the ALN block through APE in the ALC block) can be read in UniProt coordinates.
+    """
+
+    regions: dict[
+        str, str
+    ]  # ordered region label -> gapped MSA substring (17 aligned + 16 unaligned)
+    region2uniprot: dict[
+        str, int | None
+    ]  # KLIFS-style "REGION:idx" ("B1N:001".."HI:229") -> UniProt index (None = gap)
+    start: int | None = (
+        None  # KD start in UniProt canonical coords (msa2uniprot; reconciled)
+    )
+    end: int | None = (
+        None  # KD end in UniProt canonical coords (msa2uniprot; reconciled)
+    )
+    reconciled: bool = (
+        False  # True if a local alignment was needed (isoform/numbering shift)
+    )
+    source: Provenance | None = None  # Human-PK-alignment provenance
+
+    @field_validator("region2uniprot", mode="before")
+    @classmethod
+    def validate_region2uniprot(
+        cls,
+        value: dict[str, int | None],
+    ) -> dict[str, int | None]:
+        """Fill all aligned MSA positions on region2uniprot (see :func:`fill_missing_none`)."""
+        return fill_missing_none(value, LIST_MSA_REGION)
+
+
+class KinCoRe(BaseModel):
+    """Pydantic model for KinCoRe information."""
+
+    fasta: KinCoReFASTA | None = None
+    cif: KinCoReCIF | None = None
+    msa: MSA | None = None
     start: int | None = None  # fasta2cif
     end: int | None = None  # fasta2cif
     mismatch: list[int] | None = None  # fasta2cif
@@ -406,7 +426,7 @@ class KinaseInfoKinaseDomain(BaseModel):
     uniprot_id: SwissProtIDSuffix | TrEMBLIDSuffix
     kinhub: KinHub | None = None
     klifs: KLIFS | None = None
-    kincore: KinCore | None = None
+    kincore: KinCoRe | None = None
 
 
 class KinaseInfo(BaseModel):
@@ -418,7 +438,7 @@ class KinaseInfo(BaseModel):
     kinhub: KinHub | None = None
     klifs: KLIFS | None = None
     pfam: Pfam | None = None
-    kincore: KinCore | None = None
+    kincore: KinCoRe | None = None
     alphafold: AlphaFold | None = None
     KLIFS2UniProtIdx: dict[str, int | None] | None = None
     KLIFS2UniProtSeq: dict[str, str | None] | None = None
@@ -429,26 +449,8 @@ class KinaseInfo(BaseModel):
         cls,
         value: dict[str, int | None] | None,
     ) -> dict[str, int | None] | None:
-        """Validate KLIFS2UniProtIdx dictionary to include all regions since TOML doesn't save None.
-
-        Parameters
-        ----------
-        value : dict[str, int | None]
-            Dictionary mapping KLIFS residue to UniProt indices.
-
-        Returns
-        -------
-        dict[str, int | None]
-            Dictionary mapping KLIFS residue to UniProt indices.
-        """
-        dict_temp = dict.fromkeys(LIST_KLIFS_REGION, None)
-
-        if value is not None:
-            for key, val in value.items():
-                dict_temp[key] = val
-            return dict_temp
-        else:
-            return None
+        """Fill all KLIFS pocket positions on KLIFS2UniProtIdx (see :func:`fill_missing_none`)."""
+        return fill_missing_none(value, LIST_KLIFS_REGION)
 
     @field_validator("KLIFS2UniProtSeq", mode="before")
     @classmethod
@@ -456,26 +458,8 @@ class KinaseInfo(BaseModel):
         cls,
         value: dict[str, str | None] | None,
     ) -> dict[str, str | None] | None:
-        """Validate KLIFS2UniProtSeq dictionary to include all regions since TOML doesn't save None.
-
-        Parameters
-        ----------
-        value : dict[str, str | None]
-            Dictionary mapping KLIFS residue to UniProt residue.
-
-        Returns
-        -------
-        dict[str, str | None]
-            Dictionary mapping KLIFS residue to UniProt residue.
-        """
-        dict_temp = dict.fromkeys(LIST_FULL_KLIFS_REGION, None)
-
-        if value is not None:
-            for key, val in value.items():
-                dict_temp[key] = val
-            return dict_temp
-        else:
-            return None
+        """Fill all KLIFS regions on KLIFS2UniProtSeq (see :func:`fill_missing_none`)."""
+        return fill_missing_none(value, LIST_FULL_KLIFS_REGION)
 
     def extract_sequence_from_cif(self, bool_verbose: bool = False) -> str | None:
         """Extract sequence from CIF if available.
@@ -626,13 +610,17 @@ class KinaseInfo(BaseModel):
         int | None
             The start of the kinase domain if available, otherwise None.
         """
-        if self.kincore is not None:
-            start = rgetattr(self, "kincore.cif.start") or rgetattr(
-                self, "kincore.fasta.start"
-            )
-        elif self.pfam is not None:
+        # priority: KinCoRe CIF > KinCoRe FASTA > Dunbrack MSA > Pfam. Gate on the bound
+        # itself (not on ``kincore``) so an MSA-only KinCoRe (cif/fasta None) still falls
+        # through to Pfam rather than short-circuiting to None.
+        start = (
+            rgetattr(self, "kincore.cif.start")
+            or rgetattr(self, "kincore.fasta.start")
+            or rgetattr(self, "kincore.msa.start")
+        )
+        if start is None and self.pfam is not None:
             start = self.pfam.start
-        else:
+        if start is None:
             if bool_verbose:
                 logger.info(
                     f"No kinase domain sequence start found for {self.hgnc_name}"
@@ -671,13 +659,15 @@ class KinaseInfo(BaseModel):
         int | None
             The end of the kinase domain if available, otherwise None.
         """
-        if self.kincore is not None:
-            end = rgetattr(self, "kincore.cif.end") or rgetattr(
-                self, "kincore.fasta.end"
-            )
-        elif self.pfam is not None:
+        # priority: KinCoRe CIF > KinCoRe FASTA > Dunbrack MSA > Pfam (see adjudicate_kd_start)
+        end = (
+            rgetattr(self, "kincore.cif.end")
+            or rgetattr(self, "kincore.fasta.end")
+            or rgetattr(self, "kincore.msa.end")
+        )
+        if end is None and self.pfam is not None:
             end = self.pfam.end
-        else:
+        if end is None:
             if bool_verbose:
                 logger.info(f"No kinase domain sequence end found for {self.hgnc_name}")
             return None
@@ -692,6 +682,30 @@ class KinaseInfo(BaseModel):
                 bool_verbose=bool_verbose,
             )
         return end
+
+    def adjudicate_APE(self) -> list[int | None] | None:
+        """Return the APE-motif UniProt indices (Ala, Pro, Glu) from the Dunbrack MSA.
+
+        Reads ``kincore.msa.region2uniprot`` at the APE-motif positions (:data:`LIST_MSA_APE`,
+        the ALC-block Ala/Pro/Glu; the Glu is the end-of-activation-loop anchor). Returns None
+        when the motif is entirely unmapped -- either no MSA is stored, or the kinase lacks the
+        APE motif with all three positions gapped (e.g. HASPIN, PAN3, PEAK3, RNASEL, PLK5) --
+        mirroring the all-None molecular-brake triad check in
+        :meth:`return_molecular_brake_residues`.
+
+        Returns
+        -------
+        list[int | None] | None
+            UniProt indices of the APE motif ``[Ala, Pro, Glu]`` (an element may be None if
+            only part of the motif is gapped), or None if no APE motif is present.
+        """
+        region2uniprot = rgetattr(self, "kincore.msa.region2uniprot")
+        if region2uniprot is None:
+            return None
+        list_idx = [region2uniprot.get(key) for key in LIST_MSA_APE]
+        if all(idx is None for idx in list_idx):
+            return None
+        return list_idx
 
     def adjudicate_group(self, bool_verbose: bool = False) -> str | None:
         """Adjudicate group based on available data.
@@ -765,7 +779,7 @@ class KinaseInfo(BaseModel):
         canonical catalytic residues -- the VAIK beta3 lysine (III:17), the HRD
         catalytic aspartate (c.l:70) and the DFG aspartate (xDFG:81); a kinase missing
         any one is called a pseudokinase. The catalytic lysine may instead sit in beta2
-        (II:13) in the WNK family, which is accepted as present. A KinCore active-state
+        (II:13) in the WNK family, which is accepted as present. A KinCoRe active-state
         CIF takes precedence over everything else: it marks an experimentally/AF2-
         validated catalytically active kinase, so such a kinase is never a pseudokinase.
         Two hand-curated overrides then correct the known failure modes of the heuristic
@@ -788,7 +802,7 @@ class KinaseInfo(BaseModel):
             STR_KLIFS_DFG_ASP,
         )
 
-        # a KinCore active-state CIF marks a catalytically active kinase, so it is never
+        # a KinCoRe active-state CIF marks a catalytically active kinase, so it is never
         # a pseudokinase -- this overrides both the curated lists and the heuristic
         if self.kincore is not None and self.kincore.cif is not None:
             return False

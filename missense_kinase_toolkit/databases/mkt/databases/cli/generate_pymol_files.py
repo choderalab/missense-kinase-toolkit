@@ -95,7 +95,7 @@ def main(
         typer.Option(
             "--force-alphafold",
             "-f",
-            help="Render the AlphaFold DB structure even when a KinCore active-state "
+            help="Render the AlphaFold DB structure even when a KinCoRe active-state "
             "structure is available.",
         ),
     ] = False,
@@ -126,7 +126,7 @@ def main(
         # Generate KLIFS regions (semi-transparent cartoon) with custom stick residues
         generate_pymol_files --gene ABL1 --config KLIFS_CUSTOM --indices 315,317 --colors red,blue
 
-        # Force the AlphaFold structure even when a KinCore CIF is present
+        # Force the AlphaFold structure even when a KinCoRe CIF is present
         generate_pymol_files --gene ABL1 --config KLIFS_IMPORTANT --force-alphafold
     """
     configure_logging(verbose=verbose)

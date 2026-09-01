@@ -25,7 +25,7 @@ class PropertyTables:
     df_klifs: pd.DataFrame | None = None
     """Dataframe containing the KLIFS information."""
     df_kincore: pd.DataFrame | None = None
-    """Dataframe containing the KinCore information."""
+    """Dataframe containing the KinCoRe information."""
 
     def __post_init__(self):
         """Post-initialization method to extract properties."""

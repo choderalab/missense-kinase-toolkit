@@ -232,6 +232,64 @@ LIST_KLIFS_REGION = list(
 )
 """list[str]: List of string of all KLIFS pocket regions in format region:idx."""
 
+# --- Modi & Dunbrack (2019) structure-based kinase-domain MSA ---
+# Human-PK-alignment.fasta aligns 497 canonical protein-kinase domains in 17 conserved blocks
+# (Hanks nomenclature) at fixed alignment-column ranges (Modi & Dunbrack, Sci Rep 2019, Table
+# 2), separated by 16 unaligned insertion regions. Columns where the reference kinase Aurora A
+# carries a residue are numbered continuously and KLIFS-style, giving 229 aligned positions
+# "REGION:idx" ("B1N:001".."HI:229"); the rare insertion columns (Aurora A gapped) are dropped
+# so positions stay consistent across kinases.
+DICT_MSA_ALIGNED_REGION = {
+    "B1N": (1, 4),
+    "B1C": (21, 27),
+    "B2": (44, 52),
+    "B3": (93, 103),
+    "HC": (140, 153),
+    "B4": (180, 195),
+    "B5": (420, 430),
+    "HD": (445, 453),
+    "HE": (939, 962),
+    "CL": (1008, 1028),
+    "ALN": (1331, 1351),
+    "ALC": (1904, 1920),
+    "HF": (1953, 1975),
+    "FL": (1993, 1998),
+    "HG": (2049, 2061),
+    "HH": (2175, 2194),
+    "HI": (2209, 2218),
+}
+"""dict[str, tuple[int, int]]: Aligned-block name -> (start, end) 1-based MSA column range \
+(Modi & Dunbrack 2019, Table 2), in kinase-domain N->C order."""
+
+SET_MSA_INSERTION_COL = frozenset({1015, 1016, 1017, 1018, 1019, 1351, 1957})
+"""frozenset[int]: Aligned-block columns where Aurora A is gapped -- rare insertions present \
+in only a few kinases (OTHER_STK16 in CL; one in ALN; a CAMK insertion in HF). Dropped from \
+the reference numbering."""
+
+_LIST_MSA_REF_COL = [
+    (name, col)
+    for name, (start, end) in DICT_MSA_ALIGNED_REGION.items()
+    for col in range(start, end + 1)
+    if col not in SET_MSA_INSERTION_COL
+]
+
+DICT_MSA_COL2LABEL = {
+    col: f"{name}:{i:03d}" for i, (name, col) in enumerate(_LIST_MSA_REF_COL, start=1)
+}
+"""dict[int, str]: 1-based MSA column -> "REGION:idx" label over the 229 Aurora-reference \
+columns (KLIFS-style continuous index)."""
+
+LIST_MSA_REGION = list(DICT_MSA_COL2LABEL.values())
+"""list[str]: The 229 aligned MSA positions in N->C order ("B1N:001".."HI:229")."""
+
+LIST_MSA_APE = ["ALC:152", "ALC:153", "ALC:154"]
+"""list[str]: APE-motif positions (Ala, Pro, Glu) as region2uniprot keys; the Glu \
+(STR_MSA_APE) is the end-of-activation-loop anchor. All three unmapped (None) => no APE motif \
+(e.g. HASPIN, PAN3, PEAK3, RNASEL, PLK5)."""
+
+STR_MSA_APE = "ALC:154"
+"""str: region2uniprot key of the APE-motif glutamate (end of the activation loop)."""
+
 # --- pseudokinase catalytic-residue heuristic ---
 # A (predicted) pseudokinase lacks at least one of the three canonical catalytic
 # residues of the protein-kinase fold. We read these from the gapless 85-residue
@@ -268,7 +326,7 @@ LIST_PSEUDOKINASE_TRIAD_INTACT = [
 are therefore NOT caught by the catalytic-residue heuristic (false negatives); they are
 catalytically dead for other reasons (degraded regulatory spine, glycine-rich loop, or
 nucleotide binding). is_pseudokinase() force-returns True for these, unless the kinase has
-a KinCore active-state CIF (which takes precedence and marks it catalytically active).
+a KinCoRe active-state CIF (which takes precedence and marks it catalytically active).
 
 Citations:
   - BUB1B (BUBR1) -- a bona fide pseudokinase despite an intact catalytic triad:
@@ -278,7 +336,7 @@ Citations:
     Biol 2014; Mendrola et al., Biochem Soc Trans 2013.
 
 NOTE: PDIK1L and SBK3 were previously listed here (annotated pseudo on nucleotide-binding
-grounds, Murphy et al., Biochem J 2014, but lower confidence) -- both now carry KinCore
+grounds, Murphy et al., Biochem J 2014, but lower confidence) -- both now carry KinCoRe
 active-state CIFs and are treated as catalytically active, so they were removed."""
 
 LIST_PSEUDOKINASE_HEURISTIC_FALSE_POSITIVE = [
@@ -301,7 +359,7 @@ Citations / rationale:
 
 NOTE (WNK4): WNK4 also trips the heuristic (no beta3 or beta2 lysine; III:17=C, II:13=R)
 and is NOT rescued by the beta2-lysine alternative, unlike WNK1/2/3. It is not listed here
-because it carries a KinCore active-state CIF, which is_pseudokinase() treats as
+because it carries a KinCoRe active-state CIF, which is_pseudokinase() treats as
 catalytically active (taking precedence over the heuristic)."""
 
 DICT_KINASE_GROUP_COLORS = {
