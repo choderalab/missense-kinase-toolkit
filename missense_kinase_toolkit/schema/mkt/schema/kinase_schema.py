@@ -218,6 +218,91 @@ class Pfam(BaseModel):
     in_alphafold: bool
 
 
+class KinCoreSeqSource(str, Enum):
+    """KinCore kinase-domain sequence source, in fallback priority order (latest first)."""
+
+    GIZZIO_2026 = (
+        "Gizzio-Dunbrack_2026"  # kinasedomainfasta.tar.gz (current AF2 active models)
+    )
+    FAEZOV_2023 = "Faezov-Dunbrack_2023"  # AF2-active.fasta (earlier AF2 active models)
+    MODI_2019 = "Modi-Dunbrack_2019"  # Human-PK.fasta (no active-state structure)
+
+
+class KinCoreStructureSource(str, Enum):
+    """KinCore active-state structure source, in fallback priority order (latest first)."""
+
+    GIZZIO_2026 = "Gizzio-Dunbrack_2026"  # AF2_Active_Models_v2.zip (current)
+    FAEZOV_2023 = (
+        "Faezov-Dunbrack_2023"  # Kincore_AlphaFold2_ActiveHumanCatalyticKinases (v1)
+    )
+
+
+class Provenance(BaseModel):
+    """Source provenance for a derived record (dataset name, version, citation, query date)."""
+
+    name: str  # dataset/archive/file name
+    version: str | None = None  # e.g. "v1"
+    citation: str | None = None  # publication or DOI
+    query_date: str | None = (
+        None  # ISO date: download date (re-fetched) or file mtime (local)
+    )
+
+
+class SASA(BaseModel):
+    """KLIFS-pocket solvent accessibility over one kinase-domain structure.
+
+    Nested on the structure it was computed over (a KinCore active-state CIF or an AlphaFold DB
+    model), so a kinase can carry both a KinCore and an AF2 SASA for comparison; the parent
+    structure determines the provenance. Absolute SASA (Å^2) and relative solvent accessibility
+    (RSA) are computed **heavy-atom** (``include_hydrogens=False``) so the two structure sources
+    are directly comparable: KinCore v2 CIFs carry explicit hydrogens (which are stripped before
+    the calculation), whereas AlphaFold DB CIFs are heavy-atom only. RSA normalizes SASA by the
+    ``max_asa_reference`` maxima, which are themselves a heavy-atom reference (so relative
+    accessibility is only defined heavy-atom). The ``method``/``probe_radius``/``n_points``/
+    ``include_hydrogens``/``max_asa_reference`` fields record the methodology used.
+    """
+
+    sasa: dict[str, float | None]  # KLIFS region:idx -> absolute SASA (Å^2)
+    rsa: dict[str, float | None]  # KLIFS region:idx -> relative solvent accessibility
+    method: str  # SASA methodology (backend/algorithm)
+    probe_radius: float
+    n_points: int
+    include_hydrogens: bool
+    max_asa_reference: str  # reference maxima used to normalize rsa
+
+    @field_validator("sasa", "rsa", mode="before")
+    @classmethod
+    def validate_klifs_sasa(
+        cls,
+        value: dict[str, float | None],
+    ) -> dict[str, float | None]:
+        """Validate SASA/RSA dictionaries to include all regions since TOML doesn't save None.
+
+        Serializing to TOML omits keys whose value is None (TOML has no null type), so a
+        residue with no SASA/RSA would be dropped on a round-trip. Rebuild the full KLIFS
+        label set (missing entries defaulted to None), mirroring
+        :meth:`KinaseInfo.validate_klifs2uniprotidx`. Applies to both nested sites
+        (``kincore.cif.sasa`` and ``alphafold.sasa``) via Pydantic nested validation.
+
+        Parameters
+        ----------
+        value : dict[str, float | None]
+            Dictionary mapping KLIFS residue to SASA/RSA value.
+
+        Returns
+        -------
+        dict[str, float | None]
+            Dictionary mapping every KLIFS residue to its SASA/RSA value (missing -> None).
+        """
+        dict_temp = dict.fromkeys(LIST_KLIFS_REGION, None)
+
+        if isinstance(value, dict):
+            for key, val in value.items():
+                dict_temp[key] = val
+
+        return dict_temp
+
+
 class KinCoreFASTA(BaseModel):
     """Pydantic model for KinCore FASTA information."""
 
@@ -235,7 +320,9 @@ class KinCoreFASTA(BaseModel):
     end_af2: int | None = None  # AF2 active state
     length_af2: int | None = None  # AF2 active state
     length_uniprot: int | None = None  # AF2 active state
-    source_file: str
+    source: Provenance | None = (
+        None  # sequence source provenance (see KinCoreSeqSource)
+    )
     start: int | None = None  # fasta2uniprot
     end: int | None = None  # fasta2uniprot
     mismatch: list[int] | None = None  # fasta2uniprot
@@ -264,6 +351,12 @@ class KinCoreCIF(BaseModel):
         None  # KinCore active-model id: AF-<uniprot>-K{3,4}A (K4 = 2nd KD, A = active)
     )
     # calculated fields
+    source: Provenance | None = (
+        None  # structure source provenance (see KinCoreStructureSource)
+    )
+    sasa: SASA | None = (
+        None  # KLIFS-pocket SASA over this KinCore active-state structure
+    )
     start: int | None = None  # cif2uniprot
     end: int | None = None  # cif2uniprot
     mismatch: list[int] | None = None  # cif2uniprot
@@ -291,6 +384,11 @@ class AlphaFold(BaseModel):
     model_created_date: str | None = None
     latest_version: int | None = None
     tool_used: str | None = None
+    mismatch: list[int] | None = (
+        None  # KD-slice positions differing from canonical UniProt
+    )
+    source: Provenance | None = None  # EBI AlphaFold DB provenance
+    sasa: SASA | None = None  # KLIFS-pocket SASA over this AlphaFold structure
 
 
 class KinaseInfoUniProt(BaseModel):
@@ -729,22 +827,20 @@ class KinaseInfo(BaseModel):
         (see ``DICT_MOLECULAR_BRAKE`` in ``mkt.schema.constants`` for the region:idx
         labels and their canonical identities). This reads the residue at each of
         those positions from the KLIFS-to-UniProt index mapping, i.e.
-        ``canonical_seq[KLIFS2UniProtIdx[label] - 1 + offset]``, where the per-position
-        offset comes from ``DICT_MOLECULAR_BRAKE_OFFSET`` (the brake lysine sits one
-        residue N-terminal to its VIII:79 KLIFS-aligned position).
+        ``canonical_seq[KLIFS2UniProtIdx[region:idx] - 1 + offset]``, where a per-label
+        offset is encoded as a trailing signed integer on the ``DICT_MOLECULAR_BRAKE``
+        key (e.g. ``"VIII:79-1"`` -> region:idx ``"VIII:79"`` with offset -1, since the
+        brake lysine sits one residue N-terminal to its VIII:79 KLIFS-aligned position).
 
         Returns
         -------
         dict[str, str | None] | None
-            Dictionary mapping each molecular brake KLIFS region:idx label to the
-            residue found at that position in this kinase, or None where the position
-            is unmapped. Returns None entirely when no KLIFS pocket mapping is
-            available (``KLIFS2UniProtIdx`` is None).
+            Dictionary mapping each molecular brake label (region:idx with its optional
+            offset) to the residue found at that position in this kinase, or None where
+            the position is unmapped. Returns None entirely when no KLIFS pocket mapping
+            is available (``KLIFS2UniProtIdx`` is None).
         """
-        from mkt.schema.constants import (
-            DICT_MOLECULAR_BRAKE,
-            DICT_MOLECULAR_BRAKE_OFFSET,
-        )
+        from mkt.schema.constants import DICT_MOLECULAR_BRAKE
 
         if self.KLIFS2UniProtIdx is None:
             return None
@@ -752,11 +848,18 @@ class KinaseInfo(BaseModel):
         seq = self.uniprot.canonical_seq
         dict_residues: dict[str, str | None] = {}
         for label in DICT_MOLECULAR_BRAKE:
-            idx = self.KLIFS2UniProtIdx.get(label)
+            # split off a trailing signed offset ("-n"/"+n") to recover the KLIFS
+            # region:idx key, then subtract/add it back to the mapped UniProt index
+            klifs_key, offset = label, 0
+            for sign, mult in (("-", -1), ("+", 1)):
+                base, sep, num = label.rpartition(sign)
+                if sep and num.isdigit():
+                    klifs_key, offset = base, mult * int(num)
+                    break
+            idx = self.KLIFS2UniProtIdx.get(klifs_key)
             if idx is None:
                 dict_residues[label] = None
                 continue
-            offset = DICT_MOLECULAR_BRAKE_OFFSET.get(label, 0)
             dict_residues[label] = seq[idx - 1 + offset]
         return dict_residues
 

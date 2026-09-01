@@ -104,7 +104,7 @@ def test_molecular_brake_residues(dict_kinase):
     assert obj.return_molecular_brake_residues() == {
         "b.l:37": "N",
         "hinge:46": "E",
-        "VIII:79": "K",
+        "VIII:79-1": "K",
     }
     # the -1 offset recovers the lysine; the raw mapped index does not
     idx = obj.KLIFS2UniProtIdx["VIII:79"]
@@ -114,7 +114,7 @@ def test_molecular_brake_residues(dict_kinase):
     assert dict_kinase["EGFR"].return_molecular_brake_residues() == {
         "b.l:37": "R",
         "hinge:46": "Q",
-        "VIII:79": "K",
+        "VIII:79-1": "K",
     }
 
 
