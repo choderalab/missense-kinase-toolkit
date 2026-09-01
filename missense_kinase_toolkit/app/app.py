@@ -172,13 +172,13 @@ class Dashboard:
 
         with col1:
             with st.expander("Structure", expanded=True):
-                # adjudicate the structure source (KinCore CIF preferred, AF fallback)
+                # adjudicate the structure source (KinCoRe CIF preferred, AF fallback)
                 _, structure_source = adjudicate_structure(obj_temp)
 
                 if structure_source is None:
                     st.error("No structure available for this kinase.", icon="⚠️")
                 else:
-                    st.markdown(f"### Kinase Domain — {structure_source}\n")
+                    st.markdown("### Kinase Domain\n" f"#### {structure_source}\n")
                     try:
                         plot_spot = st.empty()
 
@@ -241,11 +241,11 @@ class Dashboard:
                 else:
                     st.error("No KLIFS objects available for this kinase.", icon="⚠️")
 
-                st.markdown("#### KinCore\n")
+                st.markdown("#### KinCoRe\n")
                 if table.df_kincore is not None:
                     st.table(table.df_kincore)
                 else:
-                    st.error("No KinCore objects available for this kinase.", icon="⚠️")
+                    st.error("No KinCoRe objects available for this kinase.", icon="⚠️")
 
 
 def main():
