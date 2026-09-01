@@ -217,25 +217,48 @@ def _report_region_gap_violin(ctx: "BuildContext") -> None:
     )
 
 
+def _report_sasa_concordance_scatter(ctx: "BuildContext") -> None:
+    """Generate the KinCore-vs-AF2 per-region SASA/RSA concordance scatter."""
+    from mkt.databases.plot import plot_sasa_concordance_scatter
+    from mkt.databases.plot_config import SASAConcordanceScatterConfig
+
+    plot_sasa_concordance_scatter(
+        ctx.dict_kinaseinfo, ctx.path_reports, cfg=SASAConcordanceScatterConfig()
+    )
+
+
+def _report_sasa_concordance_delta(ctx: "BuildContext") -> None:
+    """Generate the per-KLIFS-residue KinCore-minus-AF2 SASA/RSA delta boxplots."""
+    from mkt.databases.plot import plot_sasa_concordance_delta
+    from mkt.databases.plot_config import SASAConcordanceDeltaConfig
+
+    plot_sasa_concordance_delta(
+        ctx.dict_kinaseinfo, ctx.path_reports, cfg=SASAConcordanceDeltaConfig()
+    )
+
+
 _REPORT_STEPS: dict[str, Callable[["BuildContext"], None]] = {
     "upset": _report_upset,
     "region_gap_violin": _report_region_gap_violin,
+    "sasa_concordance_scatter": _report_sasa_concordance_scatter,
+    "sasa_concordance_delta": _report_sasa_concordance_delta,
 }
 """dict[str, Callable]: Terminal report steps, run only in full-regeneration mode."""
 
 
 def _run_reports(ctx: "BuildContext") -> None:
-    """Run the terminal report steps (skipped for subset/``--kinase`` builds).
+    """Run the terminal report steps over the whole assembled dict.
+
+    Reports always characterize the full kinome: ``ctx.dict_kinaseinfo`` is the complete
+    dict in every mode (subset builds splice back before finalizing), so reports run
+    regardless of ``ctx.subset_hgnc``. Whether they run at all is gated upstream by the
+    ``--no-figs`` flag in :meth:`Pipeline._finalize`.
 
     Parameters
     ----------
     ctx : BuildContext
-        The build context; reports are skipped when ``ctx.subset_hgnc`` is not None
-        because they characterize the whole kinome.
+        The build context; ``ctx.path_reports`` is the (datetime-stamped) output directory.
     """
-    if ctx.subset_hgnc is not None:
-        logger.info("subset build; skipping report steps.")
-        return
     for name, fn in _REPORT_STEPS.items():
         logger.info(f"running report step '{name}'...")
         try:

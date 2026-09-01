@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from mkt.databases.colors import COLOR_TREE_FALLBACK
+from mkt.databases.klifs import DICT_POCKET_KLIFS_REGIONS
 from mkt.databases.plot_config import (
     ColKinaseColorConfig,
     DynamicRangePlotConfig,
@@ -22,14 +23,17 @@ from mkt.databases.plot_config import (
     MetricsBoxplotConfig,
     RegionGapViolinConfig,
     RidgelinePlotConfig,
+    SASAConcordanceDeltaConfig,
+    SASAConcordanceScatterConfig,
     SequenceSchematicConfig,
     StackedBarchartConfig,
     UpsetPlotConfig,
     VennDiagramConfig,
 )
-from mkt.schema.constants import DICT_KINASE_GROUP_COLORS
+from mkt.schema.constants import DICT_KINASE_GROUP_COLORS, LIST_KLIFS_REGION
 from mkt.schema.io_utils import save_plot
 from pydantic.dataclasses import dataclass
+from scipy.stats import spearmanr
 
 logger = logging.getLogger(__name__)
 
@@ -2461,3 +2465,321 @@ def write_clade_membership_table(
             file_out.write(str_tex)
         logger.info(f"Wrote clade membership table to {str_filepath}.")
     return str_tex
+
+
+# --- KinCore vs AF2 SASA/RSA concordance ---
+_SASA_CONCORDANCE_METRICS = [
+    ("kincore_sasa", "af_sasa", "delta_sasa", "SASA (Å²)"),
+    ("kincore_rsa", "af_rsa", "delta_rsa", "RSA"),
+]
+"""list[tuple]: (KinCore column, AF2 column, delta column, display name) for SASA and RSA."""
+
+
+def _concordance_ccc(x, y) -> float:
+    """Lin's concordance correlation coefficient between two arrays."""
+    x, y = np.asarray(x, float), np.asarray(y, float)
+    mx, my = x.mean(), y.mean()
+    cov = ((x - mx) * (y - my)).mean()
+    denom = x.var() + y.var() + (mx - my) ** 2
+    return 2 * cov / denom if denom else np.nan
+
+
+def _fmt_pval(p: float) -> str:
+    """Compact p-value label, floored at 1e-99 for display."""
+    if p == 0 or p < 1e-99:
+        return "p<1e-99"
+    return f"p={p:.0e}"
+
+
+def _whisker_bounds(vals) -> tuple[float, float]:
+    """Tukey 1.5*IQR whisker bounds for a 1-D array."""
+    q1, q3 = np.percentile(vals, [25, 75])
+    iqr = q3 - q1
+    return q1 - 1.5 * iqr, q3 + 1.5 * iqr
+
+
+def _despine_keep_axes(ax) -> None:
+    """Remove the top/right spines, keeping the left/bottom axis lines for value reading."""
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+
+def build_sasa_concordance_df(dict_kinase: dict[str, Any]) -> pd.DataFrame:
+    """Build a per-(kinase, KLIFS residue) KinCore-vs-AF2 SASA/RSA table.
+
+    Includes only kinases carrying both a KinCore CIF SASA and an AlphaFold SASA; one row per
+    KLIFS position with the KinCore and AF2 absolute SASA and relative accessibility (and their
+    KinCore-minus-AF2 deltas).
+
+    Parameters
+    ----------
+    dict_kinase : dict[str, Any]
+        Mapping of HGNC name to ``KinaseInfo``.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: ``kinase``, ``label``, ``region``, ``kincore_sasa``, ``af_sasa``,
+        ``kincore_rsa``, ``af_rsa``, ``delta_sasa``, ``delta_rsa``.
+    """
+    rows = []
+    for hgnc, obj in dict_kinase.items():
+        if obj.KLIFS2UniProtIdx is None:
+            continue
+        kc = (
+            obj.kincore.cif.sasa
+            if (obj.kincore and obj.kincore.cif and obj.kincore.cif.sasa)
+            else None
+        )
+        af = obj.alphafold.sasa if (obj.alphafold and obj.alphafold.sasa) else None
+        if kc is None or af is None:
+            continue
+        for label in obj.KLIFS2UniProtIdx:
+            rows.append(
+                {
+                    "kinase": hgnc,
+                    "label": label,
+                    "region": label.split(":")[0],
+                    "kincore_sasa": kc.sasa.get(label),
+                    "af_sasa": af.sasa.get(label),
+                    "kincore_rsa": kc.rsa.get(label),
+                    "af_rsa": af.rsa.get(label),
+                }
+            )
+    columns = [
+        "kinase",
+        "label",
+        "region",
+        "kincore_sasa",
+        "af_sasa",
+        "kincore_rsa",
+        "af_rsa",
+    ]
+    df = pd.DataFrame(rows, columns=columns)
+    df["delta_sasa"] = df["kincore_sasa"] - df["af_sasa"]
+    df["delta_rsa"] = df["kincore_rsa"] - df["af_rsa"]
+    return df
+
+
+def plot_sasa_concordance_scatter(
+    dict_kinase: dict[str, Any],
+    output_path: str | None = None,
+    cfg: SASAConcordanceScatterConfig | None = None,
+    df: pd.DataFrame | None = None,
+) -> None:
+    """Faceted KinCoRe-vs-AF2 SASA/RSA scatter (KLIFS region x metric).
+
+    Each panel plots AF2 (y) against KinCoRe (x) for one region and metric, with a y=x
+    reference and the panel's Spearman rho / p; regions are columns, SASA/RSA are rows.
+
+    Parameters
+    ----------
+    dict_kinase : dict[str, Any]
+        Mapping of HGNC name to ``KinaseInfo`` (needs per-structure ``sasa``).
+    output_path : str | None, optional
+        Directory for the saved figure; by default the standard image output location.
+    cfg : SASAConcordanceScatterConfig | None, optional
+        Plot aesthetics; defaults applied when None.
+    df : pd.DataFrame | None, optional
+        Pre-built concordance table (see :func:`build_sasa_concordance_df`); built when None.
+
+    Returns
+    -------
+    None
+    """
+    cfg = cfg or SASAConcordanceScatterConfig()
+    plt.rcParams["font.family"] = "Arial"
+    df = build_sasa_concordance_df(dict_kinase) if df is None else df
+    if df.empty:
+        logger.warning(
+            "no per-structure SASA present; skipping SASA-concordance scatter."
+        )
+        return
+
+    regions = list(DICT_POCKET_KLIFS_REGIONS.keys())
+    region_color = {r: DICT_POCKET_KLIFS_REGIONS[r]["color"] for r in regions}
+    fig, axes = plt.subplots(
+        2,
+        len(regions),
+        figsize=(cfg.width_per_region * len(regions), cfg.height),
+        sharex="row",
+        sharey="row",
+    )
+    for row, (kc_col, af_col, _, name) in enumerate(_SASA_CONCORDANCE_METRICS):
+        both = df[[kc_col, af_col]].dropna()
+        hi = max(both[kc_col].max(), both[af_col].max()) * 1.02
+        for col, region in enumerate(regions):
+            ax = axes[row, col]
+            sub = df.loc[df["region"] == region, [kc_col, af_col]].dropna()
+            ax.scatter(
+                sub[kc_col],
+                sub[af_col],
+                s=cfg.point_size,
+                color=region_color[region],
+                edgecolors="none",
+                alpha=cfg.point_alpha,
+            )
+            ax.plot(
+                [0, hi],
+                [0, hi],
+                "--",
+                color=cfg.identity_color,
+                lw=cfg.identity_lw,
+                zorder=0,
+            )
+            ax.set_xlim(0, hi)
+            ax.set_ylim(0, hi)
+            if len(sub) >= 3:
+                rho, p = spearmanr(sub[kc_col], sub[af_col])
+                ax.text(
+                    0.06,
+                    0.94,
+                    f"ρ={rho:.2f}\n{_fmt_pval(p)}",
+                    transform=ax.transAxes,
+                    va="top",
+                    ha="left",
+                    fontsize=cfg.stat_fontsize,
+                )
+            _despine_keep_axes(ax)
+            ax.tick_params(labelsize=cfg.tick_labelsize)
+            if row == 0:
+                ax.set_title(region, fontsize=cfg.title_fontsize)
+            if col == 0:
+                ax.set_ylabel(f"AF2 {name}", fontsize=cfg.ylabel_fontsize)
+            else:
+                ax.tick_params(labelleft=False)
+    mid = len(regions) // 2
+    axes[0, mid].set_xlabel("KinCoRe SASA (Å²)", fontsize=cfg.row_label_fontsize)
+    axes[1, mid].set_xlabel("KinCoRe RSA", fontsize=cfg.row_label_fontsize)
+    fig.tight_layout()
+    save_plot(
+        fig,
+        "sasa_concordance_scatter",
+        plot_type="SASA concordance scatter",
+        bool_force_local=False,
+        bool_image_subdir=False,
+        output_path=output_path,
+    )
+
+
+def plot_sasa_concordance_delta(
+    dict_kinase: dict[str, Any],
+    output_path: str | None = None,
+    cfg: SASAConcordanceDeltaConfig | None = None,
+    df: pd.DataFrame | None = None,
+) -> None:
+    """Per-KLIFS-residue KinCoRe-minus-AF2 SASA/RSA delta boxplots (SASA top, RSA bottom).
+
+    One box per KLIFS residue (85 positions, region-coloured with alternating bands), jittered
+    points overlaid, and the per-residue Spearman rho / p above each facet; the y-axis is
+    focused on the whisker range so the rare far-outliers are clipped rather than compressing
+    the plot.
+
+    Parameters
+    ----------
+    dict_kinase : dict[str, Any]
+        Mapping of HGNC name to ``KinaseInfo`` (needs per-structure ``sasa``).
+    output_path : str | None, optional
+        Directory for the saved figure; by default the standard image output location.
+    cfg : SASAConcordanceDeltaConfig | None, optional
+        Plot aesthetics; defaults applied when None.
+    df : pd.DataFrame | None, optional
+        Pre-built concordance table (see :func:`build_sasa_concordance_df`); built when None.
+
+    Returns
+    -------
+    None
+    """
+    cfg = cfg or SASAConcordanceDeltaConfig()
+    plt.rcParams["font.family"] = "Arial"
+    df = build_sasa_concordance_df(dict_kinase) if df is None else df
+    if df.empty:
+        logger.warning(
+            "no per-structure SASA present; skipping SASA-concordance boxplot."
+        )
+        return
+
+    labels = LIST_KLIFS_REGION
+    rng = np.random.default_rng(0)
+    fig, axes = plt.subplots(2, 1, figsize=tuple(cfg.figsize), sharex=True)
+    for ax, (kc_col, af_col, delta_col, name) in zip(axes, _SASA_CONCORDANCE_METRICS):
+        for i in range(0, len(labels), 2):
+            ax.axvspan(i - 0.5, i + 0.5, color=cfg.band_color, lw=0, zorder=-2)
+
+        data = [df.loc[df["label"] == lab, delta_col].dropna().values for lab in labels]
+        bp = ax.boxplot(
+            data,
+            positions=range(len(labels)),
+            widths=cfg.box_width,
+            patch_artist=True,
+            showfliers=False,
+            zorder=2,
+        )
+        for patch, lab in zip(bp["boxes"], labels):
+            patch.set_facecolor(
+                _flatten_on_white(
+                    DICT_POCKET_KLIFS_REGIONS[lab.split(":")[0]]["color"], cfg.box_alpha
+                )
+            )
+            patch.set_edgecolor("black")
+            patch.set_linewidth(0.5)
+        for elem in ("medians", "whiskers", "caps"):
+            for line in bp[elem]:
+                line.set_color("black")
+                line.set_linewidth(0.6)
+        ax.axhline(0, color="grey", ls="--", lw=0.8, zorder=1)
+
+        for i, lab in enumerate(labels):
+            vals = df.loc[df["label"] == lab, delta_col].dropna().to_numpy()
+            if len(vals):
+                ax.scatter(
+                    i + rng.uniform(-cfg.jitter_width, cfg.jitter_width, len(vals)),
+                    vals,
+                    s=cfg.jitter_size,
+                    color=cfg.jitter_color,
+                    alpha=cfg.jitter_alpha,
+                    edgecolors="none",
+                    zorder=3,
+                )
+
+        # focus the y-axis tightly on the whisker range (clip the rare far-outliers)
+        finite = [v for v in data if len(v) >= 5]
+        wlo = min(_whisker_bounds(v)[0] for v in finite)
+        whi = max(_whisker_bounds(v)[1] for v in finite)
+        span = whi - wlo
+        ax.set_ylim(wlo - cfg.ylim_pad_frac * span, whi + cfg.ylim_pad_frac * span)
+        # rho / p ABOVE the axes (axes-fraction y, data-coord x) -> never overlaps the points
+        for i, lab in enumerate(labels):
+            sub = df.loc[df["label"] == lab, [kc_col, af_col]].dropna()
+            if len(sub) >= 3:
+                rho, p = spearmanr(sub[kc_col], sub[af_col])
+                ax.text(
+                    i,
+                    1.02,
+                    f"ρ={rho:.2f}\n{_fmt_pval(p)}",
+                    transform=ax.get_xaxis_transform(),
+                    ha="center",
+                    va="bottom",
+                    fontsize=cfg.stat_fontsize,
+                    clip_on=False,
+                )
+        ax.set_ylabel(f"Δ {name}\n(KinCoRe − AF2)", fontsize=cfg.ylabel_fontsize)
+        _despine_keep_axes(ax)
+    axes[1].set_xticks(range(len(labels)))
+    axes[1].set_xticklabels(labels, rotation=90, fontsize=cfg.xtick_fontsize)
+    axes[1].set_xlabel("KLIFS residue", fontsize=cfg.xlabel_fontsize)
+    fig.subplots_adjust(
+        left=cfg.left_adjust,
+        right=cfg.right_adjust,
+        top=cfg.top_adjust,
+        bottom=cfg.bottom_adjust,
+        hspace=cfg.hspace,
+    )
+    save_plot(
+        fig,
+        "sasa_concordance_delta",
+        plot_type="SASA concordance delta boxplot",
+        bool_force_local=False,
+        bool_image_subdir=False,
+        output_path=output_path,
+    )
