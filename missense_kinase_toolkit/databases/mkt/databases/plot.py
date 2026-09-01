@@ -2742,12 +2742,14 @@ def plot_sasa_concordance_delta(
                     zorder=3,
                 )
 
-        # focus the y-axis tightly on the whisker range (clip the rare far-outliers)
+        # focus the y-axis tightly on the whisker range (clip the rare far-outliers);
+        # skip when too few points per label to define whiskers (e.g. a small subset)
         finite = [v for v in data if len(v) >= 5]
-        wlo = min(_whisker_bounds(v)[0] for v in finite)
-        whi = max(_whisker_bounds(v)[1] for v in finite)
-        span = whi - wlo
-        ax.set_ylim(wlo - cfg.ylim_pad_frac * span, whi + cfg.ylim_pad_frac * span)
+        if finite:
+            wlo = min(_whisker_bounds(v)[0] for v in finite)
+            whi = max(_whisker_bounds(v)[1] for v in finite)
+            span = whi - wlo
+            ax.set_ylim(wlo - cfg.ylim_pad_frac * span, whi + cfg.ylim_pad_frac * span)
         # rho / p ABOVE the axes (axes-fraction y, data-coord x) -> never overlaps the points
         for i, lab in enumerate(labels):
             sub = df.loc[df["label"] == lab, [kc_col, af_col]].dropna()
