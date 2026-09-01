@@ -2,7 +2,7 @@
 
 Defines the ``*Generator`` subclasses (:class:`KinaseInfoGenerator` and friends) and the
 conversion/combination functions that populate
-:class:`mkt.schema.kinase_schema.KinaseInfo` from UniProt, KLIFS, Pfam, KinCore, and
+:class:`mkt.schema.kinase_schema.KinaseInfo` from UniProt, KLIFS, Pfam, KinCoRe, and
 KinHub sources.
 """
 
@@ -169,7 +169,7 @@ class KinaseInfoKinaseDomainGenerator(KinaseInfoKinaseDomain):
 
     @model_validator(mode="after")
     def generate_kincore_fasta2cif_alignment(self) -> Self:
-        """Generate dictionary mapping KinCore FASTA to CIF indices."""
+        """Generate dictionary mapping KinCoRe FASTA to CIF indices."""
         if self.kincore is not None:
 
             # all non-None entries will have fastas
@@ -177,7 +177,7 @@ class KinaseInfoKinaseDomainGenerator(KinaseInfoKinaseDomain):
             cif = extract_sequence_from_cif(self.kincore)
 
             if cif is not None:
-                # KinCoreFASTA2CIF
+                # KinCoReFASTA2CIF
                 dict_temp = align_kincore2uniprot(fasta, cif)
                 self.kincore.start = dict_temp["start"]
                 self.kincore.end = dict_temp["end"]
@@ -212,13 +212,13 @@ class KinaseInfoGenerator(KinaseInfo):
 
     @model_validator(mode="after")
     def generate_kincore2uniprot_alignment(self) -> Self:
-        """Generate dictionary mapping KinCore to UniProt indices."""
+        """Generate dictionary mapping KinCoRe to UniProt indices."""
         if self.kincore is not None:
 
             # all non-None entries will have fastas
             fasta = self.kincore.fasta.seq
 
-            # KinCoreFASTA2UniProt
+            # KinCoReFASTA2UniProt
             dict_fasta = align_kincore2uniprot(fasta, self.uniprot.canonical_seq)
             self.kincore.fasta.start = self.standardize_offset(dict_fasta["start"])
             self.kincore.fasta.end = self.standardize_offset(dict_fasta["end"])
@@ -229,7 +229,7 @@ class KinaseInfoGenerator(KinaseInfo):
                 key_seq = "_entity_poly.pdbx_seq_one_letter_code"
                 cif = self.kincore.cif.cif[key_seq][0].replace("\n", "")
 
-                # KinCoreCIF2UniProt
+                # KinCoReCIF2UniProt
                 dict_cif = align_kincore2uniprot(cif, self.uniprot.canonical_seq)
                 self.kincore.cif.start = self.standardize_offset(dict_cif["start"])
                 self.kincore.cif.end = self.standardize_offset(dict_cif["end"])
@@ -627,7 +627,7 @@ DICT_MERGE_MULTIMAP = {
 }
 """dict[str, dict[str, str] | list[list[str]]]: Dictionary where keys are UniProt IDs with multi-mapping.
     For the "general" sub-dictionary each key is the key of the dict_obj and the value is the attr on which to collapse.
-    For the "manual" sub-dict values are lists where entries are for KinHub, KLIFS, and KinCore, respectively.
+    For the "manual" sub-dict values are lists where entries are for KinHub, KLIFS, and KinCoRe, respectively.
 """
 
 
@@ -667,13 +667,13 @@ def find_alternative_hgnc(
     klifs_dict : dict[str, Any]
         KLIFS dictionary.
     kincore_dict : dict[str, Any]
-        KinCore dictionary.
+        KinCoRe dictionary.
     kinhub_attr : list[str], optional
         List of attributes to access in KinHub dictionary.
     klifs_attr : list[str], optional
         List of attributes to access in KLIFS dictionary.
     kincore_attr : list[str], optional
-        AttribuList of attributeste to access in KinCore dictionary.
+        AttribuList of attributeste to access in KinCoRe dictionary.
 
     Returns
     -------
@@ -725,7 +725,7 @@ def generate_dict_obj_from_api_or_scraper(
     ----------
     subset_uniprot : set[str] | None, optional
         If provided, restrict the expensive per-UniProt HGNC/UniProt/Pfam queries to
-        this set of UniProt IDs (intersected with the full KinHub/KLIFS/KinCore union),
+        this set of UniProt IDs (intersected with the full KinHub/KLIFS/KinCoRe union),
         by default None (build the entire kinome). Used by the ``--kinase`` one-off
         update path to rebuild only targeted entries.
 
@@ -758,7 +758,7 @@ def generate_dict_obj_from_api_or_scraper(
         set_uniprot &= set(subset_uniprot)
         if len(set_uniprot) == 0:
             logger.warning(
-                "subset_uniprot matched no UniProt IDs in the KinHub/KLIFS/KinCore "
+                "subset_uniprot matched no UniProt IDs in the KinHub/KLIFS/KinCoRe "
                 "union; no objects will be built."
             )
 

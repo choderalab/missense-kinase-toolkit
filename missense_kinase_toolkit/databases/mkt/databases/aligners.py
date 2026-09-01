@@ -2,7 +2,7 @@
 
 Wraps Clustal Omega (:class:`ClustalOmegaAligner`) and Biopython (:class:`BioAligner`)
 behind a common :class:`CustomAligner` interface, with specializations for aligning
-BLOSUM-based and KinCore sequences to UniProt.
+BLOSUM-based and KinCoRe sequences to UniProt.
 """
 
 from abc import ABC, abstractmethod
@@ -93,6 +93,22 @@ class BL2UniProtAligner(BioAligner):
 
 @dataclass
 class Kincore2UniProtAligner(BioAligner):
+    mode: str = "local"
+    """str: Alignment mode. Default is "local."""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+
+@dataclass
+class MSA2UniProtAligner(BioAligner):
+    """Local aligner to reconcile a Dunbrack-MSA row to the UniProt canonical sequence.
+
+    Used for the few kinases whose MSA UniProt isoform/numbering differs from our canonical
+    sequence: a local alignment recovers the correct canonical coordinates (the sequences are
+    otherwise identical).
+    """
+
     mode: str = "local"
     """str: Alignment mode. Default is "local."""
 

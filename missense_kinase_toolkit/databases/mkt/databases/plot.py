@@ -2467,12 +2467,12 @@ def write_clade_membership_table(
     return str_tex
 
 
-# --- KinCore vs AF2 SASA/RSA concordance ---
+# --- KinCoRe vs AF2 SASA/RSA concordance ---
 _SASA_CONCORDANCE_METRICS = [
     ("kincore_sasa", "af_sasa", "delta_sasa", "SASA (Å²)"),
     ("kincore_rsa", "af_rsa", "delta_rsa", "RSA"),
 ]
-"""list[tuple]: (KinCore column, AF2 column, delta column, display name) for SASA and RSA."""
+"""list[tuple]: (KinCoRe column, AF2 column, delta column, display name) for SASA and RSA."""
 
 
 def _concordance_ccc(x, y) -> float:
@@ -2505,11 +2505,11 @@ def _despine_keep_axes(ax) -> None:
 
 
 def build_sasa_concordance_df(dict_kinase: dict[str, Any]) -> pd.DataFrame:
-    """Build a per-(kinase, KLIFS residue) KinCore-vs-AF2 SASA/RSA table.
+    """Build a per-(kinase, KLIFS residue) KinCoRe-vs-AF2 SASA/RSA table.
 
-    Includes only kinases carrying both a KinCore CIF SASA and an AlphaFold SASA; one row per
-    KLIFS position with the KinCore and AF2 absolute SASA and relative accessibility (and their
-    KinCore-minus-AF2 deltas).
+    Includes only kinases carrying both a KinCoRe CIF SASA and an AlphaFold SASA; one row per
+    KLIFS position with the KinCoRe and AF2 absolute SASA and relative accessibility (and their
+    KinCoRe-minus-AF2 deltas).
 
     Parameters
     ----------

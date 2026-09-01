@@ -133,7 +133,7 @@ def run_source_rebuild(
 
     Reconstructs the raw dict_obj from ``dict_existing``, replaces each named source with a
     fresh :func:`fetch_source`, and re-runs the combine_* pipeline so every cross-source
-    validator (KinCore alignments, KLIFS2UniProt mapping) recomputes.
+    validator (KinCoRe alignments, KLIFS2UniProt mapping) recomputes.
 
     Parameters
     ----------

@@ -135,7 +135,7 @@ class TestFetchAlphaFoldKDValidation:
         assert af.mismatch is None
 
     def test_mismatch_recorded_not_rejected(self, abl1_kinase, caplog):
-        """A single-residue mismatch is recorded (like KinCore), not discarded."""
+        """A single-residue mismatch is recorded (like KinCoRe), not discarded."""
         start = abl1_kinase.adjudicate_kd_start()
         end = abl1_kinase.adjudicate_kd_end()
         seq = list(abl1_kinase.uniprot.canonical_seq)

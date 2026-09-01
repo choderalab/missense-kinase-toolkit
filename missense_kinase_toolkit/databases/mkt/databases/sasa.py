@@ -308,10 +308,10 @@ def _compute_kinase_sasa(
     """Compute per-residue SASA for one kinase with one backend.
 
     Returns the per-residue DataFrame (without ``hgnc_name``/``method`` tags),
-    or None if the kinase has no KinCore CIF structure.
+    or None if the kinase has no KinCoRe CIF structure.
     """
     if rgetattr(obj_kinase, "kincore.cif") is None:
-        logger.warning(f"No KinCore CIF structure for {obj_kinase.hgnc_name}")
+        logger.warning(f"No KinCoRe CIF structure for {obj_kinase.hgnc_name}")
         return None
 
     structure = convert_mmcifdict2structure(
@@ -320,7 +320,7 @@ def _compute_kinase_sasa(
     )
 
     # guard the silent no-op: explicit-H analysis is meaningless if the
-    # structure was never protonated (some KinCore models are heavy-atom only)
+    # structure was never protonated (some KinCoRe models are heavy-atom only)
     if bool_include_hydrogens and not any(
         atom.element == "H" for atom in structure.get_atoms()
     ):
@@ -364,7 +364,7 @@ def _sasa_task(task: tuple) -> pd.DataFrame | None:
 
 
 class ResidueSASA(BaseModel):
-    """Calculate per-residue solvent accessible surface area from KinCore CIFs.
+    """Calculate per-residue solvent accessible surface area from KinCoRe CIFs.
 
     Configure the run via the fields below, then call :meth:`run` to compute
     per-residue SASA for each kinase with each selected backend; results are
@@ -613,7 +613,7 @@ class ResidueSASA(BaseModel):
         """Compute per-residue SASA for all kinases and backends.
 
         Loops over each selected backend and kinase, tagging rows with
-        ``method`` and ``hgnc_name``; kinases without a KinCore CIF are skipped.
+        ``method`` and ``hgnc_name``; kinases without a KinCoRe CIF are skipped.
         The long-format result is stored on :attr:`df` (not returned).
 
         Returns:
@@ -633,7 +633,7 @@ class ResidueSASA(BaseModel):
         list_no_cif = set(self.dict_kinase.keys()) - set(dict_temp.keys())
         if list_no_cif:
             logger.warning(
-                "The following %d kinases have no KinCore CIF structure and will be skipped: %s",
+                "The following %d kinases have no KinCoRe CIF structure and will be skipped: %s",
                 len(list_no_cif),
                 ", ".join(sorted(list_no_cif)),
             )
@@ -725,7 +725,7 @@ def calculate_residue_sasa(
     Bio.PDB Shrake-Rupley) and normalizes to relative solvent accessibility (RSA) by the
     Tien et al. (2013) maxima. Uses the same computation internals as :class:`ResidueSASA`.
 
-    The default config strips hydrogens (``bool_include_hydrogens=False``) so that KinCore v2
+    The default config strips hydrogens (``bool_include_hydrogens=False``) so that KinCoRe v2
     CIFs (which carry explicit hydrogens) and AlphaFold DB CIFs (heavy-atom only) are computed
     on the same heavy-atom footing and their results are comparable; RSA is heavy-atom by
     definition (the Tien maxima are a heavy-atom reference).
@@ -788,7 +788,7 @@ def enrich_with_sasa(
     """Populate KLIFS-pocket SASA on each of a kinase's structures.
 
     Computes SASA and relative solvent accessibility (per ``config``, default
-    :data:`DEFAULT_SASA_CONFIG`) over **every** structure the kinase carries -- the KinCore
+    :data:`DEFAULT_SASA_CONFIG`) over **every** structure the kinase carries -- the KinCoRe
     active-state CIF (stored on ``kincore.cif.sasa``) and the AlphaFold DB model (stored on
     ``alphafold.sasa``) -- keyed by KLIFS region:idx (mirroring ``KLIFS2UniProtIdx``), so the
     two are directly comparable. A structure's ``sasa`` is set to None when there is no KLIFS
@@ -813,7 +813,7 @@ def enrich_with_sasa(
 def _kinase_structures(obj_kinase):
     """Yield each structure model (with a ``.cif`` mmCIF dict and a ``.sasa`` field).
 
-    Yields the KinCore active-state CIF (:class:`KinCoreCIF`) and/or the AlphaFold model
+    Yields the KinCoRe active-state CIF (:class:`KinCoReCIF`) and/or the AlphaFold model
     (:class:`AlphaFold`) that the kinase carries.
     """
     if obj_kinase.kincore is not None and obj_kinase.kincore.cif is not None:
@@ -866,7 +866,7 @@ def enrich_kinases_with_sasa(
 ) -> None:
     """Compute + store per-structure KLIFS-pocket SASA for many kinases, in parallel.
 
-    Each kinase's structures (KinCore CIF and/or AlphaFold) are computed independently -- the
+    Each kinase's structures (KinCoRe CIF and/or AlphaFold) are computed independently -- the
     CPU-bound per-residue Shrake-Rupley SASA runs in a process pool; the SASA is then stored on
     the structure it was computed over (``kincore.cif.sasa`` / ``alphafold.sasa``). Structures of
     a kinase without a KLIFS mapping get ``sasa`` None.
@@ -894,6 +894,8 @@ def enrich_kinases_with_sasa(
                 struct.sasa = None
             continue
         for i, struct in enumerate(_kinase_structures(obj)):
+            if struct.sasa is not None:
+                continue  # idempotent: keep already-computed SASA (e.g. an unchanged structure)
             key = f"{hgnc}::{i}"
             tasks.append((key, struct.cif, config))
             meta[key] = (obj, struct)

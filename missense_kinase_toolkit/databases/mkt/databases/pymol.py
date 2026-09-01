@@ -123,7 +123,7 @@ class PyMOLGenerator:
         )
 
         # Access dict_align through the config's seq_align
-        str_seq_cif = self.viz.config.seq_align.dict_align["KinCore, CIF"]["str_seq"]
+        str_seq_cif = self.viz.config.seq_align.dict_align["KinCoRe, CIF"]["str_seq"]
 
         # create mapping: alignment_index (1-based) -> PDB_residue_number (1-based sequential)
         # The PDB is renumbered sequentially (1, 2, 3, ...) counting only non-gap CIF residues
