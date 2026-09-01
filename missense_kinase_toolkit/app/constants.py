@@ -1,7 +1,7 @@
 DICT_RESOURCE_URLS = {
     "KinHub": "http://www.kinhub.org/",
     "KLIFS": "https://klifs.net/",
-    "KinCore": "http://dunbrack.fccc.edu/kincore/home",
+    "KinCoRe": "http://dunbrack.fccc.edu/kincore/home",
     "UniProt": "https://www.uniprot.org/",
     "Pfam": "https://www.ebi.ac.uk/interpro/entry/pfam",
 }
