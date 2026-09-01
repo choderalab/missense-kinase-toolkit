@@ -16,7 +16,7 @@ from mkt.schema.constants import (
     LIST_MSA_REGION,
     LIST_PFAM_KD,
 )
-from mkt.schema.utils import rgetattr
+from mkt.schema.utils import fill_missing_none, rgetattr
 from pydantic import BaseModel, ConfigDict, constr, field_validator
 from strenum import StrEnum
 
@@ -282,31 +282,8 @@ class SASA(BaseModel):
         cls,
         value: dict[str, float | None],
     ) -> dict[str, float | None]:
-        """Validate SASA/RSA dictionaries to include all regions since TOML doesn't save None.
-
-        Serializing to TOML omits keys whose value is None (TOML has no null type), so a
-        residue with no SASA/RSA would be dropped on a round-trip. Rebuild the full KLIFS
-        label set (missing entries defaulted to None), mirroring
-        :meth:`KinaseInfo.validate_klifs2uniprotidx`. Applies to both nested sites
-        (``kincore.cif.sasa`` and ``alphafold.sasa``) via Pydantic nested validation.
-
-        Parameters
-        ----------
-        value : dict[str, float | None]
-            Dictionary mapping KLIFS residue to SASA/RSA value.
-
-        Returns
-        -------
-        dict[str, float | None]
-            Dictionary mapping every KLIFS residue to its SASA/RSA value (missing -> None).
-        """
-        dict_temp = dict.fromkeys(LIST_KLIFS_REGION, None)
-
-        if isinstance(value, dict):
-            for key, val in value.items():
-                dict_temp[key] = val
-
-        return dict_temp
+        """Fill all KLIFS positions on the SASA/RSA maps (see :func:`fill_missing_none`)."""
+        return fill_missing_none(value, LIST_KLIFS_REGION)
 
 
 class KinCoreFASTA(BaseModel):
@@ -400,30 +377,8 @@ class MSA(BaseModel):
         cls,
         value: dict[str, int | None],
     ) -> dict[str, int | None]:
-        """Validate region2uniprot to include all regions since TOML doesn't save None.
-
-        Serializing to TOML omits keys whose value is None (TOML has no null type), so an
-        aligned position that is a gap in this kinase would be lost on a round-trip. Rebuild
-        the full aligned-position set (missing entries defaulted to None), mirroring
-        :meth:`KinaseInfo.validate_klifs2uniprotidx`.
-
-        Parameters
-        ----------
-        value : dict[str, int | None]
-            Dictionary mapping the MSA aligned position to its UniProt index.
-
-        Returns
-        -------
-        dict[str, int | None]
-            Dictionary mapping every aligned position to its UniProt index (missing -> None).
-        """
-        dict_temp = dict.fromkeys(LIST_MSA_REGION, None)
-
-        if isinstance(value, dict):
-            for key, val in value.items():
-                dict_temp[key] = val
-
-        return dict_temp
+        """Fill all aligned MSA positions on region2uniprot (see :func:`fill_missing_none`)."""
+        return fill_missing_none(value, LIST_MSA_REGION)
 
 
 class KinCore(BaseModel):
@@ -494,26 +449,8 @@ class KinaseInfo(BaseModel):
         cls,
         value: dict[str, int | None] | None,
     ) -> dict[str, int | None] | None:
-        """Validate KLIFS2UniProtIdx dictionary to include all regions since TOML doesn't save None.
-
-        Parameters
-        ----------
-        value : dict[str, int | None]
-            Dictionary mapping KLIFS residue to UniProt indices.
-
-        Returns
-        -------
-        dict[str, int | None]
-            Dictionary mapping KLIFS residue to UniProt indices.
-        """
-        dict_temp = dict.fromkeys(LIST_KLIFS_REGION, None)
-
-        if value is not None:
-            for key, val in value.items():
-                dict_temp[key] = val
-            return dict_temp
-        else:
-            return None
+        """Fill all KLIFS pocket positions on KLIFS2UniProtIdx (see :func:`fill_missing_none`)."""
+        return fill_missing_none(value, LIST_KLIFS_REGION)
 
     @field_validator("KLIFS2UniProtSeq", mode="before")
     @classmethod
@@ -521,26 +458,8 @@ class KinaseInfo(BaseModel):
         cls,
         value: dict[str, str | None] | None,
     ) -> dict[str, str | None] | None:
-        """Validate KLIFS2UniProtSeq dictionary to include all regions since TOML doesn't save None.
-
-        Parameters
-        ----------
-        value : dict[str, str | None]
-            Dictionary mapping KLIFS residue to UniProt residue.
-
-        Returns
-        -------
-        dict[str, str | None]
-            Dictionary mapping KLIFS residue to UniProt residue.
-        """
-        dict_temp = dict.fromkeys(LIST_FULL_KLIFS_REGION, None)
-
-        if value is not None:
-            for key, val in value.items():
-                dict_temp[key] = val
-            return dict_temp
-        else:
-            return None
+        """Fill all KLIFS regions on KLIFS2UniProtSeq (see :func:`fill_missing_none`)."""
+        return fill_missing_none(value, LIST_FULL_KLIFS_REGION)
 
     def extract_sequence_from_cif(self, bool_verbose: bool = False) -> str | None:
         """Extract sequence from CIF if available.
