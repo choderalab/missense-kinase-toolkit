@@ -270,6 +270,38 @@ class SASA(BaseModel):
     include_hydrogens: bool
     max_asa_reference: str  # reference maxima used to normalize rsa
 
+    @field_validator("sasa", "rsa", mode="before")
+    @classmethod
+    def validate_klifs_sasa(
+        cls,
+        value: dict[str, float | None],
+    ) -> dict[str, float | None]:
+        """Validate SASA/RSA dictionaries to include all regions since TOML doesn't save None.
+
+        Serializing to TOML omits keys whose value is None (TOML has no null type), so a
+        residue with no SASA/RSA would be dropped on a round-trip. Rebuild the full KLIFS
+        label set (missing entries defaulted to None), mirroring
+        :meth:`KinaseInfo.validate_klifs2uniprotidx`. Applies to both nested sites
+        (``kincore.cif.sasa`` and ``alphafold.sasa``) via Pydantic nested validation.
+
+        Parameters
+        ----------
+        value : dict[str, float | None]
+            Dictionary mapping KLIFS residue to SASA/RSA value.
+
+        Returns
+        -------
+        dict[str, float | None]
+            Dictionary mapping every KLIFS residue to its SASA/RSA value (missing -> None).
+        """
+        dict_temp = dict.fromkeys(LIST_KLIFS_REGION, None)
+
+        if isinstance(value, dict):
+            for key, val in value.items():
+                dict_temp[key] = val
+
+        return dict_temp
+
 
 class KinCoreFASTA(BaseModel):
     """Pydantic model for KinCore FASTA information."""
