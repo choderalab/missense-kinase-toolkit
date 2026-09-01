@@ -37,6 +37,11 @@ DICT_ALIGNMENT = {
         "start": "kincore.cif.start",
         "end": "kincore.cif.end",
     },
+    "KinCoRe, MSA": {
+        "seq": None,  # ungapped Dunbrack MSA row == canonical KD slice; extracted over msa.start-end
+        "start": "kincore.msa.start",
+        "end": "kincore.msa.end",
+    },
     "AF2, CIF": {
         "seq": "alphafold.cif",  # KD-sliced AlphaFold CIF; populated only when no KinCoRe CIF
         "start": "alphafold.start",
@@ -89,21 +94,27 @@ class SequenceAlignment:
 
     @property
     def str_structure_key(self) -> str | None:
-        """DICT_ALIGNMENT key for the adjudicated structure alignment.
+        """dict_align key for the adjudicated structure alignment.
 
         A KinCoRe active-state CIF is preferred, else the KD-sliced AlphaFold structure;
         the two are mutually exclusive, and (being 1-to-1 in bounds/sequence) the same
-        alignment serves a KinCoRe- or AF-rendered structure.
+        alignment serves a KinCoRe- or AF-rendered structure. The KinCoRe CIF row may
+        have been merged with identical FASTA/MSA rows (e.g. ``"KinCoRe, FASTA/CIF"``),
+        so the collapsed label carrying the CIF source is resolved from ``dict_align``.
 
         Returns
         -------
         str | None
-            ``"KinCoRe, CIF"``, ``"AF2, CIF"``, or None if no structure is available.
+            The ``dict_align`` key for the structure row (a merged KinCoRe label or
+            ``"AF2, CIF"``), or None if no structure is available.
         """
         if (
             self.obj_kinase.kincore is not None
             and self.obj_kinase.kincore.cif is not None
         ):
+            for key in self.dict_align:
+                if key.startswith("KinCoRe, ") and "CIF" in key:
+                    return key
             return "KinCoRe, CIF"
         if self.obj_kinase.alphafold is not None:
             return "AF2, CIF"
@@ -226,10 +237,16 @@ class SequenceAlignment:
             self.obj_kinase.kincore is not None
             and self.obj_kinase.kincore.cif is not None
         )
+        # the MSA row is shown only when a Dunbrack MSA is present on the kinase
+        has_msa = (
+            self.obj_kinase.kincore is not None
+            and self.obj_kinase.kincore.msa is not None
+        )
         dict_alignment = {
             k: v
             for k, v in DICT_ALIGNMENT.items()
             if not (k == "AF2, CIF" and has_kincore_cif)
+            and not (k == "KinCoRe, MSA" and not has_msa)
         }
 
         dict_out = {
@@ -244,7 +261,11 @@ class SequenceAlignment:
                 seq = seq["_entity_poly.pdbx_seq_one_letter_code"][0].replace("\n", "")
 
             # CDKL1 KinCoRe FASTA and CIF have an extra M at the start - remove and add back
-            if self.obj_kinase.hgnc_name == "CDKL1" and key.startswith("KinCoRe"):
+            # (the MSA row is canonical-derived, so it carries no extra M and is excluded)
+            if self.obj_kinase.hgnc_name == "CDKL1" and key in (
+                "KinCoRe, FASTA",
+                "KinCoRe, CIF",
+            ):
                 seq = seq[1:]
 
             start = self._parse_start_end_values(value["start"], seq)
@@ -254,7 +275,7 @@ class SequenceAlignment:
             # CDKL1 KinCoRe FASTA and CIF have an extra M at the start
             # add back and add "-" for all other sequences
             if self.obj_kinase.hgnc_name == "CDKL1":
-                if key.startswith("KinCoRe"):
+                if key in ("KinCoRe, FASTA", "KinCoRe, CIF"):
                     seq_out = "M" + seq_out
                 else:
                     seq_out = "-" + seq_out
@@ -292,4 +313,57 @@ class SequenceAlignment:
                         # Claude proposed crimson
                         value["list_colors"][idx] = "#DC143C"
 
-        return dict_out
+        return self._collapse_kincore_rows(dict_out)
+
+    def _collapse_kincore_rows(
+        self, dict_out: dict[str, dict[str, str | list[str]]]
+    ) -> dict[str, dict[str, str | list[str]]]:
+        """Merge KinCoRe rows (FASTA/CIF/MSA) sharing an identical mapped sequence.
+
+        Identical KinCoRe FASTA, CIF, and MSA rows collapse to a single row whose
+        label lists the merged sources (e.g. ``"KinCoRe, FASTA/CIF/MSA"``). A
+        reconciled MSA (``kincore.msa.reconciled``) is never merged -- it maps from
+        a non-canonical isoform, so it stays a distinct row flagged
+        ``"(reconciled)"`` even when its displayed residues coincide with the other
+        KinCoRe rows.
+
+        Parameters
+        ----------
+        dict_out : dict[str, dict[str, str | list[str]]]
+            Per-track ``{"str_seq", "list_colors"}`` mapping to collapse.
+
+        Returns
+        -------
+        dict[str, dict[str, str | list[str]]]
+            A new ordered mapping with identical KinCoRe rows merged.
+        """
+        str_prefix = "KinCoRe, "
+        set_kincore = {"KinCoRe, FASTA", "KinCoRe, CIF", "KinCoRe, MSA"}
+        bool_reconciled = bool(rgetattr(self.obj_kinase, "kincore.msa.reconciled"))
+
+        dict_collapsed: dict[str, dict[str, str | list[str]]] = {}
+        set_consumed: set[str] = set()
+        for key, value in dict_out.items():
+            if key in set_consumed:
+                continue
+            # a reconciled MSA is flagged and never merged into the structure rows
+            if key == "KinCoRe, MSA" and bool_reconciled:
+                dict_collapsed[f"{key} (reconciled)"] = value
+                continue
+            if key not in set_kincore:
+                dict_collapsed[key] = value
+                continue
+            # gather the mergeable KinCoRe rows sharing this row's mapped sequence
+            list_merge = [key]
+            for other, other_value in dict_out.items():
+                if other in set_consumed or other == key or other not in set_kincore:
+                    continue
+                if other == "KinCoRe, MSA" and bool_reconciled:
+                    continue
+                if other_value["str_seq"] == value["str_seq"]:
+                    list_merge.append(other)
+            set_consumed.update(list_merge)
+            list_suffix = [k.removeprefix(str_prefix) for k in list_merge]
+            dict_collapsed[str_prefix + "/".join(list_suffix)] = value
+
+        return dict_collapsed
