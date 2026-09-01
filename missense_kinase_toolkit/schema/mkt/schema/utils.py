@@ -22,7 +22,7 @@ def query_date_from_file(path: str) -> str | None:
 
     A freshly downloaded file's mtime is its download date; an existing local file's mtime is
     when it was last modified -- so this covers both the re-download and local-file cases.
-    Shared by the databases source loaders (KinCore FASTA/CIF, the Dunbrack MSA, ...).
+    Shared by the databases source loaders (KinCoRe FASTA/CIF, the Dunbrack MSA, ...).
 
     Parameters
     ----------
@@ -132,7 +132,7 @@ def random_uuid():
 
 
 def extract_sequence_from_cif(kincore) -> str | None:
-    """Extract the one-letter sequence from a KinCore CIF, if present.
+    """Extract the one-letter sequence from a KinCoRe CIF, if present.
 
     Shared by ``KinaseInfo.extract_sequence_from_cif`` and the
     ``KinaseInfoKinaseDomainGenerator`` FASTA-to-CIF alignment validator so both read
@@ -141,8 +141,8 @@ def extract_sequence_from_cif(kincore) -> str | None:
 
     Parameters
     ----------
-    kincore : KinCore | None
-        A ``KinCore`` object (or None); the sequence is read from
+    kincore : KinCoRe | None
+        A ``KinCoRe`` object (or None); the sequence is read from
         ``kincore.cif.cif["_entity_poly.pdbx_seq_one_letter_code"]``.
 
     Returns

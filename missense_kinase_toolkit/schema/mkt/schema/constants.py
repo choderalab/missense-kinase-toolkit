@@ -326,7 +326,7 @@ LIST_PSEUDOKINASE_TRIAD_INTACT = [
 are therefore NOT caught by the catalytic-residue heuristic (false negatives); they are
 catalytically dead for other reasons (degraded regulatory spine, glycine-rich loop, or
 nucleotide binding). is_pseudokinase() force-returns True for these, unless the kinase has
-a KinCore active-state CIF (which takes precedence and marks it catalytically active).
+a KinCoRe active-state CIF (which takes precedence and marks it catalytically active).
 
 Citations:
   - BUB1B (BUBR1) -- a bona fide pseudokinase despite an intact catalytic triad:
@@ -336,7 +336,7 @@ Citations:
     Biol 2014; Mendrola et al., Biochem Soc Trans 2013.
 
 NOTE: PDIK1L and SBK3 were previously listed here (annotated pseudo on nucleotide-binding
-grounds, Murphy et al., Biochem J 2014, but lower confidence) -- both now carry KinCore
+grounds, Murphy et al., Biochem J 2014, but lower confidence) -- both now carry KinCoRe
 active-state CIFs and are treated as catalytically active, so they were removed."""
 
 LIST_PSEUDOKINASE_HEURISTIC_FALSE_POSITIVE = [
@@ -359,7 +359,7 @@ Citations / rationale:
 
 NOTE (WNK4): WNK4 also trips the heuristic (no beta3 or beta2 lysine; III:17=C, II:13=R)
 and is NOT rescued by the beta2-lysine alternative, unlike WNK1/2/3. It is not listed here
-because it carries a KinCore active-state CIF, which is_pseudokinase() treats as
+because it carries a KinCoRe active-state CIF, which is_pseudokinase() treats as
 catalytically active (taking precedence over the heuristic)."""
 
 DICT_KINASE_GROUP_COLORS = {
