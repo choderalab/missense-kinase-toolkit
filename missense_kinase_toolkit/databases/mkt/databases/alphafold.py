@@ -139,7 +139,7 @@ def slice_alphafold_cif_to_kd(
     Keeps residues whose UniProt (auth) number is within ``[start, end]`` and returns the
     mmCIF dict, injecting the one-letter KD sequence under
     ``_entity_poly.pdbx_seq_one_letter_code`` (which ``MMCIFIO`` does not emit) so the
-    CIF-sequence accessors work as they do for KinCore CIFs.
+    CIF-sequence accessors work as they do for KinCoRe CIFs.
 
     Parameters
     ----------
@@ -220,7 +220,7 @@ def fetch_alphafold_kd(
     dict_cif = slice_alphafold_cif_to_kd(structure._cif, start, end)
 
     # compare the KD slice to the canonical UniProt sequence; record differing positions as a
-    # mismatch (mirroring KinCore) rather than discarding the structure over a few substitutions
+    # mismatch (mirroring KinCoRe) rather than discarding the structure over a few substitutions
     mismatch = None
     if canonical_seq is not None:
         seq_kd = dict_cif["_entity_poly.pdbx_seq_one_letter_code"][0]
@@ -238,7 +238,7 @@ def fetch_alphafold_kd(
                 end,
             )
             return None
-        # 0-indexed positions within the KD slice that differ from canonical (KinCore convention)
+        # 0-indexed positions within the KD slice that differ from canonical (KinCoRe convention)
         mismatch = [i for i, (a, b) in enumerate(zip(seq_kd, seq_expected)) if a != b]
         if len(mismatch) / len(seq_expected) > max_mismatch_fraction:
             logger.error(
@@ -301,7 +301,7 @@ def enrich_with_alphafold(obj_kinase) -> None:
     """Populate ``obj_kinase.alphafold`` with the KD-sliced AlphaFold structure.
 
     Fetches an AlphaFold DB structure for **every** kinase with adjudicated KD bounds (so a
-    KinCore-CIF kinase also gets an AF2 counterpart for structure/SASA comparison); the KinCore
+    KinCoRe-CIF kinase also gets an AF2 counterpart for structure/SASA comparison); the KinCoRe
     CIF remains the preferred active-state model for rendering (see :func:`adjudicate_structure`).
     The kinase-domain bounds come from the object's adjudication, so ``kincore`` must already be
     in place.
@@ -315,15 +315,21 @@ def enrich_with_alphafold(obj_kinase) -> None:
     -------
     None
     """
-    if obj_kinase.alphafold is not None:
-        return  # already stored; query AF2 DB only for entries not yet stored
-
     start = obj_kinase.adjudicate_kd_start()
     end = obj_kinase.adjudicate_kd_end()
     if start is None or end is None:
         logger.warning(
             "no kinase-domain bounds for %s; skipping AlphaFold", obj_kinase.hgnc_name
         )
+        return
+
+    # idempotent: re-slice only when the KD bounds changed since the structure was stored
+    # (e.g. an enrichment upstream, such as msa, updated adjudication); otherwise keep it.
+    if (
+        obj_kinase.alphafold is not None
+        and obj_kinase.alphafold.start == start
+        and obj_kinase.alphafold.end == end
+    ):
         return
 
     obj_kinase.alphafold = fetch_alphafold_kd(
@@ -337,7 +343,7 @@ def enrich_with_alphafold(obj_kinase) -> None:
 def get_alphafold(obj_kinase):
     """Return the AlphaFold structure for a kinase, fetching on the fly if not stored.
 
-    Entries without a KinCore CIF carry a stored ``alphafold``; entries with a KinCore CIF
+    Entries without a KinCoRe CIF carry a stored ``alphafold``; entries with a KinCoRe CIF
     do not, so this fetches + slices the AF structure on demand (e.g. for the force-AF
     render override or AF-based rSASA).
 
@@ -368,8 +374,8 @@ def get_alphafold(obj_kinase):
 def adjudicate_structure(obj_kinase, prefer_alphafold: bool = False):
     """Return the KD structure to render/compute over and a provenance label.
 
-    The KinCore active-state CIF is preferred; the AlphaFold structure (stored on
-    KinCore-less entries, or fetched on the fly via :func:`get_alphafold`) is the fallback,
+    The KinCoRe active-state CIF is preferred; the AlphaFold structure (stored on
+    KinCoRe-less entries, or fetched on the fly via :func:`get_alphafold`) is the fallback,
     or is forced when ``prefer_alphafold`` is True. Used by the app, PyMOL output, and rSASA.
 
     Parameters
@@ -377,12 +383,12 @@ def adjudicate_structure(obj_kinase, prefer_alphafold: bool = False):
     obj_kinase : KinaseInfo
         The kinase object.
     prefer_alphafold : bool, optional
-        Force the AlphaFold structure even when a KinCore CIF is present, by default False.
+        Force the AlphaFold structure even when a KinCoRe CIF is present, by default False.
 
     Returns
     -------
     tuple[dict | None, str | None]
-        ``(mmCIF dict, source label)`` where the label is ``"KinCore Active State"`` or
+        ``(mmCIF dict, source label)`` where the label is ``"KinCoRe Active State"`` or
         ``"AF2 Database"``; ``(None, None)`` when no structure is available.
     """
     dict_kincore = (
@@ -391,11 +397,11 @@ def adjudicate_structure(obj_kinase, prefer_alphafold: bool = False):
         else None
     )
     if dict_kincore is not None and not prefer_alphafold:
-        return dict_kincore, "KinCore Active State"
+        return dict_kincore, "KinCoRe Active State"
 
     obj_alphafold = get_alphafold(obj_kinase)
     if obj_alphafold is not None:
         return obj_alphafold.cif, "AF2 Database"
     if dict_kincore is not None:
-        return dict_kincore, "KinCore Active State"
+        return dict_kincore, "KinCoRe Active State"
     return None, None

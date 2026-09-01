@@ -7,7 +7,7 @@ import pytest
 from mkt.databases import sasa, utils
 from mkt.schema.io_utils import deserialize_kinase_dict
 
-# AKT1 kinase domain (P31749) spans UniProt residues 142-416 in the KinCore CIF
+# AKT1 kinase domain (P31749) spans UniProt residues 142-416 in the KinCoRe CIF
 AKT1_START = 142
 AKT1_END = 416
 AKT1_N_RES = AKT1_END - AKT1_START + 1
@@ -23,7 +23,7 @@ def akt1_kinase():
 
 @pytest.fixture(scope="module")
 def akt1_no_cif(akt1_kinase):
-    """AKT1 object with its KinCore data stripped (no CIF structure)."""
+    """AKT1 object with its KinCoRe data stripped (no CIF structure)."""
     return akt1_kinase.model_copy(update={"kincore": None})
 
 
@@ -390,8 +390,12 @@ class TestResidueSASAEnrichment:
         assert 0.0 < max(rsa_vals) < 2.0
 
     def test_enrich_with_sasa_klifs_keyed_with_methodology(self, akt1_kinase):
-        """enrich_with_sasa stores SASA on the KinCore CIF, keyed by KLIFS region:idx."""
+        """enrich_with_sasa stores SASA on the KinCoRe CIF, keyed by KLIFS region:idx."""
         obj = akt1_kinase.model_copy(deep=True)
+        # start clean: enrichment is idempotent (keeps existing SASA), so clear the
+        # tar-computed SASA to force a fresh calculation with this config
+        for struct in sasa._kinase_structures(obj):
+            struct.sasa = None
         sasa.enrich_with_sasa(obj, config=sasa.BioPythonHeavyConfig(n_points=100))
         s = obj.kincore.cif.sasa
         assert s is not None
@@ -416,6 +420,11 @@ class TestResidueSASAEnrichment:
         cfg = sasa.BioPythonHeavyConfig(n_points=100)
         d1 = {k: v.model_copy(deep=True) for k, v in d.items()}
         d2 = {k: v.model_copy(deep=True) for k, v in d.items()}
+        # enrichment is idempotent; clear the tar-computed SASA so both actually recompute
+        for dd in (d1, d2):
+            for obj in dd.values():
+                for struct in sasa._kinase_structures(obj):
+                    struct.sasa = None
         sasa.enrich_kinases_with_sasa(d1, config=cfg, n_jobs=1)
         sasa.enrich_kinases_with_sasa(d2, config=cfg, n_jobs=2)
         for k in d:
