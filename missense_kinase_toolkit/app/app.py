@@ -178,7 +178,7 @@ class Dashboard:
                 if structure_source is None:
                     st.error("No structure available for this kinase.", icon="⚠️")
                 else:
-                    st.markdown(f"### Kinase Domain — {structure_source}\n")
+                    st.markdown("### Kinase Domain\n" f"#### {structure_source}\n")
                     try:
                         plot_spot = st.empty()
 
