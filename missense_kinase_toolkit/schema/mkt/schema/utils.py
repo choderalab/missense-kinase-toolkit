@@ -6,6 +6,8 @@ Provides :func:`rgetattr`/:func:`rsetattr` for traversing nested Pydantic models
 """
 
 import logging
+import os
+from datetime import date
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +15,56 @@ TQDM_BAR_FORMAT = (
     "{l_bar}{bar}| {n:,}/{total:,} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
 )
 """Default tqdm bar format with comma-separated thousands in counts."""
+
+
+def query_date_from_file(path: str) -> str | None:
+    """Return a source file's modification date (ISO) for :class:`~mkt.schema.kinase_schema.Provenance`.
+
+    A freshly downloaded file's mtime is its download date; an existing local file's mtime is
+    when it was last modified -- so this covers both the re-download and local-file cases.
+    Shared by the databases source loaders (KinCoRe FASTA/CIF, the Dunbrack MSA, ...).
+
+    Parameters
+    ----------
+    path : str
+        Path to the source file.
+
+    Returns
+    -------
+    str | None
+        ISO date string (YYYY-MM-DD), or None if the file is absent.
+    """
+    if not os.path.exists(path):
+        return None
+    return date.fromtimestamp(os.path.getmtime(path)).isoformat()
+
+
+def fill_missing_none(value: dict | None, keys) -> dict | None:
+    """Return a dict with every key present (missing -> None), for TOML round-tripping.
+
+    TOML has no null type, so serializing a dict then deserializing drops keys whose value is
+    None. Rebuilding the full key set (missing -> None) makes the round-trip lossless. Shared by
+    the KLIFS2UniProt, SASA, and MSA field validators. A None ``value`` (an unset optional field)
+    is passed through as None rather than filled.
+
+    Parameters
+    ----------
+    value : dict | None
+        The (possibly gap-dropped) mapping, or None for an unset optional field.
+    keys : Iterable
+        The full ordered key set the mapping should cover.
+
+    Returns
+    -------
+    dict | None
+        ``value`` with every key present (missing -> None), or None if ``value`` is None.
+    """
+    if value is None:
+        return None
+    dict_temp = dict.fromkeys(keys, None)
+    if isinstance(value, dict):
+        dict_temp.update(value)
+    return dict_temp
 
 
 def rgetattr(obj, attr, *args):
@@ -80,7 +132,7 @@ def random_uuid():
 
 
 def extract_sequence_from_cif(kincore) -> str | None:
-    """Extract the one-letter sequence from a KinCore CIF, if present.
+    """Extract the one-letter sequence from a KinCoRe CIF, if present.
 
     Shared by ``KinaseInfo.extract_sequence_from_cif`` and the
     ``KinaseInfoKinaseDomainGenerator`` FASTA-to-CIF alignment validator so both read
@@ -89,8 +141,8 @@ def extract_sequence_from_cif(kincore) -> str | None:
 
     Parameters
     ----------
-    kincore : KinCore | None
-        A ``KinCore`` object (or None); the sequence is read from
+    kincore : KinCoRe | None
+        A ``KinCoRe`` object (or None); the sequence is read from
         ``kincore.cif.cif["_entity_poly.pdbx_seq_one_letter_code"]``.
 
     Returns
