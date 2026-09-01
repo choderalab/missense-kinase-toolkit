@@ -33,7 +33,9 @@ def test_dict_counts(dict_kinase):
     n_kincore = len(
         [i.hgnc_name for i in dict_kinase.values() if i.kincore is not None]
     )
-    assert n_kincore == 492
+    # 492 with KinCoRe FASTA/CIF + 5 MSA-only shells (multi-KD second domains in the
+    # Dunbrack alignment but without KinCoRe structure)
+    assert n_kincore == 497
 
     n_pfam = len([i.hgnc_name for i in dict_kinase.values() if i.pfam is not None])
     assert n_pfam == 533
@@ -197,7 +199,7 @@ def test_adjudicate_kd_sequence(dict_kinase, caplog):
 
 
 def test_kincore_cif_backward_compatible():
-    """KinCoreCIF loads both the pre-v2 (v1) and v2 KinCore CIF layouts.
+    """KinCoReCIF loads both the pre-v2 (v1) and v2 KinCoRe CIF layouts.
 
     Every field that differs between the two Dunbrack releases is optional, so a v1
     record (with template_source/msa_size/msa_source/model_no/min_aloop_pLDDT) and a v2
@@ -205,12 +207,12 @@ def test_kincore_cif_backward_compatible():
     leaves the other release's fields as None. Guards against a future required-field
     regression breaking deserialization of the archived dict.
     """
-    from mkt.schema.kinase_schema import KinCoreCIF
+    from mkt.schema.kinase_schema import KinCoReCIF
 
     cif = {"_entity_poly.pdbx_seq_one_letter_code": ["ABCDEF"]}
 
     # v1 (pre-AF2_Active_Models_v2) record
-    v1 = KinCoreCIF.model_validate(
+    v1 = KinCoReCIF.model_validate(
         {
             "cif": cif,
             "group": "TK",
@@ -226,7 +228,7 @@ def test_kincore_cif_backward_compatible():
     assert v1.model_confidence is None and v1.dfg_conf is None and v1.af_id is None
 
     # v2 (AF2_Active_Models_v2) record
-    v2 = KinCoreCIF.model_validate(
+    v2 = KinCoReCIF.model_validate(
         {
             "cif": cif,
             "group": "TK",
@@ -251,9 +253,9 @@ def test_no_legacy_kinases(dict_kinase):
 
 
 def test_pseudokinase_kincore_cif_invariant(dict_kinase):
-    """A KinCore active-state CIF marks a catalytically active kinase (never pseudo).
+    """A KinCoRe active-state CIF marks a catalytically active kinase (never pseudo).
 
-    Regression for the CIF-guard in ``is_pseudokinase``: no entry carrying a KinCore
+    Regression for the CIF-guard in ``is_pseudokinase``: no entry carrying a KinCoRe
     CIF may be labeled a pseudokinase, and the three previously-misclassified kinases
     (PDIK1L, SBK3, WNK4) are now catalytically active, while a genuine CIF-less
     pseudokinase (BUB1B) is still flagged.
@@ -277,7 +279,7 @@ def test_pseudokinase_kincore_cif_invariant(dict_kinase):
 def test_alphafold_invariants(dict_kinase):
     """AlphaFold structures are stored for every kinase with KD bounds and an AF2 model.
 
-    An AF2 structure now coexists with a KinCore CIF (AF-for-all, for structure/SASA
+    An AF2 structure now coexists with a KinCoRe CIF (AF-for-all, for structure/SASA
     comparison), and the KD-sliced AF sequence matches ``adjudicate_kd_sequence`` except at the
     positions recorded in ``alphafold.mismatch``.
     """
@@ -293,12 +295,12 @@ def test_alphafold_invariants(dict_kinase):
         diffs = [i for i, (a, b) in enumerate(zip(seq_slice, expected)) if a != b]
         assert diffs == (info.alphafold.mismatch or [])
 
-    # AF-for-all: a KinCore-CIF kinase (ABL1) also carries an AF2 structure
+    # AF-for-all: a KinCoRe-CIF kinase (ABL1) also carries an AF2 structure
     abl1 = dict_kinase["ABL1"]
     assert abl1.kincore is not None and abl1.kincore.cif is not None
     assert abl1.alphafold is not None
 
-    # BUB1B has no KinCore CIF, so AF2 is its only structure
+    # BUB1B has no KinCoRe CIF, so AF2 is its only structure
     assert dict_kinase["BUB1B"].alphafold is not None
     assert dict_kinase["BUB1B"].alphafold.entry_id == "AF-O60566-F1"
 
@@ -309,7 +311,7 @@ def test_sasa_per_structure_klifs_pocket(dict_kinase):
     SASA is nested on the structure it was computed over (``kincore.cif.sasa`` /
     ``alphafold.sasa``); a kinase with both structures carries both, over the same KLIFS keys.
     """
-    # ABL1 has a KinCore CIF (and, with AF-for-all, an AlphaFold structure too)
+    # ABL1 has a KinCoRe CIF (and, with AF-for-all, an AlphaFold structure too)
     abl1 = dict_kinase["ABL1"]
     sasas = [
         abl1.kincore.cif.sasa if abl1.kincore and abl1.kincore.cif else None,
@@ -324,7 +326,7 @@ def test_sasa_per_structure_klifs_pocket(dict_kinase):
         assert rsa_vals and all(0.0 <= v < 2.0 for v in rsa_vals)
         assert s.method and s.n_points > 0 and s.max_asa_reference
 
-    # BUB1B has no KinCore CIF but an AlphaFold structure -> AF SASA present
+    # BUB1B has no KinCoRe CIF but an AlphaFold structure -> AF SASA present
     bub1b = dict_kinase["BUB1B"]
     assert bub1b.kincore is None or bub1b.kincore.cif is None
     assert bub1b.alphafold is not None and bub1b.alphafold.sasa is not None
