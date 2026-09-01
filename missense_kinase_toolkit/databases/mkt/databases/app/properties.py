@@ -8,7 +8,7 @@ import logging
 from dataclasses import dataclass
 
 import pandas as pd
-from mkt.schema.kinase_schema import KinaseInfo
+from mkt.schema.kinase_schema import KinaseInfo, Provenance
 from mkt.schema.utils import rgetattr
 
 logger = logging.getLogger(__name__)
@@ -97,7 +97,7 @@ class PropertyTables:
 
         self.df_kincore = self.convert_property2dataframe(
             "kincore.fasta",
-            list_keep=["group", "hgnc", "swissprot", "uniprot", "source_file"],
+            list_keep=["group", "hgnc", "swissprot", "uniprot", "source"],
         )
 
         self.format_property_columns()
@@ -118,6 +118,11 @@ class PropertyTables:
         """
         if value is None:
             return ""
+        if isinstance(value, Provenance):
+            # render source provenance as "citation (version, query_date)"
+            head = value.citation or value.name
+            detail = ", ".join(x for x in (value.version, value.query_date) if x)
+            return f"{head} ({detail})" if detail else head
         if isinstance(value, (list, tuple, set, frozenset)):
             return ", ".join(str(v) for v in value)
         return str(value)
