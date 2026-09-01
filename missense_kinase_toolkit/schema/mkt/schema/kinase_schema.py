@@ -9,7 +9,13 @@ helpers for kinase-domain sequence and group assignment.
 import logging
 from enum import Enum
 
-from mkt.schema.constants import LIST_FULL_KLIFS_REGION, LIST_KLIFS_REGION, LIST_PFAM_KD
+from mkt.schema.constants import (
+    LIST_FULL_KLIFS_REGION,
+    LIST_KLIFS_REGION,
+    LIST_MSA_APE,
+    LIST_MSA_REGION,
+    LIST_PFAM_KD,
+)
 from mkt.schema.utils import rgetattr
 from pydantic import BaseModel, ConfigDict, constr, field_validator
 from strenum import StrEnum
@@ -362,11 +368,70 @@ class KinCoreCIF(BaseModel):
     mismatch: list[int] | None = None  # cif2uniprot
 
 
+class MSA(BaseModel):
+    """Per-domain slice of the Modi & Dunbrack (2019) structure-based kinase MSA.
+
+    Stores this domain's row of the Human-PK alignment (497 canonical protein-kinase
+    domains) as ordered aligned/unaligned regions, plus a per-aligned-column map to UniProt
+    canonical indices -- mirroring the KLIFS2UniProt maps -- so the activation loop (DFG in
+    the ALN block through APE in the ALC block) can be read in UniProt coordinates.
+    """
+
+    regions: dict[
+        str, str
+    ]  # ordered region label -> gapped MSA substring (17 aligned + 16 unaligned)
+    region2uniprot: dict[
+        str, int | None
+    ]  # KLIFS-style "REGION:idx" ("B1N:001".."HI:229") -> UniProt index (None = gap)
+    start: int | None = (
+        None  # KD start in UniProt canonical coords (msa2uniprot; reconciled)
+    )
+    end: int | None = (
+        None  # KD end in UniProt canonical coords (msa2uniprot; reconciled)
+    )
+    reconciled: bool = (
+        False  # True if a local alignment was needed (isoform/numbering shift)
+    )
+    source: Provenance | None = None  # Human-PK-alignment provenance
+
+    @field_validator("region2uniprot", mode="before")
+    @classmethod
+    def validate_region2uniprot(
+        cls,
+        value: dict[str, int | None],
+    ) -> dict[str, int | None]:
+        """Validate region2uniprot to include all regions since TOML doesn't save None.
+
+        Serializing to TOML omits keys whose value is None (TOML has no null type), so an
+        aligned position that is a gap in this kinase would be lost on a round-trip. Rebuild
+        the full aligned-position set (missing entries defaulted to None), mirroring
+        :meth:`KinaseInfo.validate_klifs2uniprotidx`.
+
+        Parameters
+        ----------
+        value : dict[str, int | None]
+            Dictionary mapping the MSA aligned position to its UniProt index.
+
+        Returns
+        -------
+        dict[str, int | None]
+            Dictionary mapping every aligned position to its UniProt index (missing -> None).
+        """
+        dict_temp = dict.fromkeys(LIST_MSA_REGION, None)
+
+        if isinstance(value, dict):
+            for key, val in value.items():
+                dict_temp[key] = val
+
+        return dict_temp
+
+
 class KinCore(BaseModel):
     """Pydantic model for KinCore information."""
 
-    fasta: KinCoreFASTA
+    fasta: KinCoreFASTA | None = None
     cif: KinCoreCIF | None = None
+    msa: MSA | None = None
     start: int | None = None  # fasta2cif
     end: int | None = None  # fasta2cif
     mismatch: list[int] | None = None  # fasta2cif
@@ -626,13 +691,17 @@ class KinaseInfo(BaseModel):
         int | None
             The start of the kinase domain if available, otherwise None.
         """
-        if self.kincore is not None:
-            start = rgetattr(self, "kincore.cif.start") or rgetattr(
-                self, "kincore.fasta.start"
-            )
-        elif self.pfam is not None:
+        # priority: KinCore CIF > KinCore FASTA > Dunbrack MSA > Pfam. Gate on the bound
+        # itself (not on ``kincore``) so an MSA-only KinCore (cif/fasta None) still falls
+        # through to Pfam rather than short-circuiting to None.
+        start = (
+            rgetattr(self, "kincore.cif.start")
+            or rgetattr(self, "kincore.fasta.start")
+            or rgetattr(self, "kincore.msa.start")
+        )
+        if start is None and self.pfam is not None:
             start = self.pfam.start
-        else:
+        if start is None:
             if bool_verbose:
                 logger.info(
                     f"No kinase domain sequence start found for {self.hgnc_name}"
@@ -671,13 +740,15 @@ class KinaseInfo(BaseModel):
         int | None
             The end of the kinase domain if available, otherwise None.
         """
-        if self.kincore is not None:
-            end = rgetattr(self, "kincore.cif.end") or rgetattr(
-                self, "kincore.fasta.end"
-            )
-        elif self.pfam is not None:
+        # priority: KinCore CIF > KinCore FASTA > Dunbrack MSA > Pfam (see adjudicate_kd_start)
+        end = (
+            rgetattr(self, "kincore.cif.end")
+            or rgetattr(self, "kincore.fasta.end")
+            or rgetattr(self, "kincore.msa.end")
+        )
+        if end is None and self.pfam is not None:
             end = self.pfam.end
-        else:
+        if end is None:
             if bool_verbose:
                 logger.info(f"No kinase domain sequence end found for {self.hgnc_name}")
             return None
@@ -692,6 +763,30 @@ class KinaseInfo(BaseModel):
                 bool_verbose=bool_verbose,
             )
         return end
+
+    def adjudicate_APE(self) -> list[int | None] | None:
+        """Return the APE-motif UniProt indices (Ala, Pro, Glu) from the Dunbrack MSA.
+
+        Reads ``kincore.msa.region2uniprot`` at the APE-motif positions (:data:`LIST_MSA_APE`,
+        the ALC-block Ala/Pro/Glu; the Glu is the end-of-activation-loop anchor). Returns None
+        when the motif is entirely unmapped -- either no MSA is stored, or the kinase lacks the
+        APE motif with all three positions gapped (e.g. HASPIN, PAN3, PEAK3, RNASEL, PLK5) --
+        mirroring the all-None molecular-brake triad check in
+        :meth:`return_molecular_brake_residues`.
+
+        Returns
+        -------
+        list[int | None] | None
+            UniProt indices of the APE motif ``[Ala, Pro, Glu]`` (an element may be None if
+            only part of the motif is gapped), or None if no APE motif is present.
+        """
+        region2uniprot = rgetattr(self, "kincore.msa.region2uniprot")
+        if region2uniprot is None:
+            return None
+        list_idx = [region2uniprot.get(key) for key in LIST_MSA_APE]
+        if all(idx is None for idx in list_idx):
+            return None
+        return list_idx
 
     def adjudicate_group(self, bool_verbose: bool = False) -> str | None:
         """Adjudicate group based on available data.
