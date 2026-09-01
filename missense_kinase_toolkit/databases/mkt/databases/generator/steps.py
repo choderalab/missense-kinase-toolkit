@@ -102,23 +102,50 @@ def _enrich_sasa(ctx: "BuildContext") -> None:
     enrich_kinases_with_sasa(dict_targets, config=cfg, n_jobs=-1)
 
 
+def _enrich_msa(ctx: "BuildContext") -> None:
+    """Annotate entries with the Dunbrack structure-based MSA (activation-loop coordinates).
+
+    Maps each domain's Human-PK alignment row to UniProt coordinates on ``kincore.msa``
+    (creating an MSA-only KinCore shell where structure is absent); matched by ``hgnc_name``
+    with a UniProt-accession fallback. Batch failures are logged and skipped by the enricher.
+
+    Parameters
+    ----------
+    ctx : BuildContext
+        The build context.
+
+    Returns
+    -------
+    None
+    """
+    from mkt.databases.msa import enrich_kinases_with_msa
+
+    enrich_kinases_with_msa(dict(_iter_targets(ctx)))
+
+
 # ordered enrichment-step registry; each step takes a BuildContext and mutates additive
-# optional fields on ctx.dict_kinaseinfo in place. steps run in this insertion order.
+# optional fields on ctx.dict_kinaseinfo in place. steps run in this insertion order. msa runs
+# first so its KD bounds / MSA-only shells are available to the structure steps.
 _ENRICH_STEPS: dict[str, Callable[["BuildContext"], None]] = {
+    "msa": _enrich_msa,
     "alphafold": _enrich_alphafold,
     "sasa": _enrich_sasa,
 }
 """dict[str, Callable]: Ordered enrichment-step registry (name -> step function)."""
 
-_DEFAULT_OFF: set[str] = {"alphafold", "sasa"}
+_DEFAULT_OFF: set[str] = {"msa", "alphafold", "sasa"}
 """set[str]: Enrichment steps skipped in a full regen unless explicitly named via ``--only``
-(alphafold fetches an AlphaFold structure per KinCore-less entry; sasa runs converged
-Shrake-Rupley SASA over every structure -- both heavy, opt-in)."""
+(msa downloads the Dunbrack alignment; alphafold fetches an AlphaFold structure per
+KinCore-less entry; sasa runs converged Shrake-Rupley SASA over every structure -- all opt-in)."""
 
-_STEP_DEPS: dict[str, set[str]] = {"alphafold": set(), "sasa": {"alphafold"}}
-"""dict[str, set[str]]: Enrichment-step name -> prerequisite step names. alphafold reads the
-base-build ``kincore`` field (always populated before steps run); sasa reads the adjudicated
-structure, so the AlphaFold fallback should be materialized first for KinCore-less entries."""
+_STEP_DEPS: dict[str, set[str]] = {
+    "msa": set(),
+    "alphafold": set(),
+    "sasa": {"alphafold"},
+}
+"""dict[str, set[str]]: Enrichment-step name -> prerequisite step names. msa and alphafold read
+the base-build fields (always populated before steps run); sasa reads the adjudicated structure,
+so the AlphaFold fallback should be materialized first for KinCore-less entries."""
 
 _DEFAULT_STEPS: list[str] = [name for name in _ENRICH_STEPS if name not in _DEFAULT_OFF]
 """list[str]: Steps run when neither ``--only`` nor ``--skip`` is given (registry order)."""

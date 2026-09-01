@@ -11,7 +11,6 @@ import re
 import tarfile
 import zipfile
 from collections import Counter
-from datetime import date
 from itertools import chain
 
 from Bio import SeqIO
@@ -19,6 +18,7 @@ from Bio import SeqIO
 # from biotite.structure.io.pdbx import CIFFile
 from Bio.PDB.MMCIF2Dict import MMCIF2Dict
 from mkt.databases.aligners import Kincore2UniProtAligner
+from mkt.databases.io_utils import DataSource
 from mkt.databases.utils import (
     flatten_iterables_in_iterable,
     split_on_first_only,
@@ -31,7 +31,6 @@ from mkt.schema.kinase_schema import (
     KinCoreFASTA,
     KinCoreSeqSource,
     KinCoreStructureSource,
-    Provenance,
 )
 from mkt.schema.utils import TQDM_BAR_FORMAT
 from tqdm import tqdm
@@ -74,74 +73,45 @@ CITATION_MODI = "Modi & Dunbrack, 2019 (PNAS)"
 
 # per-source metadata (archive/file name, version tier, citation, download URL) resolved into a
 # Provenance record; version tiers follow priority order (v1 = current/highest priority)
-DICT_SEQ_SOURCE_META = {
-    KinCoreSeqSource.GIZZIO_2026: {
-        "name": "kinasedomainfasta.tar.gz",
-        "version": "v1",
-        "citation": CITATION_GIZZIO,
-        "url": KINCORE_FASTA_URL,
-    },
-    KinCoreSeqSource.FAEZOV_2023: {
-        "name": "AF2-active.fasta",
-        "version": "v2",
-        "citation": CITATION_FAEZOV,
-        "url": None,
-    },
-    KinCoreSeqSource.MODI_2019: {
-        "name": "Human-PK.fasta",
-        "version": "v3",
-        "citation": CITATION_MODI,
-        "url": None,
-    },
+DICT_SEQ_SOURCE = {
+    KinCoreSeqSource.GIZZIO_2026: DataSource(
+        name="kinasedomainfasta.tar.gz",
+        path=PATH_FASTA_TAR,
+        url=KINCORE_FASTA_URL,
+        version="v1",
+        citation=CITATION_GIZZIO,
+    ),
+    KinCoreSeqSource.FAEZOV_2023: DataSource(
+        name="AF2-active.fasta",
+        path=os.path.join(PATH_DATA, "AF2-active.fasta"),
+        version="v2",
+        citation=CITATION_FAEZOV,
+    ),
+    KinCoreSeqSource.MODI_2019: DataSource(
+        name="Human-PK.fasta",
+        path=os.path.join(PATH_DATA, "Human-PK.fasta"),
+        version="v3",
+        citation=CITATION_MODI,
+    ),
 }
-"""dict[KinCoreSeqSource, dict]: KinCore kinase-domain sequence sources (priority order)."""
+"""dict[KinCoreSeqSource, DataSource]: KinCore kinase-domain sequence sources (priority order)."""
 
-DICT_STRUCTURE_SOURCE_META = {
-    KinCoreStructureSource.GIZZIO_2026: {
-        "name": "AF2_Active_Models_v2.zip",
-        "version": "v1",
-        "citation": CITATION_GIZZIO,
-        "url": KINCORE_CIF_URL,
-    },
-    KinCoreStructureSource.FAEZOV_2023: {
-        "name": "Kincore_AlphaFold2_ActiveHumanCatalyticKinases",
-        "version": "v2",
-        "citation": CITATION_FAEZOV,
-        "url": None,
-    },
+DICT_STRUCTURE_SOURCE = {
+    KinCoreStructureSource.GIZZIO_2026: DataSource(
+        name="AF2_Active_Models_v2.zip",
+        path=PATH_CIF_ZIP,
+        url=KINCORE_CIF_URL,
+        version="v1",
+        citation=CITATION_GIZZIO,
+    ),
+    KinCoreStructureSource.FAEZOV_2023: DataSource(
+        name="Kincore_AlphaFold2_ActiveHumanCatalyticKinases",
+        path=PATH_ORIG_CIF,
+        version="v2",
+        citation=CITATION_FAEZOV,
+    ),
 }
-"""dict[KinCoreStructureSource, dict]: KinCore active-state structure sources (priority order)."""
-
-
-def _query_date_from_file(path: str) -> str | None:
-    """Return a source file's modification date (ISO) as the provenance query date.
-
-    A freshly downloaded file's mtime is its download date; an existing local file's mtime is
-    when it was last modified -- so this covers both the re-download and local-file cases.
-
-    Parameters
-    ----------
-    path : str
-        Path to the source file.
-
-    Returns
-    -------
-    str | None
-        ISO date string (YYYY-MM-DD), or None if the file is absent.
-    """
-    if not os.path.exists(path):
-        return None
-    return date.fromtimestamp(os.path.getmtime(path)).isoformat()
-
-
-def _build_provenance(meta: dict, query_date: str | None) -> Provenance:
-    """Build a :class:`Provenance` from a source-metadata dict and a query date."""
-    return Provenance(
-        name=meta["name"],
-        version=meta["version"],
-        citation=meta["citation"],
-        query_date=query_date,
-    )
+"""dict[KinCoreStructureSource, DataSource]: KinCore active-state structure sources (priority order)."""
 
 
 def return_fasta_contents(path_filename=str) -> SeqIO.FastaIO.FastaIterator:
@@ -293,20 +263,8 @@ def _resolve_kincore_kinasedomain_fasta() -> str:
         Path to the combined kinase-domain FASTA.
     """
     if not os.path.exists(PATH_FASTA_COMBINED):
-        if not os.path.exists(PATH_FASTA_TAR):
-            import requests
-
-            os.makedirs(PATH_DATA, exist_ok=True)
-            logger.info(
-                f"No local KinCore kinase-domain FASTA at {PATH_FASTA_TAR}; downloading "
-                f"from {KINCORE_FASTA_URL}..."
-            )
-            with requests.get(KINCORE_FASTA_URL, stream=True) as res:
-                res.raise_for_status()
-                with open(PATH_FASTA_TAR, "wb") as f:
-                    for chunk in res.iter_content(chunk_size=1 << 20):
-                        f.write(chunk)
-        with tarfile.open(PATH_FASTA_TAR) as tf, open(PATH_FASTA_COMBINED, "wb") as out:
+        path_tar = DICT_SEQ_SOURCE[KinCoreSeqSource.GIZZIO_2026].resolve()
+        with tarfile.open(path_tar) as tf, open(PATH_FASTA_COMBINED, "wb") as out:
             for member in tf.getmembers():
                 # skip macOS AppleDouble sidecars (._*), whose names also end in .fasta
                 if (
@@ -357,9 +315,7 @@ def extract_pk_fasta_info_as_list(
     if not os.path.exists(str_path_filename):
         logger.error(f"File {str_path_filename} does not exist")
 
-    provenance = _build_provenance(
-        DICT_SEQ_SOURCE_META[seq_source], _query_date_from_file(str_path_filename)
-    )
+    provenance = DICT_SEQ_SOURCE[seq_source].provenance(str_path_filename)
 
     fasta_sequences = return_fasta_contents(str_path_filename)
     list_out = [
@@ -415,20 +371,7 @@ def _resolve_kincore_cif_zip() -> str:
     str
         Path to the local ``AF2_Active_Models_v2.zip``.
     """
-    if not os.path.exists(PATH_CIF_ZIP):
-        import requests
-
-        os.makedirs(PATH_DATA, exist_ok=True)
-        logger.info(
-            f"No local KinCore CIF archive at {PATH_CIF_ZIP}; downloading from "
-            f"{KINCORE_CIF_URL}..."
-        )
-        with requests.get(KINCORE_CIF_URL, stream=True) as res:
-            res.raise_for_status()
-            with open(PATH_CIF_ZIP, "wb") as f:
-                for chunk in res.iter_content(chunk_size=1 << 20):
-                    f.write(chunk)
-    return PATH_CIF_ZIP
+    return DICT_STRUCTURE_SOURCE[KinCoreStructureSource.GIZZIO_2026].resolve()
 
 
 def extract_pk_cif_files_as_list() -> list[KinCoreCIF]:
@@ -440,9 +383,8 @@ def extract_pk_cif_files_as_list() -> list[KinCoreCIF]:
         List of KinCoreCIF objects (one active-state model per kinase domain).
     """
     path_zip = _resolve_kincore_cif_zip()
-    provenance = _build_provenance(
-        DICT_STRUCTURE_SOURCE_META[KinCoreStructureSource.GIZZIO_2026],
-        _query_date_from_file(path_zip),
+    provenance = DICT_STRUCTURE_SOURCE[KinCoreStructureSource.GIZZIO_2026].provenance(
+        path_zip
     )
 
     list_out = []

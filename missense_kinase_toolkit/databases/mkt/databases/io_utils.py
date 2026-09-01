@@ -8,14 +8,97 @@ dictionary.
 import logging
 import os
 import tarfile
+from dataclasses import dataclass
 
 import git
 import pandas as pd
 from mkt.databases.config import OUTPUT_DIR_VAR
-from mkt.schema.utils import TQDM_BAR_FORMAT
+from mkt.schema.kinase_schema import Provenance
+from mkt.schema.utils import TQDM_BAR_FORMAT, query_date_from_file
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class DataSource:
+    """A provenance-stamped source file that is used locally or downloaded on demand.
+
+    Bundles the metadata and location of an external source (KinCore FASTA/CIF, the Dunbrack
+    MSA, ...) so a new on-demand source is a single declaration: :meth:`resolve` returns the
+    local path (streaming it from :attr:`url` when absent, or assuming a pre-provided local file
+    when ``url`` is None), and :meth:`provenance` stamps a :class:`~mkt.schema.kinase_schema.Provenance`
+    with the file's modification date.
+
+    Attributes
+    ----------
+    name : str
+        Source file/archive name, recorded on the provenance.
+    path : str
+        Local path where the file lives (or is downloaded to).
+    url : str | None
+        Download URL; None for a source expected to be present locally, by default None.
+    version : str | None
+        Source version tag, by default None.
+    citation : str | None
+        Publication or DOI, by default None.
+    """
+
+    name: str
+    path: str
+    url: str | None = None
+    version: str | None = None
+    citation: str | None = None
+
+    def resolve(self, chunk_size: int = 1 << 20) -> str:
+        """Return the local path, streaming it from :attr:`url` if the file is absent.
+
+        Implements the shared "use the local copy, otherwise download" pattern; the parent
+        directory is created as needed. A source with ``url=None`` is assumed to already exist
+        locally and is returned unchanged.
+
+        Parameters
+        ----------
+        chunk_size : int, optional
+            Streaming chunk size in bytes, by default 1 MiB.
+
+        Returns
+        -------
+        str
+            The local :attr:`path` (guaranteed to exist on return when ``url`` is set).
+        """
+        if self.url is not None and not os.path.exists(self.path):
+            import requests
+
+            logger.info(f"No local file at {self.path}; downloading from {self.url}...")
+            os.makedirs(os.path.dirname(self.path), exist_ok=True)
+            with requests.get(self.url, stream=True) as res:
+                res.raise_for_status()
+                with open(self.path, "wb") as f:
+                    for chunk in res.iter_content(chunk_size=chunk_size):
+                        f.write(chunk)
+        return self.path
+
+    def provenance(self, path: str | None = None) -> Provenance:
+        """Build a :class:`Provenance` stamped with the source file's modification date.
+
+        Parameters
+        ----------
+        path : str | None, optional
+            File whose mtime dates the provenance; defaults to :attr:`path` (use this to date
+            a post-processed derivative, e.g. an extracted/combined file).
+
+        Returns
+        -------
+        Provenance
+            The source provenance with ``query_date`` from the file mtime.
+        """
+        return Provenance(
+            name=self.name,
+            version=self.version,
+            citation=self.citation,
+            query_date=query_date_from_file(path or self.path),
+        )
 
 
 def check_outdir_exists() -> str:

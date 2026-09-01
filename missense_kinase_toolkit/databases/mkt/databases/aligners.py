@@ -98,3 +98,19 @@ class Kincore2UniProtAligner(BioAligner):
 
     def __post_init__(self):
         super().__post_init__()
+
+
+@dataclass
+class MSA2UniProtAligner(BioAligner):
+    """Local aligner to reconcile a Dunbrack-MSA row to the UniProt canonical sequence.
+
+    Used for the few kinases whose MSA UniProt isoform/numbering differs from our canonical
+    sequence: a local alignment recovers the correct canonical coordinates (the sequences are
+    otherwise identical).
+    """
+
+    mode: str = "local"
+    """str: Alignment mode. Default is "local."""
+
+    def __post_init__(self):
+        super().__post_init__()

@@ -768,8 +768,11 @@ class KinaseMissenseMutations(Mutations):
             else:
                 dict_out["klifs_region"].append(None)
 
-            # KinCore
-            if dict_in[hgnc_name].kincore is None:
+            # KinCore (an MSA-only shell has no FASTA -> treat as no KinCore KD info)
+            if (
+                dict_in[hgnc_name].kincore is None
+                or dict_in[hgnc_name].kincore.fasta is None
+            ):
                 dict_out["kincore_kd"].append(None)
             elif (
                 dict_in[hgnc_name].kincore.fasta.start
