@@ -368,3 +368,58 @@ class TestParallelExecution:
         df_parallel = parallel.sort_values(key).reset_index(drop=True)
         assert df_serial.equals(df_parallel)
         assert set(df_parallel["hgnc_name"].unique()) == {"AKT1", "EGFR"}
+
+
+class TestResidueSASAEnrichment:
+    """Per-residue SASA/RSA computation and the KLIFS-pocket enrichment helper."""
+
+    def test_calculate_residue_sasa_keys_and_range(self, akt1_kinase):
+        """SASA/RSA are keyed by UniProt position over the whole KD, in sensible ranges."""
+        lookup = sasa.calculate_residue_sasa(
+            akt1_kinase.kincore.cif.cif,
+            "AKT1",
+            config=sasa.BioPythonHeavyConfig(n_points=100),
+        )
+        assert min(lookup) == AKT1_START and max(lookup) == AKT1_END
+        assert len(lookup) == AKT1_N_RES
+        sasa_vals = [s for s, _ in lookup.values()]
+        rsa_vals = [r for _, r in lookup.values()]
+        assert all(s >= 0.0 for s in sasa_vals)
+        # relative accessibility: 0 (buried) up to ~1 (fully exposed)
+        assert all(r >= 0.0 for r in rsa_vals)
+        assert 0.0 < max(rsa_vals) < 2.0
+
+    def test_enrich_with_sasa_klifs_keyed_with_methodology(self, akt1_kinase):
+        """enrich_with_sasa stores SASA on the KinCore CIF, keyed by KLIFS region:idx."""
+        obj = akt1_kinase.model_copy(deep=True)
+        sasa.enrich_with_sasa(obj, config=sasa.BioPythonHeavyConfig(n_points=100))
+        s = obj.kincore.cif.sasa
+        assert s is not None
+        # same keys as KLIFS2UniProtIdx (all KLIFS positions), values float or None
+        assert set(s.rsa) == set(obj.KLIFS2UniProtIdx)
+        assert set(s.sasa) == set(obj.KLIFS2UniProtIdx)
+        assert any(v is not None for v in s.rsa.values())
+        # methodology recorded from the config
+        assert s.n_points == 100
+        assert s.include_hydrogens is False
+        assert s.max_asa_reference == sasa.MAX_ASA_REFERENCE
+
+    def test_enrich_with_sasa_no_klifs_mapping(self, akt1_kinase):
+        """No KLIFS mapping yields structure sasa None."""
+        obj = akt1_kinase.model_copy(update={"KLIFS2UniProtIdx": None}, deep=True)
+        sasa.enrich_with_sasa(obj)
+        assert obj.kincore.cif.sasa is None
+
+    def test_enrich_kinases_with_sasa_parallel_matches_serial(self):
+        """The process-pool batch reproduces the serial per-structure result exactly."""
+        d = deserialize_kinase_dict(list_ids=["AKT1", "EGFR"], bool_verbose=False)
+        cfg = sasa.BioPythonHeavyConfig(n_points=100)
+        d1 = {k: v.model_copy(deep=True) for k, v in d.items()}
+        d2 = {k: v.model_copy(deep=True) for k, v in d.items()}
+        sasa.enrich_kinases_with_sasa(d1, config=cfg, n_jobs=1)
+        sasa.enrich_kinases_with_sasa(d2, config=cfg, n_jobs=2)
+        for k in d:
+            s1, s2 = d1[k].kincore.cif.sasa, d2[k].kincore.cif.sasa
+            assert s1 is not None and s2 is not None
+            assert s1.sasa == s2.sasa
+            assert s1.rsa == s2.rsa

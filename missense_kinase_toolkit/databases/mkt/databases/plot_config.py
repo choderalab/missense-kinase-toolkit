@@ -606,3 +606,52 @@ class DictKinaseFiguresConfig:
             cfg.output = OutputConfig(**raw["output"])
 
         return cfg
+
+
+@dataclass
+class SASAConcordanceScatterConfig:
+    """Aesthetics for the KinCoRe-vs-AF2 SASA/RSA concordance scatter.
+
+    Faceted with KLIFS region across columns and SASA/RSA down rows; each panel plots AF2 (y)
+    against KinCoRe (x) with a y=x reference and per-panel Spearman rho / p.
+    """
+
+    width_per_region: float = 1.15
+    height: float = 3.6
+    point_size: float = 5.0
+    point_alpha: float = 0.3
+    identity_color: str = "grey"
+    identity_lw: float = 0.6
+    stat_fontsize: float = 6.5
+    title_fontsize: int = 9
+    ylabel_fontsize: int = 11
+    row_label_fontsize: int = 12
+    tick_labelsize: int = 6
+
+
+@dataclass
+class SASAConcordanceDeltaConfig:
+    """Aesthetics for the per-KLIFS-residue KinCoRe-minus-AF2 SASA/RSA delta boxplots.
+
+    85 residue positions on x; SASA (top) and RSA (bottom) facets; per-residue Spearman rho / p
+    above each facet; y-axis focused on the whisker range (rare far-outliers clipped).
+    """
+
+    figsize: list[float] = field(default_factory=lambda: [38.0, 11.0])
+    box_width: float = 0.6
+    box_alpha: float = 0.6
+    jitter_size: float = 2.0
+    jitter_width: float = 0.24
+    jitter_alpha: float = 0.4
+    jitter_color: str = "0.30"
+    band_color: str = "0.955"
+    ylim_pad_frac: float = 0.05
+    stat_fontsize: float = 5.5
+    ylabel_fontsize: int = 14
+    xtick_fontsize: int = 9
+    xlabel_fontsize: int = 14
+    left_adjust: float = 0.03
+    right_adjust: float = 0.996
+    top_adjust: float = 0.94
+    bottom_adjust: float = 0.14
+    hspace: float = 0.12

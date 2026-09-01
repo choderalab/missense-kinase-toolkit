@@ -18,6 +18,11 @@ from pydantic.dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
+MAX_AF_MISMATCH_FRACTION = 0.10
+"""float: reject an AlphaFold KD slice differing from the canonical UniProt sequence at more
+than this fraction of positions (a larger divergence indicates a wrong isoform/sequence rather
+than a near-match to flag on ``mismatch``)."""
+
 
 @dataclass
 class AlphaFoldPrediction(RESTAPIClient):
@@ -57,17 +62,17 @@ class AlphaFoldPrediction(RESTAPIClient):
 
         if res.ok:
             results = res.json()
-            # filter to canonical accession (exact match, excluding isoforms)
-            canonical = [
-                r for r in results if r.get("uniprotAccession") == self.uniprot_id
-            ]
-            if len(canonical) == 1:
-                self._json = canonical[0]
+            # the canonical AF2 model is entry "AF-<accession>-F1"; the AF DB may also return
+            # a newer numeric-id (AF3) model under the same accession and/or isoform models --
+            # select the AF2 fragment-1 entry specifically rather than requiring a single result
+            f1 = [r for r in results if r.get("entryId") == f"AF-{self.uniprot_id}-F1"]
+            if f1:
+                self._json = f1[0]
             else:
                 logger.warning(
-                    "Expected 1 canonical result for %s, got %d",
+                    "no canonical AF-<acc>-F1 AlphaFold model for %s (%d result(s))",
                     self.uniprot_id,
-                    len(canonical),
+                    len(results),
                 )
                 self._json = None
         else:
@@ -178,6 +183,7 @@ def fetch_alphafold_kd(
     start: int,
     end: int,
     canonical_seq: str | None = None,
+    max_mismatch_fraction: float = MAX_AF_MISMATCH_FRACTION,
 ):
     """Fetch the AlphaFold structure for a UniProt ID and slice it to the kinase domain.
 
@@ -190,18 +196,21 @@ def fetch_alphafold_kd(
     end : int
         Inclusive kinase-domain end in UniProt numbering.
     canonical_seq : str | None, optional
-        Canonical UniProt sequence to validate against; when provided, the KD-sliced
-        AlphaFold sequence must equal ``canonical_seq[start - 1 : end]`` (the AF DB model is
-        numbered in UniProt coordinates), else the structure is rejected (returns None). By
-        default None (no validation).
+        Canonical UniProt sequence to compare against; when provided, KD-slice positions that
+        differ from ``canonical_seq[start - 1 : end]`` are recorded on the model's ``mismatch``
+        field (the AF DB model is numbered in UniProt coordinates). By default None (no check).
+    max_mismatch_fraction : float, optional
+        Reject the structure (return None) when more than this fraction of KD-slice positions
+        differ from canonical -- a larger divergence indicates a wrong isoform/sequence rather
+        than a near-match to flag. By default :data:`MAX_AF_MISMATCH_FRACTION`.
 
     Returns
     -------
     AlphaFold | None
-        The KD-sliced AlphaFold model, or None if the structure could not be retrieved or
-        failed validation against the canonical UniProt sequence.
+        The KD-sliced AlphaFold model, or None if the structure could not be retrieved, its
+        slice length differs from canonical, or it exceeds ``max_mismatch_fraction``.
     """
-    from mkt.schema.kinase_schema import AlphaFold
+    from mkt.schema.kinase_schema import AlphaFold, Provenance
 
     structure = AlphaFoldStructure(uniprot_id=uniprot_id)
     if structure._cif is None or structure._json is None:
@@ -210,22 +219,49 @@ def fetch_alphafold_kd(
 
     dict_cif = slice_alphafold_cif_to_kd(structure._cif, start, end)
 
+    # compare the KD slice to the canonical UniProt sequence; record differing positions as a
+    # mismatch (mirroring KinCore) rather than discarding the structure over a few substitutions
+    mismatch = None
     if canonical_seq is not None:
         seq_kd = dict_cif["_entity_poly.pdbx_seq_one_letter_code"][0]
         seq_expected = canonical_seq[start - 1 : end]
-        if seq_kd != seq_expected:
-            n_mismatch = sum(a != b for a, b in zip(seq_kd, seq_expected)) + abs(
-                len(seq_kd) - len(seq_expected)
-            )
+        if len(seq_kd) != len(seq_expected):
+            # a length difference means residues are missing/extra in the slice; the KD slice
+            # can no longer be aligned to canonical by position, so reject it
             logger.error(
-                "AlphaFold KD sequence for %s does not match the canonical UniProt "
-                "sequence over [%d, %d] (%d mismatch(es)); rejecting structure.",
+                "AlphaFold KD slice for %s has length %d != canonical %d over [%d, %d]; "
+                "rejecting structure.",
                 uniprot_id,
+                len(seq_kd),
+                len(seq_expected),
                 start,
                 end,
-                n_mismatch,
             )
             return None
+        # 0-indexed positions within the KD slice that differ from canonical (KinCore convention)
+        mismatch = [i for i, (a, b) in enumerate(zip(seq_kd, seq_expected)) if a != b]
+        if len(mismatch) / len(seq_expected) > max_mismatch_fraction:
+            logger.error(
+                "AlphaFold KD sequence for %s differs from canonical at %d/%d position(s) "
+                "(> %.1f%%) over [%d, %d]; rejecting structure.",
+                uniprot_id,
+                len(mismatch),
+                len(seq_expected),
+                max_mismatch_fraction * 100,
+                start,
+                end,
+            )
+            return None
+        mismatch = mismatch or None
+        if mismatch:
+            logger.warning(
+                "AlphaFold KD sequence for %s differs from canonical at %d position(s) over "
+                "[%d, %d]; recording as mismatch.",
+                uniprot_id,
+                len(mismatch),
+                start,
+                end,
+            )
     tool_used = None
     for line in structure._cif.splitlines():
         if line.strip().startswith("_ma_model_list.model_group_name"):
@@ -233,6 +269,19 @@ def fetch_alphafold_kd(
             break
 
     json = structure._json
+    latest_version = json.get("latestVersion")
+    query_date = (
+        structure.query_datetime.date().isoformat()
+        if getattr(structure, "query_datetime", None) is not None
+        else None
+    )
+    # AlphaFold DB provenance from the returned JSON (tracks updates: model version + pipeline)
+    source = Provenance(
+        name="AlphaFold DB",
+        version=f"v{latest_version}" if latest_version is not None else None,
+        citation=json.get("toolUsed"),
+        query_date=query_date,
+    )
     return AlphaFold(
         cif=dict_cif,
         start=start,
@@ -241,18 +290,21 @@ def fetch_alphafold_kd(
         uniprot_accession=json.get("uniprotAccession"),
         global_metric_value=json.get("globalMetricValue"),
         model_created_date=json.get("modelCreatedDate"),
-        latest_version=json.get("latestVersion"),
+        latest_version=latest_version,
         tool_used=tool_used,
+        mismatch=mismatch,
+        source=source,
     )
 
 
 def enrich_with_alphafold(obj_kinase) -> None:
     """Populate ``obj_kinase.alphafold`` with the KD-sliced AlphaFold structure.
 
-    Only entries lacking a KinCore active-state CIF store an AlphaFold structure (the
-    KinCore CIF is the preferred active-state model); entries with a KinCore CIF fetch AF
-    on the fly via :func:`get_alphafold` when explicitly needed. The kinase-domain bounds
-    come from the object's adjudication, so ``kincore`` must already be in place.
+    Fetches an AlphaFold DB structure for **every** kinase with adjudicated KD bounds (so a
+    KinCore-CIF kinase also gets an AF2 counterpart for structure/SASA comparison); the KinCore
+    CIF remains the preferred active-state model for rendering (see :func:`adjudicate_structure`).
+    The kinase-domain bounds come from the object's adjudication, so ``kincore`` must already be
+    in place.
 
     Parameters
     ----------
@@ -263,9 +315,6 @@ def enrich_with_alphafold(obj_kinase) -> None:
     -------
     None
     """
-    if obj_kinase.kincore is not None and obj_kinase.kincore.cif is not None:
-        return  # has a KinCore active-state CIF; fetch AF on the fly if needed
-
     if obj_kinase.alphafold is not None:
         return  # already stored; query AF2 DB only for entries not yet stored
 

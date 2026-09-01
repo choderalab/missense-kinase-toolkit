@@ -14,6 +14,7 @@ import logging
 import os
 import shutil
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from mkt.databases.generator import steps as build_steps
@@ -41,6 +42,14 @@ DEFAULT_PATH_OBJECTS = "missense_kinase_toolkit/schema/mkt/schema/KinaseInfo"
 DEFAULT_PATH_REPORTS = "images"
 """str: Default reports directory (relative to repo root)."""
 
+REPORTS_GROUP_SUBDIR = "dict_kinase"
+"""str: Reports sub-directory grouping the whole-kinome ``KinaseInfo`` figures under
+``{path_reports}/dict_kinase/<datetime>/``."""
+
+DATETIME_SUBDIR_FMT = "%Y.%m.%d.%H%M%S"
+"""str: ``strftime`` format for the datetime-stamped reports subdirectory, derived from the
+``KinaseInfo.tar.gz`` modified time so the figures match the archive's build provenance."""
+
 
 @dataclass
 class BuildContext:
@@ -55,7 +64,7 @@ class BuildContext:
     path_tar: str
     """Absolute path to the ``KinaseInfo.tar.gz`` archive."""
     subset_hgnc: set[str] | None = None
-    """If not None, the ``hgnc_name`` keys targeted by a subset (``--kinase``) build; enrichment steps iterate only these and report steps are skipped, by default None."""
+    """If not None, the ``hgnc_name`` keys targeted by a subset (``--kinase``) build; enrichment steps iterate only these (reports still characterize the whole spliced dict), by default None."""
 
 
 def run_base_build(
@@ -352,11 +361,32 @@ class Pipeline:
             path_source=self.path_objects, filename_tar=self.path_tar
         )
 
+    def _dated_reports_dir(self) -> str:
+        """Return (and create) the datetime-stamped reports subdir keyed by the tar's mtime.
+
+        The subdir is nested under :data:`REPORTS_GROUP_SUBDIR` and named by the
+        ``KinaseInfo.tar.gz`` modified time (:data:`DATETIME_SUBDIR_FMT`), so the figures live
+        alongside the archive build they characterize; a figures-only re-run over an unchanged
+        tar reuses the same dir.
+
+        Returns
+        -------
+        str
+            Absolute path ``{path_reports}/dict_kinase/{tar-mtime}`` (created if absent).
+        """
+        stamp = datetime.fromtimestamp(os.path.getmtime(self.path_tar)).strftime(
+            DATETIME_SUBDIR_FMT
+        )
+        path_dated = os.path.join(self.path_reports, REPORTS_GROUP_SUBDIR, stamp)
+        os.makedirs(path_dated, exist_ok=True)
+        return path_dated
+
     def _finalize(
         self,
         dict_kinaseinfo: dict[str, Any],
         names: list[str],
         subset_hgnc: set[str] | None,
+        bool_figs: bool = True,
     ) -> None:
         """Run enrichment steps, serialize + tar, generate reports, and clean up.
 
@@ -369,8 +399,11 @@ class Pipeline:
         names : list[str]
             Enrichment step names to run.
         subset_hgnc : set[str] | None
-            Targeted ``hgnc_name`` keys for a subset build (steps iterate these and reports
-            are skipped); None for a full build (all entries; reports run).
+            Targeted ``hgnc_name`` keys for a subset build (enrichment steps iterate only
+            these); None for a full build (all entries).
+        bool_figs : bool, optional
+            Regenerate the report figures into the datetime-stamped reports subdir, by
+            default True; ``--no-figs`` disables them.
 
         Returns
         -------
@@ -385,25 +418,55 @@ class Pipeline:
         )
         build_steps._run_steps(names, ctx)
         self._serialize_and_tar(dict_kinaseinfo)
-        build_steps._run_reports(ctx)
+        if bool_figs:
+            ctx.path_reports = self._dated_reports_dir()
+            build_steps._run_reports(ctx)
         shutil.rmtree(self.path_objects)
 
-    def full(self, names: list[str]) -> None:
+    def figures(self) -> None:
+        """Regenerate the report figures from the existing archive without rebuilding.
+
+        Loads the currently serialized dict and renders the report steps into the reports
+        subdir keyed by the existing tar's modified time (reusing that directory), so figures
+        can be refreshed without touching the data.
+
+        Returns
+        -------
+        None
+        """
+        dict_existing = self._load_existing()
+        if not dict_existing:
+            logger.warning("no existing dict found; nothing to plot.")
+            return
+        ctx = BuildContext(
+            dict_existing,
+            self.path_objects,
+            self._dated_reports_dir(),
+            self.path_tar,
+            subset_hgnc=None,
+        )
+        build_steps._run_reports(ctx)
+
+    def full(self, names: list[str], bool_figs: bool = True) -> None:
         """Full kinome regeneration: base build -> finalize.
 
         Parameters
         ----------
         names : list[str]
             Enrichment step names to run.
+        bool_figs : bool, optional
+            Regenerate report figures after the build, by default True.
 
         Returns
         -------
         None
         """
         dict_ki = run_base_build(subset_uniprot=None)
-        self._finalize(dict_ki, names, subset_hgnc=None)
+        self._finalize(dict_ki, names, subset_hgnc=None, bool_figs=bool_figs)
 
-    def update(self, names: list[str], list_kinase: list[str]) -> None:
+    def update(
+        self, names: list[str], list_kinase: list[str], bool_figs: bool = True
+    ) -> None:
         """One-off per-entry update: rebuild targeted kinases and splice into the archive.
 
         Parameters
@@ -412,6 +475,8 @@ class Pipeline:
             Enrichment step names to run on the rebuilt entries.
         list_kinase : list[str]
             HGNC name(s) to rebuild; unknown names are resolved as new kinases or skipped.
+        bool_figs : bool, optional
+            Regenerate report figures after the splice, by default True.
 
         Returns
         -------
@@ -448,14 +513,16 @@ class Pipeline:
             f"spliced {len(dict_sub)} updated entr(ies) ({sorted(subset_hgnc)}) into "
             f"{len(dict_full)} total; re-archiving."
         )
-        self._finalize(dict_full, names, subset_hgnc=subset_hgnc)
+        self._finalize(dict_full, names, subset_hgnc=subset_hgnc, bool_figs=bool_figs)
 
-    def partial(self, sources: list[str], names: list[str]) -> None:
+    def partial(
+        self, sources: list[str], names: list[str], bool_figs: bool = True
+    ) -> None:
         """Partial update on the existing dict: refresh source(s) and/or run step(s).
 
         Loads the existing archive, optionally rebuilds the named base-build source(s), runs
-        the named enrichment steps, and re-serializes (reports skipped). Falls back to a full
-        regeneration when no existing dict is found.
+        the named enrichment steps, and re-serializes. Falls back to a full regeneration when
+        no existing dict is found.
 
         Parameters
         ----------
@@ -463,6 +530,8 @@ class Pipeline:
             Base-build source names (:class:`Source`) to refresh; may be empty (steps only).
         names : list[str]
             Enrichment step names to run.
+        bool_figs : bool, optional
+            Regenerate report figures after the update, by default True.
 
         Returns
         -------
@@ -474,7 +543,7 @@ class Pipeline:
                 "no existing dict found; falling back to a full regeneration "
                 f"(requested {sorted(sources) + sorted(names)} built fresh)."
             )
-            self.full(names)
+            self.full(names, bool_figs=bool_figs)
             return
 
         if sources:
@@ -487,13 +556,17 @@ class Pipeline:
             subset_hgnc = set(dict_new)
         else:
             subset_hgnc = set(dict_existing)
-        self._finalize(dict_existing, names, subset_hgnc=subset_hgnc)
+        self._finalize(
+            dict_existing, names, subset_hgnc=subset_hgnc, bool_figs=bool_figs
+        )
 
     def run(
         self,
         only: list[str] | None = None,
         skip: list[str] | None = None,
         list_kinase: list[str] | None = None,
+        bool_figs: bool = True,
+        figs_only: bool = False,
     ) -> None:
         """Dispatch to the run mode implied by the arguments.
 
@@ -508,11 +581,25 @@ class Pipeline:
             Skip these enrichment steps in a full regen; all other default-on steps run.
         list_kinase : list[str] | None, optional
             HGNC name(s) to update one-off; None (with no ``only``) runs a full regen.
+        bool_figs : bool, optional
+            Regenerate report figures after any dict regeneration, by default True
+            (``--no-figs`` disables).
+        figs_only : bool, optional
+            Skip all rebuilding and only regenerate figures from the existing archive, by
+            default False. Mutually exclusive with the rebuild flags.
 
         Returns
         -------
         None
         """
+        if figs_only:
+            if only or skip or list_kinase:
+                raise ValueError(
+                    "--figs-only cannot be combined with --only/--skip/--kinase."
+                )
+            self.figures()
+            return
+
         set_source = {source.value for source in Source}
         sources = [name for name in (only or []) if name in set_source]
         only_steps = [name for name in (only or []) if name not in set_source]
@@ -523,11 +610,11 @@ class Pipeline:
         names = build_steps.resolve_step_names(only_steps or None, skip)
 
         if only:
-            self.partial(sources, names)
+            self.partial(sources, names, bool_figs=bool_figs)
         elif list_kinase:
-            self.update(names, list_kinase)
+            self.update(names, list_kinase, bool_figs=bool_figs)
         else:
-            self.full(names)
+            self.full(names, bool_figs=bool_figs)
 
 
 def run(
@@ -536,6 +623,8 @@ def run(
     list_kinase: list[str] | None = None,
     path_objects: str | None = None,
     path_reports: str | None = None,
+    bool_figs: bool = True,
+    figs_only: bool = False,
 ) -> None:
     """Build a :class:`Pipeline` from the given paths and run it (CLI entry point).
 
@@ -552,9 +641,15 @@ def run(
         Objects directory relative to the repo root, by default the package-data layout.
     path_reports : str | None, optional
         Reports directory relative to the repo root, by default ``images``.
+    bool_figs : bool, optional
+        Regenerate report figures after any dict regeneration, by default True.
+    figs_only : bool, optional
+        Only regenerate figures from the existing archive (no rebuild), by default False.
 
     Returns
     -------
     None
     """
-    Pipeline.from_paths(path_objects, path_reports).run(only, skip, list_kinase)
+    Pipeline.from_paths(path_objects, path_reports).run(
+        only, skip, list_kinase, bool_figs=bool_figs, figs_only=figs_only
+    )
