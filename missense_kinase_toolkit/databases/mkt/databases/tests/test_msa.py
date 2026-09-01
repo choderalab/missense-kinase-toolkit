@@ -20,12 +20,9 @@ def test_base_accession_strips_domain_suffix():
 
 
 def _obj(uniprot_id, kd=(None, None)):
-    """Minimal KinaseInfo stand-in exposing uniprot_id + adjudicated KD bounds."""
-    return SimpleNamespace(
-        uniprot_id=uniprot_id,
-        adjudicate_kd_start=lambda: kd[0],
-        adjudicate_kd_end=lambda: kd[1],
-    )
+    """Minimal KinaseInfo stand-in exposing uniprot_id + a KLIFS-pocket span."""
+    klifs = None if kd == (None, None) else {"I:1": kd[0], "a.l:85": kd[1]}
+    return SimpleNamespace(uniprot_id=uniprot_id, KLIFS2UniProtIdx=klifs)
 
 
 def test_match_target_by_hgnc_name():
@@ -43,12 +40,17 @@ def test_match_target_accession_fallback_synonym():
     assert msa._match_target(entry, by_hgnc, by_base) is obj
 
 
-def test_match_target_multidomain_by_range_overlap():
-    """A single MSA entry for a multi-KD protein picks the domain overlapping its range."""
-    dom1 = _obj("Q8IWB6_1", kd=(227, 512))
-    dom2 = _obj("Q8IWB6_2", kd=(600, 850))
-    by_base = {"Q8IWB6": [dom2, dom1]}  # order should not matter
-    entry = {"hgnc": "TEX14", "uniprot": "Q8IWB6", "start": 227, "end": 512}
+def test_match_target_multidomain_by_klifs_overlap():
+    """A single MSA entry for a multi-KD protein picks the domain whose KLIFS span overlaps.
+
+    The Dunbrack ``_1``/``_2`` ordering is not consistent with ours, so the name is ignored and
+    the KLIFS-pocket span (not the name) decides -- here the entry range (227-512) overlaps
+    ``dom1`` even though it is keyed ``_2``.
+    """
+    dom1 = _obj("P00000_2", kd=(230, 490))  # KLIFS span overlaps the entry range
+    dom2 = _obj("P00000_1", kd=(600, 850))  # the other domain
+    by_base = {"P00000": [dom2, dom1]}  # order should not matter
+    entry = {"hgnc": "FOO_1", "uniprot": "P00000", "start": 227, "end": 512}
     assert msa._match_target(entry, {}, by_base) is dom1
 
 

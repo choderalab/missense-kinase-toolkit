@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 class DataSource:
     """A provenance-stamped source file that is used locally or downloaded on demand.
 
-    Bundles the metadata and location of an external source (KinCore FASTA/CIF, the Dunbrack
+    Bundles the metadata and location of an external source (KinCoRe FASTA/CIF, the Dunbrack
     MSA, ...) so a new on-demand source is a single declaration: :meth:`resolve` returns the
     local path (streaming it from :attr:`url` when absent, or assuming a pre-provided local file
     when ``url`` is None), and :meth:`provenance` stamps a :class:`~mkt.schema.kinase_schema.Provenance`

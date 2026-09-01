@@ -2,8 +2,8 @@
 
 Sources the Human-PK alignment (497 canonical protein-kinase domains) on demand, maps each
 domain's aligned row to UniProt canonical coordinates, and stores an :class:`MSA` on
-``KinCore.msa`` -- creating an MSA-only ``KinCore`` shell for the few multi-KD second domains
-that are in the alignment but lack KinCore structure. Positions are keyed KLIFS-style over the
+``KinCoRe.msa`` -- creating an MSA-only ``KinCoRe`` shell for the few multi-KD second domains
+that are in the alignment but lack KinCoRe structure. Positions are keyed KLIFS-style over the
 229 Aurora-reference columns ("B1N:001".."HI:229") so the activation loop (DFG in ALN through
 APE in ALC) is readable in UniProt coordinates. The handful of kinases whose UniProt
 isoform/numbering differs from our canonical sequence are reconciled by local alignment.
@@ -17,7 +17,7 @@ from collections import defaultdict
 from mkt.databases.io_utils import DataSource
 from mkt.schema.constants import DICT_MSA_ALIGNED_REGION, DICT_MSA_COL2LABEL
 from mkt.schema.io_utils import get_repo_root
-from mkt.schema.kinase_schema import MSA, KinCore, Provenance
+from mkt.schema.kinase_schema import MSA, KinCoRe, Provenance
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ MSA_SOURCE = DataSource(
     ),
     citation="10.1038/s41598-019-56499-4",  # Modi & Dunbrack, Sci Rep 2019
 )
-"""DataSource: Dunbrack KinCore Human-PK structure-based alignment (on-demand download)."""
+"""DataSource: Dunbrack KinCoRe Human-PK structure-based alignment (on-demand download)."""
 
 ANNOTATION_PREFIX = "0ANNOTATION"
 """str: Header prefix of the alignment's annotation row (skipped)."""
@@ -228,7 +228,7 @@ def build_msa_model(
 def enrich_with_msa(
     obj, aligned_seq: str, start: int, end: int, source: Provenance
 ) -> None:
-    """Attach an :class:`MSA` to a kinase, creating an MSA-only KinCore shell if needed.
+    """Attach an :class:`MSA` to a kinase, creating an MSA-only KinCoRe shell if needed.
 
     Parameters
     ----------
@@ -249,7 +249,7 @@ def enrich_with_msa(
         aligned_seq, obj.uniprot.canonical_seq, start, end, source
     )
     if obj.kincore is None:
-        obj.kincore = KinCore(msa=msa_model)
+        obj.kincore = KinCoRe(msa=msa_model)
     else:
         obj.kincore.msa = msa_model
 
@@ -259,13 +259,24 @@ def _base_accession(uniprot_id: str) -> str:
     return re.sub(r"_\d+$", "", uniprot_id)
 
 
-def _match_target(entry: dict, by_hgnc: dict, by_base: dict) -> object | None:
-    """Resolve an MSA entry to a KinaseInfo: by ``hgnc_name``, else by UniProt accession.
+def _klifs_span(obj) -> tuple[int, int] | None:
+    """Return the (min, max) UniProt index of a kinase's KLIFS pocket, or None if unmapped."""
+    idx = obj.KLIFS2UniProtIdx
+    if not idx:
+        return None
+    vals = [v for v in idx.values() if v is not None]
+    return (min(vals), max(vals)) if vals else None
 
-    The accession fallback absorbs gene-symbol synonyms (e.g. ICK->CILK1, PRPF4B->PRP4K)
-    without a hardcoded alias map; when an accession maps to several domains (a single MSA
-    entry for a multi-KD protein), the domain whose adjudicated KD bounds best overlap the
-    MSA range is chosen.
+
+def _match_target(entry: dict, by_hgnc: dict, by_base: dict) -> object | None:
+    """Resolve an MSA entry to a KinaseInfo, primarily by UniProt accession.
+
+    Matching on the accession (not the ``hgnc_name`` suffix) is deliberate: for a multi-KD
+    protein the Dunbrack ``_1``/``_2`` domain ordering is NOT consistent with ours, so the
+    entry is assigned to the domain whose **KLIFS-pocket span** overlaps the MSA range -- the
+    reliable per-domain signal (Pfam is duplicated onto both KDs and cannot discriminate). The
+    accession also absorbs gene-symbol synonyms (ICK->CILK1, PRPF4B->PRP4K) with no alias map.
+    Falls back to ``hgnc_name`` only when the accession is unknown.
 
     Parameters
     ----------
@@ -281,9 +292,6 @@ def _match_target(entry: dict, by_hgnc: dict, by_base: dict) -> object | None:
     KinaseInfo | None
         The matched kinase, or None if unresolved.
     """
-    obj = by_hgnc.get(entry["hgnc"])
-    if obj is not None:
-        return obj
     candidates = by_base.get(entry["uniprot"], [])
     if len(candidates) == 1:
         return candidates[0]
@@ -291,13 +299,13 @@ def _match_target(entry: dict, by_hgnc: dict, by_base: dict) -> object | None:
         lo, hi = entry["start"], entry["end"]
 
         def _overlap(cand):
-            start, end = cand.adjudicate_kd_start(), cand.adjudicate_kd_end()
-            if start is None or end is None:
+            span = _klifs_span(cand)
+            if span is None:
                 return -1
-            return min(hi, end) - max(lo, start)
+            return min(hi, span[1]) - max(lo, span[0])
 
         return max(candidates, key=_overlap)
-    return None
+    return by_hgnc.get(entry["hgnc"])
 
 
 def enrich_kinases_with_msa(dict_targets: dict) -> None:

@@ -55,7 +55,7 @@ class StructureConfig(ABC):
     highlight_cartoon_transparency: float = 0.0
     """Cartoon transparency applied to colored/highlighted residues (0 = opaque, 1 = invisible)."""
     prefer_alphafold: bool = False
-    """Force the AlphaFold structure even when a KinCore CIF is present (default False)."""
+    """Force the AlphaFold structure even when a KinCoRe CIF is present (default False)."""
 
     def __post_init__(self):
         list_idx, list_color, list_style = self.return_list_intersect_color_style()
@@ -115,7 +115,7 @@ class StructureConfig(ABC):
     def return_list_cif_idx(self) -> list[int]:
         """Return list of 0-indexed positions corresponding to the CIF sequence.
 
-        Uses the adjudicated structure alignment (KinCore or AlphaFold).
+        Uses the adjudicated structure alignment (KinCoRe or AlphaFold).
 
         Returns
         -------
@@ -138,10 +138,10 @@ class StructureConfig(ABC):
             List of 0-indexed positions where attribute sequence has residues,
             or None if attribute not found in dict_align.
         """
-        # a config that references the structure ("KinCore, CIF"/"AF2, CIF") resolves to
-        # whichever structure (KinCore or AlphaFold) is present for this kinase
+        # a config that references the structure ("KinCoRe, CIF"/"AF2, CIF") resolves to
+        # whichever structure (KinCoRe or AlphaFold) is present for this kinase
         str_attr = self.str_attr
-        if str_attr in ("KinCore, CIF", "AF2, CIF"):
+        if str_attr in ("KinCoRe, CIF", "AF2, CIF"):
             str_attr = self.seq_align.str_structure_key or str_attr
         try:
             str_seq_attr = self.seq_align.dict_align[str_attr]["str_seq"]
@@ -204,8 +204,8 @@ class StructureConfig(ABC):
 class DefaultConfig(StructureConfig):
     """Default configuration rendering the whole protein as cartoon with spectrum coloring."""
 
-    str_attr: str = "KinCore, CIF"
-    """Attribute to highlight in the structure (default: 'KinCore, CIF')."""
+    str_attr: str = "KinCoRe, CIF"
+    """Attribute to highlight in the structure (default: 'KinCoRe, CIF')."""
 
     def generate_list_idx(self) -> list[int]:
         """Generate list of 0-indexed positions for all CIF residues.
@@ -552,7 +552,7 @@ class KLIFSCustomConfig(KLIFSConfig):
         list[int]
             Sorted union of 0-indexed KLIFS pocket residues (present in the CIF) and
             custom UniProt positions (1-indexed input converted to 0-indexed), filtered
-            to those present in the KinCore CIF structure.
+            to those present in the KinCoRe CIF structure.
         """
         list_klifs = self.return_list_idx_intersect()
         set_cif = set(self.return_list_cif_idx())
@@ -566,7 +566,7 @@ class KLIFSCustomConfig(KLIFSConfig):
                 logger.warning(
                     f"Custom UniProt position {pos} for "
                     f"{self.seq_align.obj_kinase.hgnc_name} is not present in the "
-                    "KinCore CIF structure; skipping."
+                    "KinCoRe CIF structure; skipping."
                 )
 
         return sorted(set(list_klifs) | set(list_custom))
@@ -665,7 +665,7 @@ class MutationsConfig(StructureConfig):
         list_cif_idx = self.return_list_cif_idx()
         assert all(
             i in list_cif_idx for i in list_attr_idx
-        ), "Some mutation indices are not present in the KinCore CIF sequence."
+        ), "Some mutation indices are not present in the KinCoRe CIF sequence."
         return list_attr_idx
 
     @staticmethod

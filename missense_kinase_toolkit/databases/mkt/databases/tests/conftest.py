@@ -72,10 +72,10 @@ def egfr_uniprot():
 
 @pytest.fixture(scope="session")
 def kincore_harmonized_dict(tmp_path_factory):
-    """Build harmonized KinCore FASTA/CIF dict once.
+    """Build harmonized KinCoRe FASTA/CIF dict once.
 
     Uses a file lock so that parallel xdist workers do not
-    concurrently extract the KinCore tar.gz to the same directory.
+    concurrently extract the KinCoRe tar.gz to the same directory.
     """
     from mkt.databases.kincore import harmonize_kincore_fasta_cif
 
@@ -89,7 +89,7 @@ def kincore_harmonized_dict(tmp_path_factory):
 
 @pytest.fixture(scope="session")
 def egfr_kincore_alignment(kincore_harmonized_dict, egfr_uniprot):
-    """Align EGFR KinCore sequence to UniProt once."""
+    """Align EGFR KinCoRe sequence to UniProt once."""
     from mkt.databases.kincore import align_kincore2uniprot
 
     return align_kincore2uniprot(
@@ -108,7 +108,7 @@ def egfr_klifs_info():
 
 @pytest.fixture(scope="session")
 def egfr_klifs_pocket(egfr_uniprot, egfr_klifs_info, egfr_kincore_alignment):
-    """Build EGFR KLIFSPocket once (depends on KLIFS + KinCore data)."""
+    """Build EGFR KLIFSPocket once (depends on KLIFS + KinCoRe data)."""
     from mkt.databases import klifs
 
     if egfr_klifs_info.status_code != 200:

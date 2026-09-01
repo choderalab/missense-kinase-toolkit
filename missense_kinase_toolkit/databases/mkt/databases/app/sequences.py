@@ -27,18 +27,18 @@ DICT_ALIGNMENT = {
         "start": "pfam.start",
         "end": "pfam.end",
     },
-    "KinCore, FASTA": {
+    "KinCoRe, FASTA": {
         "seq": "kincore.fasta.seq",
         "start": "kincore.fasta.start",
         "end": "kincore.fasta.end",
     },
-    "KinCore, CIF": {
+    "KinCoRe, CIF": {
         "seq": "kincore.cif.cif",  # need to get from dict "_entity_poly.pdbx_seq_one_letter_code"
         "start": "kincore.cif.start",
         "end": "kincore.cif.end",
     },
     "AF2, CIF": {
-        "seq": "alphafold.cif",  # KD-sliced AlphaFold CIF; populated only when no KinCore CIF
+        "seq": "alphafold.cif",  # KD-sliced AlphaFold CIF; populated only when no KinCoRe CIF
         "start": "alphafold.start",
         "end": "alphafold.end",
     },
@@ -91,20 +91,20 @@ class SequenceAlignment:
     def str_structure_key(self) -> str | None:
         """DICT_ALIGNMENT key for the adjudicated structure alignment.
 
-        A KinCore active-state CIF is preferred, else the KD-sliced AlphaFold structure;
+        A KinCoRe active-state CIF is preferred, else the KD-sliced AlphaFold structure;
         the two are mutually exclusive, and (being 1-to-1 in bounds/sequence) the same
-        alignment serves a KinCore- or AF-rendered structure.
+        alignment serves a KinCoRe- or AF-rendered structure.
 
         Returns
         -------
         str | None
-            ``"KinCore, CIF"``, ``"AF2, CIF"``, or None if no structure is available.
+            ``"KinCoRe, CIF"``, ``"AF2, CIF"``, or None if no structure is available.
         """
         if (
             self.obj_kinase.kincore is not None
             and self.obj_kinase.kincore.cif is not None
         ):
-            return "KinCore, CIF"
+            return "KinCoRe, CIF"
         if self.obj_kinase.alphafold is not None:
             return "AF2, CIF"
         return None
@@ -218,9 +218,9 @@ class SequenceAlignment:
         """
         uniprot_seq = self.obj_kinase.uniprot.canonical_seq
 
-        # the AlphaFold DB is queried only as a fallback when no KinCore CIF is present, so
+        # the AlphaFold DB is queried only as a fallback when no KinCoRe CIF is present, so
         # the AF2 row is shown only then: present for the fallback entries, missing (with the
-        # KinCore CIF row) for entries lacking both; it is dropped for KinCore-CIF entries
+        # KinCoRe CIF row) for entries lacking both; it is dropped for KinCoRe-CIF entries
         # (never queried, so "missing" would misrepresent them)
         has_kincore_cif = (
             self.obj_kinase.kincore is not None
@@ -239,22 +239,22 @@ class SequenceAlignment:
         for key, value in dict_alignment.items():
             seq = rgetattr(self.obj_kinase, value["seq"])
 
-            # CIF sequences (KinCore or AlphaFold) are extracted from the mmCIF dict
-            if key in ("KinCore, CIF", "AF2, CIF") and seq is not None:
+            # CIF sequences (KinCoRe or AlphaFold) are extracted from the mmCIF dict
+            if key in ("KinCoRe, CIF", "AF2, CIF") and seq is not None:
                 seq = seq["_entity_poly.pdbx_seq_one_letter_code"][0].replace("\n", "")
 
-            # CDKL1 KinCore FASTA and CIF have an extra M at the start - remove and add back
-            if self.obj_kinase.hgnc_name == "CDKL1" and key.startswith("KinCore"):
+            # CDKL1 KinCoRe FASTA and CIF have an extra M at the start - remove and add back
+            if self.obj_kinase.hgnc_name == "CDKL1" and key.startswith("KinCoRe"):
                 seq = seq[1:]
 
             start = self._parse_start_end_values(value["start"], seq)
             end = self._parse_start_end_values(value["end"], seq)
 
             seq_out = self._map_single_alignment(start, end, uniprot_seq, seq)
-            # CDKL1 KinCore FASTA and CIF have an extra M at the start
+            # CDKL1 KinCoRe FASTA and CIF have an extra M at the start
             # add back and add "-" for all other sequences
             if self.obj_kinase.hgnc_name == "CDKL1":
-                if key.startswith("KinCore"):
+                if key.startswith("KinCoRe"):
                     seq_out = "M" + seq_out
                 else:
                     seq_out = "-" + seq_out

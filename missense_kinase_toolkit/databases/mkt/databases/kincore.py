@@ -1,6 +1,6 @@
-"""Parsing and harmonization of KinCore FASTA and CIF structure files, aligned to UniProt.
+"""Parsing and harmonization of KinCoRe FASTA and CIF structure files, aligned to UniProt.
 
-Reads KinCore FASTA and CIF files, extracts kinase-domain metadata, aligns KinCore
+Reads KinCoRe FASTA and CIF files, extracts kinase-domain metadata, aligns KinCoRe
 sequences to UniProt, and harmonizes the FASTA- and CIF-derived records.
 """
 
@@ -26,11 +26,11 @@ from mkt.databases.utils import (
 )
 from mkt.schema.io_utils import get_repo_root, untar_files_in_memory
 from mkt.schema.kinase_schema import (
-    KinCore,
-    KinCoreCIF,
-    KinCoreFASTA,
-    KinCoreSeqSource,
-    KinCoreStructureSource,
+    KinCoRe,
+    KinCoReCIF,
+    KinCoReFASTA,
+    KinCoReSeqSource,
+    KinCoReStructureSource,
 )
 from mkt.schema.utils import TQDM_BAR_FORMAT
 from tqdm import tqdm
@@ -50,7 +50,7 @@ KINCORE_CIF_URL = (
     "https://dunbrack.fccc.edu/kincore/static/downloads/af2activemodels/"
     "AF2_Active_Models_v2.zip"
 )
-"""str: Dunbrack KinCore AF2 active-model v2 archive (one active-state CIF per kinase domain)."""
+"""str: Dunbrack KinCoRe AF2 active-model v2 archive (one active-state CIF per kinase domain)."""
 PATH_CIF_ZIP = os.path.join(PATH_DATA, "AF2_Active_Models_v2.zip")
 """str: Local (gitignored) cache path for the downloaded v2 CIF archive."""
 
@@ -58,15 +58,15 @@ KINCORE_FASTA_URL = (
     "https://dunbrack.fccc.edu/kincore/static/downloads/af2activemodels/"
     "kinasedomainfasta.tar.gz"
 )
-"""str: Dunbrack KinCore kinase-domain FASTA archive matching the v2 active models."""
+"""str: Dunbrack KinCoRe kinase-domain FASTA archive matching the v2 active models."""
 PATH_FASTA_TAR = os.path.join(PATH_DATA, "kinasedomainfasta.tar.gz")
 """str: Local (gitignored) cache path for the downloaded kinase-domain FASTA archive."""
 PATH_FASTA_COMBINED = os.path.join(PATH_DATA, "kinasedomainfasta_combined.fasta")
 """str: Local (gitignored) concatenation of the per-kinase kinase-domain FASTA files."""
 
 
-# --- KinCore source provenance ---
-# citations for the Dunbrack KinCore resources (sequence + structure) used below
+# --- KinCoRe source provenance ---
+# citations for the Dunbrack KinCoRe resources (sequence + structure) used below
 CITATION_GIZZIO = "Gizzio et al., 2026 (10.1042/BCJ20260137)"
 CITATION_FAEZOV = "Faezov & Dunbrack, 2023 (bioRxiv)"
 CITATION_MODI = "Modi & Dunbrack, 2019 (PNAS)"
@@ -74,44 +74,44 @@ CITATION_MODI = "Modi & Dunbrack, 2019 (PNAS)"
 # per-source metadata (archive/file name, version tier, citation, download URL) resolved into a
 # Provenance record; version tiers follow priority order (v1 = current/highest priority)
 DICT_SEQ_SOURCE = {
-    KinCoreSeqSource.GIZZIO_2026: DataSource(
+    KinCoReSeqSource.GIZZIO_2026: DataSource(
         name="kinasedomainfasta.tar.gz",
         path=PATH_FASTA_TAR,
         url=KINCORE_FASTA_URL,
         version="v1",
         citation=CITATION_GIZZIO,
     ),
-    KinCoreSeqSource.FAEZOV_2023: DataSource(
+    KinCoReSeqSource.FAEZOV_2023: DataSource(
         name="AF2-active.fasta",
         path=os.path.join(PATH_DATA, "AF2-active.fasta"),
         version="v2",
         citation=CITATION_FAEZOV,
     ),
-    KinCoreSeqSource.MODI_2019: DataSource(
+    KinCoReSeqSource.MODI_2019: DataSource(
         name="Human-PK.fasta",
         path=os.path.join(PATH_DATA, "Human-PK.fasta"),
         version="v3",
         citation=CITATION_MODI,
     ),
 }
-"""dict[KinCoreSeqSource, DataSource]: KinCore kinase-domain sequence sources (priority order)."""
+"""dict[KinCoReSeqSource, DataSource]: KinCoRe kinase-domain sequence sources (priority order)."""
 
 DICT_STRUCTURE_SOURCE = {
-    KinCoreStructureSource.GIZZIO_2026: DataSource(
+    KinCoReStructureSource.GIZZIO_2026: DataSource(
         name="AF2_Active_Models_v2.zip",
         path=PATH_CIF_ZIP,
         url=KINCORE_CIF_URL,
         version="v1",
         citation=CITATION_GIZZIO,
     ),
-    KinCoreStructureSource.FAEZOV_2023: DataSource(
+    KinCoReStructureSource.FAEZOV_2023: DataSource(
         name="Kincore_AlphaFold2_ActiveHumanCatalyticKinases",
         path=PATH_ORIG_CIF,
         version="v2",
         citation=CITATION_FAEZOV,
     ),
 }
-"""dict[KinCoreStructureSource, DataSource]: KinCore active-state structure sources (priority order)."""
+"""dict[KinCoReStructureSource, DataSource]: KinCoRe active-state structure sources (priority order)."""
 
 
 def return_fasta_contents(path_filename=str) -> SeqIO.FastaIO.FastaIterator:
@@ -133,7 +133,7 @@ LIST_FASTA_KEYS1 = [
     "length_af2",
     "length_uniprot",
 ]
-"""list[str]: List of FASTA keys for the AF2-active KinCore FASTA header."""
+"""list[str]: List of FASTA keys for the AF2-active KinCoRe FASTA header."""
 
 
 LIST_FASTA_KEYS2 = [
@@ -146,7 +146,7 @@ LIST_FASTA_KEYS2 = [
     "hgnc2",
     "uniprot",
 ]
-"""list[str]: List of FASTA keys for the Human-PK (Modi-Dunbrack) KinCore FASTA header."""
+"""list[str]: List of FASTA keys for the Human-PK (Modi-Dunbrack) KinCoRe FASTA header."""
 
 
 DICT_KINCORE_PARAMS = {
@@ -154,22 +154,22 @@ DICT_KINCORE_PARAMS = {
         "filename": None,  # downloaded on demand (kinasedomainfasta.tar.gz)
         "LIST_FASTA_KEYS": LIST_FASTA_KEYS1,
         "bool_af2": True,
-        "seq_source": KinCoreSeqSource.GIZZIO_2026,
+        "seq_source": KinCoReSeqSource.GIZZIO_2026,
     },
     "faezov": {
         "filename": "AF2-active.fasta",
         "LIST_FASTA_KEYS": LIST_FASTA_KEYS1,
         "bool_af2": True,
-        "seq_source": KinCoreSeqSource.FAEZOV_2023,
+        "seq_source": KinCoReSeqSource.FAEZOV_2023,
     },
     "modi": {
         "filename": "Human-PK.fasta",
         "LIST_FASTA_KEYS": LIST_FASTA_KEYS2,
         "bool_af2": False,
-        "seq_source": KinCoreSeqSource.MODI_2019,
+        "seq_source": KinCoReSeqSource.MODI_2019,
     },
 }
-"""dict[str, dict]: KinCore FASTA source tiers (gizzio -> faezov -> modi, priority order)."""
+"""dict[str, dict]: KinCoRe FASTA source tiers (gizzio -> faezov -> modi, priority order)."""
 
 
 DICT_GROUP_KINCORE = {
@@ -184,7 +184,7 @@ DICT_GROUP_KINCORE = {
     "TKL": "TKL",
     "TYR": "TK",
 }
-"""dict[str, str]: Dictionary of KinCore groups to map to mkt.schema.kinase_schema.Group."""
+"""dict[str, str]: Dictionary of KinCoRe groups to map to mkt.schema.kinase_schema.Group."""
 
 
 def update_original_cif_with_new_coords(
@@ -263,7 +263,7 @@ def _resolve_kincore_kinasedomain_fasta() -> str:
         Path to the combined kinase-domain FASTA.
     """
     if not os.path.exists(PATH_FASTA_COMBINED):
-        path_tar = DICT_SEQ_SOURCE[KinCoreSeqSource.GIZZIO_2026].resolve()
+        path_tar = DICT_SEQ_SOURCE[KinCoReSeqSource.GIZZIO_2026].resolve()
         with tarfile.open(path_tar) as tf, open(PATH_FASTA_COMBINED, "wb") as out:
             for member in tf.getmembers():
                 # skip macOS AppleDouble sidecars (._*), whose names also end in .fasta
@@ -282,8 +282,8 @@ def _resolve_kincore_kinasedomain_fasta() -> str:
 
 def extract_pk_fasta_info_as_list(
     study: str,
-) -> list[KinCoreFASTA]:
-    """Parse a KinCore FASTA source tier into KinCoreFASTA objects with source provenance.
+) -> list[KinCoReFASTA]:
+    """Parse a KinCoRe FASTA source tier into KinCoReFASTA objects with source provenance.
 
     Parameters
     ----------
@@ -293,8 +293,8 @@ def extract_pk_fasta_info_as_list(
 
     Returns
     -------
-    list[KinCoreFASTA]
-        List of KinCoreFASTA objects, each tagged with its ``source`` Provenance.
+    list[KinCoReFASTA]
+        List of KinCoReFASTA objects, each tagged with its ``source`` Provenance.
     """
     try:
         dict_temp = DICT_KINCORE_PARAMS[study]
@@ -338,7 +338,7 @@ def extract_pk_fasta_info_as_list(
         i.pop("hgnc2")
         i["source"] = provenance
 
-    return [KinCoreFASTA.model_validate(i) for i in list_out]
+    return [KinCoReFASTA.model_validate(i) for i in list_out]
 
 
 LIST_CIF_KEYS = [
@@ -356,7 +356,7 @@ LIST_CIF_KEYS = [
 """list[str]: Metadata keys parsed from an AF2_Active_Models_v2 CIF filename
 (``group_hgnc_confidence_species_state_dfg_dihedral_snc_afid.cif``), with ``cif``
 prepended for the parsed mmCIF dict. ``species``/``state`` are constant (HUMAN/Active)
-and dropped before building :class:`KinCoreCIF`."""
+and dropped before building :class:`KinCoReCIF`."""
 
 
 def _resolve_kincore_cif_zip() -> str:
@@ -371,19 +371,19 @@ def _resolve_kincore_cif_zip() -> str:
     str
         Path to the local ``AF2_Active_Models_v2.zip``.
     """
-    return DICT_STRUCTURE_SOURCE[KinCoreStructureSource.GIZZIO_2026].resolve()
+    return DICT_STRUCTURE_SOURCE[KinCoReStructureSource.GIZZIO_2026].resolve()
 
 
-def extract_pk_cif_files_as_list() -> list[KinCoreCIF]:
-    """Extract all CIF files from the KinCore AF2_Active_Models_v2 archive.
+def extract_pk_cif_files_as_list() -> list[KinCoReCIF]:
+    """Extract all CIF files from the KinCoRe AF2_Active_Models_v2 archive.
 
     Returns
     -------
-    list[KinCoreCIF]
-        List of KinCoreCIF objects (one active-state model per kinase domain).
+    list[KinCoReCIF]
+        List of KinCoReCIF objects (one active-state model per kinase domain).
     """
     path_zip = _resolve_kincore_cif_zip()
-    provenance = DICT_STRUCTURE_SOURCE[KinCoreStructureSource.GIZZIO_2026].provenance(
+    provenance = DICT_STRUCTURE_SOURCE[KinCoReStructureSource.GIZZIO_2026].provenance(
         path_zip
     )
 
@@ -410,25 +410,25 @@ def extract_pk_cif_files_as_list() -> list[KinCoreCIF]:
             dict_temp = dict(zip(LIST_CIF_KEYS, [cif] + list_token))
             dict_temp["group"] = DICT_GROUP_KINCORE[dict_temp["group"]]
             dict_temp["model_confidence"] = float(dict_temp["model_confidence"])
-            # species/state are constant (HUMAN/Active) and not KinCoreCIF fields
+            # species/state are constant (HUMAN/Active) and not KinCoReCIF fields
             dict_temp.pop("species")
             dict_temp.pop("state")
             dict_temp["source"] = provenance
             list_out.append(dict_temp)
 
-    return [KinCoreCIF.model_validate(v) for v in list_out]
+    return [KinCoReCIF.model_validate(v) for v in list_out]
 
 
 def align_kincore2uniprot(
     str_kincore: str,
     str_uniprot: str,
 ) -> dict[str, dict[str, str | int | list[int] | None]]:
-    """Align KinCore Human-PK.fasta to canonical Uniprot sequences.
+    """Align KinCoRe Human-PK.fasta to canonical Uniprot sequences.
 
     Parameters
     ----------
     str_kicore : str
-        KinCore sequence
+        KinCoRe sequence
     str_uniprot : str
         Uniprot sequence
 
@@ -465,7 +465,7 @@ def align_kincore2uniprot(
     end = int(alignment.aligned[1][0][1])
     dict_out["end"] = end
 
-    # if mismatch, provide idx of mismatch in KinCore sequence
+    # if mismatch, provide idx of mismatch in KinCoRe sequence
     str_align = "".join(
         [
             i.split(" ")[-1]
@@ -481,7 +481,7 @@ def align_kincore2uniprot(
 
 
 def harmonize_kincore_fasta_cif():
-    """Harmonize KinCore FASTA/CIF sources into KinCore objects with per-entry provenance.
+    """Harmonize KinCoRe FASTA/CIF sources into KinCoRe objects with per-entry provenance.
 
     Builds the AF2 sequence tier hierarchically -- the latest (Gizzio) kinase-domain FASTA,
     falling back to Faezov for kinases it dropped (e.g. SGK3, whose v2 CIF still exists) -- then
@@ -490,8 +490,8 @@ def harmonize_kincore_fasta_cif():
 
     Returns
     -------
-    dict[str, list[KinCore]]
-        Dictionary of {uniprot : list[KinCore]}
+    dict[str, list[KinCoRe]]
+        Dictionary of {uniprot : list[KinCoRe]}
     """
     list_gizzio_fasta = extract_pk_fasta_info_as_list("gizzio")
     list_faezov_fasta = extract_pk_fasta_info_as_list("faezov")
@@ -522,7 +522,7 @@ def harmonize_kincore_fasta_cif():
             hgnc_fasta = max(fasta.hgnc, key=len)
             idx = list_cif_hgnc_split.index(hgnc_fasta)
             cif = list_kincore_cif[idx]
-            list_temp.append(KinCore(fasta=fasta, cif=cif))
+            list_temp.append(KinCoRe(fasta=fasta, cif=cif))
         dict_kincore[uniprot] = list_temp
     # single kinase domain (AF2)
     for uniprot in list_af2_uniprot:
@@ -533,9 +533,9 @@ def harmonize_kincore_fasta_cif():
             try:
                 idx = [idx for idx, i in enumerate(list_cif_hgnc_split) if i in hgnc][0]
                 cif = list_kincore_cif[idx]
-                temp = KinCore(fasta=fasta[0], cif=cif)
+                temp = KinCoRe(fasta=fasta[0], cif=cif)
             except IndexError:
-                temp = KinCore(fasta=fasta[0], cif=None)
+                temp = KinCoRe(fasta=fasta[0], cif=None)
             dict_kincore[uniprot] = [temp]
 
     # process Modi-Dunbrack dataset
@@ -546,7 +546,7 @@ def harmonize_kincore_fasta_cif():
     for uniprot in list_md_only_uniprot:
         fasta = [i for i in list_md_fasta if i.uniprot == uniprot]
         if len(fasta) == 1:
-            temp = KinCore(fasta=fasta[0], cif=None)
+            temp = KinCoRe(fasta=fasta[0], cif=None)
         else:
             logger.warning(
                 f"{uniprot} has multipe FASTA entries in Modi-Dunbrack dataset\n{fasta}\n"

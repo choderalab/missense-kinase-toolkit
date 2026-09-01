@@ -7,7 +7,7 @@ from mkt.databases.kincore import _resolve_kincore_cif_zip
 
 
 @pytest.mark.network
-class TestKinCoreHarmonization:
+class TestKinCoReHarmonization:
     def test_cif_hgnc_count_matches_cif_file_count(self, kincore_harmonized_dict):
         """Number of non-None CIF entries matches the descriptive .cif count in the zip."""
         list_dict_cif_hgnc = [
@@ -29,12 +29,12 @@ class TestKinCoreHarmonization:
         assert len(list_dict_cif_hgnc) == n_cif_files
 
     def test_egfr_has_single_entry(self, kincore_harmonized_dict):
-        """EGFR (P00533) has exactly one KinCore entry."""
+        """EGFR (P00533) has exactly one KinCoRe entry."""
         assert len(kincore_harmonized_dict["P00533"]) == 1
 
 
 @pytest.mark.network
-class TestKinCoreAlignment:
+class TestKinCoReAlignment:
     def test_aligned_sequence(self, egfr_kincore_alignment):
         assert (
             egfr_kincore_alignment["seq"]
@@ -53,7 +53,7 @@ class TestKinCoreAlignment:
 
 @pytest.mark.network
 class TestKLIFSPocketAlignment:
-    """KLIFS pocket alignment tests (depend on KinCore fixtures)."""
+    """KLIFS pocket alignment tests (depend on KinCoRe fixtures)."""
 
     def test_klifs_substr_actual(self, egfr_klifs_pocket):
         assert egfr_klifs_pocket.list_klifs_substr_actual == [

@@ -2,7 +2,7 @@
 
 Wraps Clustal Omega (:class:`ClustalOmegaAligner`) and Biopython (:class:`BioAligner`)
 behind a common :class:`CustomAligner` interface, with specializations for aligning
-BLOSUM-based and KinCore sequences to UniProt.
+BLOSUM-based and KinCoRe sequences to UniProt.
 """
 
 from abc import ABC, abstractmethod
