@@ -86,6 +86,15 @@ def main(
             "exclusive with --only/--skip/--kinase.",
         ),
     ] = False,
+    force_regen: Annotated[
+        bool,
+        typer.Option(
+            "--force-regen",
+            help="Force structure steps to re-fetch/re-slice and recompute their derived "
+            "properties (SASA, superposition) even when already present -- e.g. to refresh "
+            "against new structures that would otherwise be kept by the idempotent skip.",
+        ),
+    ] = False,
     verbose: Annotated[
         bool,
         typer.Option("--verbose", "-v", help="Enable verbose (DEBUG) logging."),
@@ -102,6 +111,7 @@ def main(
             path_reports=path_reports,
             bool_figs=not no_figs,
             figs_only=figs_only,
+            force=force_regen,
         )
     except ValueError as e:
         logger.error(str(e))

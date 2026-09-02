@@ -56,6 +56,9 @@ class StructureConfig(ABC):
     """Cartoon transparency applied to colored/highlighted residues (0 = opaque, 1 = invisible)."""
     prefer_alphafold: bool = False
     """Force the AlphaFold structure even when a KinCoRe CIF is present (default False)."""
+    bool_superpose: bool = True
+    """Transform the structure into the shared 1GAG reference frame when a stored
+    superposition is present (default True)."""
 
     def __post_init__(self):
         list_idx, list_color, list_style = self.return_list_intersect_color_style()
