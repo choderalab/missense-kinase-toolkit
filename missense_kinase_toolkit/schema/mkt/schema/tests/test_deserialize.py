@@ -330,3 +330,24 @@ def test_sasa_per_structure_klifs_pocket(dict_kinase):
     bub1b = dict_kinase["BUB1B"]
     assert bub1b.kincore is None or bub1b.kincore.cif is None
     assert bub1b.alphafold is not None and bub1b.alphafold.sasa is not None
+
+
+def test_superposition_per_structure_reference_frame(dict_kinase):
+    """Each structure carries a reference-frame superposition (rotation/translation to 1GAG).
+
+    The transform is nested on the structure it was computed over (``kincore.cif.superposition``
+    / ``alphafold.superposition``); a well-behaved ePK superposes via the KLIFS tier with a low
+    RMSD.
+    """
+    abl1 = dict_kinase["ABL1"]
+    superps = [
+        abl1.kincore.cif.superposition if abl1.kincore and abl1.kincore.cif else None,
+        abl1.alphafold.superposition if abl1.alphafold else None,
+    ]
+    superps = [s for s in superps if s is not None]
+    assert superps, "ABL1 has no per-structure superposition"
+    for s in superps:
+        assert s.reference == "1GAG" and s.method == "klifs"
+        assert len(s.rotation) == 3 and all(len(row) == 3 for row in s.rotation)
+        assert len(s.translation) == 3
+        assert s.rmsd is not None and s.rmsd < 2.5 and s.n_atoms and s.n_atoms > 50

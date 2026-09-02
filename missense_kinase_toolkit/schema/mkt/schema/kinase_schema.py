@@ -286,6 +286,26 @@ class SASA(BaseModel):
         return fill_missing_none(value, LIST_KLIFS_REGION)
 
 
+class Superposition(BaseModel):
+    """Rigid-body transform placing one kinase-domain structure into a shared reference frame.
+
+    Nested on the structure it was computed over (a KinCoRe active-state CIF or an AlphaFold DB
+    model). The structure is superposed onto the reference template (PDB 1GAG, the INSR kinase
+    domain) on equivalent C-alpha atoms, then the shared frame is recentered so the reference
+    KLIFS-pocket centroid sits at the origin. Apply as ``coord @ rotation + translation``
+    (Bio.PDB ``Structure.transform``). ``method`` records the C-alpha correspondence used
+    ("klifs" pocket, "msa" columns, or full-"sequence" alignment).
+    """
+
+    rotation: list[list[float]]  # 3x3 rotation matrix
+    translation: list[float]  # length-3 translation (includes the origin recentering)
+    reference: str  # reference template name (e.g. "1GAG")
+    method: str  # C-alpha correspondence: "klifs" | "msa" | "sequence"
+    rmsd: float | None = None  # superposition RMSD (Å) over the matched C-alpha atoms
+    n_atoms: int | None = None  # number of matched C-alpha atoms
+    source: Provenance | None = None  # reference-template provenance
+
+
 class KinCoReFASTA(BaseModel):
     """Pydantic model for KinCoRe FASTA information."""
 
@@ -339,6 +359,9 @@ class KinCoReCIF(BaseModel):
     )
     sasa: SASA | None = (
         None  # KLIFS-pocket SASA over this KinCoRe active-state structure
+    )
+    superposition: Superposition | None = (
+        None  # reference-frame transform for this KinCoRe active-state structure
     )
     start: int | None = None  # cif2uniprot
     end: int | None = None  # cif2uniprot
@@ -409,6 +432,9 @@ class AlphaFold(BaseModel):
     )
     source: Provenance | None = None  # EBI AlphaFold DB provenance
     sasa: SASA | None = None  # KLIFS-pocket SASA over this AlphaFold structure
+    superposition: Superposition | None = (
+        None  # reference-frame transform for this AF structure
+    )
 
 
 class KinaseInfoUniProt(BaseModel):
