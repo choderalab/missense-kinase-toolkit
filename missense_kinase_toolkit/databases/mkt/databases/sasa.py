@@ -810,15 +810,27 @@ def enrich_with_sasa(
     )
 
 
-def _kinase_structures(obj_kinase):
+def _kinase_structures(obj_kinase, only: str | None = None):
     """Yield each structure model (with a ``.cif`` mmCIF dict and a ``.sasa`` field).
 
     Yields the KinCoRe active-state CIF (:class:`KinCoReCIF`) and/or the AlphaFold model
     (:class:`AlphaFold`) that the kinase carries.
+
+    Parameters
+    ----------
+    obj_kinase : KinaseInfo
+        The kinase object.
+    only : str | None, optional
+        Restrict to ``"kincore"`` (the KinCoRe CIF) or ``"alphafold"`` (the AF model); None
+        yields both, by default None.
     """
-    if obj_kinase.kincore is not None and obj_kinase.kincore.cif is not None:
+    if (
+        only in (None, "kincore")
+        and obj_kinase.kincore is not None
+        and obj_kinase.kincore.cif is not None
+    ):
         yield obj_kinase.kincore.cif
-    if obj_kinase.alphafold is not None:
+    if only in (None, "alphafold") and obj_kinase.alphafold is not None:
         yield obj_kinase.alphafold
 
 
@@ -863,6 +875,8 @@ def enrich_kinases_with_sasa(
     dict_targets: dict,
     config: BaseSASAConfig | None = None,
     n_jobs: int = 1,
+    only: str | None = None,
+    force: bool = False,
 ) -> None:
     """Compute + store per-structure KLIFS-pocket SASA for many kinases, in parallel.
 
@@ -879,6 +893,11 @@ def enrich_kinases_with_sasa(
         SASA recipe; by default :data:`DEFAULT_SASA_CONFIG`.
     n_jobs : int, optional
         Worker processes: 1 serial (default), >1 pool, -1 all cores.
+    only : str | None, optional
+        Restrict to one structure type (``"kincore"`` / ``"alphafold"``); None does both,
+        by default None.
+    force : bool, optional
+        Recompute even when a structure already carries SASA, by default False.
 
     Returns
     -------
@@ -890,11 +909,11 @@ def enrich_kinases_with_sasa(
     meta = {}  # task key -> (obj_kinase, structure model)
     for hgnc, obj in dict_targets.items():
         if obj.KLIFS2UniProtIdx is None:
-            for struct in _kinase_structures(obj):
+            for struct in _kinase_structures(obj, only=only):
                 struct.sasa = None
             continue
-        for i, struct in enumerate(_kinase_structures(obj)):
-            if struct.sasa is not None:
+        for i, struct in enumerate(_kinase_structures(obj, only=only)):
+            if struct.sasa is not None and not force:
                 continue  # idempotent: keep already-computed SASA (e.g. an unchanged structure)
             key = f"{hgnc}::{i}"
             tasks.append((key, struct.cif, config))

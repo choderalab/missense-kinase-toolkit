@@ -55,8 +55,31 @@ class StructureVisualizer:
         if self._dict_cif is None:
             raise ValueError(f"No structure available for {self.obj_kinase.hgnc_name}")
         self.structure = self._convert_mmcifdict2structure()
+        if getattr(config, "bool_superpose", True):
+            self._apply_superposition()
         self.pdb_text = self._convert_structure2string()
         self.residues = list(self.structure.get_residues())
+
+    def _apply_superposition(self) -> None:
+        """Transform the structure into the shared 1GAG reference frame, if available.
+
+        Applies the stored :class:`~mkt.schema.kinase_schema.Superposition` for the adjudicated
+        structure (KinCoRe CIF or AlphaFold) in place, so the app render and any downstream
+        PyMOL output (which reuses ``pdb_text``) share the common frame. A no-op when the
+        structure carries no superposition (e.g. an AlphaFold model fetched on the fly).
+        """
+        import numpy as np
+
+        if self.structure_source == "KinCoRe Active State":
+            model = self.obj_kinase.kincore.cif if self.obj_kinase.kincore else None
+        else:
+            model = self.obj_kinase.alphafold
+        superposition = getattr(model, "superposition", None) if model else None
+        if superposition is None:
+            return
+        self.structure.transform(
+            np.array(superposition.rotation), np.array(superposition.translation)
+        )
 
     @staticmethod
     def parse_pdb_line(line: str) -> dict[str, Any] | None:

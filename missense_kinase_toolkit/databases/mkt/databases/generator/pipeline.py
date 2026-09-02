@@ -65,6 +65,8 @@ class BuildContext:
     """Absolute path to the ``KinaseInfo.tar.gz`` archive."""
     subset_hgnc: set[str] | None = None
     """If not None, the ``hgnc_name`` keys targeted by a subset (``--kinase``) build; enrichment steps iterate only these (reports still characterize the whole spliced dict), by default None."""
+    force: bool = False
+    """If True (``--force-regen``), structure steps re-fetch/re-slice and recompute their derived properties (SASA, superposition) even when already present, by default False."""
 
 
 def run_base_build(
@@ -387,6 +389,7 @@ class Pipeline:
         names: list[str],
         subset_hgnc: set[str] | None,
         bool_figs: bool = True,
+        force: bool = False,
     ) -> None:
         """Run enrichment steps, serialize + tar, generate reports, and clean up.
 
@@ -415,6 +418,7 @@ class Pipeline:
             self.path_reports,
             self.path_tar,
             subset_hgnc=subset_hgnc,
+            force=force,
         )
         build_steps._run_steps(names, ctx)
         self._serialize_and_tar(dict_kinaseinfo)
@@ -447,7 +451,9 @@ class Pipeline:
         )
         build_steps._run_reports(ctx)
 
-    def full(self, names: list[str], bool_figs: bool = True) -> None:
+    def full(
+        self, names: list[str], bool_figs: bool = True, force: bool = False
+    ) -> None:
         """Full kinome regeneration: base build -> finalize.
 
         Parameters
@@ -456,16 +462,24 @@ class Pipeline:
             Enrichment step names to run.
         bool_figs : bool, optional
             Regenerate report figures after the build, by default True.
+        force : bool, optional
+            Force structure steps to regenerate derived properties, by default False.
 
         Returns
         -------
         None
         """
         dict_ki = run_base_build(subset_uniprot=None)
-        self._finalize(dict_ki, names, subset_hgnc=None, bool_figs=bool_figs)
+        self._finalize(
+            dict_ki, names, subset_hgnc=None, bool_figs=bool_figs, force=force
+        )
 
     def update(
-        self, names: list[str], list_kinase: list[str], bool_figs: bool = True
+        self,
+        names: list[str],
+        list_kinase: list[str],
+        bool_figs: bool = True,
+        force: bool = False,
     ) -> None:
         """One-off per-entry update: rebuild targeted kinases and splice into the archive.
 
@@ -477,6 +491,8 @@ class Pipeline:
             HGNC name(s) to rebuild; unknown names are resolved as new kinases or skipped.
         bool_figs : bool, optional
             Regenerate report figures after the splice, by default True.
+        force : bool, optional
+            Force structure steps to regenerate derived properties, by default False.
 
         Returns
         -------
@@ -513,10 +529,16 @@ class Pipeline:
             f"spliced {len(dict_sub)} updated entr(ies) ({sorted(subset_hgnc)}) into "
             f"{len(dict_full)} total; re-archiving."
         )
-        self._finalize(dict_full, names, subset_hgnc=subset_hgnc, bool_figs=bool_figs)
+        self._finalize(
+            dict_full, names, subset_hgnc=subset_hgnc, bool_figs=bool_figs, force=force
+        )
 
     def partial(
-        self, sources: list[str], names: list[str], bool_figs: bool = True
+        self,
+        sources: list[str],
+        names: list[str],
+        bool_figs: bool = True,
+        force: bool = False,
     ) -> None:
         """Partial update on the existing dict: refresh source(s) and/or run step(s).
 
@@ -532,6 +554,8 @@ class Pipeline:
             Enrichment step names to run.
         bool_figs : bool, optional
             Regenerate report figures after the update, by default True.
+        force : bool, optional
+            Force structure steps to regenerate derived properties, by default False.
 
         Returns
         -------
@@ -543,7 +567,7 @@ class Pipeline:
                 "no existing dict found; falling back to a full regeneration "
                 f"(requested {sorted(sources) + sorted(names)} built fresh)."
             )
-            self.full(names, bool_figs=bool_figs)
+            self.full(names, bool_figs=bool_figs, force=force)
             return
 
         if sources:
@@ -557,7 +581,11 @@ class Pipeline:
         else:
             subset_hgnc = set(dict_existing)
         self._finalize(
-            dict_existing, names, subset_hgnc=subset_hgnc, bool_figs=bool_figs
+            dict_existing,
+            names,
+            subset_hgnc=subset_hgnc,
+            bool_figs=bool_figs,
+            force=force,
         )
 
     def run(
@@ -567,6 +595,7 @@ class Pipeline:
         list_kinase: list[str] | None = None,
         bool_figs: bool = True,
         figs_only: bool = False,
+        force: bool = False,
     ) -> None:
         """Dispatch to the run mode implied by the arguments.
 
@@ -587,6 +616,9 @@ class Pipeline:
         figs_only : bool, optional
             Skip all rebuilding and only regenerate figures from the existing archive, by
             default False. Mutually exclusive with the rebuild flags.
+        force : bool, optional
+            Force structure steps to re-fetch/re-slice and recompute their derived properties
+            (SASA, superposition) even when already present, by default False.
 
         Returns
         -------
@@ -610,11 +642,11 @@ class Pipeline:
         names = build_steps.resolve_step_names(only_steps or None, skip)
 
         if only:
-            self.partial(sources, names, bool_figs=bool_figs)
+            self.partial(sources, names, bool_figs=bool_figs, force=force)
         elif list_kinase:
-            self.update(names, list_kinase, bool_figs=bool_figs)
+            self.update(names, list_kinase, bool_figs=bool_figs, force=force)
         else:
-            self.full(names, bool_figs=bool_figs)
+            self.full(names, bool_figs=bool_figs, force=force)
 
 
 def run(
@@ -625,6 +657,7 @@ def run(
     path_reports: str | None = None,
     bool_figs: bool = True,
     figs_only: bool = False,
+    force: bool = False,
 ) -> None:
     """Build a :class:`Pipeline` from the given paths and run it (CLI entry point).
 
@@ -645,11 +678,18 @@ def run(
         Regenerate report figures after any dict regeneration, by default True.
     figs_only : bool, optional
         Only regenerate figures from the existing archive (no rebuild), by default False.
+    force : bool, optional
+        Force structure steps to regenerate their derived properties, by default False.
 
     Returns
     -------
     None
     """
     Pipeline.from_paths(path_objects, path_reports).run(
-        only, skip, list_kinase, bool_figs=bool_figs, figs_only=figs_only
+        only,
+        skip,
+        list_kinase,
+        bool_figs=bool_figs,
+        figs_only=figs_only,
+        force=force,
     )
