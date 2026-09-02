@@ -163,3 +163,38 @@ def test_adjudicate_kd_sequence_one_to_one_with_bounds(dict_kinase):
             continue
         assert len(seq) == end - start + 1
         assert seq == obj.uniprot.canonical_seq[start - 1 : end]
+
+
+def test_return_catalytic_residues(dict_kinase, mutable_kinase):
+    """Catalytic residues are read from the KLIFS pocket at the canonical positions."""
+    from mkt.schema.constants import (
+        STR_KLIFS_BETA3_LYSINE,
+        STR_KLIFS_CATALYTIC_ASP,
+        STR_KLIFS_DFG_ASP,
+    )
+
+    res = dict_kinase["ABL1"].return_catalytic_residues()
+    assert res[STR_KLIFS_BETA3_LYSINE] == "K"  # VAIK beta3 lysine
+    assert res[STR_KLIFS_CATALYTIC_ASP] == "D"  # HRD catalytic aspartate
+    assert res[STR_KLIFS_DFG_ASP] == "D"  # DFG aspartate
+
+    # without a KLIFS pocket sequence there are no catalytic residues to read
+    obj = mutable_kinase("ABL1")
+    obj.klifs.pocket_seq = None
+    assert obj.return_catalytic_residues() is None
+
+
+def test_return_klifs2msa_dict(dict_kinase):
+    """The empirical KLIFS->MSA map covers the pocket; core anchors are highly concordant."""
+    from mkt.schema.kinase_schema import return_klifs2msa_dict
+
+    dict_map, dict_concordance = return_klifs2msa_dict(
+        dict_kinase, bool_return_concordance=True
+    )
+    # core catalytic anchors map to their known MSA columns
+    assert dict_map["III:17"] == "B3:028"  # VAIK beta3 lysine
+    assert dict_map["c.l:70"] == "CL:111"  # HRD catalytic aspartate
+    assert dict_map["xDFG:81"] == "ALN:129"  # DFG aspartate
+    # concordance is near-perfect at the anchors but not 1:1 across the pocket
+    assert dict_concordance["xDFG:81"] >= 0.98
+    assert min(dict_concordance.values()) >= 0.85
