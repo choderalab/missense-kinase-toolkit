@@ -33,9 +33,28 @@ def test_dict_counts(dict_kinase):
     n_kincore = len(
         [i.hgnc_name for i in dict_kinase.values() if i.kincore is not None]
     )
-    # 492 with KinCoRe FASTA/CIF + 5 MSA-only shells (multi-KD second domains in the
-    # Dunbrack alignment but without KinCoRe structure)
     assert n_kincore == 497
+
+    # every KinCoRe domain carries a FASTA -- guards the multi-KD reconciliation so JH2
+    # pseudokinase domains (JAK1/2/3_2, TYK2_2, EIF2AK4_2) never ship FASTA-less again
+    n_fasta = len(
+        [
+            i
+            for i in dict_kinase.values()
+            if i.kincore is not None and i.kincore.fasta is not None
+        ]
+    )
+    assert n_fasta == n_kincore
+
+    # active-state CIFs only (JH2 pseudokinase domains have no active structure)
+    n_cif = len(
+        [
+            i
+            for i in dict_kinase.values()
+            if i.kincore is not None and i.kincore.cif is not None
+        ]
+    )
+    assert n_cif == 437
 
     n_pfam = len([i.hgnc_name for i in dict_kinase.values() if i.pfam is not None])
     assert n_pfam == 533
