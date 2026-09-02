@@ -78,7 +78,7 @@ DICT_SEQ_SOURCE = {
         name="kinasedomainfasta.tar.gz",
         path=PATH_FASTA_TAR,
         url=KINCORE_FASTA_URL,
-        version="v1",
+        version="v3",
         citation=CITATION_GIZZIO,
     ),
     KinCoReSeqSource.FAEZOV_2023: DataSource(
@@ -90,7 +90,7 @@ DICT_SEQ_SOURCE = {
     KinCoReSeqSource.MODI_2019: DataSource(
         name="Human-PK.fasta",
         path=os.path.join(PATH_DATA, "Human-PK.fasta"),
-        version="v3",
+        version="v1",
         citation=CITATION_MODI,
     ),
 }
@@ -101,13 +101,13 @@ DICT_STRUCTURE_SOURCE = {
         name="AF2_Active_Models_v2.zip",
         path=PATH_CIF_ZIP,
         url=KINCORE_CIF_URL,
-        version="v1",
+        version="v2",
         citation=CITATION_GIZZIO,
     ),
     KinCoReStructureSource.FAEZOV_2023: DataSource(
         name="Kincore_AlphaFold2_ActiveHumanCatalyticKinases",
         path=PATH_ORIG_CIF,
-        version="v2",
+        version="v1",
         citation=CITATION_FAEZOV,
     ),
 }
