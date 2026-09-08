@@ -229,23 +229,42 @@ class Dashboard:
 
                 table = PropertyTables(obj_temp)
 
+                def render_property_table(df, str_source):
+                    # render the Styler HTML directly: st.table/st.dataframe cannot hide the
+                    # column header, so drop the redundant "Property" header (key-value tables)
+                    # via Styler.hide + st.markdown; row labels stay, saving a header row
+                    if df is not None:
+                        styler = df.style.hide(axis="columns").set_table_styles(
+                            [
+                                {
+                                    "selector": "td, th",
+                                    "props": [
+                                        ("text-align", "left"),
+                                        ("padding", "2px 10px"),
+                                        ("font-weight", "normal"),
+                                    ],
+                                },
+                                {"selector": "table", "props": [("width", "100%")]},
+                            ]
+                        )
+                        st.markdown(styler.to_html(), unsafe_allow_html=True)
+                    else:
+                        st.error(
+                            f"No {str_source} objects available for this kinase.",
+                            icon="⚠️",
+                        )
+
                 st.markdown("#### KinHub\n")
-                if table.df_kinhub is not None:
-                    st.table(table.df_kinhub)
-                else:
-                    st.error("No KinHub objects available for this kinase.", icon="⚠️")
+                render_property_table(table.df_kinhub, "KinHub")
 
                 st.markdown("#### KLIFS\n")
-                if table.df_klifs is not None:
-                    st.table(table.df_klifs)
-                else:
-                    st.error("No KLIFS objects available for this kinase.", icon="⚠️")
+                render_property_table(table.df_klifs, "KLIFS")
 
                 st.markdown("#### KinCoRe\n")
-                if table.df_kincore is not None:
-                    st.table(table.df_kincore)
-                else:
-                    st.error("No KinCoRe objects available for this kinase.", icon="⚠️")
+                render_property_table(table.df_kincore, "KinCoRe")
+
+                st.markdown("#### Computed\n")
+                render_property_table(table.df_computed, "computed")
 
 
 def main():
