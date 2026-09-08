@@ -157,19 +157,21 @@ def test_run_dispatches_source_only(monkeypatch, tmp_path):
     monkeypatch.setattr(
         pipeline.Pipeline,
         "partial",
-        lambda self, sources, names, bool_figs=True: calls.__setitem__(
+        lambda self, sources, names, bool_figs=True, force=False: calls.__setitem__(
             "partial", (sources, names)
         ),
     )
     monkeypatch.setattr(
         pipeline.Pipeline,
         "full",
-        lambda self, names, bool_figs=True: calls.__setitem__("full", names),
+        lambda self, names, bool_figs=True, force=False: calls.__setitem__(
+            "full", names
+        ),
     )
     monkeypatch.setattr(
         pipeline.Pipeline,
         "update",
-        lambda self, names, list_kinase, bool_figs=True: calls.__setitem__(
+        lambda self, names, list_kinase, bool_figs=True, force=False: calls.__setitem__(
             "update", (names, list_kinase)
         ),
     )
@@ -201,7 +203,9 @@ def test_source_only_no_dict_falls_back_to_full(monkeypatch, tmp_path):
     monkeypatch.setattr(
         pipeline.Pipeline,
         "full",
-        lambda self, names, bool_figs=True: calls.__setitem__("full", names),
+        lambda self, names, bool_figs=True, force=False: calls.__setitem__(
+            "full", names
+        ),
     )
 
     pl = pipeline.Pipeline(

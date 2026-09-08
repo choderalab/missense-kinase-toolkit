@@ -8,10 +8,21 @@ import logging
 from dataclasses import dataclass
 
 import pandas as pd
+from mkt.schema.constants import (
+    DICT_MOLECULAR_BRAKE,
+    LIST_KLIFS_DFG_MOTIF,
+    LIST_KLIFS_HRD_MOTIF,
+    STR_KLIFS_BETA3_LYSINE,
+    STR_KLIFS_DFG_MOTIF,
+    STR_KLIFS_HRD_MOTIF,
+)
 from mkt.schema.kinase_schema import KinaseInfo, Provenance
 from mkt.schema.utils import rgetattr
 
 logger = logging.getLogger(__name__)
+
+STR_APE_MOTIF = "A-P-E"
+"""str: Canonical APE motif (Ala-Pro-Glu) shown alongside a kinase's APE indices."""
 
 
 @dataclass
@@ -26,6 +37,8 @@ class PropertyTables:
     """Dataframe containing the KLIFS information."""
     df_kincore: pd.DataFrame | None = None
     """Dataframe containing the KinCoRe information."""
+    df_computed: pd.DataFrame | None = None
+    """Dataframe containing the adjudicated/computed properties."""
 
     def __post_init__(self):
         """Post-initialization method to extract properties."""
@@ -100,7 +113,71 @@ class PropertyTables:
             list_keep=["group", "hgnc", "swissprot", "uniprot", "source"],
         )
 
+        self.df_computed = self.build_computed_table()
+
         self.format_property_columns()
+
+    def build_computed_table(self) -> pd.DataFrame | None:
+        """Assemble the adjudicated/computed-property table for the kinase.
+
+        Surfaces the classification flags (``is_pseudokinase``/``is_pseudogene``/
+        ``is_lipid_kinase``) and the activation-loop/pocket motifs -- the APE-motif UniProt
+        indices (``adjudicate_ape``) and molecular-brake residues
+        (``return_molecular_brake_residues``) -- each shown next to its canonical identity.
+
+        Returns
+        -------
+        pd.DataFrame | None
+            A single-column ("Property") table indexed by property label, or None on error.
+        """
+        try:
+            obj = self.obj_kinase
+            dict_computed: dict[str, str] = {
+                "is_pseudokinase": str(obj.is_pseudokinase()),
+                "is_pseudogene": str(obj.is_pseudogene()),
+                "is_lipid_kinase": str(obj.is_lipid_kinase()),
+            }
+
+            # catalytic motifs driving the pseudokinase call (VAIK Lys, HRD, DFG)
+            dict_catalytic = obj.return_catalytic_residues()
+            if dict_catalytic is not None:
+                dict_computed["catalytic Lys (canonical K)"] = (
+                    dict_catalytic[STR_KLIFS_BETA3_LYSINE] or "-"
+                )
+                dict_computed[f"HRD motif (canonical {STR_KLIFS_HRD_MOTIF})"] = "".join(
+                    dict_catalytic[label] or "-" for label in LIST_KLIFS_HRD_MOTIF
+                )
+                dict_computed[f"DFG motif (canonical {STR_KLIFS_DFG_MOTIF})"] = "".join(
+                    dict_catalytic[label] or "-" for label in LIST_KLIFS_DFG_MOTIF
+                )
+
+            list_ape = obj.adjudicate_ape()
+            dict_computed["APE indices"] = (
+                ", ".join("None" if i is None else str(i) for i in list_ape)
+                if list_ape is not None
+                else "None"
+            )
+            dict_computed["APE motif (canonical)"] = STR_APE_MOTIF
+
+            dict_brake = obj.return_molecular_brake_residues()
+            dict_computed["molecular brake"] = (
+                ", ".join(v if v is not None else "-" for v in dict_brake.values())
+                if dict_brake is not None
+                else "None"
+            )
+            dict_computed["molecular brake (canonical)"] = ", ".join(
+                DICT_MOLECULAR_BRAKE.values()
+            )
+
+            df_temp = pd.DataFrame.from_dict(
+                dict_computed, orient="index", columns=["Property"]
+            )
+            df_temp.index = df_temp.index.map(lambda x: x.replace("_", " ").upper())
+            return df_temp
+
+        except Exception as e:
+            logger.error(f"Error building computed property table: {e}")
+            return None
 
     @staticmethod
     def _format_property_value(value) -> str:

@@ -32,6 +32,23 @@ class TestKinCoReHarmonization:
         """EGFR (P00533) has exactly one KinCoRe entry."""
         assert len(kincore_harmonized_dict["P00533"]) == 1
 
+    def test_all_records_have_fasta(self, kincore_harmonized_dict):
+        """Every harmonized KinCoRe record carries a FASTA (no FASTA-less shells)."""
+        recs = [r for v in kincore_harmonized_dict.values() for r in v]
+        assert recs and all(r.fasta is not None for r in recs)
+
+    def test_multikd_second_domains_have_fasta(self, kincore_harmonized_dict):
+        """The JAK-family/EIF2AK4 second (JH2/pseudokinase) domains get their Modi FASTA.
+
+        These lack an active-state structure (cif is None) but must not be FASTA-less --
+        the regression that shipped them as MSA-only shells.
+        """
+        for uniprot in ["P23458", "O60674", "P52333", "P29597", "Q9P2K8"]:
+            recs = kincore_harmonized_dict[uniprot]
+            assert len(recs) == 2
+            jh2 = [r for r in recs if r.cif is None]
+            assert len(jh2) == 1 and jh2[0].fasta is not None
+
 
 @pytest.mark.network
 class TestKinCoReAlignment:
