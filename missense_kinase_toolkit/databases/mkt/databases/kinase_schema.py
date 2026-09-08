@@ -568,60 +568,60 @@ DICT_MERGE_MULTIMAP = {
     },
     "manual": {
         "P23458": [
-            ["JAK1", "JAK1", "JAK1"],
-            ["JAK1_b", "JAK1-b", None],
+            ["JAK1", "JAK1", "JAK1_2"],
+            ["JAK1_b", "JAK1-b", "JAK1_1"],
         ],
         "Q15772": [
-            ["SPEG", "SPEG", "SPEG1"],
-            ["SPEG_b", "SPEG-b", "SPEG2"],
+            ["SPEG", "SPEG", "SPEG_1"],
+            ["SPEG_b", "SPEG-b", "SPEG_2"],
         ],
         "Q9UK32": [
-            ["RSK4", "RPS6KA6", "RPS6KA61"],
-            ["RSK4_b", "RPS6KA6-b", "RPS6KA62"],
+            ["RSK4", "RPS6KA6", "RPS6KA6_1"],
+            ["RSK4_b", "RPS6KA6-b", "RPS6KA6_2"],
         ],
         "P29597": [
-            ["TYK2", "TYK2", "TYK2"],
-            ["TYK2_b", "TYK2-b", None],
+            ["TYK2", "TYK2", "TYK2_2"],
+            ["TYK2_b", "TYK2-b", "TYK2_1"],
         ],
         "Q15349": [
-            ["RSK3", "RPS6KA2", "RPS6KA21"],
-            ["RSK3_b", "RPS6KA2-b", "RPS6KA22"],
+            ["RSK3", "RPS6KA2", "RPS6KA2_1"],
+            ["RSK3_b", "RPS6KA2-b", "RPS6KA2_2"],
         ],
         "Q15418": [
-            ["RSK1", "RPS6KA1", "RPS6KA11"],
-            ["RSK1_b", "RPS6KA1-b", "RPS6KA12"],
+            ["RSK1", "RPS6KA1", "RPS6KA1_1"],
+            ["RSK1_b", "RPS6KA1-b", "RPS6KA1_2"],
         ],
         "Q5VST9": [
-            ["Obscn", "OBSCN", "OBSCN1"],
-            ["Obscn_b", "OBSCN-b", "OBSCN2"],
+            ["Obscn", "OBSCN", "OBSCN_1"],
+            ["Obscn_b", "OBSCN-b", "OBSCN_2"],
         ],
         "O60674": [
-            ["JAK2", "JAK2", "JAK2"],
-            ["JAK2_b", "JAK2-b", None],
+            ["JAK2", "JAK2", "JAK2_2"],
+            ["JAK2_b", "JAK2-b", "JAK2_1"],
         ],
         "Q9P2K8": [
-            ["GCN2", "EIF2AK4", "EIF2AK4"],
-            ["GCN2_b", "EIF2AK4-b", None],
+            ["GCN2", "EIF2AK4", "EIF2AK4_2"],
+            ["GCN2_b", "EIF2AK4-b", "EIF2AK4_1"],
         ],
         "P51812": [
-            ["RSK2", "RPS6KA3", "RPS6KA31"],
-            ["RSK2_b", "RPS6KA3-b", "RPS6KA32"],
+            ["RSK2", "RPS6KA3", "RPS6KA3_1"],
+            ["RSK2_b", "RPS6KA3-b", "RPS6KA3_2"],
         ],
         "O75676": [
-            ["MSK2", "RPS6KA4", "RPS6KA41"],
-            ["MSK2_b", "RPS6KA4-b", "RPS6KA42"],
+            ["MSK2", "RPS6KA4", "RPS6KA4_1"],
+            ["MSK2_b", "RPS6KA4-b", "RPS6KA4_2"],
         ],
         "O75582": [
-            ["MSK1", "RPS6KA5", "RPS6KA51"],
-            ["MSK1_b", "RPS6KA5-b", "RPS6KA52"],
+            ["MSK1", "RPS6KA5", "RPS6KA5_1"],
+            ["MSK1_b", "RPS6KA5-b", "RPS6KA5_2"],
         ],
         "Q8IWB6": [
             ["SgK307", "TEX14", "TEX14"],
             ["SgK424", None, None],
         ],
         "P52333": [
-            ["JAK3", "JAK3", "JAK3"],
-            ["JAK3_b", "JAK3-b", None],
+            ["JAK3", "JAK3", "JAK3_2"],
+            ["JAK3_b", "JAK3-b", "JAK3_1"],
         ],
     },
 }

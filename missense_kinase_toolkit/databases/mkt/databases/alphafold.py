@@ -297,7 +297,7 @@ def fetch_alphafold_kd(
     )
 
 
-def enrich_with_alphafold(obj_kinase) -> None:
+def enrich_with_alphafold(obj_kinase, force: bool = False) -> None:
     """Populate ``obj_kinase.alphafold`` with the KD-sliced AlphaFold structure.
 
     Fetches an AlphaFold DB structure for **every** kinase with adjudicated KD bounds (so a
@@ -310,6 +310,9 @@ def enrich_with_alphafold(obj_kinase) -> None:
     ----------
     obj_kinase : KinaseInfo
         The kinase object to enrich (mutated in place).
+    force : bool, optional
+        Re-fetch and re-slice even when the stored structure's KD bounds are unchanged
+        (``--force-regen``), by default False.
 
     Returns
     -------
@@ -324,9 +327,11 @@ def enrich_with_alphafold(obj_kinase) -> None:
         return
 
     # idempotent: re-slice only when the KD bounds changed since the structure was stored
-    # (e.g. an enrichment upstream, such as msa, updated adjudication); otherwise keep it.
+    # (e.g. an enrichment upstream, such as msa, updated adjudication); otherwise keep it
+    # unless a forced regeneration is requested.
     if (
-        obj_kinase.alphafold is not None
+        not force
+        and obj_kinase.alphafold is not None
         and obj_kinase.alphafold.start == start
         and obj_kinase.alphafold.end == end
     ):
