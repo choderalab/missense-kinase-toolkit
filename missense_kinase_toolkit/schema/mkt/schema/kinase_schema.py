@@ -709,7 +709,7 @@ class KinaseInfo(BaseModel):
             )
         return end
 
-    def adjudicate_APE(self) -> list[int | None] | None:
+    def adjudicate_ape(self) -> list[int | None] | None:
         """Return the APE-motif UniProt indices (Ala, Pro, Glu) from the Dunbrack MSA.
 
         Reads ``kincore.msa.region2uniprot`` at the APE-motif positions (:data:`LIST_MSA_APE`,
@@ -798,6 +798,41 @@ class KinaseInfo(BaseModel):
 
         return False
 
+    def return_catalytic_residues(self) -> dict[str, str | None] | None:
+        """Return this kinase's residues at the KLIFS catalytic positions.
+
+        Reads the KLIFS pocket sequence at the catalytic-determining positions -- the beta3
+        (III:17) and beta2 (II:13) lysines, the catalytic-loop HRD motif (c.l:68-70, its
+        aspartate at c.l:70 the catalytic base) and the DFG motif (xDFG:81-83, its aspartate
+        at xDFG:81). Used by :meth:`is_pseudokinase` and surfaced in the app's computed
+        properties. Returns None when no KLIFS pocket sequence is available.
+
+        Returns
+        -------
+        dict[str, str | None] | None
+            Mapping of KLIFS region:idx label to the residue at that position, or None when
+            ``klifs.pocket_seq`` is unavailable.
+        """
+        from mkt.schema.constants import (
+            LIST_KLIFS_DFG_MOTIF,
+            LIST_KLIFS_HRD_MOTIF,
+            LIST_KLIFS_REGION,
+            STR_KLIFS_BETA2_LYSINE,
+            STR_KLIFS_BETA3_LYSINE,
+        )
+
+        if self.klifs is None or self.klifs.pocket_seq is None:
+            return None
+
+        pocket = self.klifs.pocket_seq
+        list_labels = [
+            STR_KLIFS_BETA3_LYSINE,
+            STR_KLIFS_BETA2_LYSINE,
+            *LIST_KLIFS_HRD_MOTIF,
+            *LIST_KLIFS_DFG_MOTIF,
+        ]
+        return {label: pocket[LIST_KLIFS_REGION.index(label)] for label in list_labels}
+
     def is_pseudokinase(self) -> bool:
         """Return boolean if a (predicted) pseudokinase.
 
@@ -819,7 +854,6 @@ class KinaseInfo(BaseModel):
             Whether or not is a predicted pseudokinase
         """
         from mkt.schema.constants import (
-            LIST_KLIFS_REGION,
             LIST_PSEUDOKINASE_HEURISTIC_FALSE_POSITIVE,
             LIST_PSEUDOKINASE_TRIAD_INTACT,
             STR_KLIFS_BETA2_LYSINE,
@@ -840,22 +874,18 @@ class KinaseInfo(BaseModel):
             return False
 
         # cannot assess catalytic residues without a pocket
-        if self.klifs is None or self.klifs.pocket_seq is None:
+        residues = self.return_catalytic_residues()
+        if residues is None:
             return False
-
-        pocket = self.klifs.pocket_seq
-
-        def _residue(label):
-            return pocket[LIST_KLIFS_REGION.index(label)]
 
         # the catalytic lysine is normally in beta3 (VAIK); the WNK family relocates it
         # to beta2 ("With No K [in beta3]"), so accept a lysine at either position
         has_lysine = (
-            _residue(STR_KLIFS_BETA3_LYSINE) == "K"
-            or _residue(STR_KLIFS_BETA2_LYSINE) == "K"
+            residues[STR_KLIFS_BETA3_LYSINE] == "K"
+            or residues[STR_KLIFS_BETA2_LYSINE] == "K"
         )
-        has_catalytic_asp = _residue(STR_KLIFS_CATALYTIC_ASP) == "D"
-        has_dfg_asp = _residue(STR_KLIFS_DFG_ASP) == "D"
+        has_catalytic_asp = residues[STR_KLIFS_CATALYTIC_ASP] == "D"
+        has_dfg_asp = residues[STR_KLIFS_DFG_ASP] == "D"
 
         # a pseudokinase is missing at least one of the three catalytic residues
         return not (has_lysine and has_catalytic_asp and has_dfg_asp)
@@ -929,3 +959,62 @@ class KinaseInfo(BaseModel):
             dict_residues[label] == canonical
             for label, canonical in DICT_MOLECULAR_BRAKE.items()
         )
+
+
+def return_klifs2msa_dict(
+    dict_kinase: dict[str, KinaseInfo],
+    bool_return_concordance: bool = False,
+) -> dict[str, str] | tuple[dict[str, str], dict[str, float]]:
+    """Assemble the empirical KLIFS-pocket -> Dunbrack-MSA position correspondence.
+
+    For each KLIFS ``region:idx``, tallies which MSA ``region2uniprot`` key most often shares
+    its UniProt index across the kinases carrying both maps, and returns that modal
+    correspondence (built programmatically from ``dict_kinase`` -- not hard-coded).
+
+    The concordance is **not 1:1**: it is ~99% at the core catalytic/structural anchors (e.g.
+    ``III:17`` VAIK Lys, ``c.l:70`` HRD Asp, ``xDFG:81`` DFG Asp) but drops to ~90-95% across
+    the variable alphaD/alphaE/linker region, where the two structure-based alignment conventions
+    place insert-flanking residues differently, and for a handful of divergent (pseudo)kinases.
+    Use it for cross-referencing/QA, not as an exact map. Pass ``bool_return_concordance`` to also
+    get the per-position agreement fraction (share of kinases mapping to the modal MSA key).
+
+    Parameters
+    ----------
+    dict_kinase : dict[str, KinaseInfo]
+        Mapping of HGNC name to kinase object (needs both ``KLIFS2UniProtIdx`` and
+        ``kincore.msa``).
+    bool_return_concordance : bool, optional
+        If True, also return the per-KLIFS-position agreement fraction, by default False.
+
+    Returns
+    -------
+    dict[str, str] | tuple[dict[str, str], dict[str, float]]
+        The KLIFS ``region:idx`` -> MSA ``region:idx`` map; with ``bool_return_concordance``,
+        a ``(map, concordance)`` tuple where concordance is the modal-agreement fraction per
+        KLIFS position.
+    """
+    from collections import Counter
+
+    dict_counter: dict[str, Counter] = {label: Counter() for label in LIST_KLIFS_REGION}
+    for obj in dict_kinase.values():
+        msa = obj.kincore.msa if obj.kincore is not None else None
+        if msa is None or obj.KLIFS2UniProtIdx is None:
+            continue
+        dict_idx2msa = {v: k for k, v in msa.region2uniprot.items() if v is not None}
+        for klifs_label, uniprot_idx in obj.KLIFS2UniProtIdx.items():
+            if uniprot_idx is not None and uniprot_idx in dict_idx2msa:
+                dict_counter[klifs_label][dict_idx2msa[uniprot_idx]] += 1
+
+    dict_map: dict[str, str] = {}
+    dict_concordance: dict[str, float] = {}
+    for label in LIST_KLIFS_REGION:
+        counter = dict_counter[label]
+        if not counter:
+            continue
+        msa_label, count = counter.most_common(1)[0]
+        dict_map[label] = msa_label
+        dict_concordance[label] = count / sum(counter.values())
+
+    if bool_return_concordance:
+        return dict_map, dict_concordance
+    return dict_map
