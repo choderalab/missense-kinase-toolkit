@@ -248,7 +248,8 @@ class Provenance(BaseModel):
 
     name: str  # dataset/archive/file name
     version: str | None = None  # e.g. "v1"
-    citation: str | None = None  # publication or DOI
+    citation: str | None = None  # short publication citation
+    doi: str | None = None  # publication DOI URL
     query_date: str | None = (
         None  # ISO date: download date (re-fetched) or file mtime (local)
     )
@@ -437,6 +438,23 @@ class AlphaFold(BaseModel):
     )
 
 
+class Exon(BaseModel):
+    """Per-residue exon annotation of the UniProt canonical sequence.
+
+    Maps each 1-based UniProt canonical index to the 1-based exon number (transcript rank) of
+    the codon encoding it, from the GenomeNexus canonical-transcript exon/UTR structure (isoform
+    override "uniprot", so the transcript matches the UniProt sequence). A residue whose codon
+    straddles an exon boundary is assigned the exon of its central nucleotide. Enables mapping
+    exon-level events (e.g. EGFR exon-19 deletions) to amino-acid positions.
+    """
+
+    transcript_id: str  # Ensembl canonical transcript id
+    build: str  # genome build the exon coordinates are on
+    n_exons: int  # number of exons in the transcript
+    idx2exon: dict[int, int]  # UniProt 1-based index -> exon number (transcript rank)
+    source: Provenance | None = None  # GenomeNexus provenance
+
+
 class KinaseInfoUniProt(BaseModel):
     """Pydantic model for kinase information at the level of the UniProt ID."""
 
@@ -466,6 +484,7 @@ class KinaseInfo(BaseModel):
     pfam: Pfam | None = None
     kincore: KinCoRe | None = None
     alphafold: AlphaFold | None = None
+    exon: Exon | None = None
     KLIFS2UniProtIdx: dict[str, int | None] | None = None
     KLIFS2UniProtSeq: dict[str, str | None] | None = None
 
