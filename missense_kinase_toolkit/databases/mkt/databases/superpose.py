@@ -35,7 +35,8 @@ REFERENCE_HGNC = "INSR"
 REFERENCE_SOURCE = DataSource(
     name="1gag_template.pdb",
     path=os.path.join(get_repo_root(), "data", "1gag_template.pdb"),
-    citation="PDB 1GAG (Hubbard, EMBO J. 1997) -- INSR kinase domain",
+    citation="Hubbard, 1997.",  # EMBO J 1997 -- PDB 1GAG, INSR kinase domain
+    doi="https://doi.org/10.1093/emboj/16.18.5572",
 )
 """Reference template: the insulin-receptor (INSR) tyrosine-kinase domain."""
 
