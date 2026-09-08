@@ -315,6 +315,17 @@ reverse-ordered in lipid/PIKK-like kinases (DRH rather than HRD), but the aspart
 at c.l:70 -- so this column is robust to that reversal."""
 STR_KLIFS_DFG_ASP = "xDFG:81"
 """str: KLIFS region:idx of the DFG-motif aspartate."""
+LIST_KLIFS_HRD_MOTIF = ["c.l:68", "c.l:69", "c.l:70"]
+"""list[str]: KLIFS region:idx labels of the catalytic-loop HRD motif (His-Arg-Asp; the
+aspartate at c.l:70 is the catalytic base). Note the loop can read DRH in lipid/PIKK-like
+kinases (see STR_KLIFS_CATALYTIC_ASP)."""
+STR_KLIFS_HRD_MOTIF = "HRD"
+"""str: Canonical catalytic-loop motif (His-Arg-Asp)."""
+LIST_KLIFS_DFG_MOTIF = ["xDFG:81", "xDFG:82", "xDFG:83"]
+"""list[str]: KLIFS region:idx labels of the DFG motif (Asp-Phe-Gly; the aspartate at
+xDFG:81 chelates the catalytic Mg2+)."""
+STR_KLIFS_DFG_MOTIF = "DFG"
+"""str: Canonical activation-segment start motif (Asp-Phe-Gly)."""
 
 LIST_PSEUDOKINASE_TRIAD_INTACT = [
     "BUB1B",
