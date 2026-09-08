@@ -280,6 +280,7 @@ def fetch_alphafold_kd(
         name="AlphaFold DB",
         version=f"v{latest_version}" if latest_version is not None else None,
         citation=json.get("toolUsed"),
+        doi="https://doi.org/10.1093/nar/gkaf1226",  # Varadi et al., AlphaFold DB (NAR)
         query_date=query_date,
     )
     return AlphaFold(

@@ -41,7 +41,9 @@ class DataSource:
     version : str | None
         Source version tag, by default None.
     citation : str | None
-        Publication or DOI, by default None.
+        Short publication citation, by default None.
+    doi : str | None
+        Publication DOI URL, by default None.
     """
 
     name: str
@@ -49,6 +51,7 @@ class DataSource:
     url: str | None = None
     version: str | None = None
     citation: str | None = None
+    doi: str | None = None
 
     def resolve(self, chunk_size: int = 1 << 20) -> str:
         """Return the local path, streaming it from :attr:`url` if the file is absent.
@@ -97,6 +100,7 @@ class DataSource:
             name=self.name,
             version=self.version,
             citation=self.citation,
+            doi=self.doi,
             query_date=query_date_from_file(path or self.path),
         )
 

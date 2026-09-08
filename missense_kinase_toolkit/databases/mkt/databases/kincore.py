@@ -66,15 +66,20 @@ PATH_FASTA_COMBINED = os.path.join(PATH_DATA, "kinasedomainfasta_combined.fasta"
 
 # --- KinCoRe source provenance ---
 # citations for the Dunbrack KinCoRe resources (sequence + structure) used below
-CITATION_GIZZIO = "Gizzio et al., 2026 (10.1042/BCJ20260137)"
-CITATION_FAEZOV = "Faezov & Dunbrack, 2023 (bioRxiv)"
-CITATION_MODI = "Modi & Dunbrack, 2019 (PNAS)"
+CITATION_GIZZIO = "Gizzio et al., 2026."
+CITATION_FAEZOV = "Faezov & Dunbrack, 2023."
+CITATION_MODI = "Modi & Dunbrack, 2019."
+
+DOI_GIZZIO = "https://doi.org/10.1042/BCJ20260137"
+DOI_FAEZOV = "https://doi.org/10.1101/2023.07.21.550125"
+DOI_MODI = "https://doi.org/10.1073/pnas.1814279116"
 
 # per-source metadata (archive/file name, version tier, citation, download URL) resolved into a
 # Provenance record; version tiers follow priority order (v1 = current/highest priority)
 DICT_SEQ_SOURCE = {
     KinCoReSeqSource.GIZZIO_2026: DataSource(
         name="kinasedomainfasta.tar.gz",
+        doi=DOI_GIZZIO,
         path=PATH_FASTA_TAR,
         url=KINCORE_FASTA_URL,
         version="v3",
@@ -82,12 +87,14 @@ DICT_SEQ_SOURCE = {
     ),
     KinCoReSeqSource.FAEZOV_2023: DataSource(
         name="AF2-active.fasta",
+        doi=DOI_FAEZOV,
         path=os.path.join(PATH_DATA, "AF2-active.fasta"),
         version="v2",
         citation=CITATION_FAEZOV,
     ),
     KinCoReSeqSource.MODI_2019: DataSource(
         name="Human-PK.fasta",
+        doi=DOI_MODI,
         path=os.path.join(PATH_DATA, "Human-PK.fasta"),
         version="v1",
         citation=CITATION_MODI,
@@ -98,6 +105,7 @@ DICT_SEQ_SOURCE = {
 DICT_STRUCTURE_SOURCE = {
     KinCoReStructureSource.GIZZIO_2026: DataSource(
         name="AF2_Active_Models_v2.zip",
+        doi=DOI_GIZZIO,
         path=PATH_CIF_ZIP,
         url=KINCORE_CIF_URL,
         version="v2",
@@ -105,6 +113,7 @@ DICT_STRUCTURE_SOURCE = {
     ),
     KinCoReStructureSource.FAEZOV_2023: DataSource(
         name="Kincore_AlphaFold2_ActiveHumanCatalyticKinases",
+        doi=DOI_FAEZOV,
         path=PATH_ORIG_CIF,
         version="v1",
         citation=CITATION_FAEZOV,

@@ -16,16 +16,18 @@ Genome Nexus serves GRCh37 from the default host (``www.genomenexus.org``) and
 GRCh38 from ``grch38.genomenexus.org``, so the build must match the coordinates.
 """
 
+import datetime
 import json
 import logging
+import re
 
 from mkt.databases import requests_wrapper
 from mkt.databases.constants import DICT_HEADER_JSON_POST, resolve_rest_host
+from mkt.schema.kinase_schema import Exon, Provenance
 from mkt.schema.utils import TQDM_BAR_FORMAT
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
-
 
 DICT_GENOME_NEXUS_HOST = {
     "GRCh37": "https://www.genomenexus.org",
@@ -182,3 +184,121 @@ def annotate_variants(
             if summary is not None:
                 dict_annotation[rec.get("variant")] = summary
     return dict_annotation
+
+
+def build_exon_map(record: dict, protein_length: int) -> dict[int, int] | None:
+    """Map each 1-based protein position to its exon number from a transcript record.
+
+    Subtracts the UTR overlap from each exon to get its coding span, walks the exons in
+    transcription (``rank``) order to lay out the CDS, and assigns residue ``r`` to the exon
+    containing the central nucleotide of its codon (CDS position ``3r-1``) -- so a codon split
+    across an exon boundary is assigned by its middle base. Strand-agnostic: ``rank`` is already
+    coding order and the UTR overlap is a genomic-coordinate intersection.
+
+    Parameters
+    ----------
+    record : dict
+        A GenomeNexus canonical-transcript record with ``exons`` and ``utrs``.
+    protein_length : int
+        Expected protein length; the CDS must be ``protein_length * 3 + 3`` (with the stop codon)
+        or the record is rejected (None) as inconsistent with the UniProt sequence.
+
+    Returns
+    -------
+    dict[int, int] | None
+        Mapping of 1-based protein position to 1-based exon number, or None if the exon/UTR
+        structure is missing or inconsistent with ``protein_length``.
+    """
+    exons = record.get("exons") or []
+    utrs = record.get("utrs") or []
+    if not exons:
+        return None
+
+    # coding span per exon = exon length minus its overlap with any UTR
+    spans: list[tuple[int, int]] = []  # (rank, coding_len)
+    for exon in sorted(exons, key=lambda e: e["rank"]):
+        start, end = exon["exonStart"], exon["exonEnd"]
+        overlap = sum(
+            max(0, min(end, u["end"]) - max(start, u["start"]) + 1) for u in utrs
+        )
+        spans.append((exon["rank"], (end - start + 1) - overlap))
+
+    if sum(length for _, length in spans) != protein_length * 3 + 3:
+        return None
+
+    # lay out the CDS: rank -> [cds_start, cds_end] (1-based, coding 5'->3')
+    ranges: list[tuple[int, int, int]] = []  # (rank, cds_start, cds_end)
+    pos = 0
+    for rank, length in spans:
+        if length > 0:
+            ranges.append((rank, pos + 1, pos + length))
+            pos += length
+
+    # residue r's codon centers on CDS position 3r-1; assign r to that base's exon
+    idx2exon: dict[int, int] = {}
+    for residue in range(1, protein_length + 1):
+        center = 3 * residue - 1
+        for rank, cds_start, cds_end in ranges:
+            if cds_start <= center <= cds_end:
+                idx2exon[residue] = rank
+                break
+    return idx2exon
+
+
+def enrich_kinases_with_exons(
+    dict_targets: dict,
+    builds: tuple[str, ...] = ("GRCh37", "GRCh38"),
+) -> None:
+    """Annotate ``KinaseInfo`` objects with a per-residue exon map in place.
+
+    Fetches the canonical transcript (UniProt isoform override) for each distinct gene, builds
+    the protein-position -> exon-number map, and stamps it on ``obj.exon`` (recording the build
+    it came from). Multi-domain entries (``HGNC_1``/``HGNC_2``) share the gene's transcript, so
+    they share the same map. ``builds`` are tried in order: an entry unresolved on the primary
+    build (no transcript, or a protein length disagreeing with the UniProt canonical sequence) is
+    retried on the next, and left unset (logged) if no build resolves it.
+
+    Parameters
+    ----------
+    dict_targets : dict
+        Mapping of ``hgnc_name`` (possibly ``_1``/``_2``-suffixed) to ``KinaseInfo`` to enrich.
+    builds : tuple[str, ...]
+        Genome builds to try in order; GRCh37 first matches the cBioPortal MSK-IMPACT
+        coordinates, GRCh38 recovers genes absent/renamed on GRCh37.
+
+    Returns
+    -------
+    None
+    """
+    query_date = datetime.date.today().isoformat()
+    remaining = set(dict_targets)
+
+    for build in builds:
+        if not remaining:
+            break
+        genes = sorted({re.sub(r"_\d+$", "", name) for name in remaining})
+        dict_transcript = get_canonical_transcripts(genes, build=build)
+        for hgnc_name in list(remaining):
+            obj_kinase = dict_targets[hgnc_name]
+            record = dict_transcript.get(re.sub(r"_\d+$", "", hgnc_name))
+            if record is None:
+                continue
+            idx2exon = build_exon_map(record, len(obj_kinase.uniprot.canonical_seq))
+            if idx2exon is None:
+                continue
+            obj_kinase.exon = Exon(
+                transcript_id=record.get("transcriptId"),
+                build=build,
+                n_exons=len(record.get("exons") or []),
+                idx2exon=idx2exon,
+                source=Provenance(
+                    name="GenomeNexus canonical transcript",
+                    citation="de Bruijn et al., 2022.",
+                    doi="https://doi.org/10.1200/CCI.21.00144",
+                    query_date=query_date,
+                ),
+            )
+            remaining.discard(hgnc_name)
+
+    for hgnc_name in sorted(remaining):
+        logger.warning(f"no consistent exon map for {hgnc_name} on {list(builds)}...")
