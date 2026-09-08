@@ -64,6 +64,11 @@ def test_dict_counts(dict_kinase):
     )
     assert n_klif2uniprot == 519
 
+    # exon maps from GenomeNexus canonical transcripts (GRCh37, GRCh38 fallback); 20 entries
+    # have no consistent transcript (pseudogenes, symbol/length mismatches)
+    n_exon = len([i.hgnc_name for i in dict_kinase.values() if i.exon is not None])
+    assert n_exon == 523
+
 
 def test_abl1_fields(dict_kinase):
     """Test ABL1 attribute values across all data sources."""
