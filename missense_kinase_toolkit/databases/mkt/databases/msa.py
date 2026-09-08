@@ -28,7 +28,10 @@ MSA_SOURCE = DataSource(
         "https://dunbrack.fccc.edu/kincore/static/downloads/alignment-files/"
         "Human-PK-alignment.fasta"
     ),
-    citation="10.1038/s41598-019-56499-4",  # Modi & Dunbrack, Sci Rep 2019
+    # Modi & Dunbrack, Sci Rep 2019 -- the structure-based alignment paper, distinct from the
+    # PNAS active-states paper that kincore cites for the Human-PK.fasta sequences
+    citation="Modi & Dunbrack, 2019.",
+    doi="https://doi.org/10.1038/s41598-019-56499-4",
 )
 """DataSource: Dunbrack KinCoRe Human-PK structure-based alignment (on-demand download)."""
 

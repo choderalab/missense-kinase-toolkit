@@ -175,6 +175,27 @@ def _enrich_kincore_msa(ctx: "BuildContext") -> None:
     enrich_kinases_with_msa(dict(_iter_targets(ctx)))
 
 
+def _enrich_exon(ctx: "BuildContext") -> None:
+    """Annotate entries with a per-residue exon map from GenomeNexus canonical transcripts.
+
+    Populates ``exon`` (UniProt index -> exon number) for each entry, sharing a gene's transcript
+    across its ``_1``/``_2`` domains. Reads only the UniProt canonical sequence, so it has no
+    inter-step dependency.
+
+    Parameters
+    ----------
+    ctx : BuildContext
+        The build context.
+
+    Returns
+    -------
+    None
+    """
+    from mkt.databases.genomenexus import enrich_kinases_with_exons
+
+    enrich_kinases_with_exons(dict(_iter_targets(ctx)))
+
+
 # ordered enrichment-step registry; each step takes a BuildContext and mutates additive
 # optional fields on ctx.dict_kinaseinfo in place. steps run in this insertion order.
 # kincore_msa runs first so its KD bounds / MSA-only shells (and the MSA superposition tier)
@@ -186,19 +207,22 @@ _ENRICH_STEPS: dict[str, Callable[["BuildContext"], None]] = {
     "kincore_msa": _enrich_kincore_msa,
     "kincore_cif": _enrich_kincore_cif,
     "alphafold": _enrich_alphafold,
+    "exon": _enrich_exon,
 }
 """dict[str, Callable]: Ordered enrichment-step registry (name -> step function)."""
 
-_DEFAULT_OFF: set[str] = {"kincore_msa", "kincore_cif", "alphafold"}
+_DEFAULT_OFF: set[str] = {"kincore_msa", "kincore_cif", "alphafold", "exon"}
 """set[str]: Enrichment steps skipped in a full regen unless explicitly named via ``--only``
 (kincore_msa downloads the Dunbrack alignment; kincore_cif computes SASA + reference-frame
 superposition over the KinCoRe CIF; alphafold fetches an AlphaFold structure per entry and
-computes its SASA + superposition -- all opt-in and CPU-heavy)."""
+computes its SASA + superposition; exon queries GenomeNexus canonical transcripts -- all opt-in
+and network- or CPU-heavy)."""
 
 _STEP_DEPS: dict[str, set[str]] = {
     "kincore_msa": set(),
     "kincore_cif": set(),
     "alphafold": set(),
+    "exon": set(),
 }
 """dict[str, set[str]]: Enrichment-step name -> prerequisite step names. All read base-build
 fields (KLIFS mapping, adjudicated bounds) that are always populated before steps run; each

@@ -308,8 +308,13 @@ def serialize_kinase_dict(
         bar_format=TQDM_BAR_FORMAT,
     ):
         with open(f"{str_path}/{key}.{suffix}", "w") as outfile:
+            # TOML tables require string keys; mode="json" stringifies non-string dict keys
+            # (e.g. int-keyed maps), which pydantic coerces back on deserialize
+            model_dump = (
+                val.model_dump(mode="json") if suffix == "toml" else val.model_dump()
+            )
             val_serialized = DICT_FUNCS[suffix]["serialize"](
-                val.model_dump(),
+                model_dump,
                 **serialization_kwargs,
             )
             outfile.write(val_serialized)
