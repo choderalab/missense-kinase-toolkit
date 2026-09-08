@@ -13,16 +13,11 @@ from mkt.schema.constants import (
     LIST_KLIFS_DFG_MOTIF,
     LIST_KLIFS_HRD_MOTIF,
     STR_KLIFS_BETA3_LYSINE,
-    STR_KLIFS_DFG_MOTIF,
-    STR_KLIFS_HRD_MOTIF,
 )
 from mkt.schema.kinase_schema import KinaseInfo, Provenance
 from mkt.schema.utils import rgetattr
 
 logger = logging.getLogger(__name__)
-
-STR_APE_MOTIF = "A-P-E"
-"""str: Canonical APE motif (Ala-Pro-Glu) shown alongside a kinase's APE indices."""
 
 
 @dataclass
@@ -117,13 +112,41 @@ class PropertyTables:
 
         self.format_property_columns()
 
+    def _residue_index(self, label: str) -> str | None:
+        """Return the residue + UniProt index at a KLIFS ``region:idx`` label (e.g. "D855").
+
+        Handles a trailing signed offset on the label (e.g. "VIII:79-1"). Returns None when
+        no KLIFS mapping is available or the position is unmapped.
+        """
+        k2u = self.obj_kinase.KLIFS2UniProtIdx
+        if not k2u:
+            return None
+        base, offset = label, 0
+        for sign, mult in (("-", -1), ("+", 1)):
+            head, sep, num = label.rpartition(sign)
+            if sep and num.isdigit():
+                base, offset = head, mult * int(num)
+                break
+        idx = k2u.get(base)
+        if idx is None:
+            return None
+        idx += offset
+        return f"{self.obj_kinase.uniprot.canonical_seq[idx - 1]}{idx}"
+
+    def _motif(self, labels) -> str | None:
+        """Join per-position residue+index into a motif string (e.g. "H835-R836-D837")."""
+        parts = [self._residue_index(label) for label in labels]
+        return "-".join(p or "-" for p in parts) if any(parts) else None
+
     def build_computed_table(self) -> pd.DataFrame | None:
         """Assemble the adjudicated/computed-property table for the kinase.
 
         Surfaces the classification flags (``is_pseudokinase``/``is_pseudogene``/
-        ``is_lipid_kinase``) and the activation-loop/pocket motifs -- the APE-motif UniProt
-        indices (``adjudicate_ape``) and molecular-brake residues
-        (``return_molecular_brake_residues``) -- each shown next to its canonical identity.
+        ``is_lipid_kinase``) and the pocket/activation-loop motifs -- the catalytic Lys, HRD,
+        DFG (KLIFS pocket), APE (Dunbrack MSA), and molecular-brake positions -- as
+        ``residue+UniProt index`` strings (e.g. "A227-P228-E229"). The canonical identity is
+        implied by the motif name; only the molecular-brake triad states its canonical (N-E-K)
+        in the label.
 
         Returns
         -------
@@ -138,35 +161,26 @@ class PropertyTables:
                 "is_lipid_kinase": str(obj.is_lipid_kinase()),
             }
 
-            # catalytic motifs driving the pseudokinase call (VAIK Lys, HRD, DFG)
-            dict_catalytic = obj.return_catalytic_residues()
-            if dict_catalytic is not None:
-                dict_computed["catalytic Lys (canonical K)"] = (
-                    dict_catalytic[STR_KLIFS_BETA3_LYSINE] or "-"
-                )
-                dict_computed[f"HRD motif (canonical {STR_KLIFS_HRD_MOTIF})"] = "".join(
-                    dict_catalytic[label] or "-" for label in LIST_KLIFS_HRD_MOTIF
-                )
-                dict_computed[f"DFG motif (canonical {STR_KLIFS_DFG_MOTIF})"] = "".join(
-                    dict_catalytic[label] or "-" for label in LIST_KLIFS_DFG_MOTIF
-                )
+            for label, motif in [
+                ("catalytic Lys", self._residue_index(STR_KLIFS_BETA3_LYSINE)),
+                ("HRD motif", self._motif(LIST_KLIFS_HRD_MOTIF)),
+                ("DFG motif", self._motif(LIST_KLIFS_DFG_MOTIF)),
+            ]:
+                if motif is not None:
+                    dict_computed[label] = motif
 
             list_ape = obj.adjudicate_ape()
-            dict_computed["APE indices"] = (
-                ", ".join("None" if i is None else str(i) for i in list_ape)
+            seq = obj.uniprot.canonical_seq
+            dict_computed["APE motif"] = (
+                "-".join("-" if i is None else f"{seq[i - 1]}{i}" for i in list_ape)
                 if list_ape is not None
                 else "None"
             )
-            dict_computed["APE motif (canonical)"] = STR_APE_MOTIF
 
-            dict_brake = obj.return_molecular_brake_residues()
-            dict_computed["molecular brake"] = (
-                ", ".join(v if v is not None else "-" for v in dict_brake.values())
-                if dict_brake is not None
-                else "None"
-            )
-            dict_computed["molecular brake (canonical)"] = ", ".join(
-                DICT_MOLECULAR_BRAKE.values()
+            # molecular brake states its canonical triad (N-E-K) in the label
+            brake_canonical = "-".join(DICT_MOLECULAR_BRAKE.values())
+            dict_computed[f"molecular brake ({brake_canonical})"] = (
+                self._motif(DICT_MOLECULAR_BRAKE.keys()) or "None"
             )
 
             df_temp = pd.DataFrame.from_dict(
@@ -196,10 +210,11 @@ class PropertyTables:
         if value is None:
             return ""
         if isinstance(value, Provenance):
-            # render source provenance as "citation (version, query_date)"
+            # short citation, linked to the DOI when present (rendered via the Styler HTML)
             head = value.citation or value.name
-            detail = ", ".join(x for x in (value.version, value.query_date) if x)
-            return f"{head} ({detail})" if detail else head
+            if value.doi:
+                return f'<a href="{value.doi}" target="_blank">{head}</a>'
+            return head
         if isinstance(value, (list, tuple, set, frozenset)):
             return ", ".join(str(v) for v in value)
         return str(value)
