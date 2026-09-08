@@ -40,10 +40,95 @@ def _iter_targets(ctx: "BuildContext"):
                 yield hgnc_name, ctx.dict_kinaseinfo[hgnc_name]
 
 
-def _enrich_alphafold(ctx: "BuildContext") -> None:
-    """Store the KD-sliced AlphaFold structure on entries lacking a KinCoRe CIF.
+def _enrich_structure_derived(ctx: "BuildContext", only: str) -> None:
+    """Compute the structure-derived properties (SASA + superposition) for one structure type.
 
-    Per-entry failures are logged and skipped so one kinase never aborts the batch.
+    Shared body of the two structure-owning steps: the SASA over each ``only`` structure runs
+    in a process pool (parallel across cores), then each such structure is superposed onto the
+    shared 1GAG reference frame. Both honor ``ctx.force`` (recompute even when already present).
+
+    Parameters
+    ----------
+    ctx : BuildContext
+        The build context.
+    only : str
+        Structure type to enrich: ``"kincore"`` (the KinCoRe CIF) or ``"alphafold"``.
+
+    Returns
+    -------
+    None
+    """
+    from mkt.databases.sasa import (
+        DEFAULT_SASA_CONFIG,
+        MAX_ASA_REFERENCE,
+        enrich_kinases_with_sasa,
+    )
+    from mkt.databases.superpose import build_reference_frame, superpose_structure
+
+    force = getattr(ctx, "force", False)
+
+    cfg = DEFAULT_SASA_CONFIG
+    logger.info(
+        "SASA methodology (%s): %s, probe_radius=%.2f A, n_points=%d, heavy-atom; "
+        "RSA normalized by %s.",
+        only,
+        "Shrake-Rupley (Bio.PDB)" if cfg.bool_biopython else "dot_solvent (PyMOL)",
+        cfg.probe_radius,
+        cfg.n_points,
+        MAX_ASA_REFERENCE,
+    )
+
+    # parallelize the CPU-bound per-residue SASA across all cores
+    dict_targets = dict(_iter_targets(ctx))
+    enrich_kinases_with_sasa(
+        dict_targets, config=cfg, n_jobs=-1, only=only, force=force
+    )
+
+    # superpose each structure of this type onto the shared reference frame (built once)
+    frame = build_reference_frame(ctx.dict_kinaseinfo)
+    for hgnc_name, obj_kinase in _iter_targets(ctx):
+        try:
+            model = (
+                obj_kinase.kincore.cif
+                if only == "kincore" and obj_kinase.kincore is not None
+                else obj_kinase.alphafold if only == "alphafold" else None
+            )
+            superpose_structure(
+                model, obj_kinase, frame, f"{hgnc_name}_{only}", force=force
+            )
+        except Exception as e:
+            logger.error(
+                f"superpose ({only}) failed for {hgnc_name}: {e}", exc_info=True
+            )
+
+
+def _enrich_kincore_cif(ctx: "BuildContext") -> None:
+    """Compute the KinCoRe active-state CIF's derived properties (SASA + superposition).
+
+    The CIF coordinates come from the base build (the ``kincore`` source); this step
+    (re)generates the derived ``kincore.cif.sasa`` and ``kincore.cif.superposition`` that
+    travel with that structure. Named ``kincore_cif`` to avoid colliding with the ``kincore``
+    base-build source in ``--only``.
+
+    Parameters
+    ----------
+    ctx : BuildContext
+        The build context.
+
+    Returns
+    -------
+    None
+    """
+    _enrich_structure_derived(ctx, only="kincore")
+
+
+def _enrich_alphafold(ctx: "BuildContext") -> None:
+    """Fetch the KD-sliced AlphaFold structure and compute its derived properties.
+
+    Regenerates the AF structure (re-sliced on KD-bound changes, or forced via
+    ``--force-regen``) and, alongside it, its ``alphafold.sasa`` and
+    ``alphafold.superposition``. Per-entry failures are logged and skipped so one kinase never
+    aborts the batch.
 
     Parameters
     ----------
@@ -56,58 +141,25 @@ def _enrich_alphafold(ctx: "BuildContext") -> None:
     """
     from mkt.databases.alphafold import enrich_with_alphafold
 
+    force = getattr(ctx, "force", False)
     for hgnc_name, obj_kinase in _iter_targets(ctx):
         try:
-            enrich_with_alphafold(obj_kinase)
+            enrich_with_alphafold(obj_kinase, force=force)
         except Exception as e:
             logger.error(
                 f"alphafold enrichment failed for {hgnc_name}: {e}", exc_info=True
             )
 
-
-def _enrich_sasa(ctx: "BuildContext") -> None:
-    """Store KLIFS-pocket SASA/RSA computed over the adjudicated KD structure.
-
-    Logs the SASA methodology once up front (also recorded per-entry on the stored
-    :class:`SASA`); per-entry failures are logged and skipped so one kinase never aborts the
-    batch.
-
-    Parameters
-    ----------
-    ctx : BuildContext
-        The build context.
-
-    Returns
-    -------
-    None
-    """
-    from mkt.databases.sasa import (
-        DEFAULT_SASA_CONFIG,
-        MAX_ASA_REFERENCE,
-        enrich_kinases_with_sasa,
-    )
-
-    cfg = DEFAULT_SASA_CONFIG
-    logger.info(
-        "SASA methodology: %s, probe_radius=%.2f A, n_points=%d, heavy-atom; "
-        "RSA normalized by %s.",
-        "Shrake-Rupley (Bio.PDB)" if cfg.bool_biopython else "dot_solvent (PyMOL)",
-        cfg.probe_radius,
-        cfg.n_points,
-        MAX_ASA_REFERENCE,
-    )
-
-    # parallelize the CPU-bound per-residue SASA across all cores
-    dict_targets = dict(_iter_targets(ctx))
-    enrich_kinases_with_sasa(dict_targets, config=cfg, n_jobs=-1)
+    _enrich_structure_derived(ctx, only="alphafold")
 
 
-def _enrich_msa(ctx: "BuildContext") -> None:
+def _enrich_kincore_msa(ctx: "BuildContext") -> None:
     """Annotate entries with the Dunbrack structure-based MSA (activation-loop coordinates).
 
-    Maps each domain's Human-PK alignment row to UniProt coordinates on ``kincore.msa``
-    (creating an MSA-only KinCoRe shell where structure is absent); matched by ``hgnc_name``
-    with a UniProt-accession fallback. Batch failures are logged and skipped by the enricher.
+    Populates ``kincore.msa`` (a KinCoRe component): maps each domain's Human-PK alignment row
+    to UniProt coordinates (creating an MSA-only KinCoRe shell where structure is absent);
+    matched by ``hgnc_name`` with a UniProt-accession fallback. Batch failures are logged and
+    skipped by the enricher.
 
     Parameters
     ----------
@@ -124,28 +176,35 @@ def _enrich_msa(ctx: "BuildContext") -> None:
 
 
 # ordered enrichment-step registry; each step takes a BuildContext and mutates additive
-# optional fields on ctx.dict_kinaseinfo in place. steps run in this insertion order. msa runs
-# first so its KD bounds / MSA-only shells are available to the structure steps.
+# optional fields on ctx.dict_kinaseinfo in place. steps run in this insertion order.
+# kincore_msa runs first so its KD bounds / MSA-only shells (and the MSA superposition tier)
+# are available to the structure steps. each structure step owns its structure's derived
+# properties (SASA + reference-frame superposition), so they are (re)generated alongside the
+# structure itself. KinCoRe-component steps share the kincore_* prefix (fasta needs no step --
+# it is fully populated in the base build).
 _ENRICH_STEPS: dict[str, Callable[["BuildContext"], None]] = {
-    "msa": _enrich_msa,
+    "kincore_msa": _enrich_kincore_msa,
+    "kincore_cif": _enrich_kincore_cif,
     "alphafold": _enrich_alphafold,
-    "sasa": _enrich_sasa,
 }
 """dict[str, Callable]: Ordered enrichment-step registry (name -> step function)."""
 
-_DEFAULT_OFF: set[str] = {"msa", "alphafold", "sasa"}
+_DEFAULT_OFF: set[str] = {"kincore_msa", "kincore_cif", "alphafold"}
 """set[str]: Enrichment steps skipped in a full regen unless explicitly named via ``--only``
-(msa downloads the Dunbrack alignment; alphafold fetches an AlphaFold structure per
-KinCoRe-less entry; sasa runs converged Shrake-Rupley SASA over every structure -- all opt-in)."""
+(kincore_msa downloads the Dunbrack alignment; kincore_cif computes SASA + reference-frame
+superposition over the KinCoRe CIF; alphafold fetches an AlphaFold structure per entry and
+computes its SASA + superposition -- all opt-in and CPU-heavy)."""
 
 _STEP_DEPS: dict[str, set[str]] = {
-    "msa": set(),
+    "kincore_msa": set(),
+    "kincore_cif": set(),
     "alphafold": set(),
-    "sasa": {"alphafold"},
 }
-"""dict[str, set[str]]: Enrichment-step name -> prerequisite step names. msa and alphafold read
-the base-build fields (always populated before steps run); sasa reads the adjudicated structure,
-so the AlphaFold fallback should be materialized first for KinCoRe-less entries."""
+"""dict[str, set[str]]: Enrichment-step name -> prerequisite step names. All read base-build
+fields (KLIFS mapping, adjudicated bounds) that are always populated before steps run; each
+structure step owns its structure's derived properties, so there is no inter-step dependency.
+The MSA superposition tier benefits from ``kincore_msa`` running first, but degrades to the
+sequence tier if absent."""
 
 _DEFAULT_STEPS: list[str] = [name for name in _ENRICH_STEPS if name not in _DEFAULT_OFF]
 """list[str]: Steps run when neither ``--only`` nor ``--skip`` is given (registry order)."""

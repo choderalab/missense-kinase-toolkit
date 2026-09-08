@@ -22,7 +22,6 @@ from mkt.databases.io_utils import DataSource
 from mkt.databases.utils import (
     flatten_iterables_in_iterable,
     split_on_first_only,
-    try_except_split_concat_str,
 )
 from mkt.schema.io_utils import get_repo_root, untar_files_in_memory
 from mkt.schema.kinase_schema import (
@@ -78,7 +77,7 @@ DICT_SEQ_SOURCE = {
         name="kinasedomainfasta.tar.gz",
         path=PATH_FASTA_TAR,
         url=KINCORE_FASTA_URL,
-        version="v1",
+        version="v3",
         citation=CITATION_GIZZIO,
     ),
     KinCoReSeqSource.FAEZOV_2023: DataSource(
@@ -90,7 +89,7 @@ DICT_SEQ_SOURCE = {
     KinCoReSeqSource.MODI_2019: DataSource(
         name="Human-PK.fasta",
         path=os.path.join(PATH_DATA, "Human-PK.fasta"),
-        version="v3",
+        version="v1",
         citation=CITATION_MODI,
     ),
 }
@@ -101,13 +100,13 @@ DICT_STRUCTURE_SOURCE = {
         name="AF2_Active_Models_v2.zip",
         path=PATH_CIF_ZIP,
         url=KINCORE_CIF_URL,
-        version="v1",
+        version="v2",
         citation=CITATION_GIZZIO,
     ),
     KinCoReStructureSource.FAEZOV_2023: DataSource(
         name="Kincore_AlphaFold2_ActiveHumanCatalyticKinases",
         path=PATH_ORIG_CIF,
-        version="v2",
+        version="v1",
         citation=CITATION_FAEZOV,
     ),
 }
@@ -243,7 +242,10 @@ def parse_fasta_description(
         temp = list(chain(*[i.split(char) for i in temp]))
 
     temp = [
-        split_on_first_only(i, "_") if idx == 0 else i for idx, i in enumerate(temp)
+        # keep the delimiter so a multi-KD "_1"/"_2" domain suffix survives (e.g.
+        # "TYR_JAK1_2" -> group "TYR", hgnc "JAK1_2")
+        split_on_first_only(i, "_", bool_keep_delim=True) if idx == 0 else i
+        for idx, i in enumerate(temp)
     ]
     temp = flatten_iterables_in_iterable(temp)
 
@@ -508,9 +510,8 @@ def harmonize_kincore_fasta_cif():
 
     # process AF2-active dataset
     list_af2_uniprot = [i.uniprot for i in list_af2_fasta]
-    list_cif_hgnc_split = [
-        try_except_split_concat_str(i.hgnc, idx1=0, idx2=1) for i in list_kincore_cif
-    ]
+    # match FASTA's underscore multi-domain suffix: rewrite a trailing CIF "-N" to "_N"
+    list_cif_hgnc_split = [re.sub(r"-(\d+)$", r"_\1", i.hgnc) for i in list_kincore_cif]
     # multi-kinase domain (AF2)
     list_multi = [
         item for item, count in Counter(list_af2_uniprot).items() if count > 1
@@ -552,5 +553,19 @@ def harmonize_kincore_fasta_cif():
                 f"{uniprot} has multipe FASTA entries in Modi-Dunbrack dataset\n{fasta}\n"
             )
         dict_kincore[uniprot] = [temp]
+
+    # add Modi-Dunbrack second domains the active-only AF2 tier lacks (inactive/pseudokinase
+    # domains of JAK1/2/3, TYK2, EIF2AK4), identified by a "_N" domain suffix so single-domain
+    # name synonyms (no suffix, e.g. ICK for CILK1) are ignored; no active structure -> cif=None
+    set_af2_domain = {(i.uniprot, max(i.hgnc, key=len)) for i in list_af2_fasta}
+    for fasta in list_md_fasta:
+        suffixed = max(fasta.hgnc, key=len)
+        if fasta.uniprot not in list_af2_uniprot or "_" not in suffixed:
+            continue
+        if (fasta.uniprot, suffixed) in set_af2_domain:
+            continue
+        dict_kincore.setdefault(fasta.uniprot, []).append(
+            KinCoRe(fasta=fasta, cif=None)
+        )
 
     return dict_kincore

@@ -122,8 +122,11 @@ class PyMOLGenerator:
             self.viz.get_highlight_data()
         )
 
-        # Access dict_align through the config's seq_align
-        str_seq_cif = self.viz.config.seq_align.dict_align["KinCoRe, CIF"]["str_seq"]
+        # Access dict_align through the config's seq_align; the adjudicated structure
+        # row (KinCoRe CIF or AF2, and possibly a collapsed "KinCoRe, FASTA/CIF" label)
+        # is resolved via str_structure_key rather than a hard-coded key
+        str_structure_key = self.viz.config.seq_align.str_structure_key
+        str_seq_cif = self.viz.config.seq_align.dict_align[str_structure_key]["str_seq"]
 
         # create mapping: alignment_index (1-based) -> PDB_residue_number (1-based sequential)
         # The PDB is renumbered sequentially (1, 2, 3, ...) counting only non-gap CIF residues
