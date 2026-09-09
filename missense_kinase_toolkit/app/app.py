@@ -1,4 +1,5 @@
 import logging
+import re
 from dataclasses import dataclass
 
 import streamlit as st
@@ -229,10 +230,51 @@ class Dashboard:
 
                 table = PropertyTables(obj_temp)
 
+                # share one column geometry across all four tables: each column is sized to the
+                # widest content across every table (labels in col 1, values in col 2), measuring
+                # values by their visible text so HTML links don't inflate the width
+                _tables = [
+                    table.df_kinhub,
+                    table.df_klifs,
+                    table.df_kincore,
+                    table.df_computed,
+                ]
+
+                def _visible_len(cell) -> int:
+                    return len(re.sub(r"<[^>]+>", "", str(cell)))
+
+                label_ch = max(
+                    (len(str(i)) for df in _tables if df is not None for i in df.index),
+                    default=10,
+                )
+                # cap the value column so a very long value (e.g. SRMS's ~92-char KLIFS name)
+                # wraps instead of widening the table past its half-page column -- otherwise the
+                # browser scales the whole fixed-layout table (label column included) down to fit
+                VALUE_MAX_CH = 36
+                value_ch = min(
+                    VALUE_MAX_CH,
+                    max(
+                        (
+                            _visible_len(v)
+                            for df in _tables
+                            if df is not None
+                            for v in df["Property"]
+                        ),
+                        default=10,
+                    ),
+                )
+
+                # column geometry shared across all four tables. only the label column is a fixed
+                # width; the table fills its container up to a content-fit max-width, so on a wide
+                # monitor it stays content-sized while on a laptop the value column (not the label)
+                # absorbs the shortfall -- avoiding the browser scaling the whole fixed table down
+                label_w = label_ch + 8
+                table_max_w = label_w + value_ch + 2
+
                 def render_property_table(df, str_source):
                     # render the Styler HTML directly: st.table/st.dataframe cannot hide the
                     # column header, so drop the redundant "Property" header (key-value tables)
-                    # via Styler.hide + st.markdown; row labels stay, saving a header row
+                    # via Styler.hide + st.markdown; row labels stay, saving a header row.
                     if df is not None:
                         styler = df.style.hide(axis="columns").set_table_styles(
                             [
@@ -242,9 +284,23 @@ class Dashboard:
                                         ("text-align", "left"),
                                         ("padding", "2px 10px"),
                                         ("font-weight", "normal"),
+                                        ("overflow-wrap", "anywhere"),
                                     ],
                                 },
-                                {"selector": "table", "props": [("width", "100%")]},
+                                {
+                                    "selector": "table",
+                                    "props": [
+                                        ("table-layout", "fixed"),
+                                        ("width", "100%"),
+                                        ("max-width", f"{table_max_w}ch"),
+                                    ],
+                                },
+                                {
+                                    "selector": "td:first-child, th:first-child",
+                                    # labels are uppercase (wider than the `ch` glyph), so pad
+                                    # generously to keep the widest label on one line
+                                    "props": [("width", f"{label_w}ch")],
+                                },
                             ]
                         )
                         st.markdown(styler.to_html(), unsafe_allow_html=True)
