@@ -302,6 +302,29 @@ class PyMOLGenerator:
         pdb_basename = os.path.basename(pdb_path)
         obj_name = os.path.splitext(pdb_basename)[0]
 
+        # ray-trace style: publication (shadows + black outlines) for solid-color figures,
+        # else flat + shadow-free to preserve mutation-colormap fidelity
+        if getattr(self.viz.config, "bool_shadow_render", False):
+            ray_settings = [
+                "    cmd.set('ray_trace_mode', 1)",
+                "    cmd.set('ray_trace_gain', 0.1)",
+                "    cmd.set('ray_shadows', 1)",
+                "    cmd.set('specular', 1)",
+                "    cmd.set('cartoon_sampling', 14)",
+                "    cmd.set('antialias', 2)",
+            ]
+        else:
+            ray_settings = [
+                "    cmd.set('ray_trace_mode', 0)",
+                "    cmd.set('ray_trace_gain', 0.0)",
+                "    cmd.set('ray_shadows', 0)",
+                "    cmd.set('specular', 0)",
+                "    cmd.set('ambient', 0.6)",
+                "    cmd.set('direct', 0.4)",
+                "    cmd.set('cartoon_sampling', 14)",
+                "    cmd.set('antialias', 2)",
+            ]
+
         script_lines = [
             f"# PyMOL script for {self.gene_name} structure visualization",
             "from pymol import cmd",
@@ -502,14 +525,7 @@ class PyMOLGenerator:
             "    if bool_datetime:",
             "        base = f\"{base}_{datetime.now().strftime('%Y%m%d_%H%M%S')}\"",
             "    png_filename = base + ext",
-            "    cmd.set('ray_trace_mode', 0)",  # standard ray tracing (no black outlines)
-            "    cmd.set('ray_trace_gain', 0.0)",  # no edge darkening
-            "    cmd.set('ray_shadows', 0)",  # no shadows to preserve colormap fidelity
-            "    cmd.set('specular', 0)",  # no specular highlights
-            "    cmd.set('ambient', 0.6)",  # higher ambient light to reduce directional shading
-            "    cmd.set('direct', 0.4)",  # lower direct light to flatten shading
-            "    cmd.set('cartoon_sampling', 14)",
-            "    cmd.set('antialias', 2)",
+            *ray_settings,
             "    cmd.png(png_filename, dpi=300, ray=1)",
             "    print(f'Rendered publication-quality image to: {os.path.abspath(png_filename)}')",
             "    if bool_pse:",

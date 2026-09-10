@@ -62,6 +62,8 @@ class StructureConfig(ABC):
     """Force the AlphaFold structure even when a KinCoRe CIF is present (default False)."""
     bool_full_length_af: bool = False
     """Render the full-length AlphaFold model (no KD slice) instead of the KD structure (default False)."""
+    bool_shadow_render: bool = False
+    """Use the shadowed/outlined ray-trace instead of the flat colormap-fidelity render (default False)."""
     bool_superpose: bool = True
     """Transform the structure into the shared 1GAG reference frame when a stored
     superposition is present (default True)."""
@@ -1076,6 +1078,7 @@ class SourceUniProtConfig(StructureConfig):
 
     str_attr: str = "AF2, full-length"
     bool_full_length_af: bool = True
+    bool_shadow_render: bool = True
 
     def generate_list_idx(self) -> list[int]:
         """Return every structure residue (whole full-length model)."""
@@ -1094,6 +1097,7 @@ class SourcePfamConfig(StructureConfig):
 
     str_attr: str = "AF2, full-length"
     bool_full_length_af: bool = True
+    bool_shadow_render: bool = True
 
     def generate_list_idx(self) -> list[int]:
         """Return the Pfam kinase-domain residues (0-indexed) present in the structure."""
@@ -1118,6 +1122,7 @@ class SourceKinCoreConfig(StructureConfig):
     """KinCoRe active-state CIF, whole kinase domain one color (source boundary: KinCoRe)."""
 
     str_attr: str = "KinCoRe, CIF"
+    bool_shadow_render: bool = True
 
     def generate_list_idx(self) -> list[int]:
         """Return every structure residue (whole KinCoRe kinase domain)."""
@@ -1135,6 +1140,7 @@ class SourceKLIFSConfig(StructureConfig):
     """KinCoRe CIF, KLIFS pocket highlighted on the grey background (source boundary: KLIFS)."""
 
     str_attr: str = "KLIFS"
+    bool_shadow_render: bool = True
 
     def generate_list_idx(self) -> list[int]:
         """Return the KLIFS pocket residues present in the structure."""
