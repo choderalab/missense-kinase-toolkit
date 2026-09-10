@@ -8,7 +8,6 @@ helpers for kinase-domain sequence and group assignment.
 
 import logging
 from enum import Enum
-from functools import lru_cache
 
 from mkt.schema.constants import (
     LIST_FULL_KLIFS_REGION,
@@ -846,7 +845,8 @@ class KinaseInfo(BaseModel):
 
         Prefers the gapless KLIFS pocket sequence. When no pocket is stored but the domain
         carries a Dunbrack MSA row, falls back to reading the UniProt canonical sequence at
-        the equivalent MSA columns (see :func:`return_catalytic_klifs2msa_dict`), which
+        the equivalent MSA columns (see
+        :func:`mkt.schema.utils.return_catalytic_klifs2msa_dict`), which
         rescues kinases KLIFS does not annotate (e.g. CDK11A, PEAK3, SIK1B). Keys stay KLIFS
         region:idx labels either way; see :meth:`return_catalytic_residue_source` for which
         alignment was used. A gapped MSA column yields None for that label.
@@ -858,6 +858,7 @@ class KinaseInfo(BaseModel):
             neither a KLIFS pocket nor an MSA row is available.
         """
         from mkt.schema.constants import LIST_KLIFS_CATALYTIC, LIST_KLIFS_REGION
+        from mkt.schema.utils import return_catalytic_klifs2msa_dict
 
         source = self.return_catalytic_residue_source()
         if source is None:
@@ -1074,31 +1075,3 @@ def return_klifs2msa_dict(
     if bool_return_concordance:
         return dict_map, dict_concordance
     return dict_map
-
-
-@lru_cache(maxsize=1)
-def return_catalytic_klifs2msa_dict() -> dict[str, str]:
-    """Return the KLIFS -> MSA correspondence restricted to the catalytic positions.
-
-    Subsets :func:`return_klifs2msa_dict` over the shipped corpus to
-    :data:`LIST_KLIFS_CATALYTIC`, giving the MSA ``region2uniprot`` key to read for each
-    KLIFS catalytic label when a kinase has no KLIFS pocket (see
-    :meth:`KinaseInfo.return_catalytic_residues`). Cached, since it deserializes the corpus.
-
-    The catalytic anchors are where the two alignments agree most closely (~99% modal
-    concordance at III:17, c.l:68-70 and xDFG:81-83; ~97% at the beta2 lysine II:13), which
-    is what makes the fallback defensible where the general map is not (see
-    :func:`return_klifs2msa_dict`).
-
-    Returns
-    -------
-    dict[str, str]
-        KLIFS region:idx -> MSA region:idx, for the catalytic positions only.
-    """
-    from mkt.schema.constants import LIST_KLIFS_CATALYTIC
-    from mkt.schema.io_utils import deserialize_kinase_dict
-
-    dict_map = return_klifs2msa_dict(deserialize_kinase_dict())
-    return {
-        label: dict_map[label] for label in LIST_KLIFS_CATALYTIC if label in dict_map
-    }
