@@ -1,7 +1,8 @@
-"""Configuration dataclasses for plot_dataset_data.py.
+"""Configuration dataclasses for the figure CLIs.
 
-Loads plot aesthetics and data source paths from YAML config files
-via OmegaConf, following the pattern used in mkt_impact.
+Per-figure sub-configs plus the grouped per-task aggregators (KinaseInfoFiguresConfig,
+ConservationFiguresConfig, DatasetFiguresConfig, PymolConfig) that each CLI loads from its own
+namespace of a shared study YAML via ``load_task_config`` (OmegaConf), following mkt_impact.
 """
 
 from dataclasses import dataclass, field
@@ -388,79 +389,6 @@ class OutputConfig:
     bool_pdf: bool = False
 
 
-# --- top-level config ---
-
-
-@dataclass
-class PlotDatasetConfig:
-    """Top-level config aggregating all sub-configs."""
-
-    matplotlib_rc: MatplotlibRCConfig = field(default_factory=MatplotlibRCConfig)
-    family_colors: FamilyColorConfig = field(default_factory=FamilyColorConfig)
-    col_kinase_colors: ColKinaseColorConfig = field(
-        default_factory=ColKinaseColorConfig
-    )
-    dynamic_range: DynamicRangePlotConfig = field(
-        default_factory=DynamicRangePlotConfig
-    )
-    ridgeline: RidgelinePlotConfig = field(default_factory=RidgelinePlotConfig)
-    stacked_barchart: StackedBarchartConfig = field(
-        default_factory=StackedBarchartConfig
-    )
-    venn_diagram: VennDiagramConfig = field(default_factory=VennDiagramConfig)
-    metrics_boxplot: MetricsBoxplotConfig = field(default_factory=MetricsBoxplotConfig)
-    sequence_schematic: SequenceSchematicConfig = field(
-        default_factory=SequenceSchematicConfig
-    )
-    data_sources: DataSourceConfig = field(default_factory=DataSourceConfig)
-    output: OutputConfig = field(default_factory=OutputConfig)
-
-    @classmethod
-    def from_yaml(cls, config_path: str | Path) -> "PlotDatasetConfig":
-        """Load a PlotDatasetConfig from a YAML file.
-
-        Parameters:
-        -----------
-        config_path : str | Path
-            Path to the YAML configuration file.
-
-        Returns:
-        --------
-        PlotDatasetConfig
-            Fully populated config instance.
-        """
-        omega = OmegaConf.load(config_path)
-        raw = OmegaConf.to_container(omega, resolve=True)
-
-        cfg = cls()
-        if "matplotlib_rc" in raw:
-            cfg.matplotlib_rc = MatplotlibRCConfig(**raw["matplotlib_rc"])
-        if "family_colors" in raw:
-            cfg.family_colors = FamilyColorConfig(**raw["family_colors"])
-        if "col_kinase_colors" in raw:
-            cfg.col_kinase_colors = ColKinaseColorConfig(**raw["col_kinase_colors"])
-        if "dynamic_range" in raw:
-            cfg.dynamic_range = DynamicRangePlotConfig(**raw["dynamic_range"])
-        if "ridgeline" in raw:
-            cfg.ridgeline = RidgelinePlotConfig(**raw["ridgeline"])
-        if "stacked_barchart" in raw:
-            cfg.stacked_barchart = StackedBarchartConfig(**raw["stacked_barchart"])
-        if "venn_diagram" in raw:
-            cfg.venn_diagram = VennDiagramConfig(**raw["venn_diagram"])
-        if "metrics_boxplot" in raw:
-            cfg.metrics_boxplot = MetricsBoxplotConfig(**raw["metrics_boxplot"])
-        if "sequence_schematic" in raw:
-            cfg.sequence_schematic = SequenceSchematicConfig(
-                **raw["sequence_schematic"]
-            )
-        if "data_sources" in raw:
-            cfg.data_sources = DataSourceConfig(**raw["data_sources"])
-        if "output" in raw:
-            cfg.output = OutputConfig(**raw["output"])
-
-        return cfg
-
-
 # --- KLIFS hierarchical conservation-tree figures ---
 # defaults mirror the constants in mkt.databases.conservation (kept as literals here so
 # plot_config stays import-light and does not trigger the conservation panel build).
@@ -531,81 +459,6 @@ class CladeMembershipTableConfig:
 
     str_group: str = "TK"
     filename: str = "clade_membership_table"
-
-
-@dataclass
-class DictKinaseFiguresConfig:
-    """Top-level config for the DICT_KINASE figures (upset + region-gap map/violin).
-
-    Consumed by the ``plot_dict_kinase`` CLI. Kept separate from
-    :class:`PlotDatasetConfig` so rendering these figures never imports the
-    dataset-processing module (which has a network side effect on import).
-    """
-
-    matplotlib_rc: MatplotlibRCConfig = field(default_factory=MatplotlibRCConfig)
-    upset_plot: UpsetPlotConfig = field(default_factory=UpsetPlotConfig.preprint_2026)
-    region_gap_violin: RegionGapViolinConfig = field(
-        default_factory=RegionGapViolinConfig
-    )
-    conservation_tree: ConservationTreeConfig = field(
-        default_factory=ConservationTreeConfig
-    )
-    conservation_tree_explorer: ConservationTreeExplorerConfig = field(
-        default_factory=ConservationTreeExplorerConfig
-    )
-    residue_dot: ResidueDotConfig = field(default_factory=ResidueDotConfig)
-    residue_dot_explorer: ResidueDotExplorerConfig = field(
-        default_factory=ResidueDotExplorerConfig
-    )
-    clade_membership_table: CladeMembershipTableConfig = field(
-        default_factory=CladeMembershipTableConfig
-    )
-    output: OutputConfig = field(default_factory=OutputConfig)
-
-    @classmethod
-    def from_yaml(cls, config_path: str | Path) -> "DictKinaseFiguresConfig":
-        """Load a DictKinaseFiguresConfig from a YAML file.
-
-        Parameters:
-        -----------
-        config_path : str | Path
-            Path to the YAML configuration file.
-
-        Returns:
-        --------
-        DictKinaseFiguresConfig
-            Fully populated config instance.
-        """
-        omega = OmegaConf.load(config_path)
-        raw = OmegaConf.to_container(omega, resolve=True)
-
-        cfg = cls()
-        if "matplotlib_rc" in raw:
-            cfg.matplotlib_rc = MatplotlibRCConfig(**raw["matplotlib_rc"])
-        if "upset_plot" in raw:
-            cfg.upset_plot = UpsetPlotConfig(**raw["upset_plot"])
-        if "region_gap_violin" in raw:
-            cfg.region_gap_violin = RegionGapViolinConfig(**raw["region_gap_violin"])
-        if "conservation_tree" in raw:
-            cfg.conservation_tree = ConservationTreeConfig(**raw["conservation_tree"])
-        if "conservation_tree_explorer" in raw:
-            cfg.conservation_tree_explorer = ConservationTreeExplorerConfig(
-                **raw["conservation_tree_explorer"]
-            )
-        if "residue_dot" in raw:
-            cfg.residue_dot = ResidueDotConfig(**raw["residue_dot"])
-        if "residue_dot_explorer" in raw:
-            cfg.residue_dot_explorer = ResidueDotExplorerConfig(
-                **raw["residue_dot_explorer"]
-            )
-        if "clade_membership_table" in raw:
-            cfg.clade_membership_table = CladeMembershipTableConfig(
-                **raw["clade_membership_table"]
-            )
-        if "output" in raw:
-            cfg.output = OutputConfig(**raw["output"])
-
-        return cfg
 
 
 @dataclass
