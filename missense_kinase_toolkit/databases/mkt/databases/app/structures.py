@@ -53,6 +53,7 @@ class StructureVisualizer:
             self.obj_kinase,
             prefer_alphafold=config.prefer_alphafold,
             full_length_af=getattr(config, "bool_full_length_af", False),
+            pfam_slice=getattr(config, "bool_pfam_slice_af", False),
         )
         if self._dict_cif is None:
             raise ValueError(f"No structure available for {self.obj_kinase.hgnc_name}")

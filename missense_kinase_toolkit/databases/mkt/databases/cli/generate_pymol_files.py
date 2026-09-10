@@ -101,12 +101,13 @@ def _generate_one_view(
     str_final_subdir = config_name.lower().split("_")[0]
     str_attr = "_".join(config_name.lower().split("_")[1:])
 
-    # full-length source views need the gap-free full-length alignment track
+    # source views need the matching alignment track (full-length UniProt vs Pfam slice)
     seq_align = SequenceAlignment(
         str_kinase=gene,
         # for the sequence viewer, not the PyMOL colors
         dict_color=DICT_COLORS["ALPHABET_PROJECT"]["DICT_COLORS"],
-        bool_full_length_af=config_name in ("SOURCE_UNIPROT", "SOURCE_PFAM"),
+        bool_full_length_af=config_name == "SOURCE_UNIPROT",
+        bool_pfam_slice_af=config_name == "SOURCE_PFAM",
     )
     if config_name == "KLIFS_CUSTOM":
         validate_uniprot_indices(seq_align, list_uniprot_idx)

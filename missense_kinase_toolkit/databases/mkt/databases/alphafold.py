@@ -421,7 +421,10 @@ def get_alphafold(obj_kinase):
 
 
 def adjudicate_structure(
-    obj_kinase, prefer_alphafold: bool = False, full_length_af: bool = False
+    obj_kinase,
+    prefer_alphafold: bool = False,
+    full_length_af: bool = False,
+    pfam_slice: bool = False,
 ):
     """Return the KD structure to render/compute over and a provenance label.
 
@@ -436,16 +439,31 @@ def adjudicate_structure(
     prefer_alphafold : bool, optional
         Force the AlphaFold structure even when a KinCoRe CIF is present, by default False.
     full_length_af : bool, optional
-        Fetch and return the **full-length** AlphaFold model (no KD slice) instead of any KD
-        structure -- for full-length / Pfam-boundary figures. By default False.
+        Return the **full-length** AlphaFold model (no slice), by default False.
+    pfam_slice : bool, optional
+        Return the AlphaFold model sliced to the Pfam kinase-domain bounds, by default False.
 
     Returns
     -------
     tuple[dict | None, str | None]
-        ``(mmCIF dict, source label)`` where the label is ``"KinCoRe Active State"``,
-        ``"AF2 Database"``, or ``"AF2 Database (full-length)"``; ``(None, None)`` when no
+        ``(mmCIF dict, source label)`` -- ``"KinCoRe Active State"``, ``"AF2 Database"``,
+        ``"AF2 Database (full-length)"``, or ``"AF2 Database (Pfam)"``; ``(None, None)`` when no
         structure is available.
     """
+    if pfam_slice:
+        pfam = obj_kinase.pfam
+        if pfam is None or pfam.start is None or pfam.end is None:
+            return None, None
+        structure = AlphaFoldStructure(
+            uniprot_id=str(obj_kinase.uniprot_id).split("-")[0]
+        )
+        if structure._cif is None:
+            return None, None
+        return (
+            slice_alphafold_cif_to_kd(structure._cif, pfam.start, pfam.end),
+            "AF2 Database (Pfam)",
+        )
+
     if full_length_af:
         dict_full = fetch_alphafold_full_cif_dict(
             str(obj_kinase.uniprot_id).split("-")[0]

@@ -62,6 +62,8 @@ class StructureConfig(ABC):
     """Force the AlphaFold structure even when a KinCoRe CIF is present (default False)."""
     bool_full_length_af: bool = False
     """Render the full-length AlphaFold model (no KD slice) instead of the KD structure (default False)."""
+    bool_pfam_slice_af: bool = False
+    """Render the AlphaFold model sliced to the Pfam kinase-domain bounds (default False)."""
     bool_shadow_render: bool = False
     """Use the shadowed/outlined ray-trace instead of the flat colormap-fidelity render (default False)."""
     bool_superpose: bool = True
@@ -1093,27 +1095,20 @@ class SourceUniProtConfig(StructureConfig):
 
 @dataclass(kw_only=True)
 class SourcePfamConfig(StructureConfig):
-    """Full-length AlphaFold model, Pfam kinase-domain range highlighted (source boundary: Pfam)."""
+    """AlphaFold model sliced to the Pfam kinase-domain bounds, whole one color (source boundary: Pfam)."""
 
-    str_attr: str = "AF2, full-length"
-    bool_full_length_af: bool = True
+    str_attr: str = "AF2, pfam"
+    bool_pfam_slice_af: bool = True
     bool_shadow_render: bool = True
 
     def generate_list_idx(self) -> list[int]:
-        """Return the Pfam kinase-domain residues (0-indexed) present in the structure."""
-        pfam = self.seq_align.obj_kinase.pfam
-        if pfam is None or pfam.start is None or pfam.end is None:
-            logger.warning(
-                f"no Pfam bounds for {self.seq_align.obj_kinase.hgnc_name}; skipping."
-            )
-            return []
-        set_cif = set(self.return_list_cif_idx())
-        return sorted(i for i in range(pfam.start - 1, pfam.end) if i in set_cif)
+        """Return every structure residue (whole Pfam-sliced model)."""
+        return self.return_list_cif_idx()
 
     def generate_style_color_lists(
         self, list_idx: list[int]
     ) -> tuple[list[str], list[str]]:
-        """Cartoon, Pfam residues the Pfam source color (rest greyed by the generator)."""
+        """Cartoon, all residues the Pfam source color."""
         return ["cartoon"] * len(list_idx), [STR_SOURCE_PFAM_COLOR] * len(list_idx)
 
 

@@ -78,6 +78,8 @@ class SequenceAlignment:
     """KinaseInfo object from which to extract sequences (loaded from str_kinase if not provided)."""
     bool_full_length_af: bool = False
     """If True, add a gap-free full-length "AF2, full-length" track, by default False."""
+    bool_pfam_slice_af: bool = False
+    """If True, add a Pfam-sliced "AF2, pfam" track (Pfam residues only), by default False."""
 
     def __post_init__(self):
         if self.obj_kinase is None:
@@ -110,6 +112,8 @@ class SequenceAlignment:
             The ``dict_align`` key for the structure row (a merged KinCoRe label or
             ``"AF2, CIF"``), or None if no structure is available.
         """
+        if self.bool_pfam_slice_af:
+            return "AF2, pfam"
         if self.bool_full_length_af:
             return "AF2, full-length"
         if (
@@ -327,6 +331,23 @@ class SequenceAlignment:
                 "list_colors": [
                     self.dict_color.get(aa, self.dict_color.get("-", "#cccccc"))
                     for aa in canon
+                ],
+            }
+
+        # opt-in Pfam-sliced track (Pfam residues only) so an AF sliced to Pfam bounds maps
+        pfam = self.obj_kinase.pfam
+        if self.bool_pfam_slice_af and pfam and pfam.start and pfam.end:
+            canon = self.obj_kinase.uniprot.canonical_seq
+            seq = (
+                "-" * (pfam.start - 1)
+                + canon[pfam.start - 1 : pfam.end]
+                + "-" * (len(canon) - pfam.end)
+            )
+            dict_out["AF2, pfam"] = {
+                "str_seq": seq,
+                "list_colors": [
+                    self.dict_color.get(a, self.dict_color.get("-", "#cccccc"))
+                    for a in seq
                 ],
             }
 
