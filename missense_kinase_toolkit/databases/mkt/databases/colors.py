@@ -11,6 +11,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mkt.schema.io_utils import save_plot
 
+# source-boundary figure colors (lime green hardcoded to avoid PyMOL default drift)
+STR_SOURCE_UNIPROT_COLOR = "limegreen"
+STR_SOURCE_PFAM_COLOR = "cyan"
+STR_SOURCE_KINCORE_COLOR = "magenta"
+STR_SOURCE_KLIFS_COLOR = "orange"
+
 
 def map_aa_to_single_letter_code(
     aa: str,
