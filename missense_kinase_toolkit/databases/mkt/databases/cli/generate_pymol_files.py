@@ -127,6 +127,28 @@ def _generate_one_view(
     return out_dir
 
 
+def _write_colormap_legend_if_mutations(config_names, base_dir: Path) -> None:
+    """Write the mutation colormap legend into ``base_dir`` if any view is a MUTATIONS_* config.
+
+    The mutation PyMOL structures color residues by the plasma percentile colormap, so a shared
+    legend (SVG + PNG) is emitted once at the top of the pymol output dir for those figures.
+    """
+    if not any(str(c).startswith("MUTATIONS") for c in config_names):
+        return
+    from mkt.databases.colors import (
+        DICT_QUARTILE_HEATMAP_COLORMAP_PLASMA,
+        generate_colormap_legend,
+    )
+
+    base_dir.mkdir(parents=True, exist_ok=True)
+    generate_colormap_legend(
+        DICT_QUARTILE_HEATMAP_COLORMAP_PLASMA,
+        output_path=str(base_dir),
+        bool_image_subdir=False,
+    )
+    logger.info(f"wrote mutation colormap legend to {base_dir}")
+
+
 @app.command()
 def main(
     gene: Annotated[
@@ -258,6 +280,9 @@ def main(
                 n_ok += 1
             except Exception as e:
                 logger.error(f"skipping {view.gene}/{view.config_type}: {e}")
+        _write_colormap_legend_if_mutations(
+            [v.config_type for v in pym_cfg.views], base
+        )
         typer.echo(f"PyMOL: generated {n_ok}/{len(pym_cfg.views)} view(s).")
         return
 
@@ -276,6 +301,7 @@ def main(
         )
     except ValueError as e:
         raise typer.BadParameter(str(e))
+    _write_colormap_legend_if_mutations([config_type.value], base)
     typer.echo(f"PyMOL files generated in: {out}")
 
 
