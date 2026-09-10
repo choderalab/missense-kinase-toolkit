@@ -219,7 +219,7 @@ def test_is_pseudokinase_tristate(dict_kinase):
 
 def test_return_klifs2msa_dict(dict_kinase):
     """The empirical KLIFS->MSA map covers the pocket; core anchors are highly concordant."""
-    from mkt.schema.kinase_schema import return_klifs2msa_dict
+    from mkt.schema.utils import return_klifs2msa_dict
 
     dict_map, dict_concordance = return_klifs2msa_dict(
         dict_kinase, bool_return_concordance=True
