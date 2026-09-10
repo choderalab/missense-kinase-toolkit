@@ -708,7 +708,7 @@ class KinaseInfoFiguresConfig:
     output: OutputConfig = field(default_factory=OutputConfig)
     upset_plot: UpsetPlotConfig = field(default_factory=UpsetPlotConfig.preprint_2026)
     region_gap_violin: RegionGapViolinConfig = field(
-        default_factory=RegionGapViolinConfig
+        default_factory=RegionGapViolinConfig.preprint_2026
     )
     sasa_concordance_scatter: SASAConcordanceScatterConfig = field(
         default_factory=SASAConcordanceScatterConfig

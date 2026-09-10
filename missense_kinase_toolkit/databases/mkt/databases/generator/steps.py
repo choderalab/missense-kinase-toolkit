@@ -307,43 +307,52 @@ def _run_steps(names: list[str], ctx: "BuildContext") -> None:
             logger.error(f"enrichment step '{name}' failed: {e}", exc_info=True)
 
 
+def _report_cfg(ctx: "BuildContext"):
+    """Return the report aesthetics config from the context (loaded defaults if unset)."""
+    if ctx.report_config is not None:
+        return ctx.report_config
+    from mkt.databases.plot_config import KinaseInfoFiguresConfig, load_task_config
+
+    return load_task_config(KinaseInfoFiguresConfig)
+
+
 def _report_upset(ctx: "BuildContext") -> None:
-    """Generate the KinaseInfo data-source upset plot (preprint 2026 sizing)."""
+    """Generate the KinaseInfo data-source upset plot."""
     from mkt.databases.plot import plot_dict_kinase_upset
-    from mkt.databases.plot_config import UpsetPlotConfig
 
     plot_dict_kinase_upset(
-        ctx.dict_kinaseinfo, ctx.path_reports, cfg=UpsetPlotConfig.preprint_2026()
+        ctx.dict_kinaseinfo, ctx.path_reports, cfg=_report_cfg(ctx).upset_plot
     )
 
 
 def _report_region_gap_violin(ctx: "BuildContext") -> None:
-    """Generate the inter-/intra-region gap violin plot (preprint 2026 sizing)."""
+    """Generate the inter-/intra-region gap violin plot."""
     from mkt.databases.plot import plot_region_gap_violin
-    from mkt.databases.plot_config import RegionGapViolinConfig
 
     plot_region_gap_violin(
-        ctx.dict_kinaseinfo, ctx.path_reports, cfg=RegionGapViolinConfig.preprint_2026()
+        ctx.dict_kinaseinfo, ctx.path_reports, cfg=_report_cfg(ctx).region_gap_violin
     )
 
 
 def _report_sasa_concordance_scatter(ctx: "BuildContext") -> None:
     """Generate the KinCoRe-vs-AF2 per-region SASA/RSA concordance scatter."""
     from mkt.databases.plot import plot_sasa_concordance_scatter
-    from mkt.databases.plot_config import SASAConcordanceScatterConfig
 
     plot_sasa_concordance_scatter(
-        ctx.dict_kinaseinfo, ctx.path_reports, cfg=SASAConcordanceScatterConfig()
+        ctx.dict_kinaseinfo,
+        ctx.path_reports,
+        cfg=_report_cfg(ctx).sasa_concordance_scatter,
     )
 
 
 def _report_sasa_concordance_delta(ctx: "BuildContext") -> None:
     """Generate the per-KLIFS-residue KinCoRe-minus-AF2 SASA/RSA delta boxplots."""
     from mkt.databases.plot import plot_sasa_concordance_delta
-    from mkt.databases.plot_config import SASAConcordanceDeltaConfig
 
     plot_sasa_concordance_delta(
-        ctx.dict_kinaseinfo, ctx.path_reports, cfg=SASAConcordanceDeltaConfig()
+        ctx.dict_kinaseinfo,
+        ctx.path_reports,
+        cfg=_report_cfg(ctx).sasa_concordance_delta,
     )
 
 
