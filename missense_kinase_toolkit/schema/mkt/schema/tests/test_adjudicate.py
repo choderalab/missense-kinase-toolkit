@@ -173,15 +173,48 @@ def test_return_catalytic_residues(dict_kinase, mutable_kinase):
         STR_KLIFS_DFG_ASP,
     )
 
+    assert dict_kinase["ABL1"].return_catalytic_residue_source() == "klifs"
     res = dict_kinase["ABL1"].return_catalytic_residues()
     assert res[STR_KLIFS_BETA3_LYSINE] == "K"  # VAIK beta3 lysine
     assert res[STR_KLIFS_CATALYTIC_ASP] == "D"  # HRD catalytic aspartate
     assert res[STR_KLIFS_DFG_ASP] == "D"  # DFG aspartate
 
-    # without a KLIFS pocket sequence there are no catalytic residues to read
+    # without a KLIFS pocket the MSA fallback reads the same residues
     obj = mutable_kinase("ABL1")
     obj.klifs.pocket_seq = None
+    assert obj.return_catalytic_residue_source() == "msa"
+    assert obj.return_catalytic_residues() == res
+
+    # with neither alignment there are no catalytic residues to read
+    obj.kincore.msa = None
+    assert obj.return_catalytic_residue_source() is None
     assert obj.return_catalytic_residues() is None
+
+
+def test_is_pseudokinase_tristate(dict_kinase):
+    """is_pseudokinase is tri-state; the MSA fallback rescues KLIFS-less kinases."""
+    # KLIFS-less but MSA-mapped: PEAK3 lacks the HRD aspartate, SIK1B is intact
+    for name in ("CDK11A", "PEAK3", "SIK1B"):
+        assert (
+            dict_kinase[name].klifs is None
+            or dict_kinase[name].klifs.pocket_seq is None
+        )
+        assert dict_kinase[name].return_catalytic_residue_source() == "msa"
+    assert dict_kinase["PEAK3"].is_pseudokinase() is True
+    assert dict_kinase["SIK1B"].is_pseudokinase() is False
+
+    # a gap within an available alignment is a missing residue, not an unassessable one:
+    # PLK5's MSA row is gapped across the whole triad, so it is a predicted pseudokinase
+    assert dict_kinase["PLK5"].return_catalytic_residue_source() == "msa"
+    assert all(
+        v is None for v in dict_kinase["PLK5"].return_catalytic_residues().values()
+    )
+    assert dict_kinase["PLK5"].is_pseudokinase() is True
+
+    # atypical kinases with neither alignment are unassessable, not "not a pseudokinase"
+    for name in ("ALPK1", "PDK1", "PRKDC", "TRPM7", "PIP5K1A"):
+        assert dict_kinase[name].return_catalytic_residues() is None
+        assert dict_kinase[name].is_pseudokinase() is None
 
 
 def test_return_klifs2msa_dict(dict_kinase):
