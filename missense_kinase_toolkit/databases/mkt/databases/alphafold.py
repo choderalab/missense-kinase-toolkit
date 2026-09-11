@@ -178,6 +178,49 @@ def slice_alphafold_cif_to_kd(
     return dict_cif
 
 
+def fetch_alphafold_full_cif_dict(
+    uniprot_id: str,
+) -> dict[str, str | list[str]] | None:
+    """Fetch the full-length AlphaFold DB model as an mmCIF dict (no kinase-domain slice).
+
+    Backs full-length / Pfam-boundary figures. Round-trips through ``MMCIFIO`` (like
+    :func:`slice_alphafold_cif_to_kd`, minus the residue filter) so the dict matches the format
+    the structure accessors expect, and injects the one-letter sequence under
+    ``_entity_poly.pdbx_seq_one_letter_code``. Residues keep UniProt (auth) numbering, so the
+    model is contiguous from residue 1 -- superposition onto 1GAG is applied by the caller
+    (``StructureVisualizer``) via the stored KD transform.
+
+    Parameters
+    ----------
+    uniprot_id : str
+        Base UniProt accession (no multi-domain suffix).
+
+    Returns
+    -------
+    dict[str, str | list[str]] | None
+        The full-length mmCIF dict, or None if the structure could not be retrieved.
+    """
+    structure = AlphaFoldStructure(uniprot_id=uniprot_id)
+    if structure._cif is None:
+        logger.warning("no AlphaFold structure for %s", uniprot_id)
+        return None
+
+    struct = MMCIFParser(QUIET=True).get_structure("af", io.StringIO(structure._cif))
+    mmcif_io = MMCIFIO()
+    mmcif_io.set_structure(struct)
+    buffer = io.StringIO()
+    mmcif_io.save(buffer)
+    buffer.seek(0)
+    dict_cif = MMCIF2Dict(buffer)
+
+    seq = "".join(
+        protein_letters_3to1.get(residue.resname, "X")
+        for residue in struct[0].get_residues()
+    )
+    dict_cif["_entity_poly.pdbx_seq_one_letter_code"] = [seq]
+    return dict_cif
+
+
 def fetch_alphafold_kd(
     uniprot_id: str,
     start: int,
@@ -377,7 +420,12 @@ def get_alphafold(obj_kinase):
     )
 
 
-def adjudicate_structure(obj_kinase, prefer_alphafold: bool = False):
+def adjudicate_structure(
+    obj_kinase,
+    prefer_alphafold: bool = False,
+    full_length_af: bool = False,
+    pfam_slice: bool = False,
+):
     """Return the KD structure to render/compute over and a provenance label.
 
     The KinCoRe active-state CIF is preferred; the AlphaFold structure (stored on
@@ -390,13 +438,38 @@ def adjudicate_structure(obj_kinase, prefer_alphafold: bool = False):
         The kinase object.
     prefer_alphafold : bool, optional
         Force the AlphaFold structure even when a KinCoRe CIF is present, by default False.
+    full_length_af : bool, optional
+        Return the **full-length** AlphaFold model (no slice), by default False.
+    pfam_slice : bool, optional
+        Return the AlphaFold model sliced to the Pfam kinase-domain bounds, by default False.
 
     Returns
     -------
     tuple[dict | None, str | None]
-        ``(mmCIF dict, source label)`` where the label is ``"KinCoRe Active State"`` or
-        ``"AF2 Database"``; ``(None, None)`` when no structure is available.
+        ``(mmCIF dict, source label)`` -- ``"KinCoRe Active State"``, ``"AF2 Database"``,
+        ``"AF2 Database (full-length)"``, or ``"AF2 Database (Pfam)"``; ``(None, None)`` when no
+        structure is available.
     """
+    if pfam_slice:
+        pfam = obj_kinase.pfam
+        if pfam is None or pfam.start is None or pfam.end is None:
+            return None, None
+        structure = AlphaFoldStructure(
+            uniprot_id=str(obj_kinase.uniprot_id).split("-")[0]
+        )
+        if structure._cif is None:
+            return None, None
+        return (
+            slice_alphafold_cif_to_kd(structure._cif, pfam.start, pfam.end),
+            "AF2 Database (Pfam)",
+        )
+
+    if full_length_af:
+        dict_full = fetch_alphafold_full_cif_dict(
+            str(obj_kinase.uniprot_id).split("-")[0]
+        )
+        return (dict_full, "AF2 Database (full-length)") if dict_full else (None, None)
+
     dict_kincore = (
         obj_kinase.kincore.cif.cif
         if obj_kinase.kincore is not None and obj_kinase.kincore.cif is not None

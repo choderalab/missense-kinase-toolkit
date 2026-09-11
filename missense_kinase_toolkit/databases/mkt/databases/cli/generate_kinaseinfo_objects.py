@@ -68,6 +68,15 @@ def main(
             "relative to the current directory.",
         ),
     ] = None,
+    config_path: Annotated[
+        Optional[str],
+        typer.Option(
+            "--config",
+            help="Shared study YAML supplying report aesthetics (the 'kinaseinfo' section). "
+            "When given, reports go to <output.subdir>/<config-stem>/kinaseinfo/; otherwise "
+            "the mtime-stamped dict_kinase/<tar-mtime>/ convention is used.",
+        ),
+    ] = None,
     no_figs: Annotated[
         bool,
         typer.Option(
@@ -112,6 +121,7 @@ def main(
             bool_figs=not no_figs,
             figs_only=figs_only,
             force=force_regen,
+            config_path=config_path,
         )
     except ValueError as e:
         logger.error(str(e))

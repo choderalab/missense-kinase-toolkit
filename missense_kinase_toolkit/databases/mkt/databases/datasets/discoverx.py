@@ -820,8 +820,7 @@ class DiscoverXInfo(BaseModel):
                         if region.endswith("start")
                         else (idx_refseq - self.idx_stop)
                     )
-                    # only MTOR crosses threshold, where KD adjudication comes from Pfam is wrong
-                    if dist_aa >= 10 and self.discoverx_gene_symbol != "MTOR":
+                    if dist_aa >= 10:
                         logger.warning(
                             f"Codon {idx_refseq:,} (KD {region.split('_')[1]}) "
                             f"not present in construct for {self.discoverx_gene_symbol} "
@@ -834,15 +833,20 @@ class DiscoverXInfo(BaseModel):
                             else self.idx_stop
                         )
 
-                # make sure not overwriting KLIFS info
+                # make sure not overwriting KLIFS info; a KD boundary may legitimately coincide
+                # with the matching KLIFS boundary (kd_start<=I:1, kd_end>=a.l:85) -- keep the
+                # KLIFS label there, and get_boundaries_in_key falls back to it
                 try:
                     assert dict_idx[idx_refseq] is None
                     dict_idx[idx_refseq] = region
                 except AssertionError:
-                    logger.error(
-                        f"AssertionError: {self.discoverx_gene_symbol} KD {region.split('_')[1]} at "
-                        f"codon {idx_refseq:,} is annotated as {dict_idx[idx_refseq]}"
-                    )
+                    klifs_boundary = "I:1" if region == "kd_start" else "a.l:85"
+                    if dict_idx[idx_refseq] != klifs_boundary:
+                        logger.error(
+                            f"AssertionError: {self.discoverx_gene_symbol} KD "
+                            f"{region.split('_')[1]} at codon {idx_refseq:,} is annotated as "
+                            f"{dict_idx[idx_refseq]}"
+                        )
                 except KeyError:
                     logger.error(
                         f"KeyError: {self.discoverx_gene_symbol} KD "
@@ -1120,8 +1124,13 @@ class DiscoverXInfo(BaseModel):
             idx_key_start = list_values.index("I:1")
             idx_key_end = list_values.index("a.l:85")
         else:
-            idx_key_start = list_values.index("kd_start")
-            idx_key_end = list_values.index("kd_end")
+            # a KD boundary coinciding with the KLIFS boundary isn't recorded; fall back to it
+            idx_key_start = list_values.index(
+                "kd_start" if "kd_start" in list_values else "I:1"
+            )
+            idx_key_end = list_values.index(
+                "kd_end" if "kd_end" in list_values else "a.l:85"
+            )
 
         return idx_key_start, idx_key_end
 
