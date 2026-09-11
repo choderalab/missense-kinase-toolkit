@@ -54,3 +54,19 @@ def test_group_name_homologs():
 
     # hand-curated exception: BUB1 / BUB1B are distinct genes despite the "B" suffix
     assert _grouped(["BUB1", "BUB1B"]) == {"BUB1": ["BUB1"], "BUB1B": ["BUB1B"]}
+
+
+def test_return_klifs2msa_dict(dict_kinase):
+    """The empirical KLIFS->MSA map covers the pocket; core anchors are highly concordant."""
+    from mkt.schema.utils import return_klifs2msa_dict
+
+    dict_map, dict_concordance = return_klifs2msa_dict(
+        dict_kinase, bool_return_concordance=True
+    )
+    # core catalytic anchors map to their known MSA columns
+    assert dict_map["III:17"] == "B3:028"  # VAIK beta3 lysine
+    assert dict_map["c.l:70"] == "CL:111"  # HRD catalytic aspartate
+    assert dict_map["xDFG:81"] == "ALN:129"  # DFG aspartate
+    # concordance is near-perfect at the anchors but not 1:1 across the pocket
+    assert dict_concordance["xDFG:81"] >= 0.98
+    assert min(dict_concordance.values()) >= 0.85

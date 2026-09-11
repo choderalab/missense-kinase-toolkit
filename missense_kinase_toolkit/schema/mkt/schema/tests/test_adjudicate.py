@@ -215,19 +215,3 @@ def test_is_pseudokinase_tristate(dict_kinase):
     for name in ("ALPK1", "PDK1", "PRKDC", "TRPM7", "PIP5K1A"):
         assert dict_kinase[name].return_catalytic_residues() is None
         assert dict_kinase[name].is_pseudokinase() is None
-
-
-def test_return_klifs2msa_dict(dict_kinase):
-    """The empirical KLIFS->MSA map covers the pocket; core anchors are highly concordant."""
-    from mkt.schema.utils import return_klifs2msa_dict
-
-    dict_map, dict_concordance = return_klifs2msa_dict(
-        dict_kinase, bool_return_concordance=True
-    )
-    # core catalytic anchors map to their known MSA columns
-    assert dict_map["III:17"] == "B3:028"  # VAIK beta3 lysine
-    assert dict_map["c.l:70"] == "CL:111"  # HRD catalytic aspartate
-    assert dict_map["xDFG:81"] == "ALN:129"  # DFG aspartate
-    # concordance is near-perfect at the anchors but not 1:1 across the pocket
-    assert dict_concordance["xDFG:81"] >= 0.98
-    assert min(dict_concordance.values()) >= 0.85
