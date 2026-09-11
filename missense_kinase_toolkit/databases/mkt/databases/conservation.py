@@ -480,7 +480,8 @@ class KLIFSHierarchicalConservation(BaseModel):
 
         Drops any panel member for which ``KinaseInfo.is_pseudokinase()`` is True,
         keeping :attr:`names`, :attr:`pockets` and :attr:`groups` in sync. Names absent
-        from :data:`DICT_KINASE` (e.g. a custom panel) cannot be assessed and are kept.
+        from :data:`DICT_KINASE` (e.g. a custom panel), or whose catalytic triad cannot be
+        assessed (a tri-state None), are kept.
 
         Returns:
         --------
@@ -1567,7 +1568,8 @@ class KLIFSConservationTreeFigure(KLIFSHierarchicalConservation):
         """Key separating homolog lumping by lipid / pseudokinase / Manning group."""
         info = DICT_KINASE.get(self.names[i])
         lipid = info is not None and info.is_lipid_kinase()
-        pseudo = info is not None and info.is_pseudokinase()
+        # is_pseudokinase() is tri-state; an unassessable None partitions with the actives
+        pseudo = bool(info is not None and info.is_pseudokinase())
         return (True, None) if lipid else (False, pseudo, self.groups[i])
 
     def _leaf_groups(self, members: list[int]) -> list[tuple[str, int]]:

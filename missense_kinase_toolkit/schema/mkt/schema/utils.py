@@ -1,13 +1,18 @@
 """Schema utility helpers: recursive attribute access, UUID generation, and kinase-group adjudication.
 
 Provides :func:`rgetattr`/:func:`rsetattr` for traversing nested Pydantic models,
-:func:`random_uuid`, :func:`return_kinase_gene_set`, and
-:func:`adjudicate_kinase_group`.
+:func:`random_uuid`, :func:`return_kinase_gene_set`,
+:func:`adjudicate_kinase_group`, and the KLIFS-to-Dunbrack-MSA correspondence
+helpers :func:`return_klifs2msa_dict`/:func:`return_catalytic_klifs2msa_dict`.
 """
 
 import logging
 import os
 from datetime import date
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from mkt.schema.kinase_schema import KinaseInfo
 
 logger = logging.getLogger(__name__)
 
@@ -355,3 +360,92 @@ def adjudicate_kinase_group(str_kinase: str, bool_lipid: bool = True) -> str | N
     if kinase.is_lipid_kinase() and bool_lipid:
         return "Lipid"
     return kinase.adjudicate_group()
+
+
+def return_klifs2msa_dict(
+    dict_kinase: dict[str, "KinaseInfo"],
+    bool_return_concordance: bool = False,
+) -> dict[str, str] | tuple[dict[str, str], dict[str, float]]:
+    """Assemble the empirical KLIFS-pocket -> Dunbrack-MSA position correspondence.
+
+    For each KLIFS ``region:idx``, tallies which MSA ``region2uniprot`` key most often shares
+    its UniProt index across the kinases carrying both maps, and returns that modal
+    correspondence (built programmatically from ``dict_kinase`` -- not hard-coded).
+
+    The concordance is **not 1:1**: it is ~99% at the core catalytic/structural anchors (e.g.
+    ``III:17`` VAIK Lys, ``c.l:70`` HRD Asp, ``xDFG:81`` DFG Asp) but drops to ~90-95% across
+    the variable alphaD/alphaE/linker region, where the two structure-based alignment conventions
+    place insert-flanking residues differently, and for a handful of divergent (pseudo)kinases.
+    Use it for cross-referencing/QA, not as an exact map. Pass ``bool_return_concordance`` to also
+    get the per-position agreement fraction (share of kinases mapping to the modal MSA key).
+
+    Parameters
+    ----------
+    dict_kinase : dict[str, KinaseInfo]
+        Mapping of HGNC name to kinase object (needs both ``KLIFS2UniProtIdx`` and
+        ``kincore.msa``).
+    bool_return_concordance : bool, optional
+        If True, also return the per-KLIFS-position agreement fraction, by default False.
+
+    Returns
+    -------
+    dict[str, str] | tuple[dict[str, str], dict[str, float]]
+        The KLIFS ``region:idx`` -> MSA ``region:idx`` map; with ``bool_return_concordance``,
+        a ``(map, concordance)`` tuple where concordance is the modal-agreement fraction per
+        KLIFS position.
+    """
+    from collections import Counter
+
+    from mkt.schema.constants import LIST_KLIFS_REGION
+
+    dict_counter: dict[str, Counter] = {label: Counter() for label in LIST_KLIFS_REGION}
+    for obj in dict_kinase.values():
+        msa = obj.kincore.msa if obj.kincore is not None else None
+        if msa is None or obj.KLIFS2UniProtIdx is None:
+            continue
+        dict_idx2msa = {v: k for k, v in msa.region2uniprot.items() if v is not None}
+        for klifs_label, uniprot_idx in obj.KLIFS2UniProtIdx.items():
+            if uniprot_idx is not None and uniprot_idx in dict_idx2msa:
+                dict_counter[klifs_label][dict_idx2msa[uniprot_idx]] += 1
+
+    dict_map: dict[str, str] = {}
+    dict_concordance: dict[str, float] = {}
+    for label in LIST_KLIFS_REGION:
+        counter = dict_counter[label]
+        if not counter:
+            continue
+        msa_label, count = counter.most_common(1)[0]
+        dict_map[label] = msa_label
+        dict_concordance[label] = count / sum(counter.values())
+
+    if bool_return_concordance:
+        return dict_map, dict_concordance
+    return dict_map
+
+
+def return_catalytic_klifs2msa_dict() -> dict[str, str]:
+    """Return the KLIFS -> MSA correspondence restricted to the catalytic positions.
+
+    Subsets :func:`return_klifs2msa_dict` over the shipped corpus to
+    :data:`LIST_KLIFS_CATALYTIC`, giving the MSA ``region2uniprot`` key to read for each
+    KLIFS catalytic label when a kinase has no KLIFS pocket (see
+    :meth:`mkt.schema.kinase_schema.KinaseInfo.return_catalytic_residues`).
+
+    The catalytic anchors are where the two alignments agree most closely (~99% modal
+    concordance at III:17, c.l:68-70 and xDFG:81-83; ~97% at the beta2 lysine II:13), which
+    is what makes the fallback defensible where the general map is not.
+
+    Returns
+    -------
+    dict[str, str]
+        KLIFS region:idx -> MSA region:idx, for the catalytic positions only.
+    """
+    from mkt.schema.constants import LIST_KLIFS_CATALYTIC
+    from mkt.schema.io_utils import deserialize_kinase_dict
+
+    DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE", bool_verbose=False)
+
+    dict_map = return_klifs2msa_dict(DICT_KINASE)
+    return {
+        label: dict_map[label] for label in LIST_KLIFS_CATALYTIC if label in dict_map
+    }

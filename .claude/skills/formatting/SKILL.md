@@ -21,6 +21,11 @@ the baseline.
 
 ## Repo-specific additions
 
+- **Keep comments and docstrings terse.** Prefer one tight line over a paragraph.
+  State only what the reader needs to use the code — not the history, the migration
+  path, or the rationale behind a design decision (no "ported from X", "was
+  previously Y", "concepts from Z"). A new field's docstring matches the brevity of
+  the surrounding fields; a comment explains a non-obvious *what*, not a story.
 - This is a mono repo; local imports come from the per-sub-package namespaces:
   `mkt.schema.*`, `mkt.databases.*`, `mkt.ml.*`.
 - Enforced by pre-commit (`black`, `isort` profile "black", `flake8`

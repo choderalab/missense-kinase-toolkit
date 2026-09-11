@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
-"""CLI for generating PyMOL visualization files for kinase structures."""
+"""CLI for generating PyMOL visualization files for kinase structures.
 
+Two modes: a single-gene one-off from flags (``--gene``/``--config-type``/...), or a batch run
+from the ``pymol`` section of a shared study YAML (``--config``) that iterates its ``views``
+list -- one output per view. Config-mode files go to ``<output.subdir>/<config-stem>/pymol/
+<gene>/<config>/``; the flag one-off keeps the familiar ``images/pymol_output/<gene>/<config>/``.
+"""
+
+import logging
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -13,13 +20,136 @@ from mkt.databases.app.utils import (
 )
 from mkt.databases.colors import DICT_COLORS
 from mkt.databases.log_config import configure_logging
+from mkt.databases.plot_config import PymolConfig, load_task_config
 from mkt.databases.pymol import PyMOLGenerator
 from mkt.schema.io_utils import get_repo_root
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer(
     help="Generate PyMOL files for kinase structure visualization.",
     no_args_is_help=True,
 )
+
+TASK_KEY = "pymol"
+"""str: Top-level namespace this CLI reads from the shared study YAML."""
+
+
+def _generate_one_view(
+    gene: str,
+    config_name: str,
+    base_dir: Path,
+    indices: Optional[str] = None,
+    colors: Optional[str] = None,
+    json_mutations: Optional[str] = None,
+    transparency: float = 0.3,
+    force_alphafold: bool = False,
+) -> Path:
+    """Generate the PyMOL files for one (gene, config) view under ``base_dir/<gene>/<config>``.
+
+    Parameters
+    ----------
+    gene : str
+        HGNC gene name of the kinase.
+    config_name : str
+        A :class:`StandardConfig` member name (e.g. ``"KLIFS_IMPORTANT"``).
+    base_dir : Path
+        Directory the view's ``<gene>/<config>`` output tree is created under.
+    indices, colors : str | None
+        KLIFS_CUSTOM: comma-separated UniProt positions and matching colors.
+    json_mutations : str | None
+        MUTATIONS_* configs: path to the mutations JSON.
+    transparency : float
+        KLIFS_CUSTOM cartoon transparency for the colored regions.
+    force_alphafold : bool
+        Render the AlphaFold DB structure even when a KinCoRe CIF is available.
+
+    Returns
+    -------
+    Path
+        The output directory the PyMOL files were written to.
+
+    Raises
+    ------
+    ValueError
+        If the config name is unknown or its required parameters are missing/invalid.
+    """
+    if config_name not in StandardConfig.__members__:
+        raise ValueError(
+            f"unknown config '{config_name}'; valid: {list(StandardConfig.__members__)}"
+        )
+    if config_name.startswith("MUTATIONS") and json_mutations is None:
+        raise ValueError(f"json_mutations is required for {config_name}.")
+
+    list_uniprot_idx: list[int] = []
+    list_custom_color: list[str] = []
+    if config_name == "KLIFS_CUSTOM":
+        if indices is None or colors is None:
+            raise ValueError("indices and colors are both required for KLIFS_CUSTOM.")
+        try:
+            list_uniprot_idx = [int(i.strip()) for i in indices.split(",") if i.strip()]
+        except ValueError:
+            raise ValueError("indices must be a comma-separated list of integers.")
+        list_custom_color = [c.strip() for c in colors.split(",") if c.strip()]
+        if len(list_uniprot_idx) != len(list_custom_color):
+            raise ValueError(
+                f"indices ({len(list_uniprot_idx)}) and colors "
+                f"({len(list_custom_color)}) must have the same number of entries."
+            )
+
+    # e.g. "klifs" / "phosphosites"; str_attr is the config suffix
+    str_final_subdir = config_name.lower().split("_")[0]
+    str_attr = "_".join(config_name.lower().split("_")[1:])
+
+    # source views need the matching alignment track (full-length UniProt vs Pfam slice)
+    seq_align = SequenceAlignment(
+        str_kinase=gene,
+        # for the sequence viewer, not the PyMOL colors
+        dict_color=DICT_COLORS["ALPHABET_PROJECT"]["DICT_COLORS"],
+        bool_full_length_af=config_name == "SOURCE_UNIPROT",
+        bool_pfam_slice_af=config_name == "SOURCE_PFAM",
+    )
+    if config_name == "KLIFS_CUSTOM":
+        validate_uniprot_indices(seq_align, list_uniprot_idx)
+
+    config_kwargs: dict = {"prefer_alphafold": force_alphafold}
+    if config_name.startswith("MUTATIONS"):
+        config_kwargs["str_filepath_json"] = str(json_mutations)
+    elif config_name == "KLIFS_CUSTOM":
+        config_kwargs["list_uniprot_idx"] = list_uniprot_idx
+        config_kwargs["list_custom_color"] = list_custom_color
+        config_kwargs["highlight_cartoon_transparency"] = transparency
+
+    viz = create_structure_visualizer(
+        seq_align=seq_align,
+        config_class=StandardConfig[config_name].value,
+        config_kwargs=config_kwargs,
+    )
+    out_dir = base_dir / gene / str_final_subdir
+    PyMOLGenerator(viz=viz, str_attr=str_attr).save_pymol_files(str(out_dir))
+    return out_dir
+
+
+def _write_colormap_legend_if_mutations(config_names, base_dir: Path) -> None:
+    """Write the mutation colormap legend into ``base_dir`` if any view is a MUTATIONS_* config.
+
+    The mutation PyMOL structures color residues by the plasma percentile colormap, so a shared
+    legend (SVG + PNG) is emitted once at the top of the pymol output dir for those figures.
+    """
+    if not any(str(c).startswith("MUTATIONS") for c in config_names):
+        return
+    from mkt.databases.colors import (
+        DICT_QUARTILE_HEATMAP_COLORMAP_PLASMA,
+        generate_colormap_legend,
+    )
+
+    base_dir.mkdir(parents=True, exist_ok=True)
+    generate_colormap_legend(
+        DICT_QUARTILE_HEATMAP_COLORMAP_PLASMA,
+        output_path=str(base_dir),
+        bool_image_subdir=False,
+    )
+    logger.info(f"wrote mutation colormap legend to {base_dir}")
 
 
 @app.command()
@@ -29,24 +159,31 @@ def main(
         typer.Option(
             "--gene",
             "-g",
-            help="Gene name of the kinase to visualize.",
+            help="Gene name of the kinase to visualize (single-gene flag mode).",
         ),
     ] = "ABL1",
     config_type: Annotated[
         StandardConfigChoice,
         typer.Option(
-            "--config",
+            "--config-type",
             "-c",
-            help="Configuration type for structure highlighting.",
+            help="Configuration type for structure highlighting (single-gene flag mode).",
             case_sensitive=False,
         ),
     ] = StandardConfigChoice.KLIFS_IMPORTANT,
+    config_path: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--config",
+            help="Shared study YAML; batch-generate every view under its 'pymol' section.",
+        ),
+    ] = None,
     output_dir: Annotated[
         Optional[Path],
         typer.Option(
             "--output-dir",
             "-o",
-            help="Output directory for PyMOL files. Default: <repo_root>/images/pymol_output/<gene>/<config>",
+            help="Base output directory. Default: <repo_root>/images/... ",
         ),
     ] = None,
     json_mutations: Annotated[
@@ -111,107 +248,64 @@ def main(
     """Generate PyMOL visualization files for kinase structures.
 
     Examples:
-        # Generate KLIFS pocket visualization for ABL1
-        generate_pymol_files --gene ABL1 --config KLIFS_IMPORTANT
+        # single-gene one-off (flag mode)
+        generate_pymol_files --gene ABL1 --config-type KLIFS_IMPORTANT
+        generate_pymol_files --gene ABL1 --config-type KLIFS_CUSTOM --indices 315,317 --colors red,blue
 
-        # Generate phosphosite visualization
-        generate_pymol_files --gene EGFR --config PHOSPHOSITES
-
-        # Generate mutation visualization (requires JSON file)
-        generate_pymol_files --gene ABL1 --config MUTATIONS_KLIFS --json-mutations mutations.json
-
-        # Generate group-averaged mutations
-        generate_pymol_files --gene ABL1 --config MUTATIONS_GROUP --json-mutations mutations.json
-
-        # Generate KLIFS regions (semi-transparent cartoon) with custom stick residues
-        generate_pymol_files --gene ABL1 --config KLIFS_CUSTOM --indices 315,317 --colors red,blue
-
-        # Force the AlphaFold structure even when a KinCoRe CIF is present
-        generate_pymol_files --gene ABL1 --config KLIFS_IMPORTANT --force-alphafold
+        # batch mode: every view under the 'pymol' section of a study YAML
+        generate_pymol_files --config configs/paper_2026.yaml
     """
     configure_logging(verbose=verbose)
 
-    # validate that mutations file is provided for MUTATIONS_* configs
-    config_name = config_type.value
-    if config_name.startswith("MUTATIONS") and json_mutations is None:
-        raise typer.BadParameter(
-            f"--json-mutations is required when using {config_name} config.",
-            param_hint="--json-mutations",
+    # batch mode: iterate the study YAML's pymol.views
+    if config_path is not None:
+        pym_cfg = load_task_config(PymolConfig, config_path, TASK_KEY)
+        config_name = Path(config_path).stem
+        default_base = (
+            Path(get_repo_root()) / pym_cfg.output.subdir / config_name / TASK_KEY
         )
+        base = output_dir / TASK_KEY if output_dir is not None else default_base
+        n_ok = 0
+        for view in pym_cfg.views:
+            view_base = Path(view.output_dir) if view.output_dir else base
+            try:
+                out = _generate_one_view(
+                    view.gene,
+                    view.config_type,
+                    view_base,
+                    indices=view.indices,
+                    colors=view.colors,
+                    json_mutations=view.json_mutations,
+                    transparency=view.transparency,
+                    force_alphafold=view.force_alphafold,
+                )
+                logger.info(f"generated {view.gene}/{view.config_type} in {out}")
+                n_ok += 1
+            except Exception as e:
+                logger.error(f"skipping {view.gene}/{view.config_type}: {e}")
+        _write_colormap_legend_if_mutations(
+            [v.config_type for v in pym_cfg.views], base
+        )
+        typer.echo(f"PyMOL: generated {n_ok}/{len(pym_cfg.views)} view(s).")
+        return
 
-    # parse and validate custom indices/colors for KLIFS_CUSTOM config
-    list_uniprot_idx: list[int] = []
-    list_custom_color: list[str] = []
-    if config_name == "KLIFS_CUSTOM":
-        if indices is None or colors is None:
-            raise typer.BadParameter(
-                "--indices and --colors are both required when using KLIFS_CUSTOM config.",
-                param_hint="--indices / --colors",
-            )
-        try:
-            list_uniprot_idx = [int(i.strip()) for i in indices.split(",") if i.strip()]
-        except ValueError:
-            raise typer.BadParameter(
-                "--indices must be a comma-separated list of integers.",
-                param_hint="--indices",
-            )
-        list_custom_color = [c.strip() for c in colors.split(",") if c.strip()]
-        if len(list_uniprot_idx) != len(list_custom_color):
-            raise typer.BadParameter(
-                f"--indices ({len(list_uniprot_idx)}) and --colors "
-                f"({len(list_custom_color)}) must have the same number of entries.",
-                param_hint="--indices / --colors",
-            )
-
-    # e.g., "klifs" or "phosphosites"
-    str_final_subdir = config_name.lower().split("_")[0]
-    str_attr = "_".join(config_name.lower().split("_")[1:])
-
-    # create sequence alignment
-    seq_align = SequenceAlignment(
-        str_kinase=gene,
-        # this is for sequence viewer, not PyMOL colors
-        dict_color=DICT_COLORS["ALPHABET_PROJECT"]["DICT_COLORS"],
-    )
-
-    # validate custom indices fall within the protein for KLIFS_CUSTOM config
-    if config_name == "KLIFS_CUSTOM":
-        try:
-            validate_uniprot_indices(seq_align, list_uniprot_idx)
-        except ValueError as e:
-            raise typer.BadParameter(str(e), param_hint="--indices")
-
-    # Get the config class from StandardConfig enum
-    config_class = StandardConfig[config_name].value
-
-    # prepare config kwargs
-    config_kwargs: dict = {"prefer_alphafold": force_alphafold}
-    if config_name.startswith("MUTATIONS"):
-        config_kwargs["str_filepath_json"] = str(json_mutations)
-    elif config_name == "KLIFS_CUSTOM":
-        config_kwargs["list_uniprot_idx"] = list_uniprot_idx
-        config_kwargs["list_custom_color"] = list_custom_color
-        config_kwargs["highlight_cartoon_transparency"] = transparency
-
-    # create structure visualizer using the config
-    viz = create_structure_visualizer(
-        seq_align=seq_align,
-        config_class=config_class,
-        config_kwargs=config_kwargs,
-    )
-
-    # generate PyMOL files
-    pymol_generator = PyMOLGenerator(viz=viz, str_attr=str_attr)
-
-    str_subdirs = Path("images") / "pymol_output" / gene / str_final_subdir
-    if output_dir:
-        out_dir = output_dir / str_subdirs
-    else:
-        out_dir = Path(get_repo_root()) / str_subdirs
-
-    pymol_generator.save_pymol_files(str(out_dir))
-
-    typer.echo(f"PyMOL files generated in: {out_dir}")
+    # single-gene flag mode
+    base = (output_dir or Path(get_repo_root())) / "images" / "pymol_output"
+    try:
+        out = _generate_one_view(
+            gene,
+            config_type.value,
+            base,
+            indices=indices,
+            colors=colors,
+            json_mutations=str(json_mutations) if json_mutations else None,
+            transparency=transparency,
+            force_alphafold=force_alphafold,
+        )
+    except ValueError as e:
+        raise typer.BadParameter(str(e))
+    _write_colormap_legend_if_mutations([config_type.value], base)
+    typer.echo(f"PyMOL files generated in: {out}")
 
 
 if __name__ == "__main__":

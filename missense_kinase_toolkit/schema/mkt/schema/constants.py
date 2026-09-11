@@ -327,6 +327,25 @@ xDFG:81 chelates the catalytic Mg2+)."""
 STR_KLIFS_DFG_MOTIF = "DFG"
 """str: Canonical activation-segment start motif (Asp-Phe-Gly)."""
 
+LIST_KLIFS_CATALYTIC = [
+    STR_KLIFS_BETA3_LYSINE,
+    STR_KLIFS_BETA2_LYSINE,
+    *LIST_KLIFS_HRD_MOTIF,
+    *LIST_KLIFS_DFG_MOTIF,
+]
+"""list[str]: KLIFS region:idx labels read by \
+:meth:`mkt.schema.kinase_schema.KinaseInfo.return_catalytic_residues` -- the two candidate \
+catalytic lysines plus the HRD and DFG motifs, in N->C order."""
+
+LIST_KLIFS_CATALYTIC_TRIAD = [
+    STR_KLIFS_BETA3_LYSINE,
+    STR_KLIFS_CATALYTIC_ASP,
+    STR_KLIFS_DFG_ASP,
+]
+"""list[str]: The three canonical catalytic positions whose identities decide \
+:meth:`mkt.schema.kinase_schema.KinaseInfo.is_pseudokinase` (the beta2 lysine at \
+STR_KLIFS_BETA2_LYSINE substitutes for the beta3 lysine in the WNK family)."""
+
 LIST_PSEUDOKINASE_TRIAD_INTACT = [
     "BUB1B",
     "ROR1",
