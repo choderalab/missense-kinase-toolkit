@@ -1,7 +1,8 @@
-"""Configuration dataclasses for plot_dataset_data.py.
+"""Configuration dataclasses for the figure CLIs.
 
-Loads plot aesthetics and data source paths from YAML config files
-via OmegaConf, following the pattern used in mkt_impact.
+Per-figure sub-configs plus the grouped per-task aggregators (KinaseInfoFiguresConfig,
+ConservationFiguresConfig, DatasetFiguresConfig, PymolConfig) that each CLI loads from its own
+namespace of a shared study YAML via ``load_task_config`` (OmegaConf), following mkt_impact.
 """
 
 from dataclasses import dataclass, field
@@ -388,79 +389,6 @@ class OutputConfig:
     bool_pdf: bool = False
 
 
-# --- top-level config ---
-
-
-@dataclass
-class PlotDatasetConfig:
-    """Top-level config aggregating all sub-configs."""
-
-    matplotlib_rc: MatplotlibRCConfig = field(default_factory=MatplotlibRCConfig)
-    family_colors: FamilyColorConfig = field(default_factory=FamilyColorConfig)
-    col_kinase_colors: ColKinaseColorConfig = field(
-        default_factory=ColKinaseColorConfig
-    )
-    dynamic_range: DynamicRangePlotConfig = field(
-        default_factory=DynamicRangePlotConfig
-    )
-    ridgeline: RidgelinePlotConfig = field(default_factory=RidgelinePlotConfig)
-    stacked_barchart: StackedBarchartConfig = field(
-        default_factory=StackedBarchartConfig
-    )
-    venn_diagram: VennDiagramConfig = field(default_factory=VennDiagramConfig)
-    metrics_boxplot: MetricsBoxplotConfig = field(default_factory=MetricsBoxplotConfig)
-    sequence_schematic: SequenceSchematicConfig = field(
-        default_factory=SequenceSchematicConfig
-    )
-    data_sources: DataSourceConfig = field(default_factory=DataSourceConfig)
-    output: OutputConfig = field(default_factory=OutputConfig)
-
-    @classmethod
-    def from_yaml(cls, config_path: str | Path) -> "PlotDatasetConfig":
-        """Load a PlotDatasetConfig from a YAML file.
-
-        Parameters:
-        -----------
-        config_path : str | Path
-            Path to the YAML configuration file.
-
-        Returns:
-        --------
-        PlotDatasetConfig
-            Fully populated config instance.
-        """
-        omega = OmegaConf.load(config_path)
-        raw = OmegaConf.to_container(omega, resolve=True)
-
-        cfg = cls()
-        if "matplotlib_rc" in raw:
-            cfg.matplotlib_rc = MatplotlibRCConfig(**raw["matplotlib_rc"])
-        if "family_colors" in raw:
-            cfg.family_colors = FamilyColorConfig(**raw["family_colors"])
-        if "col_kinase_colors" in raw:
-            cfg.col_kinase_colors = ColKinaseColorConfig(**raw["col_kinase_colors"])
-        if "dynamic_range" in raw:
-            cfg.dynamic_range = DynamicRangePlotConfig(**raw["dynamic_range"])
-        if "ridgeline" in raw:
-            cfg.ridgeline = RidgelinePlotConfig(**raw["ridgeline"])
-        if "stacked_barchart" in raw:
-            cfg.stacked_barchart = StackedBarchartConfig(**raw["stacked_barchart"])
-        if "venn_diagram" in raw:
-            cfg.venn_diagram = VennDiagramConfig(**raw["venn_diagram"])
-        if "metrics_boxplot" in raw:
-            cfg.metrics_boxplot = MetricsBoxplotConfig(**raw["metrics_boxplot"])
-        if "sequence_schematic" in raw:
-            cfg.sequence_schematic = SequenceSchematicConfig(
-                **raw["sequence_schematic"]
-            )
-        if "data_sources" in raw:
-            cfg.data_sources = DataSourceConfig(**raw["data_sources"])
-        if "output" in raw:
-            cfg.output = OutputConfig(**raw["output"])
-
-        return cfg
-
-
 # --- KLIFS hierarchical conservation-tree figures ---
 # defaults mirror the constants in mkt.databases.conservation (kept as literals here so
 # plot_config stays import-light and does not trigger the conservation panel build).
@@ -534,81 +462,6 @@ class CladeMembershipTableConfig:
 
 
 @dataclass
-class DictKinaseFiguresConfig:
-    """Top-level config for the DICT_KINASE figures (upset + region-gap map/violin).
-
-    Consumed by the ``plot_dict_kinase`` CLI. Kept separate from
-    :class:`PlotDatasetConfig` so rendering these figures never imports the
-    dataset-processing module (which has a network side effect on import).
-    """
-
-    matplotlib_rc: MatplotlibRCConfig = field(default_factory=MatplotlibRCConfig)
-    upset_plot: UpsetPlotConfig = field(default_factory=UpsetPlotConfig.preprint_2026)
-    region_gap_violin: RegionGapViolinConfig = field(
-        default_factory=RegionGapViolinConfig
-    )
-    conservation_tree: ConservationTreeConfig = field(
-        default_factory=ConservationTreeConfig
-    )
-    conservation_tree_explorer: ConservationTreeExplorerConfig = field(
-        default_factory=ConservationTreeExplorerConfig
-    )
-    residue_dot: ResidueDotConfig = field(default_factory=ResidueDotConfig)
-    residue_dot_explorer: ResidueDotExplorerConfig = field(
-        default_factory=ResidueDotExplorerConfig
-    )
-    clade_membership_table: CladeMembershipTableConfig = field(
-        default_factory=CladeMembershipTableConfig
-    )
-    output: OutputConfig = field(default_factory=OutputConfig)
-
-    @classmethod
-    def from_yaml(cls, config_path: str | Path) -> "DictKinaseFiguresConfig":
-        """Load a DictKinaseFiguresConfig from a YAML file.
-
-        Parameters:
-        -----------
-        config_path : str | Path
-            Path to the YAML configuration file.
-
-        Returns:
-        --------
-        DictKinaseFiguresConfig
-            Fully populated config instance.
-        """
-        omega = OmegaConf.load(config_path)
-        raw = OmegaConf.to_container(omega, resolve=True)
-
-        cfg = cls()
-        if "matplotlib_rc" in raw:
-            cfg.matplotlib_rc = MatplotlibRCConfig(**raw["matplotlib_rc"])
-        if "upset_plot" in raw:
-            cfg.upset_plot = UpsetPlotConfig(**raw["upset_plot"])
-        if "region_gap_violin" in raw:
-            cfg.region_gap_violin = RegionGapViolinConfig(**raw["region_gap_violin"])
-        if "conservation_tree" in raw:
-            cfg.conservation_tree = ConservationTreeConfig(**raw["conservation_tree"])
-        if "conservation_tree_explorer" in raw:
-            cfg.conservation_tree_explorer = ConservationTreeExplorerConfig(
-                **raw["conservation_tree_explorer"]
-            )
-        if "residue_dot" in raw:
-            cfg.residue_dot = ResidueDotConfig(**raw["residue_dot"])
-        if "residue_dot_explorer" in raw:
-            cfg.residue_dot_explorer = ResidueDotExplorerConfig(
-                **raw["residue_dot_explorer"]
-            )
-        if "clade_membership_table" in raw:
-            cfg.clade_membership_table = CladeMembershipTableConfig(
-                **raw["clade_membership_table"]
-            )
-        if "output" in raw:
-            cfg.output = OutputConfig(**raw["output"])
-
-        return cfg
-
-
-@dataclass
 class SASAConcordanceScatterConfig:
     """Aesthetics for the KinCoRe-vs-AF2 SASA/RSA concordance scatter.
 
@@ -655,3 +508,132 @@ class SASAConcordanceDeltaConfig:
     top_adjust: float = 0.94
     bottom_adjust: float = 0.14
     hspace: float = 0.12
+
+
+# --- grouped study config: one shared YAML, each CLI reads its own task namespace ---
+
+
+def load_task_config(
+    schema_cls,
+    config_path: str | Path | None = None,
+    task_key: str | None = None,
+    shared_keys: tuple[str, ...] = ("matplotlib_rc", "output"),
+):
+    """Load one task's config from a shared study YAML into a typed dataclass instance.
+
+    Merges the top-level ``shared_keys`` blocks (aesthetics/output common to every task) and the
+    task's own ``task_key`` namespace onto ``schema_cls``'s structured defaults; sections absent
+    from the YAML fall back to defaults, and ``config_path=None`` returns pure defaults. Struct
+    mode is preserved, so an unknown key (a config typo) raises rather than being silently ignored.
+
+    Parameters
+    ----------
+    schema_cls : type
+        The task's aggregator dataclass (e.g. :class:`ConservationFiguresConfig`).
+    config_path : str | Path | None, optional
+        Path to the shared study YAML; None uses defaults, by default None.
+    task_key : str | None, optional
+        Top-level namespace for this task (e.g. ``"conservation"``), by default None.
+    shared_keys : tuple[str, ...], optional
+        Top-level blocks shared across tasks, applied only when the schema declares them.
+
+    Returns
+    -------
+    object
+        A populated instance of ``schema_cls``.
+    """
+    merged = OmegaConf.structured(schema_cls)
+    if config_path is not None:
+        raw = OmegaConf.load(config_path)
+        for key in shared_keys:
+            if key in raw and key in merged:
+                merged = OmegaConf.merge(merged, {key: raw[key]})
+        if task_key is not None and task_key in raw:
+            merged = OmegaConf.merge(merged, raw[task_key])
+    return OmegaConf.to_object(merged)
+
+
+@dataclass
+class KinaseInfoFiguresConfig:
+    """DICT_KINASE report figures -- the ``kinaseinfo`` task section."""
+
+    matplotlib_rc: MatplotlibRCConfig = field(default_factory=MatplotlibRCConfig)
+    output: OutputConfig = field(default_factory=OutputConfig)
+    upset_plot: UpsetPlotConfig = field(default_factory=UpsetPlotConfig.preprint_2026)
+    region_gap_violin: RegionGapViolinConfig = field(
+        default_factory=RegionGapViolinConfig.preprint_2026
+    )
+    sasa_concordance_scatter: SASAConcordanceScatterConfig = field(
+        default_factory=SASAConcordanceScatterConfig
+    )
+    sasa_concordance_delta: SASAConcordanceDeltaConfig = field(
+        default_factory=SASAConcordanceDeltaConfig
+    )
+
+
+@dataclass
+class ConservationFiguresConfig:
+    """KLIFS conservation figures -- the ``conservation`` task section."""
+
+    matplotlib_rc: MatplotlibRCConfig = field(default_factory=MatplotlibRCConfig)
+    output: OutputConfig = field(default_factory=OutputConfig)
+    conservation_tree: ConservationTreeConfig = field(
+        default_factory=ConservationTreeConfig
+    )
+    conservation_tree_explorer: ConservationTreeExplorerConfig = field(
+        default_factory=ConservationTreeExplorerConfig
+    )
+    residue_dot: ResidueDotConfig = field(default_factory=ResidueDotConfig)
+    residue_dot_explorer: ResidueDotExplorerConfig = field(
+        default_factory=ResidueDotExplorerConfig
+    )
+    clade_membership_table: CladeMembershipTableConfig = field(
+        default_factory=CladeMembershipTableConfig
+    )
+
+
+@dataclass
+class DatasetFiguresConfig:
+    """Processed-dataset figures -- the ``dataset`` task section."""
+
+    matplotlib_rc: MatplotlibRCConfig = field(default_factory=MatplotlibRCConfig)
+    output: OutputConfig = field(default_factory=OutputConfig)
+    family_colors: FamilyColorConfig = field(default_factory=FamilyColorConfig)
+    col_kinase_colors: ColKinaseColorConfig = field(
+        default_factory=ColKinaseColorConfig
+    )
+    dynamic_range: DynamicRangePlotConfig = field(
+        default_factory=DynamicRangePlotConfig
+    )
+    ridgeline: RidgelinePlotConfig = field(default_factory=RidgelinePlotConfig)
+    stacked_barchart: StackedBarchartConfig = field(
+        default_factory=StackedBarchartConfig
+    )
+    venn_diagram: VennDiagramConfig = field(default_factory=VennDiagramConfig)
+    metrics_boxplot: MetricsBoxplotConfig = field(default_factory=MetricsBoxplotConfig)
+    sequence_schematic: SequenceSchematicConfig = field(
+        default_factory=SequenceSchematicConfig
+    )
+    data_sources: DataSourceConfig = field(default_factory=DataSourceConfig)
+
+
+@dataclass
+class PymolViewConfig:
+    """One PyMOL view (one output file) under the ``pymol`` task's ``views`` list."""
+
+    gene: str = "ABL1"
+    config_type: str = "KLIFS_IMPORTANT"
+    indices: str | None = None  # KLIFS_CUSTOM: comma-separated UniProt positions
+    colors: str | None = None  # KLIFS_CUSTOM: comma-separated colors matching indices
+    json_mutations: str | None = None  # MUTATIONS_* configs: path to mutations JSON
+    transparency: float = 0.3
+    force_alphafold: bool = False
+    output_dir: str | None = None  # per-view override; else derived from output.subdir
+
+
+@dataclass
+class PymolConfig:
+    """Batch PyMOL generation -- the ``pymol`` task section: a list of view specs."""
+
+    output: OutputConfig = field(default_factory=OutputConfig)
+    views: list[PymolViewConfig] = field(default_factory=list)

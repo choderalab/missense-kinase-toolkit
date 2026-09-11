@@ -67,6 +67,8 @@ class BuildContext:
     """If not None, the ``hgnc_name`` keys targeted by a subset (``--kinase``) build; enrichment steps iterate only these (reports still characterize the whole spliced dict), by default None."""
     force: bool = False
     """If True (``--force-regen``), structure steps re-fetch/re-slice and recompute their derived properties (SASA, superposition) even when already present, by default False."""
+    report_config: Any = None
+    """Loaded :class:`KinaseInfoFiguresConfig` for the report steps (aesthetics from the ``kinaseinfo`` config namespace, or defaults), by default None."""
 
 
 def run_base_build(
@@ -295,12 +297,15 @@ class Pipeline:
     """Absolute path to the reports/figures directory."""
     path_tar: str
     """Absolute path to the ``KinaseInfo.tar.gz`` archive."""
+    config_path: str | None = None
+    """Shared study YAML supplying report aesthetics (``kinaseinfo`` namespace); when set, reports go to ``<output.subdir>/<config-stem>/kinaseinfo/`` instead of the mtime-stamped dir, by default None."""
 
     @classmethod
     def from_paths(
         cls,
         path_objects: str | None = None,
         path_reports: str | None = None,
+        config_path: str | None = None,
     ) -> "Pipeline":
         """Build a Pipeline, resolving the objects/reports dirs and the tar path.
 
@@ -310,6 +315,8 @@ class Pipeline:
             Objects directory relative to the repo root, by default the package-data layout.
         path_reports : str | None, optional
             Reports directory relative to the repo root, by default ``images``.
+        config_path : str | None, optional
+            Shared study YAML for report aesthetics + output naming, by default None.
 
         Returns
         -------
@@ -327,7 +334,7 @@ class Pipeline:
         path_tar = os.path.normpath(
             os.path.join(path_objects, "..", "KinaseInfo.tar.gz")
         )
-        return cls(path_objects, path_reports, path_tar)
+        return cls(path_objects, path_reports, path_tar, config_path=config_path)
 
     def _load_existing(self) -> dict[str, Any]:
         """Deserialize the existing dict from the target archive or the packaged tar.
@@ -383,6 +390,31 @@ class Pipeline:
         os.makedirs(path_dated, exist_ok=True)
         return path_dated
 
+    def _reports_target(self) -> tuple[str, Any]:
+        """Return the report output dir and the loaded report config.
+
+        With a ``--config`` study YAML, figures go to a per-task subdir of the study dir
+        (``<output.subdir>/<config-stem>/kinaseinfo/``) and use its ``kinaseinfo`` aesthetics;
+        without one (a one-off CLI regen), they use the mtime-stamped
+        ``dict_kinase/<tar-mtime>`` convention with default aesthetics.
+
+        Returns
+        -------
+        tuple[str, KinaseInfoFiguresConfig]
+            The (created) output directory and the report config.
+        """
+        from mkt.databases.plot_config import KinaseInfoFiguresConfig, load_task_config
+
+        cfg = load_task_config(KinaseInfoFiguresConfig, self.config_path, "kinaseinfo")
+        if self.config_path is None:
+            return self._dated_reports_dir(), cfg
+        config_name = os.path.splitext(os.path.basename(self.config_path))[0]
+        path = os.path.join(
+            get_repo_root(), cfg.output.subdir, config_name, "kinaseinfo"
+        )
+        os.makedirs(path, exist_ok=True)
+        return path, cfg
+
     def _finalize(
         self,
         dict_kinaseinfo: dict[str, Any],
@@ -423,7 +455,7 @@ class Pipeline:
         build_steps._run_steps(names, ctx)
         self._serialize_and_tar(dict_kinaseinfo)
         if bool_figs:
-            ctx.path_reports = self._dated_reports_dir()
+            ctx.path_reports, ctx.report_config = self._reports_target()
             build_steps._run_reports(ctx)
         shutil.rmtree(self.path_objects)
 
@@ -442,12 +474,14 @@ class Pipeline:
         if not dict_existing:
             logger.warning("no existing dict found; nothing to plot.")
             return
+        path_reports, report_config = self._reports_target()
         ctx = BuildContext(
             dict_existing,
             self.path_objects,
-            self._dated_reports_dir(),
+            path_reports,
             self.path_tar,
             subset_hgnc=None,
+            report_config=report_config,
         )
         build_steps._run_reports(ctx)
 
@@ -658,6 +692,7 @@ def run(
     bool_figs: bool = True,
     figs_only: bool = False,
     force: bool = False,
+    config_path: str | None = None,
 ) -> None:
     """Build a :class:`Pipeline` from the given paths and run it (CLI entry point).
 
@@ -680,12 +715,15 @@ def run(
         Only regenerate figures from the existing archive (no rebuild), by default False.
     force : bool, optional
         Force structure steps to regenerate their derived properties, by default False.
+    config_path : str | None, optional
+        Shared study YAML for report aesthetics + ``<config-stem>/kinaseinfo`` output naming,
+        by default None (mtime-stamped ``dict_kinase`` reports dir).
 
     Returns
     -------
     None
     """
-    Pipeline.from_paths(path_objects, path_reports).run(
+    Pipeline.from_paths(path_objects, path_reports, config_path=config_path).run(
         only,
         skip,
         list_kinase,

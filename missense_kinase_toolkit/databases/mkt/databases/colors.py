@@ -11,6 +11,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mkt.schema.io_utils import save_plot
 
+# source-boundary figure colors (lime green hardcoded to avoid PyMOL default drift)
+STR_SOURCE_UNIPROT_COLOR = "limegreen"
+STR_SOURCE_PFAM_COLOR = "cyan"
+STR_SOURCE_KINCORE_COLOR = "magenta"
+STR_SOURCE_KLIFS_COLOR = "orange"
+
 
 def map_aa_to_single_letter_code(
     aa: str,
@@ -501,6 +507,7 @@ def generate_colormap_legend(
     n_gradient_steps: int = 256,
     null_steps: int | None = None,
     figsize: tuple[float, float] = (0.75, 5.5),
+    bool_image_subdir: bool = True,
 ) -> None:
     """Generate a vertical colormap legend image (SVG and PNG) from color stops.
 
@@ -525,6 +532,9 @@ def generate_colormap_legend(
         1/10 the height of one bin (``n_gradient_steps // 10``).
     figsize : tuple[float, float]
         Figure size in inches (width, height). Default: (1, 5).
+    bool_image_subdir : bool
+        If True (default), save under ``<output_path>/images/``; if False, save directly into
+        ``output_path`` (which must already exist).
     """
     plt.rcParams["font.family"] = "Arial"
 
@@ -581,6 +591,7 @@ def generate_colormap_legend(
             output_path=output_path,
             plot_type=desc,
             bool_force_local=False,
+            bool_image_subdir=bool_image_subdir,
         )
 
 
