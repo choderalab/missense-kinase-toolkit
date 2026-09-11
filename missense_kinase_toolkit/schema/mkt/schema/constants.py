@@ -337,6 +337,21 @@ LIST_KLIFS_CATALYTIC = [
 :meth:`mkt.schema.kinase_schema.KinaseInfo.return_catalytic_residues` -- the two candidate \
 catalytic lysines plus the HRD and DFG motifs, in N->C order."""
 
+DICT_KLIFS2MSA_CATALYTIC = {
+    "III:17": "B3:028",
+    "II:13": "B2:017",
+    "c.l:68": "CL:109",
+    "c.l:69": "CL:110",
+    "c.l:70": "CL:111",
+    "xDFG:81": "ALN:129",
+    "xDFG:82": "ALN:130",
+    "xDFG:83": "ALN:131",
+}
+"""dict[str, str]: KLIFS region:idx -> Dunbrack MSA region2uniprot key at the \
+LIST_KLIFS_CATALYTIC positions, read when a kinase has no KLIFS pocket. Precomputed so a \
+single KinaseInfo never loads the corpus; kept in sync with \
+:func:`mkt.schema.utils.return_catalytic_klifs2msa_dict` by the test suite."""
+
 LIST_KLIFS_CATALYTIC_TRIAD = [
     STR_KLIFS_BETA3_LYSINE,
     STR_KLIFS_CATALYTIC_ASP,

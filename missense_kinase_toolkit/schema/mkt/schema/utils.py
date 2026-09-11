@@ -423,17 +423,23 @@ def return_klifs2msa_dict(
     return dict_map
 
 
-def return_catalytic_klifs2msa_dict() -> dict[str, str]:
+def return_catalytic_klifs2msa_dict(
+    dict_kinase: dict[str, "KinaseInfo"],
+) -> dict[str, str]:
     """Return the KLIFS -> MSA correspondence restricted to the catalytic positions.
 
-    Subsets :func:`return_klifs2msa_dict` over the shipped corpus to
-    :data:`LIST_KLIFS_CATALYTIC`, giving the MSA ``region2uniprot`` key to read for each
-    KLIFS catalytic label when a kinase has no KLIFS pocket (see
-    :meth:`mkt.schema.kinase_schema.KinaseInfo.return_catalytic_residues`).
+    Subsets :func:`return_klifs2msa_dict` to :data:`LIST_KLIFS_CATALYTIC`; the source of
+    the precomputed :data:`mkt.schema.constants.DICT_KLIFS2MSA_CATALYTIC` read by
+    :meth:`mkt.schema.kinase_schema.KinaseInfo.return_catalytic_residues`.
 
     The catalytic anchors are where the two alignments agree most closely (~99% modal
     concordance at III:17, c.l:68-70 and xDFG:81-83; ~97% at the beta2 lysine II:13), which
     is what makes the fallback defensible where the general map is not.
+
+    Parameters
+    ----------
+    dict_kinase : dict[str, KinaseInfo]
+        Mapping of HGNC name to kinase object (see :func:`return_klifs2msa_dict`).
 
     Returns
     -------
@@ -441,11 +447,8 @@ def return_catalytic_klifs2msa_dict() -> dict[str, str]:
         KLIFS region:idx -> MSA region:idx, for the catalytic positions only.
     """
     from mkt.schema.constants import LIST_KLIFS_CATALYTIC
-    from mkt.schema.io_utils import deserialize_kinase_dict
 
-    DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE", bool_verbose=False)
-
-    dict_map = return_klifs2msa_dict(DICT_KINASE)
+    dict_map = return_klifs2msa_dict(dict_kinase)
     return {
         label: dict_map[label] for label in LIST_KLIFS_CATALYTIC if label in dict_map
     }

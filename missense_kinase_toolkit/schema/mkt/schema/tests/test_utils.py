@@ -70,3 +70,11 @@ def test_return_klifs2msa_dict(dict_kinase):
     # concordance is near-perfect at the anchors but not 1:1 across the pocket
     assert dict_concordance["xDFG:81"] >= 0.98
     assert min(dict_concordance.values()) >= 0.85
+
+
+def test_catalytic_klifs2msa_constant_matches_corpus(dict_kinase):
+    """The precomputed DICT_KLIFS2MSA_CATALYTIC matches the map derived from the corpus."""
+    from mkt.schema.constants import DICT_KLIFS2MSA_CATALYTIC
+    from mkt.schema.utils import return_catalytic_klifs2msa_dict
+
+    assert return_catalytic_klifs2msa_dict(dict_kinase) == DICT_KLIFS2MSA_CATALYTIC

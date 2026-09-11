@@ -215,3 +215,21 @@ def test_is_pseudokinase_tristate(dict_kinase):
     for name in ("ALPK1", "PDK1", "PRKDC", "TRPM7", "PIP5K1A"):
         assert dict_kinase[name].return_catalytic_residues() is None
         assert dict_kinase[name].is_pseudokinase() is None
+
+
+def test_msa_fallback_does_not_load_corpus(dict_kinase, monkeypatch):
+    """The MSA fallback reads a constant map, so one KinaseInfo never loads the corpus.
+
+    Regression: the Streamlit app deserializes a single kinase at a time; loading all of
+    ``DICT_KINASE`` here (~7 GB) OOM-killed it on KLIFS-less kinases such as PEAK3.
+    """
+    from mkt.schema import io_utils
+
+    def _raise(*args, **kwargs):
+        raise AssertionError("deserialize_kinase_dict called by the MSA fallback")
+
+    monkeypatch.setattr(io_utils, "deserialize_kinase_dict", _raise)
+
+    obj = dict_kinase["PEAK3"]
+    assert obj.return_catalytic_residue_source() == "msa"
+    assert obj.is_pseudokinase() is True
