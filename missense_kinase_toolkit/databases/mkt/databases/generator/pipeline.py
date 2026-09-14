@@ -15,8 +15,10 @@ import os
 import shutil
 from dataclasses import dataclass
 from datetime import datetime
+from importlib.metadata import version
 from typing import Any
 
+import git
 from mkt.databases.generator import steps as build_steps
 from mkt.databases.io_utils import create_tar_without_metadata
 from mkt.databases.kinase_schema import (
@@ -28,8 +30,11 @@ from mkt.databases.kinase_schema import (
     generate_dict_obj_from_api_or_scraper,
 )
 from mkt.schema.io_utils import (
+    STR_MANIFEST_FILENAME,
+    Manifest,
     deserialize_kinase_dict,
     get_repo_root,
+    load_manifest,
     serialize_kinase_dict,
 )
 
@@ -47,8 +52,11 @@ REPORTS_GROUP_SUBDIR = "dict_kinase"
 ``{path_reports}/dict_kinase/<datetime>/``."""
 
 DATETIME_SUBDIR_FMT = "%Y.%m.%d.%H%M%S"
-"""str: ``strftime`` format for the datetime-stamped reports subdirectory, derived from the
-``KinaseInfo.tar.gz`` modified time so the figures match the archive's build provenance."""
+"""str: ``strftime`` format for the datetime-stamped reports subdirectory, applied to the
+archive manifest's ``generated_at`` (UTC)."""
+
+LIST_MANIFEST_PACKAGES = ["mkt-schema", "mkt-databases"]
+"""list[str]: Packages whose versions are recorded in the archive manifest."""
 
 
 @dataclass
@@ -281,6 +289,36 @@ def _resolve_dir(path_repo: str, path_rel: str | None, default_rel: str) -> str:
     return path_out
 
 
+def _return_git_info() -> dict[str, str | bool]:
+    """Return the build checkout's commit SHA and dirty flag.
+
+    Returns
+    -------
+    dict[str, str | bool]
+        ``{"sha": ..., "dirty": ...}``, or empty outside a git checkout.
+    """
+    try:
+        repo = git.Repo(get_repo_root(), search_parent_directories=True)
+    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+        logger.warning("not a git checkout; manifest records package versions only.")
+        return {}
+    bool_dirty = repo.is_dirty()
+    if bool_dirty:
+        logger.warning("building from a dirty tree; manifest git sha is ambiguous.")
+    return {"sha": repo.head.commit.hexsha, "dirty": bool_dirty}
+
+
+def _return_package_versions() -> dict[str, str]:
+    """Return installed versions of :data:`LIST_MANIFEST_PACKAGES`.
+
+    Returns
+    -------
+    dict[str, str]
+        Package name -> version string.
+    """
+    return {name: version(name) for name in LIST_MANIFEST_PACKAGES}
+
+
 @dataclass
 class Pipeline:
     """Orchestrates the KinaseInfo build across its run modes.
@@ -298,7 +336,7 @@ class Pipeline:
     path_tar: str
     """Absolute path to the ``KinaseInfo.tar.gz`` archive."""
     config_path: str | None = None
-    """Shared study YAML supplying report aesthetics (``kinaseinfo`` namespace); when set, reports go to ``<output.subdir>/<config-stem>/kinaseinfo/`` instead of the mtime-stamped dir, by default None."""
+    """Shared study YAML supplying report aesthetics (``kinaseinfo`` namespace); when set, reports go to ``<output.subdir>/<config-stem>/kinaseinfo/`` instead of the datetime-stamped dir, by default None."""
 
     @classmethod
     def from_paths(
@@ -352,7 +390,7 @@ class Pipeline:
         return deserialize_kinase_dict()
 
     def _serialize_and_tar(self, dict_kinaseinfo: dict[str, Any]) -> None:
-        """Serialize the dict to per-kinase files and (re)build the tar archive.
+        """Serialize the dict and its manifest to files and (re)build the tar archive.
 
         Parameters
         ----------
@@ -364,6 +402,14 @@ class Pipeline:
         None
         """
         serialize_kinase_dict(dict_kinaseinfo, str_path=self.path_objects)
+        manifest = Manifest.from_kinase_dict(
+            dict_kinaseinfo,
+            git=_return_git_info(),
+            packages=_return_package_versions(),
+        )
+        path_manifest = os.path.join(self.path_objects, STR_MANIFEST_FILENAME)
+        with open(path_manifest, "w") as outfile:
+            outfile.write(manifest.model_dump_json(indent=4))
         if os.path.exists(self.path_tar):
             os.remove(self.path_tar)
         create_tar_without_metadata(
@@ -371,22 +417,31 @@ class Pipeline:
         )
 
     def _dated_reports_dir(self) -> str:
-        """Return (and create) the datetime-stamped reports subdir keyed by the tar's mtime.
+        """Return (and create) the reports subdir named by the archive's build timestamp.
 
-        The subdir is nested under :data:`REPORTS_GROUP_SUBDIR` and named by the
-        ``KinaseInfo.tar.gz`` modified time (:data:`DATETIME_SUBDIR_FMT`), so the figures live
-        alongside the archive build they characterize; a figures-only re-run over an unchanged
-        tar reuses the same dir.
+        Nested under :data:`REPORTS_GROUP_SUBDIR` and named by the manifest's ``generated_at``
+        (:data:`DATETIME_SUBDIR_FMT`), so a figures-only re-run over the same archive reuses the
+        dir across checkouts; manifest-less archives fall back to the tar's mtime.
 
         Returns
         -------
         str
-            Absolute path ``{path_reports}/dict_kinase/{tar-mtime}`` (created if absent).
+            Absolute path ``{path_reports}/dict_kinase/{generated_at}`` (created if absent).
         """
-        stamp = datetime.fromtimestamp(os.path.getmtime(self.path_tar)).strftime(
-            DATETIME_SUBDIR_FMT
+        manifest = load_manifest(self.path_tar)
+        if manifest is not None:
+            dt_stamp = manifest.generated_at
+        else:
+            logger.warning(
+                f"no {STR_MANIFEST_FILENAME} in {self.path_tar}; "
+                "naming reports subdir from the tar mtime."
+            )
+            dt_stamp = datetime.fromtimestamp(os.path.getmtime(self.path_tar))
+        path_dated = os.path.join(
+            self.path_reports,
+            REPORTS_GROUP_SUBDIR,
+            dt_stamp.strftime(DATETIME_SUBDIR_FMT),
         )
-        path_dated = os.path.join(self.path_reports, REPORTS_GROUP_SUBDIR, stamp)
         os.makedirs(path_dated, exist_ok=True)
         return path_dated
 
@@ -395,8 +450,8 @@ class Pipeline:
 
         With a ``--config`` study YAML, figures go to a per-task subdir of the study dir
         (``<output.subdir>/<config-stem>/kinaseinfo/``) and use its ``kinaseinfo`` aesthetics;
-        without one (a one-off CLI regen), they use the mtime-stamped
-        ``dict_kinase/<tar-mtime>`` convention with default aesthetics.
+        without one (a one-off CLI regen), they use the datetime-stamped
+        ``dict_kinase/<generated_at>`` convention with default aesthetics.
 
         Returns
         -------
@@ -463,8 +518,8 @@ class Pipeline:
         """Regenerate the report figures from the existing archive without rebuilding.
 
         Loads the currently serialized dict and renders the report steps into the reports
-        subdir keyed by the existing tar's modified time (reusing that directory), so figures
-        can be refreshed without touching the data.
+        subdir keyed by the existing archive's ``generated_at`` (reusing that directory), so
+        figures can be refreshed without touching the data.
 
         Returns
         -------

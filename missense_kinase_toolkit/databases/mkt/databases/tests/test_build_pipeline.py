@@ -12,7 +12,11 @@ import pytest
 from mkt.databases.generator import pipeline
 from mkt.databases.generator import steps as build_steps
 from mkt.databases.io_utils import create_tar_without_metadata
-from mkt.schema.io_utils import deserialize_kinase_dict, serialize_kinase_dict
+from mkt.schema.io_utils import (
+    deserialize_kinase_dict,
+    load_manifest,
+    serialize_kinase_dict,
+)
 
 
 @pytest.mark.parametrize(
@@ -124,6 +128,52 @@ def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
     assert after["EGFR"].uniprot.header == sentinel
     assert after["ABL1"].uniprot.header == seed["ABL1"].uniprot.header
     assert not path_objects.exists()
+
+    # the rebuilt archive carries a manifest consistent with its contents
+    manifest = load_manifest(str(path_tar))
+    assert manifest is not None
+    assert manifest.return_mismatches(after) == []
+    assert set(manifest.packages) == set(pipeline.LIST_MANIFEST_PACKAGES)
+
+
+def test_dated_reports_dir_uses_manifest(tmp_path):
+    """The reports subdir is named by ``generated_at``, independent of the tar mtime."""
+    import os
+
+    seed = deserialize_kinase_dict(list_ids=["ABL1"], bool_verbose=False)
+    pl = pipeline.Pipeline(
+        str(tmp_path / "KinaseInfo"),
+        str(tmp_path / "reports"),
+        str(tmp_path / "KinaseInfo.tar.gz"),
+    )
+    pl._serialize_and_tar(seed)
+    stamp = load_manifest(pl.path_tar).generated_at.strftime(
+        pipeline.DATETIME_SUBDIR_FMT
+    )
+
+    path_before = pl._dated_reports_dir()
+    os.utime(pl.path_tar, (0, 0))  # a fresh checkout changes the mtime
+    assert pl._dated_reports_dir() == path_before
+    assert os.path.basename(path_before) == stamp
+
+
+def test_dated_reports_dir_falls_back_to_mtime(tmp_path, caplog):
+    """A manifest-less archive names the subdir from the tar mtime, with a warning."""
+    import os
+    from datetime import datetime
+
+    seed = deserialize_kinase_dict(list_ids=["ABL1"], bool_verbose=False)
+    path_seed = tmp_path / "seed"
+    path_tar = tmp_path / "KinaseInfo.tar.gz"
+    serialize_kinase_dict(seed, str_path=str(path_seed))
+    create_tar_without_metadata(path_source=str(path_seed), filename_tar=str(path_tar))
+
+    pl = pipeline.Pipeline(str(path_seed), str(tmp_path / "reports"), str(path_tar))
+    stamp = datetime.fromtimestamp(os.path.getmtime(path_tar)).strftime(
+        pipeline.DATETIME_SUBDIR_FMT
+    )
+    assert os.path.basename(pl._dated_reports_dir()) == stamp
+    assert "naming reports subdir from the tar mtime" in caplog.text
 
 
 def test_reconstruct_dict_obj_groups_multidomain():
