@@ -13,7 +13,7 @@ from typing import Annotated, Optional
 
 import typer
 from mkt.databases.generator import pipeline
-from mkt.databases.log_config import configure_logging
+from mkt.schema.log_config import configure_logging
 
 logger = logging.getLogger(__name__)
 

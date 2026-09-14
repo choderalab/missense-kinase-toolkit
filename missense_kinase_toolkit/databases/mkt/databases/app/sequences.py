@@ -205,6 +205,10 @@ class SequenceAlignment:
         int | None
             The parsed start or end index, or None if not found.
         """
+        # no bounds by design (e.g. Phosphosites) or no sequence to derive them from
+        if start_or_end is None or (callable(start_or_end) and str_seq is None):
+            return None
+
         try:
             if isinstance(start_or_end, str):
                 output = rgetattr(self.obj_kinase, start_or_end)
@@ -213,7 +217,7 @@ class SequenceAlignment:
             elif callable(start_or_end):
                 output = start_or_end(str_seq)
             else:
-                logger.info(
+                logger.warning(
                     f"Start or end value {start_or_end} "
                     "is not a string, int, or callable "
                     "and cannot be parsed. Returning None..."
