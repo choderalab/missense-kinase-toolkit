@@ -11,6 +11,7 @@ import logging
 import os
 import shutil
 import tarfile
+from datetime import datetime, timezone
 from importlib import resources
 from io import BytesIO
 from typing import Any, Optional
@@ -20,7 +21,7 @@ import toml
 import yaml
 from mkt.schema import kinase_schema
 from mkt.schema.config import get_output_dir
-from mkt.schema.utils import TQDM_BAR_FORMAT
+from mkt.schema.utils import TQDM_BAR_FORMAT, return_manifest_tallies
 from pydantic import BaseModel
 from tqdm import tqdm
 
@@ -28,6 +29,127 @@ logger = logging.getLogger(__name__)
 
 
 _deserialization_cache = {}
+
+STR_MANIFEST_FILENAME = "manifest.json"
+"""str: Filename of the build manifest stored alongside the per-kinase files."""
+
+
+class Manifest(BaseModel):
+    """Build record of a :class:`KinaseInfo` archive, checked against the loaded dict."""
+
+    manifest_version: int = 1
+    """Manifest schema version, by default 1."""
+    generated_at: datetime
+    """UTC build timestamp."""
+    git: dict[str, str | bool | None] = {}
+    """Build checkout ``sha`` and ``dirty`` flag, by default empty."""
+    packages: dict[str, str] = {}
+    """Package name -> version used for the build, by default empty."""
+    n_entries: int
+    """Number of kinase entries."""
+    counts: dict[str, int]
+    """Dotted sub-model path -> number of non-None entries."""
+    source_versions: dict[str, dict[str, int]] = {}
+    """Dotted sub-model path -> ``Provenance.version`` tally, by default empty."""
+
+    @classmethod
+    def from_kinase_dict(
+        cls,
+        dict_kinase: dict[str, BaseModel],
+        list_paths: list[str] | None = None,
+        **kwargs: Any,
+    ) -> "Manifest":
+        """Build a manifest from a kinase dictionary.
+
+        Parameters
+        ----------
+        dict_kinase : dict[str, KinaseInfo]
+            Kinase dictionary being archived.
+        list_paths : list[str] | None, optional
+            Paths to tally, by default None (see :func:`return_manifest_tallies`).
+        **kwargs : Any
+            Additional fields (``git``, ``packages``, ``generated_at``); ``generated_at``
+            defaults to now (UTC).
+
+        Returns
+        -------
+        Manifest
+            Manifest with counts and source versions computed from ``dict_kinase``.
+        """
+        kwargs.setdefault("generated_at", datetime.now(timezone.utc))
+        counts, source_versions = return_manifest_tallies(dict_kinase, list_paths)
+        return cls(
+            n_entries=len(dict_kinase),
+            counts=counts,
+            source_versions=source_versions,
+            **kwargs,
+        )
+
+    def return_mismatches(self, dict_kinase: dict[str, BaseModel]) -> list[str]:
+        """Return expected-vs-actual differences against a loaded kinase dictionary.
+
+        Parameters
+        ----------
+        dict_kinase : dict[str, KinaseInfo]
+            Loaded kinase dictionary.
+
+        Returns
+        -------
+        list[str]
+            One line per mismatched quantity; empty if consistent.
+        """
+        # tally only this manifest's paths so newer schema fields don't count as drift
+        actual = Manifest.from_kinase_dict(
+            dict_kinase, list(self.counts), generated_at=self.generated_at
+        )
+        list_diff = []
+        if actual.n_entries != self.n_entries:
+            list_diff.append(
+                f"n_entries: expected {self.n_entries}, got {actual.n_entries}"
+            )
+        for field in ("counts", "source_versions"):
+            dict_expected, dict_actual = getattr(self, field), getattr(actual, field)
+            list_diff.extend(
+                f"{field}[{key}]: expected {val}, got {dict_actual.get(key)}"
+                for key, val in dict_expected.items()
+                if dict_actual.get(key) != val
+            )
+        return list_diff
+
+
+def check_kinase_dict_manifest(
+    dict_kinase: dict[str, BaseModel],
+    manifest: Manifest | None,
+    str_path: str,
+) -> None:
+    """Raise if a loaded kinase dictionary disagrees with its manifest; warn if absent.
+
+    Parameters
+    ----------
+    dict_kinase : dict[str, KinaseInfo]
+        Loaded kinase dictionary.
+    manifest : Manifest | None
+        Manifest read from the archive, or None if missing.
+    str_path : str
+        Archive path, for messages.
+
+    Returns
+    -------
+    None
+    """
+    if manifest is None:
+        logger.warning(
+            f"No {STR_MANIFEST_FILENAME} in {str_path}; skipping integrity check."
+        )
+        return
+
+    list_diff = manifest.return_mismatches(dict_kinase)
+    if list_diff:
+        raise ValueError(
+            f"{str_path} does not match its {STR_MANIFEST_FILENAME} "
+            f"(generated_at {manifest.generated_at.isoformat()}):\n"
+            + "\n".join(list_diff)
+        )
 
 
 def get_repo_root():
@@ -169,26 +291,55 @@ def untar_files_in_memory(
 
     Returns
     -------
-    dict[str, str]
-        Dictionary of file names and their contents as strings.
+    tuple[list[str], dict[str, str]]
+        Entry IDs and a dictionary of file names to contents; the build manifest
+        (:data:`STR_MANIFEST_FILENAME`) is excluded from both.
 
+    """
+    return _untar_in_memory(str_path, bool_extract=bool_extract, list_ids=list_ids)[:2]
+
+
+def _untar_in_memory(
+    str_path: str,
+    bool_extract: bool = True,
+    list_ids: list[str] | None = None,
+) -> tuple[list[str], dict[str, str], str | None]:
+    """Untar files in memory, returning the build manifest separately.
+
+    Parameters
+    ----------
+    str_path : str
+        Path to the tar.gz file.
+    bool_extract : bool, optional
+        If True, extract the files to memory, by default True.
+    list_ids : list[str] | None, optional
+        List of IDs to filter the files, by default None (all files).
+
+    Returns
+    -------
+    tuple[list[str], dict[str, str], str | None]
+        Entry IDs, file names to contents, and the manifest contents (None if absent
+        or not extracted).
     """
     with open(str_path, "rb") as f:
         tar_data = f.read()
 
-    list_entries, dict_bytes = [], {}
+    list_entries, dict_bytes, str_manifest = [], {}, None
     with BytesIO(tar_data) as tar_buffer, tarfile.open(
         fileobj=tar_buffer, mode="r"
     ) as tar:
         for member in tar.getmembers():
             filename = os.path.basename(member.name)
-            # make sure entry is file
-            cond1 = member.isfile()
-            # ignore MacOS AppleDouble files
-            cond2 = "._" not in filename
+            # make sure entry is file; ignore MacOS AppleDouble files
+            if not member.isfile() or "._" in filename:
+                continue
+            if filename == STR_MANIFEST_FILENAME:
+                if bool_extract:
+                    with tar.extractfile(member) as f:
+                        str_manifest = f.read().decode("utf-8")
+                continue
             # use list_ids, if provided
-            cond3 = list_ids is None or filename.split(".")[0] in list_ids
-            if cond1 and cond2 and cond3:
+            if list_ids is None or filename.split(".")[0] in list_ids:
                 list_entries.append(filename.split(".")[0])
                 if bool_extract:
                     with tar.extractfile(member) as f:
@@ -198,7 +349,7 @@ def untar_files_in_memory(
         # decode bytes to string
         dict_bytes = {k: v.decode("utf-8") for k, v in dict_bytes.items()}
 
-    return list_entries, dict_bytes
+    return list_entries, dict_bytes, str_manifest
 
 
 def return_str_path_from_pkg_data(
@@ -383,9 +534,11 @@ def deserialize_kinase_dict(
 
     str_path = return_str_path_from_pkg_data(str_path)
 
-    dict_import = {}
+    dict_import, manifest = {}, None
     if str_path.endswith(".tar.gz"):
-        dict_str = untar_files_in_memory(str_path, list_ids=list_ids)[1]
+        _, dict_str, str_manifest = _untar_in_memory(str_path, list_ids=list_ids)
+        if str_manifest is not None:
+            manifest = Manifest.model_validate_json(str_manifest)
         for val in tqdm(
             dict_str.values(),
             desc="Deserializing KinaseInfo objects in memory...",
@@ -400,7 +553,15 @@ def deserialize_kinase_dict(
             kinase_obj = kinase_schema.KinaseInfo.model_validate(val_deserialized)
             dict_import[kinase_obj.hgnc_name] = kinase_obj
     else:
-        list_file = glob.glob(os.path.join(str_path, f"*.{suffix}"))
+        list_file = [
+            file
+            for file in glob.glob(os.path.join(str_path, f"*.{suffix}"))
+            if os.path.basename(file) != STR_MANIFEST_FILENAME
+        ]
+        path_manifest = os.path.join(str_path, STR_MANIFEST_FILENAME)
+        if os.path.exists(path_manifest):
+            with open(path_manifest) as openfile:
+                manifest = Manifest.model_validate_json(openfile.read())
         for file in tqdm(
             list_file,
             desc="Deserializing KinaseInfo objects from files...",
@@ -420,6 +581,10 @@ def deserialize_kinase_dict(
             clean_files_and_delete_directory(list_file)
 
     dict_import = {key: dict_import[key] for key in sorted(dict_import.keys())}
+
+    # subset loads can't match the manifest; directories are checked only if one exists
+    if list_ids is None and (manifest is not None or str_path.endswith(".tar.gz")):
+        check_kinase_dict_manifest(dict_import, manifest, str_path)
 
     if str_name is not None:
         _deserialization_cache[str_name] = dict_import
