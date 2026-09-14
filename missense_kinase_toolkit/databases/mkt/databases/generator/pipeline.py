@@ -415,6 +415,7 @@ class Pipeline:
         create_tar_without_metadata(
             path_source=self.path_objects, filename_tar=self.path_tar
         )
+        logger.info(f"built {self.path_tar}\n{manifest.return_summary()}")
 
     def _dated_reports_dir(self) -> str:
         """Return (and create) the reports subdir named by the archive's build timestamp.
