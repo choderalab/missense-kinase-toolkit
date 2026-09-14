@@ -24,3 +24,31 @@ def test_missing_sources_do_not_log_errors(caplog):
     assert table.df_kinhub is None and table.df_klifs is None
     assert table.df_computed is not None
     assert [r for r in caplog.records if r.name.startswith("mkt.databases.app")] == []
+
+
+def test_computed_table_motifs_name_index_source():
+    """Catalytic motifs follow return_catalytic_residues (KLIFS, else MSA) and name it.
+
+    Regression: KLIFS-less kinases such as PEAK3 dropped the catalytic Lys/HRD/DFG rows.
+    """
+    from mkt.databases.app.properties import PropertyTables
+    from mkt.schema.io_utils import deserialize_kinase_dict
+
+    dict_obj = deserialize_kinase_dict(list_ids=["ABL1", "PEAK3", "ALPK1"])
+
+    ser_abl1 = PropertyTables(dict_obj["ABL1"]).df_computed["Property"]
+    assert ser_abl1["CATALYTIC LYS (KLIFS)"] == "K271"
+    assert ser_abl1["HRD MOTIF (KLIFS)"] == "H361-R362-D363"
+    assert ser_abl1["DFG MOTIF (KLIFS)"] == "D381-F382-G383"
+
+    ser_peak3 = PropertyTables(dict_obj["PEAK3"]).df_computed["Property"]
+    assert ser_peak3["CATALYTIC LYS (MSA)"] == "K204"
+    assert ser_peak3["HRD MOTIF (MSA)"] == "L302-V303-E304"
+    assert ser_peak3["DFG MOTIF (MSA)"] == "D330-F331-G332"
+    # the molecular brake is KLIFS-only, so it stays unresolved without a KLIFS mapping
+    assert ser_peak3["MOLECULAR BRAKE N-E-K (KLIFS)"] == "None"
+
+    # neither alignment: rows are kept (no source suffix) and read "None"
+    ser_alpk1 = PropertyTables(dict_obj["ALPK1"]).df_computed["Property"]
+    assert ser_alpk1["HRD MOTIF"] == "None"
+    assert ser_alpk1["DFG MOTIF"] == "None"

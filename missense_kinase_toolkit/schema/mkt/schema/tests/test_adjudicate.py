@@ -191,6 +191,42 @@ def test_return_catalytic_residues(dict_kinase, mutable_kinase):
     assert obj.return_catalytic_residues() is None
 
 
+def test_return_catalytic_residues_uniprot_idx(dict_kinase):
+    """bool_uniprot_idx appends the UniProt index from KLIFS, or the MSA without KLIFS."""
+    abl1 = dict_kinase["ABL1"]
+    res_idx = abl1.return_catalytic_residues(bool_uniprot_idx=True)
+    assert res_idx["III:17"] == "K271"
+    assert [res_idx[i] for i in ("c.l:68", "c.l:69", "c.l:70")] == [
+        "H361",
+        "R362",
+        "D363",
+    ]
+    assert [res_idx[i] for i in ("xDFG:81", "xDFG:82", "xDFG:83")] == [
+        "D381",
+        "F382",
+        "G383",
+    ]
+    # the flag only appends the index; residues match the default letters
+    dict_letters = {k: v and v[0] for k, v in res_idx.items()}
+    assert dict_letters == abl1.return_catalytic_residues()
+
+    # PEAK3 has no KLIFS pocket, so indices come from the MSA (HRD reads LVE)
+    peak3 = dict_kinase["PEAK3"]
+    assert peak3.return_catalytic_residue_source() == "msa"
+    res_idx = peak3.return_catalytic_residues(bool_uniprot_idx=True)
+    assert res_idx["III:17"] == "K204"
+    assert [res_idx[i] for i in ("c.l:68", "c.l:69", "c.l:70")] == [
+        "L302",
+        "V303",
+        "E304",
+    ]
+    assert [res_idx[i] for i in ("xDFG:81", "xDFG:82", "xDFG:83")] == [
+        "D330",
+        "F331",
+        "G332",
+    ]
+
+
 def test_is_pseudokinase_tristate(dict_kinase):
     """is_pseudokinase is tri-state; the MSA fallback rescues KLIFS-less kinases."""
     # KLIFS-less but MSA-mapped: PEAK3 lacks the HRD aspartate, SIK1B is intact

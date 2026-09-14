@@ -137,20 +137,20 @@ class PropertyTables:
         idx += offset
         return f"{self.obj_kinase.uniprot.canonical_seq[idx - 1]}{idx}"
 
-    def _motif(self, labels) -> str | None:
+    @staticmethod
+    def _join_motif(parts) -> str:
         """Join per-position residue+index into a motif string (e.g. "H835-R836-D837")."""
-        parts = [self._residue_index(label) for label in labels]
-        return "-".join(p or "-" for p in parts) if any(parts) else None
+        return "-".join(p or "-" for p in parts) if any(parts) else "None"
 
     def build_computed_table(self) -> pd.DataFrame | None:
         """Assemble the adjudicated/computed-property table for the kinase.
 
         Surfaces the classification flags (``is_pseudokinase``/``is_pseudogene``/
         ``is_lipid_kinase``) and the pocket/activation-loop motifs -- the catalytic Lys, HRD,
-        DFG (KLIFS pocket), APE (Dunbrack MSA), and molecular-brake positions -- as
-        ``residue+UniProt index`` strings (e.g. "A227-P228-E229"). The canonical identity is
-        implied by the motif name; only the molecular-brake triad states its canonical (N-E-K)
-        in the label.
+        DFG, APE, and molecular-brake positions -- as ``residue+UniProt index`` strings (e.g.
+        "A227-P228-E229"). Each motif label names its index source: catalytic Lys/HRD/DFG
+        follow :meth:`KinaseInfo.return_catalytic_residues` (KLIFS, else MSA), APE is MSA and
+        the molecular brake KLIFS. Only the brake states its canonical triad (N-E-K).
 
         Returns
         -------
@@ -165,17 +165,22 @@ class PropertyTables:
                 "is_lipid_kinase": str(obj.is_lipid_kinase()),
             }
 
-            for label, motif in [
-                ("catalytic Lys", self._residue_index(STR_KLIFS_BETA3_LYSINE)),
-                ("HRD motif", self._motif(LIST_KLIFS_HRD_MOTIF)),
-                ("DFG motif", self._motif(LIST_KLIFS_DFG_MOTIF)),
+            # catalytic motifs share is_pseudokinase's KLIFS-or-MSA lookup
+            dict_catalytic = obj.return_catalytic_residues(bool_uniprot_idx=True) or {}
+            source = obj.return_catalytic_residue_source()
+            str_suffix = f" ({source.upper()})" if source is not None else ""
+            for label, list_labels in [
+                ("catalytic Lys", [STR_KLIFS_BETA3_LYSINE]),
+                ("HRD motif", LIST_KLIFS_HRD_MOTIF),
+                ("DFG motif", LIST_KLIFS_DFG_MOTIF),
             ]:
-                if motif is not None:
-                    dict_computed[label] = motif
+                dict_computed[label + str_suffix] = self._join_motif(
+                    [dict_catalytic.get(i) for i in list_labels]
+                )
 
             list_ape = obj.adjudicate_ape()
             seq = obj.uniprot.canonical_seq
-            dict_computed["APE motif"] = (
+            dict_computed["APE motif (MSA)"] = (
                 "-".join("-" if i is None else f"{seq[i - 1]}{i}" for i in list_ape)
                 if list_ape is not None
                 else "None"
@@ -183,8 +188,10 @@ class PropertyTables:
 
             # molecular brake states its canonical triad (N-E-K) in the label
             brake_canonical = "-".join(DICT_MOLECULAR_BRAKE.values())
-            dict_computed[f"molecular brake ({brake_canonical})"] = (
-                self._motif(DICT_MOLECULAR_BRAKE.keys()) or "None"
+            dict_computed[f"molecular brake {brake_canonical} (KLIFS)"] = (
+                self._join_motif(
+                    [self._residue_index(i) for i in DICT_MOLECULAR_BRAKE.keys()]
+                )
             )
 
             df_temp = pd.DataFrame.from_dict(
