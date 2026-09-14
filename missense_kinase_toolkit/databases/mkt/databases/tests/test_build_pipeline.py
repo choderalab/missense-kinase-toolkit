@@ -34,9 +34,12 @@ def test_strip_kd_suffix(str_in, expected):
     assert pipeline._strip_kd_suffix(str_in) == expected
 
 
-def test_resolve_step_names_empty_registry():
-    assert build_steps.resolve_step_names() == []
-    assert build_steps.resolve_step_names(skip=[]) == []
+def test_resolve_step_names_defaults_run_all():
+    """A full regen runs every enrichment step unless skipped."""
+    list_all = list(build_steps._ENRICH_STEPS)
+    assert build_steps.resolve_step_names() == list_all
+    assert build_steps.resolve_step_names(skip=[]) == list_all
+    assert "alphafold" not in build_steps.resolve_step_names(skip=["alphafold"])
 
 
 def test_resolve_step_names_unknown_raises():
@@ -119,6 +122,8 @@ def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
         return {"EGFR": egfr}
 
     monkeypatch.setattr(pipeline, "run_base_build", _fake_base_build)
+    # enrichment steps fetch structures/transcripts; keep the splice test network-free
+    monkeypatch.setattr(build_steps, "_DEFAULT_STEPS", [])
 
     pipeline.run(list_kinase=["EGFR"], path_objects=str(path_objects))
 

@@ -74,7 +74,7 @@ def main(
             "--config",
             help="Shared study YAML supplying report aesthetics (the 'kinaseinfo' section). "
             "When given, reports go to <output.subdir>/<config-stem>/kinaseinfo/; otherwise "
-            "the mtime-stamped dict_kinase/<tar-mtime>/ convention is used.",
+            "to dict_kinase/<generated_at>/ from the archive manifest.",
         ),
     ] = None,
     no_figs: Annotated[
@@ -82,8 +82,8 @@ def main(
         typer.Option(
             "--no-figs",
             help="Skip regenerating the report figures after the build. By default "
-            "figures are refreshed on any dict regeneration, into a datetime-stamped "
-            "subdirectory keyed by the archive's modified time.",
+            "figures are refreshed on any dict regeneration, into a subdirectory keyed by "
+            "the archive manifest's generated_at.",
         ),
     ] = False,
     figs_only: Annotated[
@@ -91,8 +91,8 @@ def main(
         typer.Option(
             "--figs-only",
             help="Only regenerate the report figures from the existing archive (no "
-            "rebuild), reusing the subdirectory keyed by its modified time. Mutually "
-            "exclusive with --only/--skip/--kinase.",
+            "rebuild), reusing the subdirectory keyed by its manifest's generated_at. "
+            "Mutually exclusive with --only/--skip/--kinase.",
         ),
     ] = False,
     force_regen: Annotated[

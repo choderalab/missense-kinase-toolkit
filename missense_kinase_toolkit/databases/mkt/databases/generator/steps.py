@@ -4,8 +4,8 @@ Defines the ordered registry of enrichment steps (each mutating additive optiona
 fields on the assembled :class:`KinaseInfo` objects in place), the terminal report
 steps, and the selection/validation helpers that back the ``--only``/``--skip`` CLI
 flags. Enrichment steps are added incrementally per workstream (alphafold, then rsasa,
-activation_loop, alignment, exon). Heavy steps default off (see ``_DEFAULT_OFF``) and run
-via ``--only``; every step must be idempotent (overwrite its field, never append) so
+activation_loop, alignment, exon). All steps run in a full regen (opt out with ``--skip``,
+see ``_DEFAULT_OFF``); every step must be idempotent (overwrite its field, never append) so
 ``--only <step>`` and ``--kinase`` splicing are safe to re-run.
 """
 
@@ -211,12 +211,9 @@ _ENRICH_STEPS: dict[str, Callable[["BuildContext"], None]] = {
 }
 """dict[str, Callable]: Ordered enrichment-step registry (name -> step function)."""
 
-_DEFAULT_OFF: set[str] = {"kincore_msa", "kincore_cif", "alphafold", "exon"}
-"""set[str]: Enrichment steps skipped in a full regen unless explicitly named via ``--only``
-(kincore_msa downloads the Dunbrack alignment; kincore_cif computes SASA + reference-frame
-superposition over the KinCoRe CIF; alphafold fetches an AlphaFold structure per entry and
-computes its SASA + superposition; exon queries GenomeNexus canonical transcripts -- all opt-in
-and network- or CPU-heavy)."""
+_DEFAULT_OFF: set[str] = set()
+"""set[str]: Enrichment steps skipped unless named via ``--only``, by default none so a full
+regen yields a complete archive; opt out of heavy steps with ``--skip``."""
 
 _STEP_DEPS: dict[str, set[str]] = {
     "kincore_msa": set(),
