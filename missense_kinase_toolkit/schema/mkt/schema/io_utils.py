@@ -152,6 +152,34 @@ def check_kinase_dict_manifest(
         )
 
 
+def load_manifest(str_path: str) -> Manifest | None:
+    """Read the build manifest from a KinaseInfo ``.tar.gz`` or directory.
+
+    Parameters
+    ----------
+    str_path : str
+        Path to the archive or per-kinase directory.
+
+    Returns
+    -------
+    Manifest | None
+        The parsed manifest, or None if absent.
+    """
+    if str_path.endswith(".tar.gz"):
+        # an empty list_ids skips every kinase entry but still reads the manifest
+        str_manifest = _untar_in_memory(str_path, list_ids=[])[2]
+    else:
+        path_manifest = os.path.join(str_path, STR_MANIFEST_FILENAME)
+        if not os.path.exists(path_manifest):
+            return None
+        with open(path_manifest) as openfile:
+            str_manifest = openfile.read()
+
+    if str_manifest is None:
+        return None
+    return Manifest.model_validate_json(str_manifest)
+
+
 def get_repo_root():
     """Get the root of the git repository.
 
@@ -558,10 +586,7 @@ def deserialize_kinase_dict(
             for file in glob.glob(os.path.join(str_path, f"*.{suffix}"))
             if os.path.basename(file) != STR_MANIFEST_FILENAME
         ]
-        path_manifest = os.path.join(str_path, STR_MANIFEST_FILENAME)
-        if os.path.exists(path_manifest):
-            with open(path_manifest) as openfile:
-                manifest = Manifest.model_validate_json(openfile.read())
+        manifest = load_manifest(str_path)
         for file in tqdm(
             list_file,
             desc="Deserializing KinaseInfo objects from files...",

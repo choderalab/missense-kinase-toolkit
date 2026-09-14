@@ -93,6 +93,20 @@ def test_untar_skips_manifest(tmp_path, dict_sample):
     assert "manifest" not in list_entries
 
 
+def test_load_manifest(tmp_path, dict_sample):
+    """``load_manifest`` reads from a tar or directory and returns None when absent."""
+    manifest = io_utils.Manifest.from_kinase_dict(dict_sample)
+    str_tar = _write_tar(tmp_path, dict_sample, manifest)
+
+    assert io_utils.load_manifest(str_tar) == manifest
+    assert io_utils.load_manifest(str(tmp_path / "KinaseInfo")) == manifest
+
+    path_bare = tmp_path / "bare"
+    _write_tar(path_bare, dict_sample)
+    assert io_utils.load_manifest(str(path_bare / "KinaseInfo.tar.gz")) is None
+    assert io_utils.load_manifest(str(path_bare / "KinaseInfo")) is None
+
+
 def test_load_with_matching_manifest(tmp_path, dict_sample, caplog):
     """A consistent archive loads without a missing-manifest warning."""
     caplog.set_level(logging.WARNING)
