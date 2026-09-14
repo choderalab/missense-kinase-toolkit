@@ -19,10 +19,10 @@ from mkt.databases.app.utils import (
     validate_uniprot_indices,
 )
 from mkt.databases.colors import DICT_COLORS
-from mkt.databases.log_config import configure_logging
 from mkt.databases.plot_config import PymolConfig, load_task_config
 from mkt.databases.pymol import PyMOLGenerator
 from mkt.schema.io_utils import get_repo_root
+from mkt.schema.log_config import configure_logging
 
 logger = logging.getLogger(__name__)
 

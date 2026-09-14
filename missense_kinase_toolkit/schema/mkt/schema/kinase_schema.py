@@ -845,9 +845,7 @@ class KinaseInfo(BaseModel):
 
         Prefers the gapless KLIFS pocket sequence. When no pocket is stored but the domain
         carries a Dunbrack MSA row, falls back to reading the UniProt canonical sequence at
-        the equivalent MSA columns (see
-        :func:`mkt.schema.utils.return_catalytic_klifs2msa_dict`), which
-        rescues kinases KLIFS does not annotate (e.g. CDK11A, PEAK3, SIK1B). Keys stay KLIFS
+        the equivalent MSA columns (:data:`DICT_KLIFS2MSA_CATALYTIC`), which rescues kinases KLIFS does not annotate (e.g. CDK11A, PEAK3, SIK1B). Keys stay KLIFS
         region:idx labels either way; see :meth:`return_catalytic_residue_source` for which
         alignment was used. A gapped MSA column yields None for that label.
 
@@ -857,8 +855,11 @@ class KinaseInfo(BaseModel):
             Mapping of KLIFS region:idx label to the residue at that position, or None when
             neither a KLIFS pocket nor an MSA row is available.
         """
-        from mkt.schema.constants import LIST_KLIFS_CATALYTIC, LIST_KLIFS_REGION
-        from mkt.schema.utils import return_catalytic_klifs2msa_dict
+        from mkt.schema.constants import (
+            DICT_KLIFS2MSA_CATALYTIC,
+            LIST_KLIFS_CATALYTIC,
+            LIST_KLIFS_REGION,
+        )
 
         source = self.return_catalytic_residue_source()
         if source is None:
@@ -872,12 +873,11 @@ class KinaseInfo(BaseModel):
             }
 
         # MSA fallback: KLIFS label -> MSA column -> UniProt index -> residue
-        dict_klifs2msa = return_catalytic_klifs2msa_dict()
         region2uniprot = self.kincore.msa.region2uniprot
         seq = self.uniprot.canonical_seq
         dict_residues: dict[str, str | None] = {}
         for label in LIST_KLIFS_CATALYTIC:
-            idx = region2uniprot.get(dict_klifs2msa.get(label))
+            idx = region2uniprot.get(DICT_KLIFS2MSA_CATALYTIC.get(label))
             dict_residues[label] = seq[idx - 1] if idx is not None else None
         return dict_residues
 

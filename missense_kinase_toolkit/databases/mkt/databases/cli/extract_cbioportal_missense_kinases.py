@@ -10,8 +10,8 @@ import logging
 import os
 
 from mkt.databases import cbioportal, config
-from mkt.databases.log_config import add_logging_flags, configure_logging
 from mkt.schema.io_utils import get_repo_root
+from mkt.schema.log_config import add_logging_flags, configure_logging
 
 logger = logging.getLogger(__name__)
 
@@ -71,9 +71,9 @@ def get_parser():
 
 
 def main():
-    configure_logging()
-
     args = get_parser().parse_args()
+
+    configure_logging(level=args.verbose)
 
     if args.cache:
         if not os.path.exists(args.cache):
