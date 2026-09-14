@@ -678,6 +678,22 @@ class Pipeline:
             force=force,
         )
 
+    def _config_figs_only(self) -> bool:
+        """Return whether the study config marks the ``kinaseinfo`` task figures-only.
+
+        Returns
+        -------
+        bool
+            ``kinaseinfo.figs_only`` from :attr:`config_path`, or False without a config.
+        """
+        if self.config_path is None:
+            return False
+        from mkt.databases.plot_config import KinaseInfoFiguresConfig, load_task_config
+
+        return load_task_config(
+            KinaseInfoFiguresConfig, self.config_path, "kinaseinfo"
+        ).figs_only
+
     def run(
         self,
         only: list[str] | None = None,
@@ -686,6 +702,7 @@ class Pipeline:
         bool_figs: bool = True,
         figs_only: bool = False,
         force: bool = False,
+        rebuild: bool = False,
     ) -> None:
         """Dispatch to the run mode implied by the arguments.
 
@@ -709,11 +726,27 @@ class Pipeline:
         force : bool, optional
             Force structure steps to re-fetch/re-slice and recompute their derived properties
             (SASA, superposition) even when already present, by default False.
+        rebuild : bool, optional
+            Rebuild data even if the config sets ``kinaseinfo.figs_only``, by default False.
 
         Returns
         -------
         None
         """
+        if rebuild and figs_only:
+            raise ValueError("--rebuild cannot be combined with --figs-only.")
+        if not rebuild and not figs_only and self._config_figs_only():
+            if only or skip or list_kinase:
+                raise ValueError(
+                    "config sets kinaseinfo.figs_only; pass --rebuild to use "
+                    "--only/--skip/--kinase."
+                )
+            logger.info(
+                "config sets kinaseinfo.figs_only; regenerating figures only "
+                "(pass --rebuild to rebuild the data)."
+            )
+            figs_only = True
+
         if figs_only:
             if only or skip or list_kinase:
                 raise ValueError(
@@ -749,6 +782,7 @@ def run(
     figs_only: bool = False,
     force: bool = False,
     config_path: str | None = None,
+    rebuild: bool = False,
 ) -> None:
     """Build a :class:`Pipeline` from the given paths and run it (CLI entry point).
 
@@ -773,7 +807,9 @@ def run(
         Force structure steps to regenerate their derived properties, by default False.
     config_path : str | None, optional
         Shared study YAML for report aesthetics + ``<config-stem>/kinaseinfo`` output naming,
-        by default None (mtime-stamped ``dict_kinase`` reports dir).
+        by default None (``dict_kinase/<generated_at>`` reports dir).
+    rebuild : bool, optional
+        Rebuild data even if the config sets ``kinaseinfo.figs_only``, by default False.
 
     Returns
     -------
@@ -786,4 +822,5 @@ def run(
         bool_figs=bool_figs,
         figs_only=figs_only,
         force=force,
+        rebuild=rebuild,
     )

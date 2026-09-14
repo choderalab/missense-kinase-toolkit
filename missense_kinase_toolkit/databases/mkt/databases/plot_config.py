@@ -557,6 +557,8 @@ def load_task_config(
 class KinaseInfoFiguresConfig:
     """DICT_KINASE report figures -- the ``kinaseinfo`` task section."""
 
+    figs_only: bool = False
+    """Only regenerate figures from the existing archive unless ``--rebuild`` is passed, by default False."""
     matplotlib_rc: MatplotlibRCConfig = field(default_factory=MatplotlibRCConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
     upset_plot: UpsetPlotConfig = field(default_factory=UpsetPlotConfig.preprint_2026)

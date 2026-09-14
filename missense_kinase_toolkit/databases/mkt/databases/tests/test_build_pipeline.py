@@ -270,3 +270,61 @@ def test_source_only_no_dict_falls_back_to_full(monkeypatch, tmp_path):
     )
     pl.partial(["kincore"], [])
     assert "full" in calls
+
+
+def _config_pipeline(tmp_path, monkeypatch, bool_figs_only=True):
+    """Pipeline with a study YAML setting ``kinaseinfo.figs_only`` and stubbed run modes."""
+    path_config = tmp_path / "study.yaml"
+    path_config.write_text(f"kinaseinfo:\n  figs_only: {str(bool_figs_only).lower()}\n")
+    calls = []
+    monkeypatch.setattr(
+        pipeline.Pipeline, "figures", lambda self: calls.append("figures")
+    )
+    monkeypatch.setattr(
+        pipeline.Pipeline,
+        "full",
+        lambda self, names, bool_figs=True, force=False: calls.append("full"),
+    )
+    pl = pipeline.Pipeline(
+        str(tmp_path / "objects"),
+        str(tmp_path / "reports"),
+        str(tmp_path / "absent.tar.gz"),
+        config_path=str(path_config),
+    )
+    return pl, calls
+
+
+def test_config_figs_only_runs_figures(tmp_path, monkeypatch):
+    """``kinaseinfo.figs_only: true`` turns a bare run into a figures-only run."""
+    pl, calls = _config_pipeline(tmp_path, monkeypatch)
+    pl.run()
+    assert calls == ["figures"]
+
+
+def test_config_figs_only_rebuild_overrides(tmp_path, monkeypatch):
+    """``--rebuild`` rebuilds the data despite ``kinaseinfo.figs_only``."""
+    pl, calls = _config_pipeline(tmp_path, monkeypatch)
+    pl.run(rebuild=True)
+    assert calls == ["full"]
+
+
+def test_config_figs_only_false_rebuilds(tmp_path, monkeypatch):
+    """Without the key set, a config run still rebuilds the data."""
+    pl, calls = _config_pipeline(tmp_path, monkeypatch, bool_figs_only=False)
+    pl.run()
+    assert calls == ["full"]
+
+
+def test_config_figs_only_rejects_rebuild_flags(tmp_path, monkeypatch):
+    """``--only`` under a figures-only config requires ``--rebuild``."""
+    pl, calls = _config_pipeline(tmp_path, monkeypatch)
+    with pytest.raises(ValueError, match="--rebuild"):
+        pl.run(only=["exon"])
+    assert calls == []
+
+
+def test_rebuild_with_figs_only_raises(tmp_path, monkeypatch):
+    """``--rebuild`` and ``--figs-only`` are mutually exclusive."""
+    pl, _ = _config_pipeline(tmp_path, monkeypatch)
+    with pytest.raises(ValueError, match="--figs-only"):
+        pl.run(figs_only=True, rebuild=True)

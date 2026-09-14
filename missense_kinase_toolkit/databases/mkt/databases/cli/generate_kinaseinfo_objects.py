@@ -95,6 +95,14 @@ def main(
             "Mutually exclusive with --only/--skip/--kinase.",
         ),
     ] = False,
+    rebuild: Annotated[
+        bool,
+        typer.Option(
+            "--rebuild",
+            help="Rebuild the data even when the --config study YAML sets "
+            "kinaseinfo.figs_only. Mutually exclusive with --figs-only.",
+        ),
+    ] = False,
     force_regen: Annotated[
         bool,
         typer.Option(
@@ -122,6 +130,7 @@ def main(
             figs_only=figs_only,
             force=force_regen,
             config_path=config_path,
+            rebuild=rebuild,
         )
     except ValueError as e:
         logger.error(str(e))
