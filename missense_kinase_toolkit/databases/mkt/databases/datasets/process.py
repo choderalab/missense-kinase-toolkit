@@ -16,7 +16,6 @@ from mkt.databases.aligners import ClustalOmegaAligner
 from mkt.databases.datasets.constants import KinaseGroupSource
 from mkt.databases.datasets.discoverx import DiscoverXInfoGenerator
 from mkt.databases.io_utils import return_kinase_dict
-from mkt.databases.log_config import configure_logging
 from mkt.schema.io_utils import get_repo_root
 from mkt.schema.utils import TQDM_BAR_FORMAT, rgetattr
 from pydantic import BaseModel, Field
@@ -27,8 +26,6 @@ logger = logging.getLogger(__name__)
 
 
 DICT_KINASE = return_kinase_dict()
-
-configure_logging()
 
 try:
     config.set_request_cache(path.join(get_repo_root(), "requests_cache.sqlite"))

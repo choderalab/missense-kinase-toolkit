@@ -63,9 +63,13 @@ class PropertyTables:
         pd.DataFrame
             The dataframe containing the properties of the KinaseInfo object.
         """
-        try:
-            obj_temp = rgetattr(self.obj_kinase, str_attr)
+        obj_temp = rgetattr(self.obj_kinase, str_attr)
+        if obj_temp is None:
+            # source absent for this kinase; the app renders a "not available" notice
+            logger.debug(f"No {str_attr} for {self.obj_kinase.hgnc_name}")
+            return None
 
+        try:
             # copy so list_drop's `del` does not mutate the cached KinaseInfo object
             dict_temp = dict(obj_temp.__dict__)
 
