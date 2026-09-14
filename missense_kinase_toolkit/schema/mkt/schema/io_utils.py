@@ -116,6 +116,65 @@ class Manifest(BaseModel):
             )
         return list_diff
 
+    def return_summary(self, int_bar_width: int = 20) -> str:
+        """Return a tree-indented text summary of the manifest.
+
+        Parameters
+        ----------
+        int_bar_width : int, optional
+            Width of the coverage bar in characters, by default 20.
+
+        Returns
+        -------
+        str
+            Header (build time, git, packages, entries) plus one row per path with count,
+            percent of entries, a coverage bar, and any source-version tally.
+        """
+        # order each path directly after its parent (e.g. klifs.pocket_seq after klifs)
+        dict_order = {path: idx for idx, path in enumerate(self.counts)}
+        list_paths = sorted(
+            self.counts,
+            key=lambda path: tuple(
+                dict_order.get(".".join(path.split(".")[: i + 1]), len(dict_order))
+                for i in range(path.count(".") + 1)
+            ),
+        )
+        dict_label = {
+            path: "  " * path.count(".") + path.rsplit(".", 1)[-1]
+            for path in list_paths
+        }
+        int_label = max(len(label) for label in dict_label.values())
+
+        str_git = self.git.get("sha", "n/a")[:12]
+        if self.git.get("dirty"):
+            str_git += " (dirty)"
+        list_packages = [f"{name} {ver}" for name, ver in self.packages.items()]
+
+        list_lines = [
+            f"KinaseInfo manifest v{self.manifest_version}",
+            f"  generated  {self.generated_at:%Y-%m-%d %H:%M:%S %Z}".rstrip(),
+            f"  git        {str_git}",
+            f"  packages   {list_packages[0] if list_packages else 'n/a'}",
+            *(f"             {pkg}" for pkg in list_packages[1:]),
+            f"  entries    {self.n_entries:,}",
+            "",
+            f"  {'field':<{int_label}}  {'n':>5}  {'%':>6}",
+            "  " + "─" * (int_label + 17 + int_bar_width),
+        ]
+        for path in list_paths:
+            int_n = self.counts[path]
+            float_frac = int_n / self.n_entries if self.n_entries else 0.0
+            int_fill = round(float_frac * int_bar_width)
+            str_bar = "█" * int_fill + "░" * (int_bar_width - int_fill)
+            str_versions = " · ".join(
+                f"{ver} {n:,}" for ver, n in self.source_versions.get(path, {}).items()
+            )
+            list_lines.append(
+                f"  {dict_label[path]:<{int_label}}  {int_n:>5,}  "
+                f"{float_frac:>6.1%}  {str_bar}  {str_versions}".rstrip()
+            )
+        return "\n".join(list_lines)
+
 
 def check_kinase_dict_manifest(
     dict_kinase: dict[str, BaseModel],
@@ -178,6 +237,27 @@ def load_manifest(str_path: str) -> Manifest | None:
     if str_manifest is None:
         return None
     return Manifest.model_validate_json(str_manifest)
+
+
+def print_manifest_summary(str_path: str | None = None) -> None:
+    """Print the manifest summary of a KinaseInfo archive or directory.
+
+    Parameters
+    ----------
+    str_path : str | None, optional
+        Path to the archive or directory, by default None (the packaged tar).
+
+    Returns
+    -------
+    None
+    """
+    if str_path is None:
+        str_path = return_str_path_from_pkg_data()
+    manifest = load_manifest(str_path)
+    if manifest is None:
+        logger.warning(f"No {STR_MANIFEST_FILENAME} in {str_path}.")
+        return
+    print(manifest.return_summary())
 
 
 def get_repo_root():

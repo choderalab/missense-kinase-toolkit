@@ -107,6 +107,32 @@ def test_load_manifest(tmp_path, dict_sample):
     assert io_utils.load_manifest(str(path_bare / "KinaseInfo")) is None
 
 
+def test_manifest_summary(tmp_path, dict_kinase, capsys):
+    """The summary nests children under parents and prints from an archive."""
+    manifest = io_utils.Manifest.from_kinase_dict(
+        dict_kinase,
+        git={"sha": "0123456789abcdef", "dirty": True},
+        packages={"mkt-schema": "0.1.0"},
+    )
+    list_lines = manifest.return_summary().splitlines()
+
+    def _row(str_label):
+        return next(
+            i for i, line in enumerate(list_lines) if line.startswith(str_label)
+        )
+
+    assert "  git        0123456789ab (dirty)" in list_lines
+    assert "  entries    543" in list_lines
+    # extras sit directly under their parent rather than at the end
+    assert _row("  klifs ") + 1 == _row("    pocket_seq ")
+    assert _row("    pocket_seq ") < _row("  pfam ")
+    assert "v1 60 · v3 437" in list_lines[_row("    fasta ")]
+
+    str_tar = _write_tar(tmp_path, {"ABL1": dict_kinase["ABL1"]}, manifest)
+    io_utils.print_manifest_summary(str_tar)
+    assert "KinaseInfo manifest v1" in capsys.readouterr().out
+
+
 def test_load_with_matching_manifest(tmp_path, dict_sample, caplog):
     """A consistent archive loads without a missing-manifest warning."""
     caplog.set_level(logging.WARNING)
