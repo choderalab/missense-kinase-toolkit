@@ -18,9 +18,9 @@ from pathlib import Path
 from typing import Annotated, Callable, Optional
 
 import typer
-from mkt.databases.log_config import configure_logging
 from mkt.databases.plot_config import ConservationFiguresConfig, load_task_config
 from mkt.schema.io_utils import get_repo_root, serialize_conservation_data
+from mkt.schema.log_config import configure_logging
 from omegaconf import OmegaConf
 
 logger = logging.getLogger(__name__)

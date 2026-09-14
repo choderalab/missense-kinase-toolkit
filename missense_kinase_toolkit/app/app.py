@@ -13,7 +13,6 @@ from mkt.databases.app.schema import (
 )
 from mkt.databases.app.structures import StructureVisualizer
 from mkt.databases.colors import DICT_COLORS
-from mkt.databases.log_config import configure_logging
 from mkt.schema.io_utils import (
     DICT_FUNCS,
     deserialize_kinase_dict,
@@ -21,6 +20,7 @@ from mkt.schema.io_utils import (
     untar_files_in_memory,
 )
 from mkt.schema.kinase_schema import KinaseInfo
+from mkt.schema.log_config import configure_logging
 from mkt.schema.utils import rgetattr
 from streamlit_bokeh import streamlit_bokeh
 from visualizers import SequenceAlignmentGenerator, StructureVisualizerGenerator

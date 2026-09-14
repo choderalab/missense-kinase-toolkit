@@ -217,17 +217,19 @@ def test_is_pseudokinase_tristate(dict_kinase):
         assert dict_kinase[name].is_pseudokinase() is None
 
 
-def test_return_klifs2msa_dict(dict_kinase):
-    """The empirical KLIFS->MSA map covers the pocket; core anchors are highly concordant."""
-    from mkt.schema.utils import return_klifs2msa_dict
+def test_msa_fallback_does_not_load_corpus(dict_kinase, monkeypatch):
+    """The MSA fallback reads a constant map, so one KinaseInfo never loads the corpus.
 
-    dict_map, dict_concordance = return_klifs2msa_dict(
-        dict_kinase, bool_return_concordance=True
-    )
-    # core catalytic anchors map to their known MSA columns
-    assert dict_map["III:17"] == "B3:028"  # VAIK beta3 lysine
-    assert dict_map["c.l:70"] == "CL:111"  # HRD catalytic aspartate
-    assert dict_map["xDFG:81"] == "ALN:129"  # DFG aspartate
-    # concordance is near-perfect at the anchors but not 1:1 across the pocket
-    assert dict_concordance["xDFG:81"] >= 0.98
-    assert min(dict_concordance.values()) >= 0.85
+    Regression: the Streamlit app deserializes a single kinase at a time; loading all of
+    ``DICT_KINASE`` here (~7 GB) OOM-killed it on KLIFS-less kinases such as PEAK3.
+    """
+    from mkt.schema import io_utils
+
+    def _raise(*args, **kwargs):
+        raise AssertionError("deserialize_kinase_dict called by the MSA fallback")
+
+    monkeypatch.setattr(io_utils, "deserialize_kinase_dict", _raise)
+
+    obj = dict_kinase["PEAK3"]
+    assert obj.return_catalytic_residue_source() == "msa"
+    assert obj.is_pseudokinase() is True

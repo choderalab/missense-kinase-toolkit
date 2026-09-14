@@ -17,9 +17,9 @@ from typing import Annotated, Optional
 import pandas as pd
 import typer
 from mkt.databases import config
-from mkt.databases.log_config import configure_logging
 from mkt.databases.plot_config import DatasetFiguresConfig, load_task_config
 from mkt.schema.io_utils import get_repo_root
+from mkt.schema.log_config import configure_logging
 from omegaconf import OmegaConf
 
 logger = logging.getLogger(__name__)
