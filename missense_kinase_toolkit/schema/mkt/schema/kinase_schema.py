@@ -834,26 +834,32 @@ class KinaseInfo(BaseModel):
             return "msa"
         return None
 
-    def return_catalytic_residues(self) -> dict[str, str | None] | None:
+    def return_catalytic_residues(
+        self, bool_uniprot_idx: bool = False
+    ) -> dict[str, str | None] | None:
         """Return this kinase's residues at the KLIFS catalytic positions.
 
         Reads the catalytic-determining positions (:data:`LIST_KLIFS_CATALYTIC`) -- the beta3
         (III:17) and beta2 (II:13) lysines, the catalytic-loop HRD motif (c.l:68-70, its
         aspartate at c.l:70 the catalytic base) and the DFG motif (xDFG:81-83, its aspartate
-        at xDFG:81). Used by :meth:`is_pseudokinase` and surfaced in the app's computed
-        properties.
+        at xDFG:81). Used by :meth:`is_pseudokinase` and the app's computed properties.
 
-        Prefers the gapless KLIFS pocket sequence. When no pocket is stored but the domain
-        carries a Dunbrack MSA row, falls back to reading the UniProt canonical sequence at
-        the equivalent MSA columns (:data:`DICT_KLIFS2MSA_CATALYTIC`), which rescues kinases KLIFS does not annotate (e.g. CDK11A, PEAK3, SIK1B). Keys stay KLIFS
-        region:idx labels either way; see :meth:`return_catalytic_residue_source` for which
-        alignment was used. A gapped MSA column yields None for that label.
+        Prefers KLIFS. Without a KLIFS pocket but with a Dunbrack MSA row, reads the UniProt
+        canonical sequence at the equivalent MSA columns (:data:`DICT_KLIFS2MSA_CATALYTIC`),
+        which rescues kinases KLIFS does not annotate (e.g. CDK11A, PEAK3, SIK1B). Keys stay
+        KLIFS region:idx labels either way; see :meth:`return_catalytic_residue_source` for
+        which alignment was used. A gapped MSA column yields None for that label.
+
+        Parameters
+        ----------
+        bool_uniprot_idx : bool, optional
+            If True, append the UniProt index to each residue (e.g. "D381"), by default False.
 
         Returns
         -------
         dict[str, str | None] | None
-            Mapping of KLIFS region:idx label to the residue at that position, or None when
-            neither a KLIFS pocket nor an MSA row is available.
+            Mapping of KLIFS region:idx label to the residue (or residue + UniProt index), or
+            None when neither a KLIFS pocket nor an MSA row is available.
         """
         from mkt.schema.constants import (
             DICT_KLIFS2MSA_CATALYTIC,
@@ -866,20 +872,32 @@ class KinaseInfo(BaseModel):
             return None
 
         if source == "klifs":
-            pocket = self.klifs.pocket_seq
-            return {
-                label: pocket[LIST_KLIFS_REGION.index(label)]
+            if not bool_uniprot_idx:
+                pocket = self.klifs.pocket_seq
+                return {
+                    label: pocket[LIST_KLIFS_REGION.index(label)]
+                    for label in LIST_KLIFS_CATALYTIC
+                }
+            # pocket residues equal canonical_seq at KLIFS2UniProtIdx, so index from it
+            k2u = self.KLIFS2UniProtIdx or {}
+            dict_idx = {label: k2u.get(label) for label in LIST_KLIFS_CATALYTIC}
+        else:
+            # MSA fallback: KLIFS label -> MSA column -> UniProt index
+            region2uniprot = self.kincore.msa.region2uniprot
+            dict_idx = {
+                label: region2uniprot.get(DICT_KLIFS2MSA_CATALYTIC.get(label))
                 for label in LIST_KLIFS_CATALYTIC
             }
 
-        # MSA fallback: KLIFS label -> MSA column -> UniProt index -> residue
-        region2uniprot = self.kincore.msa.region2uniprot
         seq = self.uniprot.canonical_seq
-        dict_residues: dict[str, str | None] = {}
-        for label in LIST_KLIFS_CATALYTIC:
-            idx = region2uniprot.get(DICT_KLIFS2MSA_CATALYTIC.get(label))
-            dict_residues[label] = seq[idx - 1] if idx is not None else None
-        return dict_residues
+        return {
+            label: (
+                None
+                if idx is None
+                else seq[idx - 1] + (str(idx) if bool_uniprot_idx else "")
+            )
+            for label, idx in dict_idx.items()
+        }
 
     def is_pseudokinase(self) -> bool | None:
         """Return boolean if a (predicted) pseudokinase.
