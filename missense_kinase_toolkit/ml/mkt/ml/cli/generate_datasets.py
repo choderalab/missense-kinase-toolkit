@@ -6,8 +6,8 @@ from os import path
 import numpy as np
 import pandas as pd
 from mkt.ml.datasets.process import DavisDataset, PKIS2Dataset
-from mkt.ml.log_config import add_logging_flags, configure_logging
 from mkt.schema.io_utils import get_repo_root
+from mkt.schema.log_config import add_logging_flags, configure_logging
 from mkt.schema.utils import random_uuid
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ def main():
 
     args = parse_args()
 
-    configure_logging()
+    configure_logging(level=args.verbose)
 
     try:
         pkis2_dataset = PKIS2Dataset(bool_save=False)
