@@ -60,6 +60,15 @@ def render_alignment_plot(
         Bokeh figure with the sequence alignment visualization.
     """
     list_text = [i for s in list_sequences for i in s]
+
+    # a missing track (all "-") gets a crimson label; color its cells to match so a missing
+    # track reads apart from a misaligned one
+    str_missing_color = "#DC143C"
+    empty_sequences = [all(c == "-" for c in seq) for seq in list_sequences]
+    list_colors = [
+        [str_missing_color] * len(cols) if empty else cols
+        for cols, empty in zip(list_colors, empty_sequences)
+    ]
     colors = list(chain(*list_colors))
 
     N = len(list_sequences[0])
@@ -86,9 +95,6 @@ def render_alignment_plot(
     )
 
     viewlen = min(N, 80)
-
-    # determine which sequences consist of only '-' characters
-    empty_sequences = [all(c == "-" for c in seq) for seq in list_sequences]
 
     # sequence text view with ability to scroll along x axis
     # view_range is for the close up view
@@ -144,7 +150,7 @@ def render_alignment_plot(
 
     # add custom colored labels
     for i, label in enumerate(list_ids):
-        color = "#DC143C" if empty_sequences[i] else "black"
+        color = str_missing_color if empty_sequences[i] else "black"
         custom_label = Label(
             x=0,  # position at the y-axis
             y=i,  # y position corresponds to the sequence index
