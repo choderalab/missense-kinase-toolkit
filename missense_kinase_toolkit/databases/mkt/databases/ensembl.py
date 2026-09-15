@@ -168,6 +168,45 @@ class EnsemblSequence(RESTAPIClient):
             self.sequence = None
 
 
+def _get_sequence_by_id(
+    transcript_id: str,
+    str_type: str,
+    build: str = "GRCh37",
+) -> str | None:
+    """Return one sequence type of a transcript from Ensembl ``/sequence/id``.
+
+    Parameters
+    ----------
+    transcript_id : str
+        Ensembl transcript id (e.g. ``"ENST00000275493"``).
+    str_type : str
+        Ensembl sequence type (``"cds"`` or ``"protein"``).
+    build : str
+        Genome build selecting the REST host (e.g. ``"GRCh37"``, ``"GRCh38"``).
+
+    Returns
+    -------
+    str | None
+        The upper-cased sequence, or None if the fetch failed (e.g. a transcript retired
+        from the build).
+    """
+    res = requests_wrapper.get_cached_session().get(
+        f"{rest_host(build)}/sequence/id/{transcript_id}",
+        params={"type": str_type},
+        headers=DICT_HEADER_JSON,
+    )
+    if not res.ok:
+        logger.error(
+            "Ensembl %s fetch failed for %s: %s",
+            str_type,
+            transcript_id,
+            res.status_code,
+        )
+        return None
+    seq = res.json().get("seq")
+    return seq.upper() if seq else None
+
+
 def get_cds_sequence(
     transcript_id: str,
     build: str = "GRCh37",
@@ -190,16 +229,30 @@ def get_cds_sequence(
     str | None
         The upper-cased CDS nucleotide sequence, or None if the fetch failed.
     """
-    res = requests_wrapper.get_cached_session().get(
-        f"{rest_host(build)}/sequence/id/{transcript_id}",
-        params={"type": "cds"},
-        headers=DICT_HEADER_JSON,
-    )
-    if not res.ok:
-        logger.error("Error: %s", res.status_code)
-        return None
-    seq = res.json().get("seq")
-    return seq.upper() if seq else None
+    return _get_sequence_by_id(transcript_id, "cds", build)
+
+
+def get_protein_sequence(
+    transcript_id: str,
+    build: str = "GRCh37",
+) -> str | None:
+    """Return the translated protein sequence of a transcript.
+
+    Wraps ``GET /sequence/id/{id}?type=protein`` through the shared cached session.
+
+    Parameters
+    ----------
+    transcript_id : str
+        Ensembl transcript id (e.g. ``"ENST00000275493"``).
+    build : str
+        Genome build selecting the REST host (e.g. ``"GRCh37"``, ``"GRCh38"``).
+
+    Returns
+    -------
+    str | None
+        The protein sequence, or None if the fetch failed.
+    """
+    return _get_sequence_by_id(transcript_id, "protein", build)
 
 
 def get_trinucleotide_context(

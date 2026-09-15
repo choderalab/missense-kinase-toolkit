@@ -19,12 +19,11 @@ GRCh38 from ``grch38.genomenexus.org``, so the build must match the coordinates.
 import datetime
 import json
 import logging
-import re
 
 from mkt.databases import requests_wrapper
 from mkt.databases.constants import DICT_HEADER_JSON_POST, resolve_rest_host
 from mkt.schema.kinase_schema import Exon, Provenance
-from mkt.schema.utils import TQDM_BAR_FORMAT
+from mkt.schema.utils import TQDM_BAR_FORMAT, split_domain_suffix
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -276,11 +275,11 @@ def enrich_kinases_with_exons(
     for build in builds:
         if not remaining:
             break
-        genes = sorted({re.sub(r"_\d+$", "", name) for name in remaining})
+        genes = sorted({split_domain_suffix(name)[0] for name in remaining})
         dict_transcript = get_canonical_transcripts(genes, build=build)
         for hgnc_name in list(remaining):
             obj_kinase = dict_targets[hgnc_name]
-            record = dict_transcript.get(re.sub(r"_\d+$", "", hgnc_name))
+            record = dict_transcript.get(split_domain_suffix(hgnc_name)[0])
             if record is None:
                 continue
             idx2exon = build_exon_map(record, len(obj_kinase.uniprot.canonical_seq))
