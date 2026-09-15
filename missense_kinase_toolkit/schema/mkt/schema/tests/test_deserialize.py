@@ -1,5 +1,7 @@
 import logging
 
+import pytest
+
 
 def test_cache_identity(dict_kinase):
     """Test that deserializing by cached name returns the same object."""
@@ -375,3 +377,24 @@ def test_superposition_per_structure_reference_frame(dict_kinase):
         assert len(s.rotation) == 3 and all(len(row) == 3 for row in s.rotation)
         assert len(s.translation) == 3
         assert s.rmsd is not None and s.rmsd < 2.5 and s.n_atoms and s.n_atoms > 50
+
+
+def test_raise_if_missing_or_empty(tmp_path):
+    """Missing paths and empty directories raise; a populated directory does not."""
+    from mkt.schema.io_utils import raise_if_missing_or_empty
+
+    with pytest.raises(FileNotFoundError, match="does not exist"):
+        raise_if_missing_or_empty(str(tmp_path / "absent.tar.gz"))
+    with pytest.raises(FileNotFoundError, match="empty directory"):
+        raise_if_missing_or_empty(str(tmp_path))
+
+    (tmp_path / "ABL1.json").write_text("{}")
+    raise_if_missing_or_empty(str(tmp_path))
+
+
+def test_missing_packaged_resource_raises():
+    """A missing packaged resource raises instead of logging and returning a bad path."""
+    from mkt.schema.io_utils import return_str_path_from_pkg_data
+
+    with pytest.raises(FileNotFoundError, match="does not exist"):
+        return_str_path_from_pkg_data(pkg_resource="Absent.tar.gz")

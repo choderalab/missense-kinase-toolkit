@@ -73,6 +73,16 @@ def test_manifest_tallies_match_corpus(dict_kinase):
     assert source_versions == DICT_CORPUS_SOURCE_VERSIONS
 
 
+def test_packaged_manifest_matches_expected(dict_kinase):
+    """The shipped archive's manifest matches the loaded dict and the expected counts."""
+    manifest = io_utils.load_manifest(io_utils.return_str_path_from_pkg_data())
+    assert manifest is not None
+    assert manifest.return_mismatches(dict_kinase) == []
+    assert manifest.n_entries == len(dict_kinase)
+    assert manifest.counts == DICT_CORPUS_COUNTS
+    assert manifest.source_versions == DICT_CORPUS_SOURCE_VERSIONS
+
+
 def test_manifest_extra_paths_resolve(dict_kinase):
     """Every explicit extra path resolves on some entry (``rgetattr`` hides typos)."""
     for path in LIST_MANIFEST_EXTRA_PATHS:
@@ -162,6 +172,41 @@ def test_stale_entry_raises(tmp_path, dict_kinase, dict_sample):
 
     with pytest.raises(ValueError, match="n_entries"):
         io_utils.deserialize_kinase_dict(str_path=str_tar)
+
+
+def test_missing_entry_raises(tmp_path, dict_sample):
+    """An entry dropped from the archive (e.g. a truncated tar) raises on ``n_entries``."""
+    manifest = io_utils.Manifest.from_kinase_dict(dict_sample)
+    str_tar = _write_tar(tmp_path, {"ABL1": dict_sample["ABL1"]}, manifest)
+
+    with pytest.raises(ValueError, match="n_entries: expected 2, got 1"):
+        io_utils.deserialize_kinase_dict(str_path=str_tar)
+
+
+def test_serialize_rejects_key_hgnc_mismatch(tmp_path, dict_sample):
+    """Serializing under a key other than ``hgnc_name`` raises before writing files."""
+    path_out = tmp_path / "out"
+    with pytest.raises(ValueError, match="dict keys must equal hgnc_name"):
+        io_utils.serialize_kinase_dict(
+            {"NOT_ABL1": dict_sample["ABL1"]}, str_path=str(path_out)
+        )
+    assert not path_out.exists()
+
+
+def test_deserialize_rejects_renamed_file(tmp_path, dict_sample):
+    """A file whose name differs from its ``hgnc_name`` raises, from a tar or directory."""
+    path_dir = _write_dir(tmp_path, dict_sample)
+    (path_dir / "ABL1.json").rename(path_dir / "NOT_ABL1.json")
+
+    path_tar = tmp_path / "renamed.tar.gz"
+    with tarfile.open(path_tar, "w:gz") as tar:
+        for path in sorted(path_dir.iterdir()):
+            tar.add(path, arcname=path.name)
+    with pytest.raises(ValueError, match="filenames must match hgnc_name"):
+        io_utils.deserialize_kinase_dict(str_path=str(path_tar))
+
+    with pytest.raises(ValueError, match="filenames must match hgnc_name"):
+        io_utils.deserialize_kinase_dict(str_path=str(path_dir), bool_remove=False)
 
 
 def test_missing_manifest_warns(tmp_path, dict_sample, caplog):
