@@ -78,3 +78,49 @@ def test_catalytic_klifs2msa_constant_matches_corpus(dict_kinase):
     from mkt.schema.utils import return_catalytic_klifs2msa_dict
 
     assert return_catalytic_klifs2msa_dict(dict_kinase) == DICT_KLIFS2MSA_CATALYTIC
+
+
+def test_split_domain_suffix():
+    """Suffixes may have several digits; a trailing digit without an underscore is kept."""
+    from mkt.schema.utils import split_domain_suffix
+
+    assert split_domain_suffix("JAK1_1") == ("JAK1", "_1")
+    assert split_domain_suffix("JAK1_10") == ("JAK1", "_10")
+    assert split_domain_suffix("A_B_2") == ("A_B", "_2")
+    assert split_domain_suffix("SGK1") == ("SGK1", "")
+    assert split_domain_suffix("BTK") == ("BTK", "")
+    assert split_domain_suffix("_1") == ("_1", "")
+
+
+def test_adjudicate_kinase_group_without_corpus(monkeypatch):
+    """Groups come from precomputed constants, so the corpus is never loaded."""
+    from mkt.schema import io_utils
+    from mkt.schema.constants import DICT_KINASE_GROUP, DICT_KINASE_GROUP_COLORS
+    from mkt.schema.utils import adjudicate_kinase_group
+
+    def _no_load(*args, **kwargs):
+        raise AssertionError("adjudicate_kinase_group loaded DICT_KINASE")
+
+    monkeypatch.setattr(io_utils, "deserialize_kinase_dict", _no_load)
+
+    assert adjudicate_kinase_group("JAK1") == "TK"
+    assert adjudicate_kinase_group("RPS6KA4") == "Multiple"
+    assert adjudicate_kinase_group("RPS6KA4_1") == "AGC"
+    assert adjudicate_kinase_group("RPS6KA4_2") == "CAMK"
+    assert adjudicate_kinase_group("PIK3CA") == "Lipid"
+    assert (
+        adjudicate_kinase_group("PIK3CA", bool_lipid=False)
+        == DICT_KINASE_GROUP["PIK3CA"]
+    )
+    assert adjudicate_kinase_group("NOTAKINASE") is None
+    # every group the lookup can return has a palette color
+    assert set(DICT_KINASE_GROUP.values()) | {"Lipid"} <= set(DICT_KINASE_GROUP_COLORS)
+
+
+def test_kinase_group_constants_match_corpus(dict_kinase):
+    """The precomputed group and lipid constants match those derived from the corpus."""
+    from mkt.schema.constants import DICT_KINASE_GROUP, SET_LIPID_KINASE
+    from mkt.schema.utils import return_kinase_group_dict, return_lipid_kinase_set
+
+    assert return_kinase_group_dict(dict_kinase) == DICT_KINASE_GROUP
+    assert return_lipid_kinase_set(dict_kinase) == SET_LIPID_KINASE
