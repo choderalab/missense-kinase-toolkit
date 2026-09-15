@@ -1,7 +1,10 @@
+import copy
+
 import pytest
 from mkt.databases.alphafold import (
     AlphaFoldPrediction,
     AlphaFoldStructure,
+    enrich_with_alphafold,
     fetch_alphafold_kd,
 )
 
@@ -51,6 +54,16 @@ def abl1_kinase():
 # ---------------------------------------------------------------------------
 # tests
 # ---------------------------------------------------------------------------
+
+
+def test_enrich_drops_alphafold_without_kd_bounds(abl1_kinase):
+    """A stored structure is dropped once the kinase has no kinase-domain bounds."""
+    obj = copy.deepcopy(abl1_kinase)
+    obj.alphafold = object()
+    obj.kincore, obj.pfam, obj.KLIFS2UniProtIdx = None, None, None
+    assert obj.adjudicate_kd_start() is None
+    enrich_with_alphafold(obj)
+    assert obj.alphafold is None
 
 
 @pytest.mark.network

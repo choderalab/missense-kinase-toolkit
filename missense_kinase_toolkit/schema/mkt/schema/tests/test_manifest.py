@@ -15,16 +15,16 @@ DICT_CORPUS_COUNTS = {
     "kinhub": 517,
     "klifs": 539,
     "klifs.pocket_seq": 519,
-    "pfam": 533,
+    "pfam": 518,
     "kincore": 497,
     "kincore.fasta": 497,
     "kincore.cif": 437,
     "kincore.cif.sasa": 436,
     "kincore.cif.superposition": 437,
     "kincore.msa": 497,
-    "alphafold": 530,
+    "alphafold": 529,
     "alphafold.sasa": 509,
-    "alphafold.superposition": 530,
+    "alphafold.superposition": 529,
     "exon": 523,
     "KLIFS2UniProtIdx": 519,
     "KLIFS2UniProtSeq": 519,
@@ -34,7 +34,7 @@ DICT_CORPUS_COUNTS = {
 DICT_CORPUS_SOURCE_VERSIONS = {
     "kincore.fasta": {"v1": 60, "v3": 437},
     "kincore.cif": {"v2": 437},
-    "alphafold": {"v6": 530},
+    "alphafold": {"v6": 529},
 }
 """dict[str, dict[str, int]]: Expected source-version tallies in the packaged tar."""
 

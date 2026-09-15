@@ -11,13 +11,13 @@ isoform/numbering differs from our canonical sequence are reconciled by local al
 
 import logging
 import os
-import re
 from collections import defaultdict
 
 from mkt.databases.io_utils import DataSource
 from mkt.schema.constants import DICT_MSA_ALIGNED_REGION, DICT_MSA_COL2LABEL
 from mkt.schema.io_utils import get_repo_root
 from mkt.schema.kinase_schema import MSA, KinCoRe, Provenance
+from mkt.schema.utils import split_domain_suffix
 
 logger = logging.getLogger(__name__)
 
@@ -144,14 +144,14 @@ def _col2uniprot(
 
     # reconcile: local-align the ungapped row to our canonical (isoform/numbering shift)
     from mkt.databases.aligners import MSA2UniProtAligner
+    from mkt.databases.isoform import map_positions_by_alignment
 
-    alignment = MSA2UniProtAligner().align(canonical_seq, ungapped)[0]
-
-    # map each ungapped position -> canonical index via the (gapless, 100%-identity) blocks
-    pos2uniprot: dict[int, int] = {}
-    for (t0, t1), (q0, q1) in zip(alignment.aligned[0], alignment.aligned[1]):
-        for offset in range(t1 - t0):
-            pos2uniprot[q0 + offset] = t0 + offset + 1  # 1-based canonical index
+    # canonical -> row positions over the (gapless, 100%-identity) blocks, inverted to
+    # 0-based ungapped position -> 1-based canonical index
+    dict_canonical2row = map_positions_by_alignment(
+        canonical_seq, ungapped, aligner=MSA2UniProtAligner()
+    )
+    pos2uniprot = {row - 1: canonical for canonical, row in dict_canonical2row.items()}
     col2uniprot = {
         col: pos2uniprot[pos] for pos, (col, _) in enumerate(cols) if pos in pos2uniprot
     }
@@ -259,7 +259,7 @@ def enrich_with_msa(
 
 def _base_accession(uniprot_id: str) -> str:
     """Strip the multi-KD ``_1``/``_2`` domain suffix to the bare UniProt accession."""
-    return re.sub(r"_\d+$", "", uniprot_id)
+    return split_domain_suffix(uniprot_id)[0]
 
 
 def _klifs_span(obj) -> tuple[int, int] | None:

@@ -257,22 +257,23 @@ def extract_sequence_from_cif(kincore) -> str | None:
 def split_domain_suffix(name: str) -> tuple[str, str]:
     """Split a trailing multi-domain index suffix off a kinase name.
 
-    Multi-domain kinases are represented with a ``_1`` / ``_2`` suffix denoting the
-    individual kinase domains (e.g. ``"JAK1_1"`` is the first kinase domain of JAK1).
+    Multi-domain kinases carry a ``_<n>`` suffix denoting the individual kinase domain
+    (e.g. ``"JAK1_1"``); ``n`` may have several digits.
 
     Parameters
     ----------
     name : str
-        Kinase name, optionally carrying a ``_<digit>`` domain suffix.
+        Kinase name, optionally carrying a ``_<digits>`` domain suffix.
 
     Returns
     -------
     tuple[str, str]
-        ``(base, suffix)`` where ``suffix`` is ``"_<digit>"`` or ``""``
-        (e.g. ``"JAK1_1" -> ("JAK1", "_1")``, ``"BTK" -> ("BTK", "")``).
+        ``(base, suffix)`` where ``suffix`` is ``"_<digits>"`` or ``""``
+        (e.g. ``"JAK1_10" -> ("JAK1", "_10")``, ``"SGK1" -> ("SGK1", "")``).
     """
-    if len(name) >= 2 and name[-2] == "_" and name[-1].isdigit():
-        return name[:-2], name[-2:]
+    base, sep, tail = name.rpartition("_")
+    if sep and base and tail.isdigit():
+        return base, f"{sep}{tail}"
     return name, ""
 
 
@@ -425,31 +426,94 @@ def group_name_homologs(
     return out
 
 
+def return_kinase_group_dict(dict_kinase: dict[str, "KinaseInfo"]) -> dict[str, str]:
+    """Return each kinase's adjudicated group, adding bare multi-domain gene symbols.
+
+    A bare symbol (e.g. ``"JAK1"`` for ``JAK1_1``/``JAK1_2``) takes its domains' shared
+    group, or ``"Multiple"`` when they differ. Source of
+    :data:`mkt.schema.constants.DICT_KINASE_GROUP`.
+
+    Parameters
+    ----------
+    dict_kinase : dict[str, KinaseInfo]
+        Mapping of kinase name to kinase object.
+
+    Returns
+    -------
+    dict[str, str]
+        Kinase name (suffixed or bare) -> group, sorted by name; kinases without a group
+        are omitted.
+    """
+    dict_group: dict[str, str] = {}
+    dict_base_groups: dict[str, set[str]] = {}
+    for name, obj in dict_kinase.items():
+        group = obj.adjudicate_group()
+        if group is None:
+            continue
+        dict_group[name] = str(group)
+        base, suffix = split_domain_suffix(name)
+        if suffix:
+            dict_base_groups.setdefault(base, set()).add(dict_group[name])
+    for base, set_groups in dict_base_groups.items():
+        dict_group[base] = set_groups.pop() if len(set_groups) == 1 else "Multiple"
+    return dict(sorted(dict_group.items()))
+
+
+def return_lipid_kinase_set(dict_kinase: dict[str, "KinaseInfo"]) -> frozenset[str]:
+    """Return lipid kinase names, adding bare multi-domain symbols whose domains all qualify.
+
+    Source of :data:`mkt.schema.constants.SET_LIPID_KINASE`.
+
+    Parameters
+    ----------
+    dict_kinase : dict[str, KinaseInfo]
+        Mapping of kinase name to kinase object.
+
+    Returns
+    -------
+    frozenset[str]
+        Lipid kinase names (suffixed or bare).
+    """
+    set_lipid = {name for name, obj in dict_kinase.items() if obj.is_lipid_kinase()}
+    dict_base_names: dict[str, list[str]] = {}
+    for name in dict_kinase:
+        base, suffix = split_domain_suffix(name)
+        if suffix:
+            dict_base_names.setdefault(base, []).append(name)
+    set_bare = {
+        base
+        for base, list_names in dict_base_names.items()
+        if all(name in set_lipid for name in list_names)
+    }
+    return frozenset(set_lipid | set_bare)
+
+
 def adjudicate_kinase_group(str_kinase: str, bool_lipid: bool = True) -> str | None:
-    """Adjudicates the kinase group for a given kinase.
+    """Adjudicate the kinase group for a kinase name or bare multi-domain gene symbol.
+
+    Reads the precomputed :data:`~mkt.schema.constants.DICT_KINASE_GROUP` and
+    :data:`~mkt.schema.constants.SET_LIPID_KINASE`, so it never loads ``DICT_KINASE``. A
+    bare multi-domain symbol returns its domains' shared group, or ``"Multiple"`` when
+    they differ.
 
     Parameters
     ----------
     str_kinase : str
-        The name of the kinase (e.g., "PIK3CA").
+        Kinase name (e.g. ``"PIK3CA"``, ``"JAK1_1"``) or bare gene symbol (``"JAK1"``).
     bool_lipid : bool, optional
-        Flag to indicate if lipid kinases should be classified as "Lipid" group, by default True.
+        Classify lipid kinases as ``"Lipid"``, by default True.
 
     Returns
     -------
     str | None
-        The adjudicated kinase group (e.g., "Lipid", "TK", "CMGC"), or None if the kinase is not found.
+        The group (e.g. ``"Lipid"``, ``"TK"``, ``"Multiple"``), or None if the kinase is
+        unknown.
     """
-    from mkt.schema.io_utils import deserialize_kinase_dict
+    from mkt.schema.constants import DICT_KINASE_GROUP, SET_LIPID_KINASE
 
-    DICT_KINASE = deserialize_kinase_dict(str_name="DICT_KINASE", bool_verbose=False)
-
-    if str_kinase not in DICT_KINASE:
-        return None
-    kinase = DICT_KINASE[str_kinase]
-    if kinase.is_lipid_kinase() and bool_lipid:
+    if bool_lipid and str_kinase in SET_LIPID_KINASE:
         return "Lipid"
-    return kinase.adjudicate_group()
+    return DICT_KINASE_GROUP.get(str_kinase)
 
 
 def return_klifs2msa_dict(
