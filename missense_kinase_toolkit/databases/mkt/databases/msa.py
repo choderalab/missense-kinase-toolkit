@@ -11,13 +11,13 @@ isoform/numbering differs from our canonical sequence are reconciled by local al
 
 import logging
 import os
-import re
 from collections import defaultdict
 
 from mkt.databases.io_utils import DataSource
 from mkt.schema.constants import DICT_MSA_ALIGNED_REGION, DICT_MSA_COL2LABEL
 from mkt.schema.io_utils import get_repo_root
 from mkt.schema.kinase_schema import MSA, KinCoRe, Provenance
+from mkt.schema.utils import split_domain_suffix
 
 logger = logging.getLogger(__name__)
 
@@ -259,7 +259,7 @@ def enrich_with_msa(
 
 def _base_accession(uniprot_id: str) -> str:
     """Strip the multi-KD ``_1``/``_2`` domain suffix to the bare UniProt accession."""
-    return re.sub(r"_\d+$", "", uniprot_id)
+    return split_domain_suffix(uniprot_id)[0]
 
 
 def _klifs_span(obj) -> tuple[int, int] | None:
