@@ -115,7 +115,8 @@ def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
     # enrichment steps fetch structures/transcripts; keep the splice test network-free
     monkeypatch.setattr(build_steps, "_ENRICH_STEPS", {})
 
-    pipeline.run(list_kinase=["EGFR"], path_objects=str(path_objects))
+    # no figures: they would render into the repo's images/ reports dir
+    pipeline.run(list_kinase=["EGFR"], path_objects=str(path_objects), bool_figs=False)
 
     after = deserialize_kinase_dict(str_path=str(path_tar), bool_verbose=False)
     # targeted entry updated, non-target untouched, count stable, objects dir cleaned
