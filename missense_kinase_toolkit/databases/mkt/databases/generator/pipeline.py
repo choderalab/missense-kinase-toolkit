@@ -14,7 +14,6 @@ import logging
 import os
 import shutil
 from dataclasses import dataclass
-from datetime import datetime
 from importlib.metadata import version
 from typing import Any
 
@@ -49,7 +48,7 @@ DEFAULT_PATH_REPORTS = "images"
 
 REPORTS_GROUP_SUBDIR = "dict_kinase"
 """str: Reports sub-directory grouping the whole-kinome ``KinaseInfo`` figures under
-``{path_reports}/dict_kinase/<datetime>/``."""
+``{path_reports}/dict_kinase/<generated_at>/``, one folder per archive version."""
 
 DATETIME_SUBDIR_FMT = "%Y.%m.%d.%H%M%S"
 """str: ``strftime`` format for the datetime-stamped reports subdirectory, applied to the
@@ -418,30 +417,34 @@ class Pipeline:
         logger.info(f"built {self.path_tar}\n{manifest.return_summary()}")
 
     def _dated_reports_dir(self) -> str:
-        """Return (and create) the reports subdir named by the archive's build timestamp.
+        """Return (and create) the reports subdir for this archive version.
 
-        Nested under :data:`REPORTS_GROUP_SUBDIR` and named by the manifest's ``generated_at``
-        (:data:`DATETIME_SUBDIR_FMT`), so a figures-only re-run over the same archive reuses the
-        dir across checkouts; manifest-less archives fall back to the tar's mtime.
+        Named by the manifest's ``generated_at`` (:data:`DATETIME_SUBDIR_FMT`) under
+        :data:`REPORTS_GROUP_SUBDIR`, so each archive version gets exactly one folder that
+        figures-only re-runs reuse.
 
         Returns
         -------
         str
             Absolute path ``{path_reports}/dict_kinase/{generated_at}`` (created if absent).
+
+        Raises
+        ------
+        ArgumentError
+            If the archive has no manifest (it has no version to name the folder by).
         """
+        from mkt.databases.plot_config import ArgumentError
+
         manifest = load_manifest(self.path_tar)
-        if manifest is not None:
-            dt_stamp = manifest.generated_at
-        else:
-            logger.warning(
-                f"no {STR_MANIFEST_FILENAME} in {self.path_tar}; "
-                "naming reports subdir from the tar mtime."
+        if manifest is None:
+            raise ArgumentError(
+                f"no {STR_MANIFEST_FILENAME} in {self.path_tar}; report folders are named by "
+                "the manifest's generated_at, so rebuild the archive with --data."
             )
-            dt_stamp = datetime.fromtimestamp(os.path.getmtime(self.path_tar))
         path_dated = os.path.join(
             self.path_reports,
             REPORTS_GROUP_SUBDIR,
-            dt_stamp.strftime(DATETIME_SUBDIR_FMT),
+            manifest.generated_at.strftime(DATETIME_SUBDIR_FMT),
         )
         os.makedirs(path_dated, exist_ok=True)
         return path_dated

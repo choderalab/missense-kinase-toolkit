@@ -153,11 +153,8 @@ def test_dated_reports_dir_uses_manifest(tmp_path):
     assert os.path.basename(path_before) == stamp
 
 
-def test_dated_reports_dir_falls_back_to_mtime(tmp_path, caplog):
-    """A manifest-less archive names the subdir from the tar mtime, with a warning."""
-    import os
-    from datetime import datetime
-
+def test_dated_reports_dir_requires_manifest(tmp_path):
+    """A manifest-less archive has no version to name a reports folder by, so it raises."""
     seed = deserialize_kinase_dict(list_ids=["ABL1"], bool_verbose=False)
     path_seed = tmp_path / "seed"
     path_tar = tmp_path / "KinaseInfo.tar.gz"
@@ -165,11 +162,9 @@ def test_dated_reports_dir_falls_back_to_mtime(tmp_path, caplog):
     create_tar_without_metadata(path_source=str(path_seed), filename_tar=str(path_tar))
 
     pl = pipeline.Pipeline(str(path_seed), str(tmp_path / "reports"), str(path_tar))
-    stamp = datetime.fromtimestamp(os.path.getmtime(path_tar)).strftime(
-        pipeline.DATETIME_SUBDIR_FMT
-    )
-    assert os.path.basename(pl._dated_reports_dir()) == stamp
-    assert "naming reports subdir from the tar mtime" in caplog.text
+    with pytest.raises(ArgumentError, match="rebuild the archive with --data"):
+        pl._dated_reports_dir()
+    assert not (tmp_path / "reports").exists()
 
 
 def test_reconstruct_dict_obj_groups_multidomain():
