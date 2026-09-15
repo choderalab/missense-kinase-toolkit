@@ -26,7 +26,7 @@ def dict_kinase():
 def mutable_kinase(dict_kinase):
     """Return a factory that deep-copies a single KinaseInfo for mutation.
 
-    Deep-copying one object (rather than the full 566-entry dict) keeps mutating
+    Deep-copying one object (rather than the full dict) keeps mutating
     tests fast while isolating changes from the session-scoped read-only dict.
 
     Parameters

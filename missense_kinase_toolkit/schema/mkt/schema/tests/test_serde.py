@@ -53,8 +53,8 @@ def serde_sample(dict_kinase):
     Covers a tyrosine kinase (ABL1), a CMGC kinase (CDK2), an atypical kinase
     (MTOR), and a Kincore-without-CIF entry (BUB1B), plus one multi-domain
     entry, one lipid kinase, and one pseudogene selected programmatically so the
-    sample exercises the schema's edge cases without round-tripping all 566
-    objects.
+    sample exercises the schema's edge cases without round-tripping the full
+    dict.
 
     Parameters
     ----------

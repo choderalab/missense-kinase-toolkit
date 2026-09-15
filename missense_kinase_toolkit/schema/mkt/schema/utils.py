@@ -121,6 +121,96 @@ def rsetattr(obj, attr, val):
     return setattr(rgetattr(obj, pre) if pre else obj, post, val)
 
 
+LIST_MANIFEST_EXTRA_PATHS = ["klifs.pocket_seq", "KLIFS2UniProtIdx", "KLIFS2UniProtSeq"]
+"""list[str]: Non-sub-model :class:`KinaseInfo` fields also counted in the build manifest."""
+
+
+def return_submodel_paths(model_cls=None, str_prefix: str = "") -> list[str]:
+    """Return dotted paths to every nested Pydantic sub-model field, depth-first.
+
+    ``Provenance`` fields are skipped; their versions are tallied by
+    :func:`return_manifest_tallies`.
+
+    Parameters
+    ----------
+    model_cls : type[BaseModel] | None, optional
+        Model to walk, by default None (:class:`KinaseInfo`).
+    str_prefix : str, optional
+        Prefix prepended to each path, by default "".
+
+    Returns
+    -------
+    list[str]
+        Dotted sub-model paths (e.g. ``"kincore.cif.sasa"``).
+    """
+    from typing import get_args, get_origin
+
+    from mkt.schema.kinase_schema import KinaseInfo, Provenance
+    from pydantic import BaseModel
+
+    if model_cls is None:
+        model_cls = KinaseInfo
+
+    list_paths = []
+    for name, field in model_cls.model_fields.items():
+        for sub_cls in get_args(field.annotation) or (field.annotation,):
+            if (
+                get_origin(sub_cls) is None
+                and isinstance(sub_cls, type)
+                and issubclass(sub_cls, BaseModel)
+                and sub_cls is not Provenance
+            ):
+                path = f"{str_prefix}{name}"
+                list_paths.append(path)
+                list_paths.extend(return_submodel_paths(sub_cls, f"{path}."))
+    return list_paths
+
+
+def return_manifest_tallies(
+    dict_kinase: dict[str, "KinaseInfo"],
+    list_paths: list[str] | None = None,
+) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
+    """Count non-None values and tally ``source.version`` per dotted path in one pass.
+
+    Shared by the manifest writer and the load-time check so the two cannot drift.
+
+    Parameters
+    ----------
+    dict_kinase : dict[str, KinaseInfo]
+        Kinase dictionary to tally.
+    list_paths : list[str] | None, optional
+        Paths to tally, by default None (all sub-models plus
+        :data:`LIST_MANIFEST_EXTRA_PATHS`).
+
+    Returns
+    -------
+    tuple[dict[str, int], dict[str, dict[str, int]]]
+        Path -> non-None count, and path -> version -> count (paths without a
+        versioned source omitted).
+    """
+    from collections import Counter
+
+    if list_paths is None:
+        list_paths = return_submodel_paths() + LIST_MANIFEST_EXTRA_PATHS
+
+    dict_counts = dict.fromkeys(list_paths, 0)
+    dict_versions = {path: Counter() for path in list_paths}
+    for obj in dict_kinase.values():
+        for path in list_paths:
+            if rgetattr(obj, path) is None:
+                continue
+            dict_counts[path] += 1
+            version = rgetattr(obj, f"{path}.source.version")
+            if version is not None:
+                dict_versions[path][version] += 1
+
+    return dict_counts, {
+        path: dict(sorted(counter.items()))
+        for path, counter in dict_versions.items()
+        if counter
+    }
+
+
 # adapted from: https://nathanielknight.ca/articles/consistent_random_uuids_in_python.html
 def random_uuid():
     """Generate a random UUID that allows to set a seed.

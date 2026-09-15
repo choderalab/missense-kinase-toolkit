@@ -26,7 +26,7 @@ baseline.
 - `missense_kinase_toolkit/schema/mkt/schema/tests/` — `test_<concern>.py`
   (imports, deserialize, adjudicate, serde, utils) with shared fixtures in
   `conftest.py`: session-scoped read-only `dict_kinase` and a single-object
-  `mutable_kinase(hgnc_name)` factory (deep-copies one entry, not all 566).
+  `mutable_kinase(hgnc_name)` factory (deep-copies one entry, not the full dict).
 - `missense_kinase_toolkit/databases/mkt/databases/tests/` — one
   `test_<module>.py` per source module, shared fixtures in `conftest.py`.
 - No tests for `ml/`, `experiments/`, or `app/`.
