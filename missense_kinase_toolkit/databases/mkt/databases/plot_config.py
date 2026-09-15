@@ -553,12 +553,60 @@ def load_task_config(
     return OmegaConf.to_object(merged)
 
 
+class ArgumentError(ValueError):
+    """An invalid combination of run flags or config values, raised before any work."""
+
+
 @dataclass
-class KinaseInfoFiguresConfig:
+class TaskConfig:
+    """Fields shared by every task section of a study YAML."""
+
+    output: OutputConfig = field(default_factory=OutputConfig)
+    """Output directory and image formats, by default :class:`OutputConfig` defaults."""
+
+
+@dataclass
+class DataFiguresConfig(TaskConfig):
+    """A task that builds a data artifact and renders matplotlib figures from it."""
+
+    data: bool = True
+    """Build the task's data before rendering; ``--data``/``--no-data`` overrides, by default True."""
+    matplotlib_rc: MatplotlibRCConfig = field(default_factory=MatplotlibRCConfig)
+    """Matplotlib rcParams for rendering, by default :class:`MatplotlibRCConfig` defaults."""
+
+    def resolve_data(self, bool_data: bool | None, bool_figs: bool) -> bool:
+        """Resolve whether to build the data; an explicit ``--data``/``--no-data`` wins.
+
+        Parameters
+        ----------
+        bool_data : bool | None
+            The ``--data``/``--no-data`` flag, or None when not passed.
+        bool_figs : bool
+            The ``--figs``/``--no-figs`` flag.
+
+        Returns
+        -------
+        bool
+            Whether to build the task's data.
+
+        Raises
+        ------
+        ArgumentError
+            If neither data nor figures would run.
+        """
+        bool_resolved = self.data if bool_data is None else bool_data
+        if not bool_resolved and not bool_figs:
+            raise ArgumentError(
+                "data is off (--no-data or config data: false) and --no-figs is set; "
+                "nothing to do."
+            )
+        return bool_resolved
+
+
+@dataclass
+class KinaseInfoFiguresConfig(DataFiguresConfig):
     """DICT_KINASE report figures -- the ``kinaseinfo`` task section."""
 
-    matplotlib_rc: MatplotlibRCConfig = field(default_factory=MatplotlibRCConfig)
-    output: OutputConfig = field(default_factory=OutputConfig)
     upset_plot: UpsetPlotConfig = field(default_factory=UpsetPlotConfig.preprint_2026)
     region_gap_violin: RegionGapViolinConfig = field(
         default_factory=RegionGapViolinConfig.preprint_2026
@@ -572,11 +620,9 @@ class KinaseInfoFiguresConfig:
 
 
 @dataclass
-class ConservationFiguresConfig:
+class ConservationFiguresConfig(DataFiguresConfig):
     """KLIFS conservation figures -- the ``conservation`` task section."""
 
-    matplotlib_rc: MatplotlibRCConfig = field(default_factory=MatplotlibRCConfig)
-    output: OutputConfig = field(default_factory=OutputConfig)
     conservation_tree: ConservationTreeConfig = field(
         default_factory=ConservationTreeConfig
     )
@@ -593,11 +639,9 @@ class ConservationFiguresConfig:
 
 
 @dataclass
-class DatasetFiguresConfig:
+class DatasetFiguresConfig(DataFiguresConfig):
     """Processed-dataset figures -- the ``dataset`` task section."""
 
-    matplotlib_rc: MatplotlibRCConfig = field(default_factory=MatplotlibRCConfig)
-    output: OutputConfig = field(default_factory=OutputConfig)
     family_colors: FamilyColorConfig = field(default_factory=FamilyColorConfig)
     col_kinase_colors: ColKinaseColorConfig = field(
         default_factory=ColKinaseColorConfig
@@ -632,8 +676,7 @@ class PymolViewConfig:
 
 
 @dataclass
-class PymolConfig:
+class PymolConfig(TaskConfig):
     """Batch PyMOL generation -- the ``pymol`` task section: a list of view specs."""
 
-    output: OutputConfig = field(default_factory=OutputConfig)
     views: list[PymolViewConfig] = field(default_factory=list)

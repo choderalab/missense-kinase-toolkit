@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Regenerate the mkt data artifacts and/or figures from one shared study config.
 #
-# usage: ./bin/regenerate_all.sh <config_file.yaml> [--figs-only TASKS] [--only TASKS] [--skip TASKS]
+# usage: ./bin/regenerate_all.sh <config_file.yaml> [--data TASKS] [--no-data TASKS]
+#                                [--only TASKS] [--skip TASKS]
 #   tasks: kinaseinfo | conservation | dataset | pymol   (comma-separated; "all" allowed)
-#   --figs-only TASKS   these tasks render figures only (no data rebuild); others do a full
-#                       regen. bare --figs-only means all. pymol has no data step (always figures).
-#   --only TASKS        run only these tasks.
-#   --skip TASKS        run everything except these tasks.
+#   --data TASKS      these tasks rebuild their data, even if the config sets <task>.data: false.
+#   --no-data TASKS   these tasks draw figures from their existing data.
+#                     a bare --data/--no-data means all. tasks in neither follow the config's
+#                     <task>.data (true if unset). pymol has no data step (always figures).
+#   --only TASKS      run only these tasks.
+#   --skip TASKS      run everything except these tasks.
 #
 # Each CLI reads its own task namespace from the shared YAML and writes figures to
 #   <output.subdir>/<config-stem>/<task>/
@@ -21,20 +24,27 @@ PATH_TO_VENV="missense_kinase_toolkit/VE/bin/activate"
 CREATE_VENV_SCRIPT="missense_kinase_toolkit/create_venv.sh"
 
 CONFIG=""
-FIGS_ONLY_TASKS=""
+DATA_TASKS=""
+NO_DATA_TASKS=""
 ONLY_TASKS=""
 SKIP_TASKS=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --figs-only)
-            # optional value; bare --figs-only == all
+        --data | --no-data)
+            # optional value; a bare flag means all tasks
+            flag="$1"
             if [ $# -ge 2 ] && [ "${2#--}" = "$2" ]; then
-                FIGS_ONLY_TASKS="$2"
+                tasks="$2"
                 shift 2
             else
-                FIGS_ONLY_TASKS="all"
+                tasks="all"
                 shift
+            fi
+            if [ "$flag" = "--data" ]; then
+                DATA_TASKS="$tasks"
+            else
+                NO_DATA_TASKS="$tasks"
             fi
             ;;
         --only)
@@ -53,7 +63,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -z "$CONFIG" ]; then
-    echo "Usage: $0 <config_file.yaml> [--figs-only TASKS] [--only TASKS] [--skip TASKS]"
+    echo "Usage: $0 <config_file.yaml> [--data TASKS] [--no-data TASKS] [--only TASKS] [--skip TASKS]"
     exit 1
 fi
 if [ ! -f "$CONFIG" ]; then
@@ -109,6 +119,13 @@ run_step() {
 }
 
 for task in $ALL_TASKS; do
+    if in_csv "$task" "$DATA_TASKS" && in_csv "$task" "$NO_DATA_TASKS"; then
+        echo "Task $task is listed in both --data and --no-data."
+        exit 1
+    fi
+done
+
+for task in $ALL_TASKS; do
     # --only wins; otherwise run everything not in --skip
     if [ -n "$ONLY_TASKS" ]; then
         in_csv "$task" "$ONLY_TASKS" || continue
@@ -118,12 +135,16 @@ for task in $ALL_TASKS; do
     fi
 
     cli=$(cli_for "$task")
-    # pymol has no data step; the figs-only flag only applies to the data-bearing tasks
-    if [ "$task" != "pymol" ] && in_csv "$task" "$FIGS_ONLY_TASKS"; then
-        run_step "$cli" --figs-only --config "$CONFIG"
-    else
-        run_step "$cli" --config "$CONFIG"
+    # pymol has no data step; the data flags only apply to the data-bearing tasks
+    data_flag=""
+    if [ "$task" != "pymol" ]; then
+        if in_csv "$task" "$NO_DATA_TASKS"; then
+            data_flag="--no-data"
+        elif in_csv "$task" "$DATA_TASKS"; then
+            data_flag="--data"
+        fi
     fi
+    run_step "$cli" ${data_flag:+"$data_flag"} --config "$CONFIG"
 done
 
 echo "=== regenerate_all.sh complete ==="
