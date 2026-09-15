@@ -6,7 +6,6 @@ with the build and figure work stubbed so no data is fetched or written.
 """
 
 import pytest
-import typer
 from mkt.databases.cli import generate_conservation_data as cli_conservation
 from mkt.databases.cli import generate_dataset_csv_files as cli_dataset
 from mkt.databases.cli import generate_kinaseinfo_objects as cli_kinaseinfo
@@ -27,10 +26,20 @@ RUNNER = CliRunner()
 
 
 @pytest.fixture(autouse=True)
-def _no_logging_config(monkeypatch):
-    """Keep each CLI from attaching log handlers to the runner's short-lived streams."""
+def _isolate_cli_logging(monkeypatch, caplog):
+    """Route CLI logs to ``caplog`` only, keeping them away from pytest's live-log handler.
+
+    With ``log_cli = true``, a WARNING+ record emitted inside ``CliRunner.invoke`` makes pytest
+    suspend/resume capture, which swaps out the runner's ``sys.stdout`` wrapper; the orphaned
+    wrapper is garbage-collected and closes the runner's buffer ("I/O operation on closed file").
+    """
     for cli in (cli_conservation, cli_dataset, cli_kinaseinfo):
         monkeypatch.setattr(cli, "configure_logging", lambda **kwargs: None)
+        monkeypatch.setattr(cli.logger, "propagate", False)
+        cli.logger.addHandler(caplog.handler)
+    yield
+    for cli in (cli_conservation, cli_dataset, cli_kinaseinfo):
+        cli.logger.removeHandler(caplog.handler)
 
 
 @pytest.mark.parametrize(
@@ -144,14 +153,13 @@ def test_conservation_cli_no_data_renders_figures(
 
 
 @pytest.mark.parametrize("cli", [cli_conservation, cli_dataset])
-def test_cli_no_data_no_figs_exits(monkeypatch, cli):
-    """``--no-data --no-figs`` exits non-zero before doing any work."""
+def test_cli_no_data_no_figs_exits(monkeypatch, caplog, cli):
+    """``--no-data --no-figs`` exits non-zero with a message, before doing any work."""
     calls = []
     monkeypatch.setattr(
         cli, "_run_figures", lambda config_path: calls.append("figures")
     )
-    # called directly: CliRunner closes its captured streams on a non-zero typer.Exit
-    with pytest.raises(typer.Exit) as excinfo:
-        cli.main(data=False, figs=False)
-    assert excinfo.value.exit_code == 1
+    result = RUNNER.invoke(cli.app, ["--no-data", "--no-figs"])
+    assert result.exit_code == 1
     assert calls == []
+    assert "nothing to do" in caplog.text
