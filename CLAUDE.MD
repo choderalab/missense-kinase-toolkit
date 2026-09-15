@@ -157,7 +157,7 @@ Key methods on `KinaseInfo`:
 - `adjudicate_group()` - priority: `kincore.fasta.group` > `kinhub.group` > `klifs.group`
 - `is_lipid_kinase()`, `is_pseudogene()` - classification helpers
 
-566 pre-built `KinaseInfo` objects are shipped as `KinaseInfo.tar.gz` (package data in `mkt.schema`), loaded in-memory via `deserialize_kinase_dict()`.
+Pre-built `KinaseInfo` objects are shipped as `KinaseInfo.tar.gz` (package data in `mkt.schema`; the entry count and per-source coverage are recorded in its `manifest.json`), loaded in-memory via `deserialize_kinase_dict()`.
 
 ### API Client Hierarchy (`mkt.databases.api_schema`)
 
