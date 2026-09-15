@@ -61,13 +61,14 @@ def render_alignment_plot(
     """
     list_text = [i for s in list_sequences for i in s]
 
-    # a missing track (all "-") gets a crimson label; color its cells to match so a missing
-    # track reads apart from a misaligned one
+    # a missing track (all "-") gets crimson label and residue text so it reads apart from a
+    # misaligned one; its cell background keeps the default gap color
     str_missing_color = "#DC143C"
     empty_sequences = [all(c == "-" for c in seq) for seq in list_sequences]
-    list_colors = [
-        [str_missing_color] * len(cols) if empty else cols
-        for cols, empty in zip(list_colors, empty_sequences)
+    text_colors = [
+        str_missing_color if empty else "black"
+        for seq, empty in zip(list_sequences, empty_sequences)
+        for _ in seq
     ]
     colors = list(chain(*list_colors))
 
@@ -91,6 +92,7 @@ def render_alignment_plot(
             recty=recty,
             text=list_text,
             colors=colors,
+            text_colors=text_colors,
         )
     )
 
@@ -118,7 +120,7 @@ def render_alignment_plot(
         text="text",
         text_align="center",
         text_baseline="bottom",
-        text_color="black",
+        text_color="text_colors",
         text_font_size=f"{str(font_size)}pt",
     )
     rects = Rect(
