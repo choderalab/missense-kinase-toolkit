@@ -42,16 +42,6 @@ def test_resolve_step_names_defaults_run_all():
     assert "alphafold" not in build_steps.resolve_step_names(skip=["alphafold"])
 
 
-def test_resolve_step_names_unknown_raises():
-    with pytest.raises(ValueError, match="unknown enrichment step"):
-        build_steps.resolve_step_names(only=["does_not_exist"])
-
-
-def test_resolve_step_names_mutual_exclusion_raises():
-    with pytest.raises(ValueError, match="not both"):
-        build_steps.resolve_step_names(only=["a"], skip=["b"])
-
-
 def test_resolve_step_names_only_and_skip_order(monkeypatch):
     """--only/--skip return steps in registry order regardless of arg order."""
     fake_registry = {name: (lambda ctx: None) for name in ("alpha", "beta", "gamma")}
@@ -235,11 +225,21 @@ def test_run_dispatches_source_only(monkeypatch, tmp_path):
     assert calls["partial"][0] == ["kincore"]
 
 
-def test_run_source_with_skip_raises(monkeypatch, tmp_path):
-    """--only <source> combined with --skip is rejected."""
-    monkeypatch.setattr(pipeline, "_resolve_dir", lambda *a: str(tmp_path))
-    with pytest.raises(ValueError, match="skip"):
-        pipeline.run(only=["kincore"], skip=["alphafold"])
+@pytest.mark.parametrize(
+    "kwargs,match",
+    [
+        ({"only": ["exon"], "skip": ["alphafold"]}, "mutually exclusive"),
+        ({"only": ["kincore"], "skip": ["alphafold"]}, "mutually exclusive"),
+        ({"only": ["notacomponent"]}, r"unknown --only .*'hgnc'.*'exon'"),
+        ({"skip": ["klifs"]}, "unknown --skip"),
+    ],
+)
+def test_run_rejects_invalid_only_skip(tmp_path, monkeypatch, kwargs, match):
+    """--only/--skip are validated once, before any work, against every valid component."""
+    pl, calls = _data_pipeline(tmp_path, monkeypatch)
+    with pytest.raises(ValueError, match=match):
+        pl.run(**kwargs)
+    assert calls == []
 
 
 def test_fetch_source_unknown_raises():

@@ -228,10 +228,13 @@ def resolve_step_names(
 ) -> list[str]:
     """Resolve the enrichment steps to run into registry order.
 
+    Names are validated by :meth:`mkt.databases.generator.pipeline.Pipeline.run`; unknown
+    names are ignored here.
+
     Parameters
     ----------
     only : list[str] | None, optional
-        Run only these steps (registry order); mutually exclusive with ``skip``.
+        Run only these steps; takes precedence over ``skip``.
     skip : list[str] | None, optional
         Skip these steps; all other steps run.
 
@@ -239,24 +242,7 @@ def resolve_step_names(
     -------
     list[str]
         Enrichment-step names to run, in registry order.
-
-    Raises
-    ------
-    ValueError
-        If both ``only`` and ``skip`` are given, or an unknown step is named.
     """
-    if only and skip:
-        raise ValueError("use --only or --skip, not both.")
-
-    unknown = {
-        name for name in (only or []) + (skip or []) if name not in _ENRICH_STEPS
-    }
-    if unknown:
-        raise ValueError(
-            f"unknown enrichment step(s): {sorted(unknown)}; "
-            f"valid steps: {list(_ENRICH_STEPS)}."
-        )
-
     if only:
         requested = set(only)
         return [name for name in _ENRICH_STEPS if name in requested]
