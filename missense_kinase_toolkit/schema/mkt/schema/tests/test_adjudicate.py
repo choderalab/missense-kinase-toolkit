@@ -69,8 +69,27 @@ def test_adjudicate_kd_large_gap_expands_by_default(dict_kinase):
     # PIK3CA Pfam start (798) gap to the KLIFS minimum (769) expands to the KLIFS index
     # (a lipid kinase, so no KinCoRe/MSA overrides Pfam here)
     assert dict_kinase["PIK3CA"].adjudicate_kd_start() == 769
-    # ADCK2 end gap (Pfam end 218 -> KLIFS max) expands to the KLIFS maximum
-    assert dict_kinase["ADCK2"].adjudicate_kd_end() == 497
+
+
+def test_adjudicate_kd_fallbacks(dict_kinase, mutable_kinase):
+    """Without KinCoRe, Pfam bounds single-domain entries and the KLIFS pocket is last."""
+    # ADCK2 has neither KinCoRe nor an intersecting Pfam hit, so KLIFS bounds the KD
+    obj = mutable_kinase("ADCK2")
+    obj.pfam = None
+    assert (obj.adjudicate_kd_start(), obj.adjudicate_kd_end()) == (285, 497)
+
+    # multi-domain entries skip Pfam (one span per protein) and fall back to KLIFS
+    obj = mutable_kinase("JAK1_2")
+    assert obj.pfam is not None
+    obj.kincore = None
+    bounds = obj._klifs_uniprot_idx_bounds()
+    assert (obj.adjudicate_kd_start(), obj.adjudicate_kd_end()) == bounds
+
+    # TEX14_2 has no source for its own domain, so it no longer overlaps TEX14_1
+    assert dict_kinase["TEX14_2"].adjudicate_kd_start() is None
+    assert dict_kinase["TEX14_2"].adjudicate_kd_end() is None
+    assert dict_kinase["TEX14_1"].adjudicate_kd_start() == 227
+    assert dict_kinase["TEX14_1"].adjudicate_kd_end() == 512
 
 
 def test_adjudicate_kd_finite_cutoff_returns_none(dict_kinase, caplog):
@@ -82,8 +101,8 @@ def test_adjudicate_kd_finite_cutoff_returns_none(dict_kinase, caplog):
     assert "Kinase domain start found for PIK3CA" in caplog.text
     assert "larger than cut-off 15" in caplog.text
 
-    # a large-but-finite cut-off still expands the ADCK2 end bound
-    assert dict_kinase["ADCK2"].adjudicate_kd_end(int_max_gap=2000) == 497
+    # a large-but-finite cut-off still expands the PIK3CA start bound
+    assert dict_kinase["PIK3CA"].adjudicate_kd_start(int_max_gap=2000) == 769
 
 
 def test_adjudicate_kd_verbose_logs_expansion(dict_kinase, caplog):

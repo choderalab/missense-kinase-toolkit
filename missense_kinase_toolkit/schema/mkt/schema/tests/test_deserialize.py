@@ -59,7 +59,7 @@ def test_dict_counts(dict_kinase):
     assert n_cif == 437
 
     n_pfam = len([i.hgnc_name for i in dict_kinase.values() if i.pfam is not None])
-    assert n_pfam == 533
+    assert n_pfam == 518
 
     n_klif2uniprot = len(
         [i.hgnc_name for i in dict_kinase.values() if i.KLIFS2UniProtIdx is not None]
