@@ -117,8 +117,14 @@ def main():
         f"Extracting missense kinase data from {args.cbioportalInstance} for study {args.studyId}..."
     )
 
-    kinase_missense_muts = cbioportal.KinaseMissenseMutations(args.studyId)
-    df_kin_mis = kinase_missense_muts.get_kinase_missense_mutations()
+    # the mutations are extracted once, on construction
+    kinase_missense_muts = cbioportal.KinaseMissenseMutations(study_id=args.studyId)
+    df_kin_mis = kinase_missense_muts._df_filter
+    if df_kin_mis is None:
+        logger.error(
+            f"No kinase missense mutations extracted for study {args.studyId}."
+        )
+        exit(1)
 
     if args.outputPath:
         if not os.path.exists(args.outputPath):

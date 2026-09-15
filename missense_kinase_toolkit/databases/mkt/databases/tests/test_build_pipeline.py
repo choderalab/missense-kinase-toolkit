@@ -189,6 +189,42 @@ def test_reconstruct_dict_obj_groups_multidomain():
     assert len(dict_obj["kincore"]["P23458"]) == 2  # JAK1 two kinase domains
 
 
+def test_reconstruct_dict_obj_keeps_later_domain_pfam():
+    """A Pfam hit dropped from ``_1`` but kept on ``_2`` still reaches the rebuild."""
+    seed = deserialize_kinase_dict(list_ids=["JAK1_1", "JAK1_2"], bool_verbose=False)
+    if not {"JAK1_1", "JAK1_2"} <= set(seed):
+        pytest.skip("packaged KinaseInfo.tar.gz missing JAK1")
+
+    seed = {k: copy.deepcopy(seed[k]) for k in ["JAK1_1", "JAK1_2"]}
+    seed["JAK1_1"].pfam = None
+    assert seed["JAK1_2"].pfam is not None
+    dict_obj = pipeline._reconstruct_dict_obj(seed)
+    assert dict_obj["pfam"]["P23458"] is seed["JAK1_2"].pfam
+
+
+def test_drop_nonintersecting_pfam():
+    """Pfam survives if it overlaps KinCoRe/KLIFS, or is the sole source of a single domain."""
+    from mkt.databases.kinase_schema import drop_nonintersecting_pfam
+
+    seed = deserialize_kinase_dict(list_ids=["EGFR", "JAK1_1"], bool_verbose=False)
+    if not {"EGFR", "JAK1_1"} <= set(seed):
+        pytest.skip("packaged KinaseInfo.tar.gz missing EGFR/JAK1")
+    pfam = seed["EGFR"].pfam
+
+    def _kept(hgnc_name, start, end, bool_strip=False):
+        obj = copy.deepcopy(seed[hgnc_name])
+        obj.pfam = pfam.model_copy(update={"start": start, "end": end})
+        if bool_strip:
+            obj.kincore, obj.KLIFS2UniProtIdx = None, None
+        return drop_nonintersecting_pfam(obj).pfam is not None
+
+    assert _kept("EGFR", pfam.start, pfam.end)  # overlaps KinCoRe/KLIFS
+    assert not _kept("EGFR", 1, 10)  # single-domain, disjoint
+    assert _kept("EGFR", 1, 10, bool_strip=True)  # single-domain, Pfam only
+    assert not _kept("JAK1_1", 1, 10)  # multi-domain, disjoint
+    assert not _kept("JAK1_1", 1, 10, bool_strip=True)  # multi-domain, Pfam only
+
+
 def test_run_dispatches_source_only(monkeypatch, tmp_path):
     """--only <source> routes to the source-rebuild path, not full regen / per-entry."""
     calls = {}

@@ -36,6 +36,7 @@ from mkt.schema.io_utils import (
     load_manifest,
     serialize_kinase_dict,
 )
+from mkt.schema.utils import split_domain_suffix
 
 logger = logging.getLogger(__name__)
 
@@ -128,8 +129,10 @@ def _reconstruct_dict_obj(dict_kinase: dict[str, Any]) -> dict[str, Any]:
         first = list_obj[0]
         dict_obj[Source.hgnc][base] = first.hgnc_name.split("_")[0]
         dict_obj[Source.uniprot][base] = first.uniprot
-        if first.pfam is not None:
-            dict_obj[Source.pfam][base] = first.pfam
+        # pfam may be dropped from one domain (drop_nonintersecting_pfam); keep any survivor
+        pfam = next((o.pfam for o in list_obj if o.pfam is not None), None)
+        if pfam is not None:
+            dict_obj[Source.pfam][base] = pfam
         dict_obj[Source.kinhub][base] = [o.kinhub for o in list_obj]
         dict_obj[Source.klifs][base] = [o.klifs for o in list_obj]
         dict_obj[Source.kincore][base] = [o.kincore for o in list_obj]
@@ -176,17 +179,14 @@ def _strip_kd_suffix(str_id: str) -> str:
     Parameters
     ----------
     str_id : str
-        HGNC name or UniProt ID, possibly suffixed with ``_<digit>``.
+        HGNC name or UniProt ID, possibly suffixed with ``_<digits>``.
 
     Returns
     -------
     str
-        The base id/name with any trailing ``_<digit>`` removed.
+        The base id/name with any trailing ``_<digits>`` removed.
     """
-    parts = str_id.rsplit("_", 1)
-    if len(parts) == 2 and parts[1].isdigit():
-        return parts[0]
-    return str_id
+    return split_domain_suffix(str_id)[0]
 
 
 def _resolve_targets(

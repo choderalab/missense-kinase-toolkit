@@ -2,7 +2,8 @@
 
 Builds on :class:`cBioPortal`/:class:`cBioPortalQuery` to pull study, mutation,
 treatment, and gene-panel data; :class:`KinaseMissenseMutations` extracts missense
-mutations restricted to kinase genes.
+mutations restricted to kinase genes, reconciled onto canonical UniProt coordinates and
+named by the kinase domain that contains them.
 """
 
 import logging
@@ -19,13 +20,20 @@ from bravado.client import SwaggerClient
 from mkt.databases import properties
 from mkt.databases.api_schema import APIKeySwaggerClient
 from mkt.databases.config import get_cbioportal_instance, maybe_get_cbioportal_token
+from mkt.databases.constants import normalize_build
 from mkt.databases.io_utils import (
     parse_iterabc2dataframe,
     return_kinase_dict,
     save_dataframe_to_csv,
 )
+from mkt.databases.isoform import (
+    TUPLE_DEFAULT_TIERS,
+    CanonicalReconciler,
+    SourceTier,
+    select_domain_name,
+)
 from mkt.databases.utils import add_one_hot_encoding_to_dataframe
-from mkt.schema.utils import TQDM_BAR_FORMAT
+from mkt.schema.utils import TQDM_BAR_FORMAT, split_domain_suffix
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -457,6 +465,215 @@ class StructuralVariant(StudyData):
             return None
 
 
+def apply_gene_replacements(
+    dict_hgnc2uniprot: dict[str, str | None],
+    dict_kinase: dict[str, object],
+    dict_replace: dict[str, str],
+) -> dict[str, str | None]:
+    """Point renamed cBioPortal genes at their mkt kinase's UniProt accession.
+
+    A replacement (e.g. ``STK19 -> WHR1``) applies only when the target kinase exists.
+
+    Parameters
+    ----------
+    dict_hgnc2uniprot : dict[str, str | None]
+        cBioPortal gene symbol -> UniProt accession from HGNC.
+    dict_kinase : dict[str, KinaseInfo]
+        Kinase name -> kinase object.
+    dict_replace : dict[str, str]
+        cBioPortal gene symbol -> mkt kinase name.
+
+    Returns
+    -------
+    dict[str, str | None]
+        A copy of ``dict_hgnc2uniprot`` with the applicable replacements.
+    """
+    dict_out = dict(dict_hgnc2uniprot)
+    for cbio_name, mkt_name in dict_replace.items():
+        if cbio_name not in dict_out:
+            continue
+        if mkt_name not in dict_kinase:
+            logger.info(
+                f"Skipping {cbio_name} -> {mkt_name} replacement; "
+                f"{mkt_name} is not in DICT_KINASE."
+            )
+            continue
+        dict_out[cbio_name] = split_domain_suffix(dict_kinase[mkt_name].uniprot_id)[0]
+    return dict_out
+
+
+def return_gene2names(
+    dict_hgnc2uniprot: dict[str, str | None],
+    dict_kinase: dict[str, object],
+) -> dict[str, list[str]]:
+    """Map cBioPortal gene symbols to their ordered mkt kinase names.
+
+    A symbol matches every kinase whose base UniProt accession equals the symbol's, so a
+    multi-domain gene maps to all its domains (e.g. ``JAK1 -> ["JAK1_1", "JAK1_2"]``).
+
+    Parameters
+    ----------
+    dict_hgnc2uniprot : dict[str, str | None]
+        cBioPortal gene symbol -> UniProt accession.
+    dict_kinase : dict[str, KinaseInfo]
+        Kinase name -> kinase object.
+
+    Returns
+    -------
+    dict[str, list[str]]
+        Gene symbol -> sorted kinase names; symbols matching no kinase are omitted.
+    """
+    dict_accession2names: dict[str, list[str]] = {}
+    for name, obj in dict_kinase.items():
+        accession = split_domain_suffix(obj.uniprot_id)[0]
+        dict_accession2names.setdefault(accession, []).append(name)
+    return {
+        symbol: sorted(dict_accession2names[accession])
+        for symbol, accession in dict_hgnc2uniprot.items()
+        if accession in dict_accession2names
+    }
+
+
+def return_gene2seq(
+    dict_gene2names: dict[str, list[str]],
+    dict_kinase: dict[str, object],
+) -> dict[str, str]:
+    """Return each gene's UniProt canonical sequence, shared by all its domains.
+
+    Parameters
+    ----------
+    dict_gene2names : dict[str, list[str]]
+        Gene symbol -> kinase names (see :func:`return_gene2names`).
+    dict_kinase : dict[str, KinaseInfo]
+        Kinase name -> kinase object.
+
+    Returns
+    -------
+    dict[str, str]
+        Gene symbol -> canonical sequence.
+
+    Raises
+    ------
+    ValueError
+        If a gene's domains carry different canonical sequences, which would make the
+        residue check in reconciliation unreliable.
+    """
+    dict_out = {}
+    for symbol, list_names in dict_gene2names.items():
+        set_seq = {dict_kinase[name].uniprot.canonical_seq for name in list_names}
+        if len(set_seq) != 1:
+            raise ValueError(
+                f"{symbol} domains {list_names} have different canonical sequences."
+            )
+        dict_out[symbol] = set_seq.pop()
+    return dict_out
+
+
+def return_hgvsg_list(df: pd.DataFrame, str_build: str) -> list[str | None]:
+    """Return a Genome Nexus genomic HGVS string per single-base substitution row.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        cBioPortal mutations with ``chr``, ``startPosition``, ``referenceAllele``,
+        ``variantAllele`` and (optionally) ``ncbiBuild``.
+    str_build : str
+        Genome build the strings are valid for; rows on another build get None. Builds
+        are compared after alias normalization (``"37"``/``"hg19"`` mean GRCh37).
+
+    Returns
+    -------
+    list[str | None]
+        ``"7:g.140453136A>T"``-style strings, or None for non-SNV rows, rows on another
+        build, or when the coordinate columns are missing.
+    """
+    list_cols = ["chr", "startPosition", "referenceAllele", "variantAllele"]
+    if not set(list_cols) <= set(df.columns):
+        return [None] * len(df)
+    str_canonical = normalize_build(str_build)
+    list_build = (
+        df["ncbiBuild"].tolist() if "ncbiBuild" in df.columns else [str_build] * len(df)
+    )
+    list_hgvsg = []
+    for chrom, start, ref, alt, build in zip(
+        df["chr"],
+        df["startPosition"],
+        df["referenceAllele"],
+        df["variantAllele"],
+        list_build,
+    ):
+        bool_snv = (
+            str_canonical is not None
+            and normalize_build(build) == str_canonical
+            and isinstance(ref, str)
+            and isinstance(alt, str)
+            and len(ref) == len(alt) == 1
+            and ref in "ACGT"
+            and alt in "ACGT"
+            and pd.notna(start)
+        )
+        list_hgvsg.append(f"{chrom}:g.{int(start)}{ref}>{alt}" if bool_snv else None)
+    return list_hgvsg
+
+
+def assign_mkt_name(
+    df: pd.DataFrame,
+    dict_gene2names: dict[str, list[str]],
+    dict_kinase: dict[str, object],
+    col_gene: str = "gene_hugoGeneSymbol",
+    col_idx: str = "uniprot_idx",
+) -> pd.DataFrame:
+    """Add ``mkt_name`` and ``in_kinase_domain`` per mutation.
+
+    A multi-domain gene resolves to the domain whose adjudicated kinase-domain span holds
+    the canonical position; a position outside every domain keeps the mkt base name.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Mutations with a gene symbol and canonical position column.
+    dict_gene2names : dict[str, list[str]]
+        Gene symbol -> kinase names (see :func:`return_gene2names`).
+    dict_kinase : dict[str, KinaseInfo]
+        Kinase name -> kinase object.
+    col_gene : str, optional
+        Gene symbol column, by default "gene_hugoGeneSymbol".
+    col_idx : str, optional
+        Canonical position column, by default "uniprot_idx".
+
+    Returns
+    -------
+    pd.DataFrame
+        A copy of ``df`` with ``mkt_name`` and ``in_kinase_domain`` (None where the gene
+        is unknown or the position is missing).
+    """
+    dict_name2span = {
+        name: (
+            dict_kinase[name].adjudicate_kd_start(),
+            dict_kinase[name].adjudicate_kd_end(),
+        )
+        for list_names in dict_gene2names.values()
+        for name in list_names
+    }
+    list_mkt_name, list_in_kd = [], []
+    for symbol, idx in zip(df[col_gene], df[col_idx]):
+        list_names = dict_gene2names.get(symbol)
+        if not list_names:
+            list_mkt_name.append(None)
+            list_in_kd.append(None)
+            continue
+        str_base = split_domain_suffix(list_names[0])[0]
+        name, bool_in_kd = select_domain_name(
+            str_base, list_names, dict_name2span, None if pd.isna(idx) else int(idx)
+        )
+        list_mkt_name.append(name)
+        list_in_kd.append(bool_in_kd)
+    df = df.copy()
+    df["mkt_name"] = list_mkt_name
+    df["in_kinase_domain"] = list_in_kd
+    return df
+
+
 @dataclass
 class KinaseMissenseMutations(Mutations):
     """Class to get kinase mutations from a cBioPortal study."""
@@ -467,6 +684,18 @@ class KinaseMissenseMutations(Mutations):
     """BLOSUM matrix to use for mutation analysis; default is "BLOSUM80"."""
     pathfile_filter: str | None = None
     """Path to CSV file for filtered kinase missense mutations; default is None."""
+    bool_drop_mismatch: bool = False
+    """Use the legacy filter that drops every mutation of a gene with any canonical-residue mismatch instead of per-row reconciliation, by default False."""
+    tuple_sources: tuple[SourceTier, ...] = TUPLE_DEFAULT_TIERS
+    """Reconciliation tiers tried in order, by default direct, mskcc, refseq, genomenexus."""
+    str_isoform_override: str = "mskcc"
+    """Isoform-override source for the transcript tier, by default "mskcc"."""
+    str_build: str = "GRCh37"
+    """Genome build for transcript and variant lookups; only rows on this build get a Genome Nexus variant, by default "GRCh37"."""
+    bool_drop_unreconciled: bool = True
+    """Drop rows whose position could not be reconciled onto the canonical sequence, by default True."""
+    str_col_gene: str = "mkt_name"
+    """Column :meth:`generate_pivot_table` groups mutations by, by default "mkt_name"."""
     _df_filter: pd.DataFrame | None = field(init=False, default=None)
     """DataFrame of kinase missense mutations; None if DataFrame could not be created (post-init)."""
 
@@ -583,161 +812,210 @@ class KinaseMissenseMutations(Mutations):
             str_errors = "\n".join(list_err)
             logger.error(f"Errors retrieving HGNC gene names:\n{str_errors}")
 
-        # replace any HGNC gene names in the dictionary
-        for cbio_name, mkt_name in self.dict_replace.items():
-            if cbio_name in dict_hgnc2uniprot:
-                dict_hgnc2uniprot[cbio_name] = dict_kinase[mkt_name].uniprot_id
-
-        return dict_hgnc2uniprot
+        return apply_gene_replacements(
+            dict_hgnc2uniprot, dict_kinase, self.dict_replace
+        )
 
     def get_kinase_missense_mutations(
         self,
-        bool_save=False,
-    ) -> None | pd.DataFrame:
-        """Get cBioPortal kinase mutations and optionally save as a CSV file.
+        bool_save: bool = False,
+    ) -> pd.DataFrame | None:
+        """Get kinase missense mutations on canonical UniProt coordinates.
 
         Parameters
         ----------
-        bool_save : bool
-            Save cBioPortal kinase mutations as a CSV file if True
+        bool_save : bool, optional
+            Also save the mutations as a CSV file, by default False.
 
         Returns
         -------
         pd.DataFrame | None
-            DataFrame of kinase mutations if successful, otherwise None
-
+            Mutations with ``uniprot_idx``, ``reconcile_source``, ``mkt_name``,
+            ``in_kinase_domain`` and region annotations, or None if the study has no
+            mutation data.
         """
+        if self._df is None:
+            logger.error(f"No mutation data for study {self.study_id}.")
+            return None
 
-        col_hgnc = self.return_adjusted_colname("hugoGeneSymbol")
+        col_gene = self.return_adjusted_colname("hugoGeneSymbol")
+        df_missense = self.filter_single_aa_missense_mutations(self._df.copy())
 
-        # filter for single amino acid missense mutations
-        df = self._df.copy()  # defensive copy to avoid modifying original DataFrame
-        df_muts_missense = self.filter_single_aa_missense_mutations(df)
-
-        # extract the HGNC gene names from the mutations
         dict_hgnc2uniprot = self.query_hgnc_gene_names(
-            list_hgnc=df_muts_missense[col_hgnc].tolist(),
+            list_hgnc=df_missense[col_gene].tolist(),
             dict_kinase=DICT_KINASE,
         )
+        dict_gene2names = return_gene2names(dict_hgnc2uniprot, DICT_KINASE)
+        dict_gene2seq = return_gene2seq(dict_gene2names, DICT_KINASE)
 
-        # hgnc2uniprot filtered to mutations in the kinase dictionary
-        dict_hgnc2uniprot_kin = {
-            k: v
-            for k, v in dict_hgnc2uniprot.items()
-            if v in [v.uniprot_id for v in DICT_KINASE.values()]
-        }
-
-        # dict_kinase is filtered to only include kinases with mutations
-        dict_kinase_cbio = {
-            k: v
-            for k, v in DICT_KINASE.items()
-            if v.uniprot_id.split("_")[0] in dict_hgnc2uniprot_kin.values()
-        }
-
-        # replace any mismatched gene names in the dictionary
-        for cbio_name, mkt_name in self.dict_replace.items():
-            if mkt_name in dict_kinase_cbio:
-                dict_kinase_cbio[cbio_name] = dict_kinase_cbio.pop(mkt_name)
-
-        # BRD4 and STK19 don't have KLIFS - if want to remove them, uncomment below
-        # dict_kinase_cbio = {
-        #     k: v for k, v in dict_kinase_cbio.items()
-        #     if v.KLIFS2UniProtIdx is not None
-        # }
-
-        # filter mutations for kinase genes
-        df_muts_missense_kin = df_muts_missense.loc[
-            df_muts_missense[col_hgnc].isin(dict_kinase_cbio.keys()), :
+        df_kinase = df_missense.loc[
+            df_missense[col_gene].isin(dict_gene2names.keys()), :
         ].reset_index(drop=True)
 
-        # remove mutations with mismatches to canonical Uniprot sequence
-        df_muts_missense_kin_filtered = self.remove_mismatched_uniprot_mutations(
-            df_muts_missense_kin,
-            dict_in=dict_kinase_cbio,
-        )
+        if self.bool_drop_mismatch:
+            df_kinase = self.remove_mismatched_uniprot_mutations(
+                df_kinase, dict_gene2seq
+            )
+        else:
+            df_kinase = self.reconcile_uniprot_positions(df_kinase, dict_gene2seq)
 
-        df_muts_missense_kin_filtered_annotated = self.annotate_kinase_regions(
-            df=df_muts_missense_kin_filtered,
-            dict_in=dict_kinase_cbio,
+        df_kinase = assign_mkt_name(
+            df_kinase, dict_gene2names, DICT_KINASE, col_gene=col_gene
         )
+        df_kinase = self.annotate_kinase_regions(df=df_kinase, dict_kinase=DICT_KINASE)
 
-        if df_muts_missense_kin_filtered_annotated is not None:
-            if bool_save:
-                filename = f"{self.study_id}_kinase_missense_mutations.csv"
-                save_dataframe_to_csv(df_muts_missense_kin_filtered_annotated, filename)
-            else:
-                return df_muts_missense_kin_filtered_annotated
+        if bool_save:
+            filename = f"{self.study_id}_kinase_missense_mutations.csv"
+            save_dataframe_to_csv(df_kinase, filename)
+        return df_kinase
 
     def remove_mismatched_uniprot_mutations(
         self,
         df: pd.DataFrame,
-        dict_in: dict,
+        dict_gene2seq: dict[str, str],
     ) -> pd.DataFrame:
-        """Remove mutations with mismatches to canonical Uniprot sequence.
+        """Drop every mutation of any gene with a mismatch to its canonical sequence.
+
+        Legacy alternative to :meth:`reconcile_uniprot_positions`; emits the same
+        ``uniprot_idx`` and ``reconcile_source`` columns, with every kept row ``"direct"``.
 
         Parameters
         ----------
         df : pd.DataFrame
-            DataFrame of mutations
-        dict_in : dict
-            Dictionary of HGNC gene names to Uniprot IDs
+            Kinase missense mutations.
+        dict_gene2seq : dict[str, str]
+            Gene symbol -> UniProt canonical sequence.
 
         Returns
         -------
         pd.DataFrame
-            DataFrame of mutations with mismatched Uniprot IDs removed
-
+            Mutations of genes whose every reported residue matches the canonical.
         """
-        list_mismatch, list_err = [], []
-
-        for _, row in df.iterrows():
-
-            hgnc_name = row[self.return_adjusted_colname("hugoGeneSymbol")]
-            codon = row["proteinChange"]
-            sample_id = row["sampleId"]
+        col_gene = self.return_adjusted_colname("hugoGeneSymbol")
+        set_mismatch = set()
+        for symbol, codon in zip(df[col_gene], df["proteinChange"]):
             idx = self.try_except_middle_int(codon)
+            seq = dict_gene2seq.get(symbol)
+            if seq is None or idx is None or not 1 <= idx <= len(seq):
+                set_mismatch.add(symbol)
+            elif seq[idx - 1] != codon[0]:
+                set_mismatch.add(symbol)
 
-            try:
-                if dict_in[hgnc_name].uniprot.canonical_seq[idx - 1] != codon[0]:
-                    list_mismatch.append(f"{sample_id}_{hgnc_name}_{codon}")
-            except Exception as e:
-                list_err.append(f"{sample_id}_{hgnc_name}_{codon}: {e}")
-
-        # TODO: check non-mismatches for list_set_kinase_mismatch gene_hugoGeneSymbol
-        set_kinase_mismatch = {i.split("_")[1] for i in list_mismatch + list_err}
-        if len(set_kinase_mismatch) > 0:
-            str_errors = "\n".join(set_kinase_mismatch)
+        if set_mismatch:
             logger.error(
-                "HGNC gene names of kinases with mismatches between "
-                f"cBioPortal and canonical Uniprot sequences:\n{str_errors}"
+                "Dropping every mutation of kinases with a mismatch between cBioPortal "
+                f"and canonical UniProt sequences: {sorted(set_mismatch)}"
             )
-        df_filtered = df.loc[
-            ~df["gene_hugoGeneSymbol"].isin(set_kinase_mismatch), :
-        ].reset_index(drop=True)
+        df = df.loc[~df[col_gene].isin(set_mismatch), :].reset_index(drop=True)
+        df["uniprot_idx"] = pd.array(
+            [self.try_except_middle_int(codon) for codon in df["proteinChange"]],
+            dtype="Int64",
+        )
+        df["reconcile_source"] = str(SourceTier.direct)
+        return df
 
-        return df_filtered
+    def reconcile_uniprot_positions(
+        self,
+        df: pd.DataFrame,
+        dict_gene2seq: dict[str, str],
+    ) -> pd.DataFrame:
+        """Reconcile each mutation's position onto the canonical UniProt sequence.
+
+        Runs :class:`~mkt.databases.isoform.CanonicalReconciler` over the rows; rows that
+        cannot be reconciled are logged per gene and, with :attr:`bool_drop_unreconciled`,
+        dropped individually.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Kinase missense mutations.
+        dict_gene2seq : dict[str, str]
+            Gene symbol -> UniProt canonical sequence.
+
+        Returns
+        -------
+        pd.DataFrame
+            Mutations with ``uniprot_idx`` and ``reconcile_source`` added.
+        """
+        col_gene = self.return_adjusted_colname("hugoGeneSymbol")
+        list_codon = df["proteinChange"].tolist()
+        list_refseq = (
+            df["refseqMrnaId"].tolist() if "refseqMrnaId" in df.columns else None
+        )
+
+        reconciler = CanonicalReconciler(
+            dict_canonical=dict_gene2seq,
+            tuple_sources=self.tuple_sources,
+            str_override=self.str_isoform_override,
+            str_build=self.str_build,
+        )
+        list_idx, list_source = reconciler.reconcile_many(
+            df[col_gene].tolist(),
+            [self.try_except_middle_int(codon) for codon in list_codon],
+            [
+                codon[0].upper() if isinstance(codon, str) and codon else None
+                for codon in list_codon
+            ],
+            list_refseq=list_refseq,
+            list_hgvsg=return_hgvsg_list(df, self.str_build),
+        )
+
+        df = df.copy()
+        df["uniprot_idx"] = pd.array(list_idx, dtype="Int64")
+        df["reconcile_source"] = [None if s is None else str(s) for s in list_source]
+
+        mask_drop = df["uniprot_idx"].isna()
+        if mask_drop.any():
+            df_drop = df.loc[mask_drop]
+            list_summary = [
+                f"{symbol} (n={len(group)}, residues {group['proteinChange'].map(self.try_except_middle_int).min()}-"
+                f"{group['proteinChange'].map(self.try_except_middle_int).max()})"
+                for symbol, group in df_drop.groupby(col_gene)
+            ]
+            logger.warning(
+                f"{int(mask_drop.sum())} of {len(df)} mutations could not be reconciled "
+                f"onto canonical UniProt sequences: {', '.join(list_summary)}"
+            )
+            if self.bool_drop_unreconciled:
+                df = df.loc[~mask_drop, :].reset_index(drop=True)
+        return df
 
     def annotate_kinase_regions(
         self,
         df: pd.DataFrame,
-        dict_in: dict,
+        dict_kinase: dict[str, object],
     ) -> pd.DataFrame:
-        """Annotate kinase regions in a DataFrame of mutations.
+        """Annotate KLIFS region, KinCoRe domain membership and residue-change properties.
+
+        Keyed on ``mkt_name`` and the canonical ``uniprot_idx``; a row whose ``mkt_name``
+        is not a kinase entry (a bare multi-domain gene symbol) gets no region annotation.
 
         Parameters
         ----------
         df : pd.DataFrame
-            DataFrame of mutations
-        dict_in : dict
-            Dictionary of HGNC gene names to KinaseInfo objects
+            Mutations with ``mkt_name``, ``uniprot_idx`` and ``proteinChange``.
+        dict_kinase : dict[str, KinaseInfo]
+            Kinase name -> kinase object.
 
         Returns
         -------
         pd.DataFrame
-            DataFrame of mutations with kinase regions annotated
-
+            Mutations with ``klifs_region``, ``kincore_kd``, ``blosum_penalty`` and
+            one-hot charge/polarity/volume columns.
         """
         mx_blosum = Align.substitution_matrices.load(self.str_blosom)
+
+        # reverse KLIFS maps built once per kinase rather than scanned per row
+        dict_idx2klifs: dict[str, dict[int, str]] = {}
+        for name in df["mkt_name"].dropna().unique():
+            obj = dict_kinase.get(name)
+            if obj is None or obj.KLIFS2UniProtIdx is None:
+                continue
+            dict_rev: dict[int, str] = {}
+            for region, idx_region in obj.KLIFS2UniProtIdx.items():
+                if idx_region is not None:
+                    dict_rev.setdefault(idx_region, region)
+            dict_idx2klifs[name] = dict_rev
 
         dict_out = {
             "klifs_region": [],
@@ -747,41 +1025,30 @@ class KinaseMissenseMutations(Mutations):
             "polarity": [],
             "volume": [],
         }
-        for _, row in df.iterrows():
-
-            hgnc_name = row[self.return_adjusted_colname("hugoGeneSymbol")]
-            codon = row["proteinChange"]
-            idx = self.try_except_middle_int(codon)
+        for name, idx, codon in zip(
+            df["mkt_name"], df["uniprot_idx"], df["proteinChange"]
+        ):
             aa_from = codon[0].upper()
             aa_to = codon[-1].upper()
+            obj = dict_kinase.get(name)
+            idx = None if pd.isna(idx) else int(idx)
 
             # KLIFS
-            if dict_in[hgnc_name].KLIFS2UniProtIdx is None:
-                dict_out["klifs_region"].append(None)
-            elif idx in dict_in[hgnc_name].KLIFS2UniProtIdx.values():
-                klifs_region = [
-                    k
-                    for k, v in dict_in[hgnc_name].KLIFS2UniProtIdx.items()
-                    if v == idx
-                ][0]
-                dict_out["klifs_region"].append(klifs_region)
-            else:
-                dict_out["klifs_region"].append(None)
+            dict_rev = dict_idx2klifs.get(name)
+            dict_out["klifs_region"].append(
+                dict_rev.get(idx) if dict_rev is not None and idx is not None else None
+            )
 
             # KinCoRe (an MSA-only shell has no FASTA -> treat as no KinCoRe KD info)
-            if (
-                dict_in[hgnc_name].kincore is None
-                or dict_in[hgnc_name].kincore.fasta is None
-            ):
+            fasta = (
+                obj.kincore.fasta
+                if obj is not None and obj.kincore is not None
+                else None
+            )
+            if fasta is None or idx is None:
                 dict_out["kincore_kd"].append(None)
-            elif (
-                dict_in[hgnc_name].kincore.fasta.start
-                <= idx
-                <= dict_in[hgnc_name].kincore.fasta.end
-            ):
-                dict_out["kincore_kd"].append(True)
             else:
-                dict_out["kincore_kd"].append(False)
+                dict_out["kincore_kd"].append(fasta.start <= idx <= fasta.end)
 
             # BLOSUM penalty
             dict_out["blosum_penalty"].append(mx_blosum[aa_from, aa_to])
@@ -843,12 +1110,19 @@ class KinaseMissenseMutations(Mutations):
 
         dict_out = dict.fromkeys(["dataframe", "title"])
         dict_out["title"] = "Missense mutation counts by KLIFS region"
-        col_hgnc = self.return_adjusted_colname("hugoGeneSymbol")
+        col_gene = self.str_col_gene
+        if col_gene not in df.columns:
+            col_fallback = self.return_adjusted_colname("hugoGeneSymbol")
+            logger.warning(
+                f"Column {col_gene} not in DataFrame (e.g. loaded from an older CSV); "
+                f"grouping by {col_fallback}."
+            )
+            col_gene = col_fallback
         col_klifs = "klifs_region"
         # BLOSUM take mean, others take value counts
         if colname == "blosum_penalty":
             pivot_table = (
-                df.groupby([col_hgnc, col_klifs])[colname]
+                df.groupby([col_gene, col_klifs])[colname]
                 .agg("mean")
                 .unstack(fill_value=0)
             )
@@ -858,7 +1132,7 @@ class KinaseMissenseMutations(Mutations):
             # keep only values that correpond to the one-hot encoding
             df_temp = df.loc[df[colname] == bool_onehot, :].reset_index(drop=True)
             pivot_table = (
-                df_temp.groupby([col_hgnc, col_klifs])[colname]
+                df_temp.groupby([col_gene, col_klifs])[colname]
                 .value_counts(dropna=True)
                 .unstack(fill_value=0)
                 .unstack(fill_value=0)
@@ -872,7 +1146,7 @@ class KinaseMissenseMutations(Mutations):
         # value count of KLIFS regions by gene only
         else:
             pivot_table = (
-                df.groupby(col_hgnc)[colname]
+                df.groupby(col_gene)[colname]
                 .value_counts(dropna=True)
                 .unstack(fill_value=0)
             )

@@ -365,9 +365,16 @@ def enrich_with_alphafold(obj_kinase, force: bool = False) -> None:
     start = obj_kinase.adjudicate_kd_start()
     end = obj_kinase.adjudicate_kd_end()
     if start is None or end is None:
-        logger.warning(
-            "no kinase-domain bounds for %s; skipping AlphaFold", obj_kinase.hgnc_name
+        # a structure stored under earlier bounds no longer matches any kinase domain
+        str_action = (
+            "dropping stored" if obj_kinase.alphafold is not None else "skipping"
         )
+        logger.warning(
+            "no kinase-domain bounds for %s; %s AlphaFold",
+            obj_kinase.hgnc_name,
+            str_action,
+        )
+        obj_kinase.alphafold = None
         return
 
     # idempotent: re-slice only when the KD bounds changed since the structure was stored

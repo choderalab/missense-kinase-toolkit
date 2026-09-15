@@ -634,6 +634,31 @@ class KinaseInfo(BaseModel):
         )
         return None
 
+    def _fallback_kd_bound(
+        self, bounds: tuple[int, int] | None, is_start: bool
+    ) -> int | None:
+        """Return the Pfam bound, else the KLIFS pocket bound, for a kinase without KinCoRe.
+
+        Pfam annotates one kinase domain per protein, so multi-domain entries skip it.
+
+        Parameters
+        ----------
+        bounds : tuple[int, int] | None
+            The (min, max) KLIFS pocket UniProt indices, or None.
+        is_start : bool
+            Whether to return the start (True) or end (False) bound.
+
+        Returns
+        -------
+        int | None
+            The fallback bound if available, otherwise None.
+        """
+        if self.pfam is not None and "_" not in self.uniprot_id:
+            return self.pfam.start if is_start else self.pfam.end
+        if bounds is not None:
+            return bounds[0] if is_start else bounds[1]
+        return None
+
     def adjudicate_kd_start(
         self, int_max_gap: float = float("inf"), bool_verbose: bool = False
     ) -> int | None:
@@ -655,16 +680,17 @@ class KinaseInfo(BaseModel):
         int | None
             The start of the kinase domain if available, otherwise None.
         """
-        # priority: KinCoRe CIF > KinCoRe FASTA > Dunbrack MSA > Pfam. Gate on the bound
-        # itself (not on ``kincore``) so an MSA-only KinCoRe (cif/fasta None) still falls
-        # through to Pfam rather than short-circuiting to None.
+        # priority: KinCoRe CIF > KinCoRe FASTA > Dunbrack MSA > Pfam > KLIFS pocket. Gate on
+        # the bound itself (not on ``kincore``) so an MSA-only KinCoRe (cif/fasta None) still
+        # falls through rather than short-circuiting to None.
         start = (
             rgetattr(self, "kincore.cif.start")
             or rgetattr(self, "kincore.fasta.start")
             or rgetattr(self, "kincore.msa.start")
         )
-        if start is None and self.pfam is not None:
-            start = self.pfam.start
+        bounds = self._klifs_uniprot_idx_bounds()
+        if start is None:
+            start = self._fallback_kd_bound(bounds, is_start=True)
         if start is None:
             if bool_verbose:
                 logger.info(
@@ -672,8 +698,7 @@ class KinaseInfo(BaseModel):
                 )
             return None
 
-        bounds = self._klifs_uniprot_idx_bounds()
-        if start is not None and bounds is not None:
+        if bounds is not None:
             start = self._reconcile_kd_bound_with_klifs(
                 bound=start,
                 klifs_bound=bounds[0],
@@ -704,21 +729,22 @@ class KinaseInfo(BaseModel):
         int | None
             The end of the kinase domain if available, otherwise None.
         """
-        # priority: KinCoRe CIF > KinCoRe FASTA > Dunbrack MSA > Pfam (see adjudicate_kd_start)
+        # priority: KinCoRe CIF > KinCoRe FASTA > Dunbrack MSA > Pfam > KLIFS pocket
+        # (see adjudicate_kd_start)
         end = (
             rgetattr(self, "kincore.cif.end")
             or rgetattr(self, "kincore.fasta.end")
             or rgetattr(self, "kincore.msa.end")
         )
-        if end is None and self.pfam is not None:
-            end = self.pfam.end
+        bounds = self._klifs_uniprot_idx_bounds()
+        if end is None:
+            end = self._fallback_kd_bound(bounds, is_start=False)
         if end is None:
             if bool_verbose:
                 logger.info(f"No kinase domain sequence end found for {self.hgnc_name}")
             return None
 
-        bounds = self._klifs_uniprot_idx_bounds()
-        if end is not None and bounds is not None:
+        if bounds is not None:
             end = self._reconcile_kd_bound_with_klifs(
                 bound=end,
                 klifs_bound=bounds[1],
