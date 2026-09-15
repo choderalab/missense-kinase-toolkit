@@ -13,6 +13,7 @@ from typing import Annotated, Optional
 
 import typer
 from mkt.databases.generator import pipeline
+from mkt.databases.plot_config import ArgumentError
 from mkt.schema.log_config import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -119,7 +120,7 @@ def main(
             force=recompute,
             config_path=config_path,
         )
-    except ValueError as e:
+    except ArgumentError as e:
         logger.error(str(e))
         raise typer.Exit(code=1)
 

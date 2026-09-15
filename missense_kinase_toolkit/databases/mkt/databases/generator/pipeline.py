@@ -712,29 +712,33 @@ class Pipeline:
         -------
         None
         """
-        from mkt.databases.plot_config import KinaseInfoFiguresConfig, load_task_config
+        from mkt.databases.plot_config import (
+            ArgumentError,
+            KinaseInfoFiguresConfig,
+            load_task_config,
+        )
 
         # validate --only/--skip once, before any work, against every valid component
         if only and skip:
-            raise ValueError("--only and --skip are mutually exclusive.")
+            raise ArgumentError("--only and --skip are mutually exclusive.")
         list_sources = [source.value for source in Source]
         list_steps = build_steps.resolve_step_names()
         list_components = list_sources + list_steps
         unknown_only = [name for name in only or [] if name not in list_components]
         if unknown_only:
-            raise ValueError(
+            raise ArgumentError(
                 f"unknown --only component(s) {unknown_only}; valid: {list_components}."
             )
         unknown_skip = [name for name in skip or [] if name not in list_steps]
         if unknown_skip:
-            raise ValueError(
+            raise ArgumentError(
                 f"unknown --skip component(s) {unknown_skip}; valid: {list_steps}."
             )
 
         cfg = load_task_config(KinaseInfoFiguresConfig, self.config_path, "kinaseinfo")
         if not cfg.resolve_data(bool_data, bool_figs):
             if only or skip or list_kinase:
-                raise ValueError(
+                raise ArgumentError(
                     "--only/--skip/--kinase select data to rebuild, but data is off "
                     "(--no-data or kinaseinfo.data: false); pass --data."
                 )

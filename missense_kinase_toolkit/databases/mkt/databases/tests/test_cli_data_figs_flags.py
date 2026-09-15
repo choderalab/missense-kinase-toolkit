@@ -10,6 +10,7 @@ from mkt.databases.cli import generate_conservation_data as cli_conservation
 from mkt.databases.cli import generate_dataset_csv_files as cli_dataset
 from mkt.databases.cli import generate_kinaseinfo_objects as cli_kinaseinfo
 from mkt.databases.plot_config import (
+    ArgumentError,
     ConservationFiguresConfig,
     DataFiguresConfig,
     DatasetFiguresConfig,
@@ -59,7 +60,7 @@ def test_resolve_data(bool_data, bool_config_data, expected):
 
 def test_resolve_data_nothing_to_do():
     """Data off plus figures off raises."""
-    with pytest.raises(ValueError, match="nothing to do"):
+    with pytest.raises(ArgumentError, match="nothing to do"):
         DataFiguresConfig(data=False).resolve_data(None, bool_figs=False)
 
 
@@ -100,6 +101,31 @@ def test_kinaseinfo_cli_flags(monkeypatch, args, expected):
     result = RUNNER.invoke(cli_kinaseinfo.app, args)
     assert result.exit_code == 0, result.output
     assert {key: calls[0][key] for key in expected} == expected
+
+
+def test_kinaseinfo_cli_catches_only_argument_errors(monkeypatch, caplog):
+    """Argument errors exit 1 with a message; other ValueErrors keep their traceback."""
+
+    def _raising(exc):
+        def _run(**kwargs):
+            raise exc
+
+        return _run
+
+    monkeypatch.setattr(
+        cli_kinaseinfo.pipeline, "run", _raising(ArgumentError("bad flag combo"))
+    )
+    result = RUNNER.invoke(cli_kinaseinfo.app, [])
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit)
+    assert "bad flag combo" in caplog.text
+
+    monkeypatch.setattr(
+        cli_kinaseinfo.pipeline, "run", _raising(ValueError("data validation bug"))
+    )
+    result = RUNNER.invoke(cli_kinaseinfo.app, [])
+    assert type(result.exception) is ValueError
+    assert "data validation bug" in str(result.exception)
 
 
 def _write_config(tmp_path, str_task, bool_data):

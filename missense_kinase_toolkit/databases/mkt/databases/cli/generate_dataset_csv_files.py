@@ -17,7 +17,11 @@ from typing import Annotated, Optional
 import pandas as pd
 import typer
 from mkt.databases import config
-from mkt.databases.plot_config import DatasetFiguresConfig, load_task_config
+from mkt.databases.plot_config import (
+    ArgumentError,
+    DatasetFiguresConfig,
+    load_task_config,
+)
 from mkt.schema.io_utils import get_repo_root
 from mkt.schema.log_config import configure_logging
 from omegaconf import OmegaConf
@@ -213,7 +217,7 @@ def main(
     cfg = load_task_config(DatasetFiguresConfig, config_path, TASK_KEY)
     try:
         bool_data = cfg.resolve_data(data, figs)
-    except ValueError as e:
+    except ArgumentError as e:
         logger.error(str(e))
         raise typer.Exit(code=1)
 

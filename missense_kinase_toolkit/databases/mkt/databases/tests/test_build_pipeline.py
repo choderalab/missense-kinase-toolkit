@@ -12,6 +12,7 @@ import pytest
 from mkt.databases.generator import pipeline
 from mkt.databases.generator import steps as build_steps
 from mkt.databases.io_utils import create_tar_without_metadata
+from mkt.databases.plot_config import ArgumentError
 from mkt.schema.io_utils import (
     deserialize_kinase_dict,
     load_manifest,
@@ -237,7 +238,7 @@ def test_run_dispatches_source_only(monkeypatch, tmp_path):
 def test_run_rejects_invalid_only_skip(tmp_path, monkeypatch, kwargs, match):
     """--only/--skip are validated once, before any work, against every valid component."""
     pl, calls = _data_pipeline(tmp_path, monkeypatch)
-    with pytest.raises(ValueError, match=match):
+    with pytest.raises(ArgumentError, match=match):
         pl.run(**kwargs)
     assert calls == []
 
@@ -324,7 +325,7 @@ def test_run_no_data_rejects_rebuild_selectors(tmp_path, monkeypatch):
     """``--only``/``--skip``/``--kinase`` with data off point the user at ``--data``."""
     pl, calls = _data_pipeline(tmp_path, monkeypatch, STR_YAML_NO_DATA)
     for kwargs in ({"only": ["exon"]}, {"skip": ["exon"]}, {"list_kinase": ["ABL1"]}):
-        with pytest.raises(ValueError, match="pass --data"):
+        with pytest.raises(ArgumentError, match="pass --data"):
             pl.run(**kwargs)
     assert calls == []
 
@@ -332,6 +333,6 @@ def test_run_no_data_rejects_rebuild_selectors(tmp_path, monkeypatch):
 def test_run_no_data_no_figs_raises(tmp_path, monkeypatch):
     """Turning off both data and figures is an error, not a silent no-op."""
     pl, calls = _data_pipeline(tmp_path, monkeypatch, STR_YAML_NO_DATA)
-    with pytest.raises(ValueError, match="nothing to do"):
+    with pytest.raises(ArgumentError, match="nothing to do"):
         pl.run(bool_figs=False)
     assert calls == []

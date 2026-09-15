@@ -553,6 +553,10 @@ def load_task_config(
     return OmegaConf.to_object(merged)
 
 
+class ArgumentError(ValueError):
+    """An invalid combination of run flags or config values, raised before any work."""
+
+
 @dataclass
 class TaskConfig:
     """Fields shared by every task section of a study YAML."""
@@ -587,12 +591,12 @@ class DataFiguresConfig(TaskConfig):
 
         Raises
         ------
-        ValueError
+        ArgumentError
             If neither data nor figures would run.
         """
         bool_resolved = self.data if bool_data is None else bool_data
         if not bool_resolved and not bool_figs:
-            raise ValueError(
+            raise ArgumentError(
                 "data is off (--no-data or config data: false) and --no-figs is set; "
                 "nothing to do."
             )
