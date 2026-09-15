@@ -58,7 +58,7 @@ DICT_ONCOTREE_LEGACY_ALIAS = {
     "CLL": "CLLSLL",  # Chronic Lymphocytic Leukemia -> CLL/SLL
     "AASTR": "ASTR",  # (anaplastic astrocytoma) -> Astrocytoma
     "MM": "PCM",  # Multiple Myeloma -> Plasma Cell Myeloma
-    "ALL": "BLL",  # Acute Lymphoblastic Leukemia -> B-Lymphoblastic Leukemia/Lymphoma
+    "ALL": "LNM",  # Acute Lymphoblastic Leukemia; split into BLL/TLL -> shared parent
     # cBioPortal truncates ONCOTREE_CODE to 10 chars; restore the full codes
     "AMLMLLT3KM": "AMLMLLT3KMT2A",  # AML with t(9;11); MLLT3-KMT2A
     "MLNPCM1JAK": "MLNPCM1JAK2",  # Myeloid/Lymphoid Neoplasms with PCM1-JAK2
@@ -66,14 +66,106 @@ DICT_ONCOTREE_LEGACY_ALIAS = {
 }
 """Curated map of retired/renamed (or client-truncated) OncoTree codes still
 present in clinical data to their current equivalents. Curated from OncoTree's
-precursors/history; extend as further legacy codes are encountered."""
+precursors/history; a code split across several current nodes maps to their
+nearest shared ancestor (see :func:`return_nearest_shared_ancestor`). Extend as
+further legacy codes are encountered."""
+
+
+def return_nearest_shared_ancestor(
+    list_codes: list[str], dict_parent: dict[str, str | None]
+) -> str | None:
+    """Return the deepest OncoTree node that is, or is an ancestor of, every code.
+
+    Parameters
+    ----------
+    list_codes : list[str]
+        Current OncoTree codes, e.g. the successors of a split retired code.
+    dict_parent : dict[str, str | None]
+        Code -> parent code for every node (None at the root).
+
+    Returns
+    -------
+    str | None
+        The nearest shared ancestor (one of the codes itself if it is an ancestor of
+        the others), or None if the codes share no ancestor.
+    """
+    if not list_codes:
+        return None
+
+    def _lineage(code: str | None) -> list[str]:
+        """Return ``code`` followed by its ancestors, nearest first."""
+        list_chain = []
+        while code is not None and code not in list_chain:
+            list_chain.append(code)
+            code = dict_parent.get(code)
+        return list_chain
+
+    list_lineages = [_lineage(code) for code in list_codes]
+    set_shared = set(list_lineages[0]).intersection(*list_lineages[1:])
+    return next((code for code in list_lineages[0] if code in set_shared), None)
+
+
+def return_rename_map_from_nodes(list_nodes: list[dict]) -> dict[str, str]:
+    """Build a ``retired_code -> current_code`` map from OncoTree API nodes.
+
+    Uses each node's ``precursors``, ``history`` and ``revocations``. A retired code
+    with one successor maps to it; a code split across several successors maps to
+    their nearest shared ancestor (:func:`return_nearest_shared_ancestor`), so the
+    result does not depend on node order.
+
+    Parameters
+    ----------
+    list_nodes : list[dict]
+        Tumor-type nodes from :data:`API_TUMOR_TYPES_URL` (``code``, ``parent`` and
+        the history fields).
+
+    Returns
+    -------
+    dict[str, str]
+        ``{retired_code: current_code}``; split codes with no shared ancestor are
+        omitted with a warning.
+    """
+    dict_parent = {
+        node["code"]: node.get("parent") or None
+        for node in list_nodes
+        if node.get("code")
+    }
+    dict_successors: dict[str, set[str]] = {}
+    for node in list_nodes:
+        current = node.get("code")
+        if not current:
+            continue
+        for field in ("precursors", "history", "revocations"):
+            for old in node.get(field) or []:
+                if old and old != current:
+                    dict_successors.setdefault(old, set()).add(current)
+
+    rename: dict[str, str] = {}
+    for old, set_current in sorted(dict_successors.items()):
+        if len(set_current) == 1:
+            rename[old] = next(iter(set_current))
+            continue
+        list_current = sorted(set_current)
+        shared = return_nearest_shared_ancestor(list_current, dict_parent)
+        if shared is None:
+            logger.warning(
+                f"OncoTree code {old} split into {list_current} with no shared "
+                "ancestor; left unmapped."
+            )
+            continue
+        logger.info(
+            f"OncoTree code {old} split into {list_current}; mapped to nearest shared "
+            f"ancestor {shared}."
+        )
+        rename[old] = shared
+    return rename
 
 
 def fetch_oncotree_rename_map(url: str = API_TUMOR_TYPES_URL) -> dict[str, str]:
     """Query the OncoTree API for a ``retired_code -> current_code`` rename map.
 
-    Builds the map from each node's ``precursors``, ``history`` and
-    ``revocations`` (exposed by the JSON API but not the bundled TSV), so
+    Built by :func:`return_rename_map_from_nodes` from each node's history fields
+    (exposed by the JSON API but not the bundled TSV), so
     :data:`DICT_ONCOTREE_LEGACY_ALIAS` can be refreshed reliably when OncoTree
     reclassifies codes. Client-side quirks the API can't know about -- e.g.
     cBioPortal truncating ``ONCOTREE_CODE`` to 10 characters -- are not covered
@@ -88,21 +180,12 @@ def fetch_oncotree_rename_map(url: str = API_TUMOR_TYPES_URL) -> dict[str, str]:
     Returns
     -------
     dict[str, str]
-        ``{retired_code: current_code}``; the first mapping seen wins if a code
-        is referenced by more than one node.
+        ``{retired_code: current_code}``; split codes map to the nearest shared
+        ancestor of their successors.
     """
     res = requests_wrapper.get_cached_session().get(url)
     res.raise_for_status()
-    rename: dict[str, str] = {}
-    for node in res.json():
-        current = node.get("code")
-        if not current:
-            continue
-        for field in ("precursors", "history", "revocations"):
-            for old in node.get(field) or []:
-                if old and old != current:
-                    rename.setdefault(old, current)
-    return rename
+    return return_rename_map_from_nodes(res.json())
 
 
 DICT_TISSUE_COLOR = {
