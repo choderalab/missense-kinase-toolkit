@@ -19,6 +19,45 @@ from pydantic.dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 
+URL_NCBI_EFETCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+"""str: NCBI E-utilities efetch endpoint."""
+
+
+def get_cds_translation(accession: str) -> str | None:
+    """Return the protein translation of a nucleotide record's coding sequence.
+
+    Queries NCBI efetch (``db=nuccore``, ``rettype=fasta_cds_aa``) through the shared cached
+    session, e.g. for the RefSeq mRNA (``NM_``) named on a cBioPortal mutation.
+
+    Parameters
+    ----------
+    accession : str
+        Nucleotide accession (e.g. ``"NM_003242"``).
+
+    Returns
+    -------
+    str | None
+        The translated CDS (the first one if the record has several), or None if the
+        fetch or parse failed.
+    """
+    res = requests_wrapper.get_cached_session().get(
+        URL_NCBI_EFETCH,
+        params={
+            "db": "nuccore",
+            "id": accession,
+            "rettype": "fasta_cds_aa",
+            "retmode": "text",
+        },
+    )
+    if not res.ok or not res.text.startswith(">"):
+        logger.error(
+            "NCBI CDS translation fetch failed for %s: %s", accession, res.status_code
+        )
+        return None
+    list_records = list(SeqIO.parse(StringIO(res.text), "fasta"))
+    return str(list_records[0].seq).rstrip("*") if list_records else None
+
+
 @dataclass
 class ProteinEntrez:
     """Class to interact with query NCBI Protein API; only FASTA download supported."""
