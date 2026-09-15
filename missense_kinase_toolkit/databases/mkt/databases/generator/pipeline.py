@@ -14,9 +14,10 @@ import logging
 import os
 import shutil
 from dataclasses import dataclass
-from datetime import datetime
+from importlib.metadata import version
 from typing import Any
 
+import git
 from mkt.databases.generator import steps as build_steps
 from mkt.databases.io_utils import create_tar_without_metadata
 from mkt.databases.kinase_schema import (
@@ -28,8 +29,11 @@ from mkt.databases.kinase_schema import (
     generate_dict_obj_from_api_or_scraper,
 )
 from mkt.schema.io_utils import (
+    STR_MANIFEST_FILENAME,
+    Manifest,
     deserialize_kinase_dict,
     get_repo_root,
+    load_manifest,
     serialize_kinase_dict,
 )
 
@@ -44,11 +48,14 @@ DEFAULT_PATH_REPORTS = "images"
 
 REPORTS_GROUP_SUBDIR = "dict_kinase"
 """str: Reports sub-directory grouping the whole-kinome ``KinaseInfo`` figures under
-``{path_reports}/dict_kinase/<datetime>/``."""
+``{path_reports}/dict_kinase/<generated_at>/``, one folder per archive version."""
 
 DATETIME_SUBDIR_FMT = "%Y.%m.%d.%H%M%S"
-"""str: ``strftime`` format for the datetime-stamped reports subdirectory, derived from the
-``KinaseInfo.tar.gz`` modified time so the figures match the archive's build provenance."""
+"""str: ``strftime`` format for the datetime-stamped reports subdirectory, applied to the
+archive manifest's ``generated_at`` (UTC)."""
+
+LIST_MANIFEST_PACKAGES = ["mkt-schema", "mkt-databases"]
+"""list[str]: Packages whose versions are recorded in the archive manifest."""
 
 
 @dataclass
@@ -66,7 +73,7 @@ class BuildContext:
     subset_hgnc: set[str] | None = None
     """If not None, the ``hgnc_name`` keys targeted by a subset (``--kinase``) build; enrichment steps iterate only these (reports still characterize the whole spliced dict), by default None."""
     force: bool = False
-    """If True (``--force-regen``), structure steps re-fetch/re-slice and recompute their derived properties (SASA, superposition) even when already present, by default False."""
+    """If True (``--recompute``), structure steps re-fetch/re-slice and recompute their derived properties (SASA, superposition) even when already present, by default False."""
     report_config: Any = None
     """Loaded :class:`KinaseInfoFiguresConfig` for the report steps (aesthetics from the ``kinaseinfo`` config namespace, or defaults), by default None."""
 
@@ -281,6 +288,36 @@ def _resolve_dir(path_repo: str, path_rel: str | None, default_rel: str) -> str:
     return path_out
 
 
+def _return_git_info() -> dict[str, str | bool]:
+    """Return the build checkout's commit SHA and dirty flag.
+
+    Returns
+    -------
+    dict[str, str | bool]
+        ``{"sha": ..., "dirty": ...}``, or empty outside a git checkout.
+    """
+    try:
+        repo = git.Repo(get_repo_root(), search_parent_directories=True)
+    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+        logger.warning("not a git checkout; manifest records package versions only.")
+        return {}
+    bool_dirty = repo.is_dirty()
+    if bool_dirty:
+        logger.warning("building from a dirty tree; manifest git sha is ambiguous.")
+    return {"sha": repo.head.commit.hexsha, "dirty": bool_dirty}
+
+
+def _return_package_versions() -> dict[str, str]:
+    """Return installed versions of :data:`LIST_MANIFEST_PACKAGES`.
+
+    Returns
+    -------
+    dict[str, str]
+        Package name -> version string.
+    """
+    return {name: version(name) for name in LIST_MANIFEST_PACKAGES}
+
+
 @dataclass
 class Pipeline:
     """Orchestrates the KinaseInfo build across its run modes.
@@ -298,7 +335,7 @@ class Pipeline:
     path_tar: str
     """Absolute path to the ``KinaseInfo.tar.gz`` archive."""
     config_path: str | None = None
-    """Shared study YAML supplying report aesthetics (``kinaseinfo`` namespace); when set, reports go to ``<output.subdir>/<config-stem>/kinaseinfo/`` instead of the mtime-stamped dir, by default None."""
+    """Shared study YAML supplying report aesthetics (``kinaseinfo`` namespace); when set, reports go to ``<output.subdir>/<config-stem>/kinaseinfo/`` instead of the datetime-stamped dir, by default None."""
 
     @classmethod
     def from_paths(
@@ -352,7 +389,7 @@ class Pipeline:
         return deserialize_kinase_dict()
 
     def _serialize_and_tar(self, dict_kinaseinfo: dict[str, Any]) -> None:
-        """Serialize the dict to per-kinase files and (re)build the tar archive.
+        """Serialize the dict and its manifest to files and (re)build the tar archive.
 
         Parameters
         ----------
@@ -364,29 +401,51 @@ class Pipeline:
         None
         """
         serialize_kinase_dict(dict_kinaseinfo, str_path=self.path_objects)
+        manifest = Manifest.from_kinase_dict(
+            dict_kinaseinfo,
+            git=_return_git_info(),
+            packages=_return_package_versions(),
+        )
+        path_manifest = os.path.join(self.path_objects, STR_MANIFEST_FILENAME)
+        with open(path_manifest, "w") as outfile:
+            outfile.write(manifest.model_dump_json(indent=4))
         if os.path.exists(self.path_tar):
             os.remove(self.path_tar)
         create_tar_without_metadata(
             path_source=self.path_objects, filename_tar=self.path_tar
         )
+        logger.info(f"built {self.path_tar}\n{manifest.return_summary()}")
 
     def _dated_reports_dir(self) -> str:
-        """Return (and create) the datetime-stamped reports subdir keyed by the tar's mtime.
+        """Return (and create) the reports subdir for this archive version.
 
-        The subdir is nested under :data:`REPORTS_GROUP_SUBDIR` and named by the
-        ``KinaseInfo.tar.gz`` modified time (:data:`DATETIME_SUBDIR_FMT`), so the figures live
-        alongside the archive build they characterize; a figures-only re-run over an unchanged
-        tar reuses the same dir.
+        Named by the manifest's ``generated_at`` (:data:`DATETIME_SUBDIR_FMT`) under
+        :data:`REPORTS_GROUP_SUBDIR`, so each archive version gets exactly one folder that
+        figures-only re-runs reuse.
 
         Returns
         -------
         str
-            Absolute path ``{path_reports}/dict_kinase/{tar-mtime}`` (created if absent).
+            Absolute path ``{path_reports}/dict_kinase/{generated_at}`` (created if absent).
+
+        Raises
+        ------
+        ArgumentError
+            If the archive has no manifest (it has no version to name the folder by).
         """
-        stamp = datetime.fromtimestamp(os.path.getmtime(self.path_tar)).strftime(
-            DATETIME_SUBDIR_FMT
+        from mkt.databases.plot_config import ArgumentError
+
+        manifest = load_manifest(self.path_tar)
+        if manifest is None:
+            raise ArgumentError(
+                f"no {STR_MANIFEST_FILENAME} in {self.path_tar}; report folders are named by "
+                "the manifest's generated_at, so rebuild the archive with --data."
+            )
+        path_dated = os.path.join(
+            self.path_reports,
+            REPORTS_GROUP_SUBDIR,
+            manifest.generated_at.strftime(DATETIME_SUBDIR_FMT),
         )
-        path_dated = os.path.join(self.path_reports, REPORTS_GROUP_SUBDIR, stamp)
         os.makedirs(path_dated, exist_ok=True)
         return path_dated
 
@@ -395,8 +454,8 @@ class Pipeline:
 
         With a ``--config`` study YAML, figures go to a per-task subdir of the study dir
         (``<output.subdir>/<config-stem>/kinaseinfo/``) and use its ``kinaseinfo`` aesthetics;
-        without one (a one-off CLI regen), they use the mtime-stamped
-        ``dict_kinase/<tar-mtime>`` convention with default aesthetics.
+        without one (a one-off CLI regen), they use the datetime-stamped
+        ``dict_kinase/<generated_at>`` convention with default aesthetics.
 
         Returns
         -------
@@ -452,19 +511,19 @@ class Pipeline:
             subset_hgnc=subset_hgnc,
             force=force,
         )
-        build_steps._run_steps(names, ctx)
+        build_steps.run_steps(names, ctx)
         self._serialize_and_tar(dict_kinaseinfo)
         if bool_figs:
             ctx.path_reports, ctx.report_config = self._reports_target()
-            build_steps._run_reports(ctx)
+            build_steps.run_reports(ctx)
         shutil.rmtree(self.path_objects)
 
     def figures(self) -> None:
         """Regenerate the report figures from the existing archive without rebuilding.
 
         Loads the currently serialized dict and renders the report steps into the reports
-        subdir keyed by the existing tar's modified time (reusing that directory), so figures
-        can be refreshed without touching the data.
+        subdir keyed by the existing archive's ``generated_at`` (reusing that directory), so
+        figures can be refreshed without touching the data.
 
         Returns
         -------
@@ -483,7 +542,7 @@ class Pipeline:
             subset_hgnc=None,
             report_config=report_config,
         )
-        build_steps._run_reports(ctx)
+        build_steps.run_reports(ctx)
 
     def full(
         self, names: list[str], bool_figs: bool = True, force: bool = False
@@ -627,8 +686,8 @@ class Pipeline:
         only: list[str] | None = None,
         skip: list[str] | None = None,
         list_kinase: list[str] | None = None,
+        bool_data: bool | None = None,
         bool_figs: bool = True,
-        figs_only: bool = False,
         force: bool = False,
     ) -> None:
         """Dispatch to the run mode implied by the arguments.
@@ -636,43 +695,61 @@ class Pipeline:
         Parameters
         ----------
         only : list[str] | None, optional
-            Components to rebuild on the existing dict: base-build sources (:class:`Source`
-            values -- hgnc/uniprot/kinhub/klifs/pfam/kincore) and/or enrichment steps. Any
-            ``only`` triggers a partial update (load existing -> refresh sources -> run steps);
-            mutually exclusive with ``skip``.
+            Components to rebuild on the existing dict: data sources
+            (hgnc/uniprot/kinhub/klifs/pfam/kincore) and/or enrichment steps. Any ``only``
+            triggers a partial update; mutually exclusive with ``skip``.
         skip : list[str] | None, optional
-            Skip these enrichment steps in a full regen; all other default-on steps run.
+            Skip these enrichment steps in a full regen; all other steps run.
         list_kinase : list[str] | None, optional
             HGNC name(s) to update one-off; None (with no ``only``) runs a full regen.
+        bool_data : bool | None, optional
+            Build or update the archive; False draws figures from the existing archive. None
+            defers to the config's ``kinaseinfo.data`` (True if unset), by default None.
         bool_figs : bool, optional
-            Regenerate report figures after any dict regeneration, by default True
-            (``--no-figs`` disables).
-        figs_only : bool, optional
-            Skip all rebuilding and only regenerate figures from the existing archive, by
-            default False. Mutually exclusive with the rebuild flags.
+            Draw the report figures, by default True.
         force : bool, optional
-            Force structure steps to re-fetch/re-slice and recompute their derived properties
-            (SASA, superposition) even when already present, by default False.
+            Recompute structure-derived properties (AlphaFold slice, SASA, superposition) even
+            when already present, by default False.
 
         Returns
         -------
         None
         """
-        if figs_only:
+        from mkt.databases.plot_config import (
+            ArgumentError,
+            KinaseInfoFiguresConfig,
+            load_task_config,
+        )
+
+        # validate --only/--skip once, before any work, against every valid component
+        if only and skip:
+            raise ArgumentError("--only and --skip are mutually exclusive.")
+        list_sources = [source.value for source in Source]
+        list_steps = build_steps.resolve_step_names()
+        list_components = list_sources + list_steps
+        unknown_only = [name for name in only or [] if name not in list_components]
+        if unknown_only:
+            raise ArgumentError(
+                f"unknown --only component(s) {unknown_only}; valid: {list_components}."
+            )
+        unknown_skip = [name for name in skip or [] if name not in list_steps]
+        if unknown_skip:
+            raise ArgumentError(
+                f"unknown --skip component(s) {unknown_skip}; valid: {list_steps}."
+            )
+
+        cfg = load_task_config(KinaseInfoFiguresConfig, self.config_path, "kinaseinfo")
+        if not cfg.resolve_data(bool_data, bool_figs):
             if only or skip or list_kinase:
-                raise ValueError(
-                    "--figs-only cannot be combined with --only/--skip/--kinase."
+                raise ArgumentError(
+                    "--only/--skip/--kinase select data to rebuild, but data is off "
+                    "(--no-data or kinaseinfo.data: false); pass --data."
                 )
             self.figures()
             return
 
-        set_source = {source.value for source in Source}
-        sources = [name for name in (only or []) if name in set_source]
-        only_steps = [name for name in (only or []) if name not in set_source]
-
-        if sources and skip:
-            raise ValueError("--skip cannot be combined with a --only source rebuild.")
-
+        sources = [name for name in only or [] if name in list_sources]
+        only_steps = [name for name in only or [] if name in list_steps]
         names = build_steps.resolve_step_names(only_steps or None, skip)
 
         if only:
@@ -689,8 +766,8 @@ def run(
     list_kinase: list[str] | None = None,
     path_objects: str | None = None,
     path_reports: str | None = None,
+    bool_data: bool | None = None,
     bool_figs: bool = True,
-    figs_only: bool = False,
     force: bool = False,
     config_path: str | None = None,
 ) -> None:
@@ -699,8 +776,8 @@ def run(
     Parameters
     ----------
     only : list[str] | None, optional
-        Components to rebuild (base-build sources and/or enrichment steps); mutually
-        exclusive with ``skip``.
+        Components to rebuild (data sources and/or enrichment steps); mutually exclusive
+        with ``skip``.
     skip : list[str] | None, optional
         Enrichment steps to skip in a full regen.
     list_kinase : list[str] | None, optional
@@ -709,15 +786,16 @@ def run(
         Objects directory relative to the repo root, by default the package-data layout.
     path_reports : str | None, optional
         Reports directory relative to the repo root, by default ``images``.
+    bool_data : bool | None, optional
+        Build or update the archive; None defers to the config's ``kinaseinfo.data``, by
+        default None.
     bool_figs : bool, optional
-        Regenerate report figures after any dict regeneration, by default True.
-    figs_only : bool, optional
-        Only regenerate figures from the existing archive (no rebuild), by default False.
+        Draw the report figures, by default True.
     force : bool, optional
-        Force structure steps to regenerate their derived properties, by default False.
+        Recompute structure-derived properties even when already present, by default False.
     config_path : str | None, optional
         Shared study YAML for report aesthetics + ``<config-stem>/kinaseinfo`` output naming,
-        by default None (mtime-stamped ``dict_kinase`` reports dir).
+        by default None (``dict_kinase/<generated_at>`` reports dir).
 
     Returns
     -------
@@ -727,7 +805,7 @@ def run(
         only,
         skip,
         list_kinase,
+        bool_data=bool_data,
         bool_figs=bool_figs,
-        figs_only=figs_only,
         force=force,
     )

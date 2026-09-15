@@ -6,7 +6,7 @@ Entry point (``generate_conservation_data``) that constructs a
 ``DICT_KINASE`` KLIFS panel, packages its distances + dendrogram + provenance as a
 :class:`mkt.schema.conservation_schema.KLIFSConservationData`, and serializes it as
 ``mkt.schema`` package data. Mirroring ``generate_kinaseinfo_objects``, it also renders the
-conservation figures from that artifact -- ``--figs-only`` re-renders them without rebuilding
+conservation figures from that artifact -- ``--no-data`` re-renders them without rebuilding
 the data, ``--no-figs`` builds the data alone. Figure aesthetics come from the ``conservation``
 section of a shared study YAML (``--config``); each figure renders only when its config section
 is present (the static tree renders by default when no config is given).
@@ -18,7 +18,11 @@ from pathlib import Path
 from typing import Annotated, Callable, Optional
 
 import typer
-from mkt.databases.plot_config import ConservationFiguresConfig, load_task_config
+from mkt.databases.plot_config import (
+    ArgumentError,
+    ConservationFiguresConfig,
+    load_task_config,
+)
 from mkt.schema.io_utils import get_repo_root, serialize_conservation_data
 from mkt.schema.log_config import configure_logging
 from omegaconf import OmegaConf
@@ -191,17 +195,19 @@ def main(
             "Each figure renders only when its section is present (defaults otherwise).",
         ),
     ] = None,
-    figs_only: Annotated[
-        bool,
+    data: Annotated[
+        Optional[bool],
         typer.Option(
-            "--figs-only",
-            help="Only (re)render the figures from the existing artifact; skip the rebuild.",
+            "--data/--no-data",
+            help="Build the conservation data artifact; --no-data renders figures from the "
+            "existing artifact. Defaults to the config's conservation.data (true if unset).",
+            show_default=False,
         ),
-    ] = False,
-    no_figs: Annotated[
+    ] = None,
+    figs: Annotated[
         bool,
-        typer.Option("--no-figs", help="Build the data artifact only; skip figures."),
-    ] = False,
+        typer.Option("--figs/--no-figs", help="Render the conservation figures."),
+    ] = True,
     output_dir: Annotated[
         Optional[Path],
         typer.Option(
@@ -226,11 +232,18 @@ def main(
         generate_conservation_data --config configs/paper_2026.yaml
 
         # re-render figures only, without rebuilding the artifact
-        generate_conservation_data --config configs/paper_2026.yaml --figs-only
+        generate_conservation_data --config configs/paper_2026.yaml --no-data
     """
     configure_logging(verbose=verbose)
 
-    if figs_only:
+    cfg = load_task_config(ConservationFiguresConfig, config_path, TASK_KEY)
+    try:
+        bool_data = cfg.resolve_data(data, figs)
+    except ArgumentError as e:
+        logger.error(str(e))
+        raise typer.Exit(code=1)
+
+    if not bool_data:
         _run_figures(config_path)
         return
 
@@ -256,7 +269,7 @@ def main(
     filepath = serialize_conservation_data(conservation_data, str_path=str_path)
     typer.echo(f"KLIFSConservationData written to: {filepath}")
 
-    if not no_figs:
+    if figs:
         _run_figures(config_path)
 
 

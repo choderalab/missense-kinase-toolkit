@@ -356,7 +356,7 @@ def enrich_with_alphafold(obj_kinase, force: bool = False) -> None:
         The kinase object to enrich (mutated in place).
     force : bool, optional
         Re-fetch and re-slice even when the stored structure's KD bounds are unchanged
-        (``--force-regen``), by default False.
+        (``--recompute``), by default False.
 
     Returns
     -------

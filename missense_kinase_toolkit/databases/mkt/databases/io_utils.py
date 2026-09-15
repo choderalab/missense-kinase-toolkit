@@ -5,6 +5,7 @@ into dataframes, create metadata-free tar archives, and load the packaged kinase
 dictionary.
 """
 
+import gzip
 import logging
 import os
 import tarfile
@@ -294,40 +295,70 @@ def get_repo_root():
         return os.getcwd()
 
 
+def _strip_tar_metadata(tarinfo: tarfile.TarInfo) -> tarfile.TarInfo:
+    """Zero a tar member's timestamp and ownership (``tarfile.add`` filter).
+
+    Parameters
+    ----------
+    tarinfo : tarfile.TarInfo
+        The member about to be added.
+
+    Returns
+    -------
+    tarfile.TarInfo
+        The same member with ``mtime``, ``uid``/``gid``, and ``uname``/``gname`` cleared.
+    """
+    tarinfo.mtime = 0
+    tarinfo.uid = tarinfo.gid = 0
+    tarinfo.uname = tarinfo.gname = ""
+    return tarinfo
+
+
 def create_tar_without_metadata(
     path_source: str,
     filename_tar: str,
 ) -> None:
-    """Create a tar file without metadata.
+    """Create a reproducible tar.gz: identical source files always give identical bytes.
+
+    Member timestamps and ownership and the gzip header's mtime/filename are cleared, files
+    are added in sorted order, and macOS ``._`` AppleDouble files are skipped.
 
     Parameters
     ----------
     path_source : str
-        Path to the source directory to be tarred
+        Path to the source directory to be tarred.
     filename_tar : str
-        Path and filename to the save the tar file
+        Path and filename to save the tar file; overwritten if it exists.
 
     Returns
     -------
     None
 
+    Raises
+    ------
+    NotADirectoryError
+        If ``path_source`` is not an existing directory.
     """
-    # check if the source directory exists
-    if not os.path.exists(path_source):
-        logging.error(f"Source directory {path_source} does not exist.")
-    # check if the source directory is a directory
     if not os.path.isdir(path_source):
-        logging.error(f"Source path {path_source} is not a directory.")
-    # check if the output tar file already exists
+        raise NotADirectoryError(f"source path is not a directory: {path_source}")
     if os.path.exists(filename_tar):
-        logging.error(f"Output tar file {filename_tar} already exists.")
+        logger.warning(f"overwriting existing tar file {filename_tar}.")
 
-    with tarfile.open(filename_tar, "w:gz") as tar:
-        for root, _, files in os.walk(path_source):
-            for file in files:
-                file_path = os.path.join(root, file)
-                if not file.startswith("._"):
-                    tar.add(file_path, arcname=os.path.relpath(file_path, path_source))
+    list_files = sorted(
+        os.path.join(root, file)
+        for root, _, files in os.walk(path_source)
+        for file in files
+        if not file.startswith("._")
+    )
+    with open(filename_tar, "wb") as fh, gzip.GzipFile(
+        filename="", mode="wb", fileobj=fh, mtime=0
+    ) as gz, tarfile.open(fileobj=gz, mode="w") as tar:
+        for file_path in list_files:
+            tar.add(
+                file_path,
+                arcname=os.path.relpath(file_path, path_source),
+                filter=_strip_tar_metadata,
+            )
 
 
 def return_kinase_dict(bool_hgnc: bool = True) -> dict[str, object]:

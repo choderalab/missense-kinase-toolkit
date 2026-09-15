@@ -12,7 +12,12 @@ import pytest
 from mkt.databases.generator import pipeline
 from mkt.databases.generator import steps as build_steps
 from mkt.databases.io_utils import create_tar_without_metadata
-from mkt.schema.io_utils import deserialize_kinase_dict, serialize_kinase_dict
+from mkt.databases.plot_config import ArgumentError
+from mkt.schema.io_utils import (
+    deserialize_kinase_dict,
+    load_manifest,
+    serialize_kinase_dict,
+)
 
 
 @pytest.mark.parametrize(
@@ -30,32 +35,24 @@ def test_strip_kd_suffix(str_in, expected):
     assert pipeline._strip_kd_suffix(str_in) == expected
 
 
-def test_resolve_step_names_empty_registry():
-    assert build_steps.resolve_step_names() == []
-    assert build_steps.resolve_step_names(skip=[]) == []
-
-
-def test_resolve_step_names_unknown_raises():
-    with pytest.raises(ValueError, match="unknown enrichment step"):
-        build_steps.resolve_step_names(only=["does_not_exist"])
-
-
-def test_resolve_step_names_mutual_exclusion_raises():
-    with pytest.raises(ValueError, match="not both"):
-        build_steps.resolve_step_names(only=["a"], skip=["b"])
+def test_resolve_step_names_defaults_run_all():
+    """A full regen runs every enrichment step unless skipped."""
+    list_all = list(build_steps._ENRICH_STEPS)
+    assert build_steps.resolve_step_names() == list_all
+    assert build_steps.resolve_step_names(skip=[]) == list_all
+    assert "alphafold" not in build_steps.resolve_step_names(skip=["alphafold"])
 
 
 def test_resolve_step_names_only_and_skip_order(monkeypatch):
     """--only/--skip return steps in registry order regardless of arg order."""
     fake_registry = {name: (lambda ctx: None) for name in ("alpha", "beta", "gamma")}
     monkeypatch.setattr(build_steps, "_ENRICH_STEPS", fake_registry)
-    monkeypatch.setattr(build_steps, "_DEFAULT_STEPS", list(fake_registry))
 
     # --only preserves registry order, not the order supplied
     assert build_steps.resolve_step_names(only=["gamma", "alpha"]) == ["alpha", "gamma"]
     # --skip removes named steps, keeps the rest in registry order
     assert build_steps.resolve_step_names(skip=["beta"]) == ["alpha", "gamma"]
-    # neither runs all default-on steps
+    # neither runs all steps
     assert build_steps.resolve_step_names() == ["alpha", "beta", "gamma"]
 
 
@@ -115,8 +112,11 @@ def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
         return {"EGFR": egfr}
 
     monkeypatch.setattr(pipeline, "run_base_build", _fake_base_build)
+    # enrichment steps fetch structures/transcripts; keep the splice test network-free
+    monkeypatch.setattr(build_steps, "_ENRICH_STEPS", {})
 
-    pipeline.run(list_kinase=["EGFR"], path_objects=str(path_objects))
+    # no figures: they would render into the repo's images/ reports dir
+    pipeline.run(list_kinase=["EGFR"], path_objects=str(path_objects), bool_figs=False)
 
     after = deserialize_kinase_dict(str_path=str(path_tar), bool_verbose=False)
     # targeted entry updated, non-target untouched, count stable, objects dir cleaned
@@ -124,6 +124,47 @@ def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
     assert after["EGFR"].uniprot.header == sentinel
     assert after["ABL1"].uniprot.header == seed["ABL1"].uniprot.header
     assert not path_objects.exists()
+
+    # the rebuilt archive carries a manifest consistent with its contents
+    manifest = load_manifest(str(path_tar))
+    assert manifest is not None
+    assert manifest.return_mismatches(after) == []
+    assert set(manifest.packages) == set(pipeline.LIST_MANIFEST_PACKAGES)
+
+
+def test_dated_reports_dir_uses_manifest(tmp_path):
+    """The reports subdir is named by ``generated_at``, independent of the tar mtime."""
+    import os
+
+    seed = deserialize_kinase_dict(list_ids=["ABL1"], bool_verbose=False)
+    pl = pipeline.Pipeline(
+        str(tmp_path / "KinaseInfo"),
+        str(tmp_path / "reports"),
+        str(tmp_path / "KinaseInfo.tar.gz"),
+    )
+    pl._serialize_and_tar(seed)
+    stamp = load_manifest(pl.path_tar).generated_at.strftime(
+        pipeline.DATETIME_SUBDIR_FMT
+    )
+
+    path_before = pl._dated_reports_dir()
+    os.utime(pl.path_tar, (0, 0))  # a fresh checkout changes the mtime
+    assert pl._dated_reports_dir() == path_before
+    assert os.path.basename(path_before) == stamp
+
+
+def test_dated_reports_dir_requires_manifest(tmp_path):
+    """A manifest-less archive has no version to name a reports folder by, so it raises."""
+    seed = deserialize_kinase_dict(list_ids=["ABL1"], bool_verbose=False)
+    path_seed = tmp_path / "seed"
+    path_tar = tmp_path / "KinaseInfo.tar.gz"
+    serialize_kinase_dict(seed, str_path=str(path_seed))
+    create_tar_without_metadata(path_source=str(path_seed), filename_tar=str(path_tar))
+
+    pl = pipeline.Pipeline(str(path_seed), str(tmp_path / "reports"), str(path_tar))
+    with pytest.raises(ArgumentError, match="rebuild the archive with --data"):
+        pl._dated_reports_dir()
+    assert not (tmp_path / "reports").exists()
 
 
 def test_reconstruct_dict_obj_groups_multidomain():
@@ -181,11 +222,21 @@ def test_run_dispatches_source_only(monkeypatch, tmp_path):
     assert calls["partial"][0] == ["kincore"]
 
 
-def test_run_source_with_skip_raises(monkeypatch, tmp_path):
-    """--only <source> combined with --skip is rejected."""
-    monkeypatch.setattr(pipeline, "_resolve_dir", lambda *a: str(tmp_path))
-    with pytest.raises(ValueError, match="skip"):
-        pipeline.run(only=["kincore"], skip=["alphafold"])
+@pytest.mark.parametrize(
+    "kwargs,match",
+    [
+        ({"only": ["exon"], "skip": ["alphafold"]}, "mutually exclusive"),
+        ({"only": ["kincore"], "skip": ["alphafold"]}, "mutually exclusive"),
+        ({"only": ["notacomponent"]}, r"unknown --only .*'hgnc'.*'exon'"),
+        ({"skip": ["klifs"]}, "unknown --skip"),
+    ],
+)
+def test_run_rejects_invalid_only_skip(tmp_path, monkeypatch, kwargs, match):
+    """--only/--skip are validated once, before any work, against every valid component."""
+    pl, calls = _data_pipeline(tmp_path, monkeypatch)
+    with pytest.raises(ArgumentError, match=match):
+        pl.run(**kwargs)
+    assert calls == []
 
 
 def test_fetch_source_unknown_raises():
@@ -215,3 +266,69 @@ def test_source_only_no_dict_falls_back_to_full(monkeypatch, tmp_path):
     )
     pl.partial(["kincore"], [])
     assert "full" in calls
+
+
+def _data_pipeline(tmp_path, monkeypatch, str_yaml=None):
+    """Pipeline with an optional study YAML and stubbed figures/full run modes."""
+    config_path = None
+    if str_yaml is not None:
+        path_config = tmp_path / "study.yaml"
+        path_config.write_text(str_yaml)
+        config_path = str(path_config)
+    calls = []
+    monkeypatch.setattr(
+        pipeline.Pipeline, "figures", lambda self: calls.append("figures")
+    )
+    monkeypatch.setattr(
+        pipeline.Pipeline,
+        "full",
+        lambda self, names, bool_figs=True, force=False: calls.append(
+            ("full", bool_figs)
+        ),
+    )
+    pl = pipeline.Pipeline(
+        str(tmp_path / "objects"),
+        str(tmp_path / "reports"),
+        str(tmp_path / "absent.tar.gz"),
+        config_path=config_path,
+    )
+    return pl, calls
+
+
+STR_YAML_NO_DATA = "kinaseinfo:\n  data: false\n"
+"""str: Study YAML whose kinaseinfo task draws figures from the existing archive."""
+
+
+@pytest.mark.parametrize(
+    "str_yaml,kwargs,expected",
+    [
+        (None, {}, [("full", True)]),
+        (None, {"bool_figs": False}, [("full", False)]),
+        (None, {"bool_data": False}, ["figures"]),
+        (STR_YAML_NO_DATA, {}, ["figures"]),
+        (STR_YAML_NO_DATA, {"bool_data": True}, [("full", True)]),
+        ("kinaseinfo:\n  data: true\n", {"bool_data": False}, ["figures"]),
+    ],
+)
+def test_run_data_figs_resolution(tmp_path, monkeypatch, str_yaml, kwargs, expected):
+    """An explicit ``bool_data`` wins over ``kinaseinfo.data``; figures follow ``bool_figs``."""
+    pl, calls = _data_pipeline(tmp_path, monkeypatch, str_yaml)
+    pl.run(**kwargs)
+    assert calls == expected
+
+
+def test_run_no_data_rejects_rebuild_selectors(tmp_path, monkeypatch):
+    """``--only``/``--skip``/``--kinase`` with data off point the user at ``--data``."""
+    pl, calls = _data_pipeline(tmp_path, monkeypatch, STR_YAML_NO_DATA)
+    for kwargs in ({"only": ["exon"]}, {"skip": ["exon"]}, {"list_kinase": ["ABL1"]}):
+        with pytest.raises(ArgumentError, match="pass --data"):
+            pl.run(**kwargs)
+    assert calls == []
+
+
+def test_run_no_data_no_figs_raises(tmp_path, monkeypatch):
+    """Turning off both data and figures is an error, not a silent no-op."""
+    pl, calls = _data_pipeline(tmp_path, monkeypatch, STR_YAML_NO_DATA)
+    with pytest.raises(ArgumentError, match="nothing to do"):
+        pl.run(bool_figs=False)
+    assert calls == []

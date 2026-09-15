@@ -1,4 +1,5 @@
 import os
+import tarfile
 
 import pandas as pd
 import pytest
@@ -34,6 +35,41 @@ class TestSaveLoadDataframe:
         finally:
             os.chdir(orig_dir)
         assert df_concat.equals(pd.concat([df, df]))
+
+
+class TestCreateTarWithoutMetadata:
+    @staticmethod
+    def _write_tree(path):
+        """Write two files (one nested) plus a macOS AppleDouble file under ``path``."""
+        (path / "b").mkdir(parents=True)
+        (path / "a.json").write_text('{"x": 1}')
+        (path / "b" / "c.json").write_text('{"y": 2}')
+        (path / "._a.json").write_text("appledouble")
+        return path
+
+    def test_reproducible_and_stripped(self, tmp_path):
+        """Rebuilding identical files gives identical bytes with member metadata cleared."""
+        src = self._write_tree(tmp_path / "src")
+        tar_one, tar_two = tmp_path / "one.tar.gz", tmp_path / "two.tar.gz"
+        io_utils.create_tar_without_metadata(str(src), str(tar_one))
+        # a new checkout changes file mtimes
+        os.utime(src / "a.json", (1_000_000, 1_000_000))
+        io_utils.create_tar_without_metadata(str(src), str(tar_two))
+        assert tar_one.read_bytes() == tar_two.read_bytes()
+
+        with tarfile.open(tar_one) as tar:
+            members = tar.getmembers()
+        assert [member.name for member in members] == ["a.json", "b/c.json"]
+        for member in members:
+            assert (member.mtime, member.uid, member.gid) == (0, 0, 0)
+            assert (member.uname, member.gname) == ("", "")
+
+    def test_missing_source_raises(self, tmp_path):
+        """A missing source directory raises instead of writing an empty archive."""
+        with pytest.raises(NotADirectoryError):
+            io_utils.create_tar_without_metadata(
+                str(tmp_path / "absent"), str(tmp_path / "out.tar.gz")
+            )
 
 
 class TestConvertStr2List:

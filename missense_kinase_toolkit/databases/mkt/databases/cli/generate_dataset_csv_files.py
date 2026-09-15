@@ -3,7 +3,7 @@
 
 Entry point (``generate_dataset_csv_files``) that builds and writes the processed dataset CSV
 files (Davis, PKIS2) and, mirroring ``generate_kinaseinfo_objects``, renders the dataset figures
-from them: ``--figs-only`` re-renders figures without rebuilding the CSVs, ``--no-figs`` builds
+from them: ``--no-data`` re-renders figures without rebuilding the CSVs, ``--no-figs`` builds
 the CSVs alone. Figure aesthetics come from the ``dataset`` section of a shared study YAML
 (``--config``); each figure renders only when its section is present (all render when no config
 is given). Figures write to ``<output.subdir>/<config-stem>/dataset/``.
@@ -17,7 +17,11 @@ from typing import Annotated, Optional
 import pandas as pd
 import typer
 from mkt.databases import config
-from mkt.databases.plot_config import DatasetFiguresConfig, load_task_config
+from mkt.databases.plot_config import (
+    ArgumentError,
+    DatasetFiguresConfig,
+    load_task_config,
+)
 from mkt.schema.io_utils import get_repo_root
 from mkt.schema.log_config import configure_logging
 from omegaconf import OmegaConf
@@ -178,17 +182,19 @@ def main(
             "source paths. Each figure renders only when its section is present.",
         ),
     ] = None,
-    figs_only: Annotated[
-        bool,
+    data: Annotated[
+        Optional[bool],
         typer.Option(
-            "--figs-only",
-            help="Only (re)render the figures from the existing CSVs; skip the rebuild.",
+            "--data/--no-data",
+            help="Build the processed dataset CSVs; --no-data renders figures from the "
+            "existing CSVs. Defaults to the config's dataset.data (true if unset).",
+            show_default=False,
         ),
-    ] = False,
-    no_figs: Annotated[
+    ] = None,
+    figs: Annotated[
         bool,
-        typer.Option("--no-figs", help="Build the dataset CSVs only; skip figures."),
-    ] = False,
+        typer.Option("--figs/--no-figs", help="Render the dataset figures."),
+    ] = True,
     verbose: Annotated[
         bool,
         typer.Option("--verbose", "-v", help="Enable verbose (DEBUG) logging."),
@@ -204,16 +210,20 @@ def main(
         generate_dataset_csv_files --config configs/paper_2026.yaml
 
         # re-render figures only, without rebuilding the CSVs
-        generate_dataset_csv_files --config configs/paper_2026.yaml --figs-only
+        generate_dataset_csv_files --config configs/paper_2026.yaml --no-data
     """
     configure_logging(verbose=verbose)
 
-    if figs_only:
-        _run_figures(config_path)
-        return
+    cfg = load_task_config(DatasetFiguresConfig, config_path, TASK_KEY)
+    try:
+        bool_data = cfg.resolve_data(data, figs)
+    except ArgumentError as e:
+        logger.error(str(e))
+        raise typer.Exit(code=1)
 
-    _build_datasets()
-    if not no_figs:
+    if bool_data:
+        _build_datasets()
+    if figs:
         _run_figures(config_path)
 
 

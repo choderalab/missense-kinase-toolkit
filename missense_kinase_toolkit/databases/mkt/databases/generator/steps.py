@@ -4,8 +4,8 @@ Defines the ordered registry of enrichment steps (each mutating additive optiona
 fields on the assembled :class:`KinaseInfo` objects in place), the terminal report
 steps, and the selection/validation helpers that back the ``--only``/``--skip`` CLI
 flags. Enrichment steps are added incrementally per workstream (alphafold, then rsasa,
-activation_loop, alignment, exon). Heavy steps default off (see ``_DEFAULT_OFF``) and run
-via ``--only``; every step must be idempotent (overwrite its field, never append) so
+activation_loop, alignment, exon). All steps run in a full regen (opt out with ``--skip``);
+every step must be idempotent (overwrite its field, never append) so
 ``--only <step>`` and ``--kinase`` splicing are safe to re-run.
 """
 
@@ -102,13 +102,11 @@ def _enrich_structure_derived(ctx: "BuildContext", only: str) -> None:
             )
 
 
-def _enrich_kincore_cif(ctx: "BuildContext") -> None:
+def _enrich_kincore_structure_props(ctx: "BuildContext") -> None:
     """Compute the KinCoRe active-state CIF's derived properties (SASA + superposition).
 
-    The CIF coordinates come from the base build (the ``kincore`` source); this step
-    (re)generates the derived ``kincore.cif.sasa`` and ``kincore.cif.superposition`` that
-    travel with that structure. Named ``kincore_cif`` to avoid colliding with the ``kincore``
-    base-build source in ``--only``.
+    (Re)generates ``kincore.cif.sasa`` and ``kincore.cif.superposition``; the CIF itself is
+    fetched by the ``kincore`` source (``--only kincore``).
 
     Parameters
     ----------
@@ -126,7 +124,7 @@ def _enrich_alphafold(ctx: "BuildContext") -> None:
     """Fetch the KD-sliced AlphaFold structure and compute its derived properties.
 
     Regenerates the AF structure (re-sliced on KD-bound changes, or forced via
-    ``--force-regen``) and, alongside it, its ``alphafold.sasa`` and
+    ``--recompute``) and, alongside it, its ``alphafold.sasa`` and
     ``alphafold.superposition``. Per-entry failures are logged and skipped so one kinase never
     aborts the batch.
 
@@ -205,22 +203,15 @@ def _enrich_exon(ctx: "BuildContext") -> None:
 # it is fully populated in the base build).
 _ENRICH_STEPS: dict[str, Callable[["BuildContext"], None]] = {
     "kincore_msa": _enrich_kincore_msa,
-    "kincore_cif": _enrich_kincore_cif,
+    "kincore_structure_props": _enrich_kincore_structure_props,
     "alphafold": _enrich_alphafold,
     "exon": _enrich_exon,
 }
 """dict[str, Callable]: Ordered enrichment-step registry (name -> step function)."""
 
-_DEFAULT_OFF: set[str] = {"kincore_msa", "kincore_cif", "alphafold", "exon"}
-"""set[str]: Enrichment steps skipped in a full regen unless explicitly named via ``--only``
-(kincore_msa downloads the Dunbrack alignment; kincore_cif computes SASA + reference-frame
-superposition over the KinCoRe CIF; alphafold fetches an AlphaFold structure per entry and
-computes its SASA + superposition; exon queries GenomeNexus canonical transcripts -- all opt-in
-and network- or CPU-heavy)."""
-
 _STEP_DEPS: dict[str, set[str]] = {
     "kincore_msa": set(),
-    "kincore_cif": set(),
+    "kincore_structure_props": set(),
     "alphafold": set(),
     "exon": set(),
 }
@@ -230,9 +221,6 @@ structure step owns its structure's derived properties, so there is no inter-ste
 The MSA superposition tier benefits from ``kincore_msa`` running first, but degrades to the
 sequence tier if absent."""
 
-_DEFAULT_STEPS: list[str] = [name for name in _ENRICH_STEPS if name not in _DEFAULT_OFF]
-"""list[str]: Steps run when neither ``--only`` nor ``--skip`` is given (registry order)."""
-
 
 def resolve_step_names(
     only: list[str] | None = None,
@@ -240,45 +228,29 @@ def resolve_step_names(
 ) -> list[str]:
     """Resolve the enrichment steps to run into registry order.
 
+    Names are validated by :meth:`mkt.databases.generator.pipeline.Pipeline.run`; unknown
+    names are ignored here.
+
     Parameters
     ----------
     only : list[str] | None, optional
-        Run only these steps (registry order); mutually exclusive with ``skip``.
+        Run only these steps; takes precedence over ``skip``.
     skip : list[str] | None, optional
-        Skip these steps; all other default-on steps run.
+        Skip these steps; all other steps run.
 
     Returns
     -------
     list[str]
         Enrichment-step names to run, in registry order.
-
-    Raises
-    ------
-    ValueError
-        If both ``only`` and ``skip`` are given, or an unknown step is named.
     """
-    if only and skip:
-        raise ValueError("use --only or --skip, not both.")
-
-    unknown = {
-        name for name in (only or []) + (skip or []) if name not in _ENRICH_STEPS
-    }
-    if unknown:
-        raise ValueError(
-            f"unknown enrichment step(s): {sorted(unknown)}; "
-            f"valid steps: {list(_ENRICH_STEPS)}."
-        )
-
     if only:
         requested = set(only)
         return [name for name in _ENRICH_STEPS if name in requested]
-    if skip:
-        skipped = set(skip)
-        return [name for name in _DEFAULT_STEPS if name not in skipped]
-    return list(_DEFAULT_STEPS)
+    skipped = set(skip or [])
+    return [name for name in _ENRICH_STEPS if name not in skipped]
 
 
-def _run_steps(names: list[str], ctx: "BuildContext") -> None:
+def run_steps(names: list[str], ctx: "BuildContext") -> None:
     """Run the enabled enrichment steps sequentially in registry order.
 
     A failing step is logged and skipped rather than aborting the whole batch (step
@@ -365,7 +337,7 @@ _REPORT_STEPS: dict[str, Callable[["BuildContext"], None]] = {
 """dict[str, Callable]: Terminal report steps, run only in full-regeneration mode."""
 
 
-def _run_reports(ctx: "BuildContext") -> None:
+def run_reports(ctx: "BuildContext") -> None:
     """Run the terminal report steps over the whole assembled dict.
 
     Reports always characterize the full kinome: ``ctx.dict_kinaseinfo`` is the complete
