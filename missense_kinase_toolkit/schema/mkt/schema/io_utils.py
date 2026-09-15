@@ -11,6 +11,7 @@ import logging
 import os
 import shutil
 import tarfile
+from datetime import datetime, timezone
 from importlib import resources
 from io import BytesIO
 from typing import Any, Optional
@@ -20,7 +21,7 @@ import toml
 import yaml
 from mkt.schema import kinase_schema
 from mkt.schema.config import get_output_dir
-from mkt.schema.utils import TQDM_BAR_FORMAT
+from mkt.schema.utils import TQDM_BAR_FORMAT, return_manifest_tallies
 from pydantic import BaseModel
 from tqdm import tqdm
 
@@ -28,6 +29,235 @@ logger = logging.getLogger(__name__)
 
 
 _deserialization_cache = {}
+
+STR_MANIFEST_FILENAME = "manifest.json"
+"""str: Filename of the build manifest stored alongside the per-kinase files."""
+
+
+class Manifest(BaseModel):
+    """Build record of a :class:`KinaseInfo` archive, checked against the loaded dict."""
+
+    manifest_version: int = 1
+    """Manifest schema version, by default 1."""
+    generated_at: datetime
+    """UTC build timestamp."""
+    git: dict[str, str | bool | None] = {}
+    """Build checkout ``sha`` and ``dirty`` flag, by default empty."""
+    packages: dict[str, str] = {}
+    """Package name -> version used for the build, by default empty."""
+    n_entries: int
+    """Number of kinase entries."""
+    counts: dict[str, int]
+    """Dotted sub-model path -> number of non-None entries."""
+    source_versions: dict[str, dict[str, int]] = {}
+    """Dotted sub-model path -> ``Provenance.version`` tally, by default empty."""
+
+    @classmethod
+    def from_kinase_dict(
+        cls,
+        dict_kinase: dict[str, BaseModel],
+        list_paths: list[str] | None = None,
+        **kwargs: Any,
+    ) -> "Manifest":
+        """Build a manifest from a kinase dictionary.
+
+        Parameters
+        ----------
+        dict_kinase : dict[str, KinaseInfo]
+            Kinase dictionary being archived.
+        list_paths : list[str] | None, optional
+            Paths to tally, by default None (see :func:`return_manifest_tallies`).
+        **kwargs : Any
+            Additional fields (``git``, ``packages``, ``generated_at``); ``generated_at``
+            defaults to now (UTC).
+
+        Returns
+        -------
+        Manifest
+            Manifest with counts and source versions computed from ``dict_kinase``.
+        """
+        kwargs.setdefault("generated_at", datetime.now(timezone.utc))
+        counts, source_versions = return_manifest_tallies(dict_kinase, list_paths)
+        return cls(
+            n_entries=len(dict_kinase),
+            counts=counts,
+            source_versions=source_versions,
+            **kwargs,
+        )
+
+    def return_mismatches(self, dict_kinase: dict[str, BaseModel]) -> list[str]:
+        """Return expected-vs-actual differences against a loaded kinase dictionary.
+
+        Parameters
+        ----------
+        dict_kinase : dict[str, KinaseInfo]
+            Loaded kinase dictionary.
+
+        Returns
+        -------
+        list[str]
+            One line per mismatched quantity; empty if consistent.
+        """
+        # tally only this manifest's paths so newer schema fields don't count as drift
+        actual = Manifest.from_kinase_dict(
+            dict_kinase, list(self.counts), generated_at=self.generated_at
+        )
+        list_diff = []
+        if actual.n_entries != self.n_entries:
+            list_diff.append(
+                f"n_entries: expected {self.n_entries}, got {actual.n_entries}"
+            )
+        for field in ("counts", "source_versions"):
+            dict_expected, dict_actual = getattr(self, field), getattr(actual, field)
+            list_diff.extend(
+                f"{field}[{key}]: expected {val}, got {dict_actual.get(key)}"
+                for key, val in dict_expected.items()
+                if dict_actual.get(key) != val
+            )
+        return list_diff
+
+    def return_summary(self, int_bar_width: int = 20) -> str:
+        """Return a tree-indented text summary of the manifest.
+
+        Parameters
+        ----------
+        int_bar_width : int, optional
+            Width of the coverage bar in characters, by default 20.
+
+        Returns
+        -------
+        str
+            Header (build time, git, packages, entries) plus one row per path with count,
+            percent of entries, a coverage bar, and any source-version tally.
+        """
+        # order each path directly after its parent (e.g. klifs.pocket_seq after klifs)
+        dict_order = {path: idx for idx, path in enumerate(self.counts)}
+        list_paths = sorted(
+            self.counts,
+            key=lambda path: tuple(
+                dict_order.get(".".join(path.split(".")[: i + 1]), len(dict_order))
+                for i in range(path.count(".") + 1)
+            ),
+        )
+        dict_label = {
+            path: "  " * path.count(".") + path.rsplit(".", 1)[-1]
+            for path in list_paths
+        }
+        int_label = max(len(label) for label in dict_label.values())
+
+        str_git = self.git.get("sha", "n/a")[:12]
+        if self.git.get("dirty"):
+            str_git += " (dirty)"
+        list_packages = [f"{name} {ver}" for name, ver in self.packages.items()]
+
+        list_lines = [
+            f"KinaseInfo manifest v{self.manifest_version}",
+            f"  generated  {self.generated_at:%Y-%m-%d %H:%M:%S %Z}".rstrip(),
+            f"  git        {str_git}",
+            f"  packages   {list_packages[0] if list_packages else 'n/a'}",
+            *(f"             {pkg}" for pkg in list_packages[1:]),
+            f"  entries    {self.n_entries:,}",
+            "",
+            f"  {'field':<{int_label}}  {'n':>5}  {'%':>6}",
+            "  " + "─" * (int_label + 17 + int_bar_width),
+        ]
+        for path in list_paths:
+            int_n = self.counts[path]
+            float_frac = int_n / self.n_entries if self.n_entries else 0.0
+            int_fill = round(float_frac * int_bar_width)
+            str_bar = "█" * int_fill + "░" * (int_bar_width - int_fill)
+            str_versions = " · ".join(
+                f"{ver} {n:,}" for ver, n in self.source_versions.get(path, {}).items()
+            )
+            list_lines.append(
+                f"  {dict_label[path]:<{int_label}}  {int_n:>5,}  "
+                f"{float_frac:>6.1%}  {str_bar}  {str_versions}".rstrip()
+            )
+        return "\n".join(list_lines)
+
+
+def check_kinase_dict_manifest(
+    dict_kinase: dict[str, BaseModel],
+    manifest: Manifest | None,
+    str_path: str,
+) -> None:
+    """Raise if a loaded kinase dictionary disagrees with its manifest; warn if absent.
+
+    Parameters
+    ----------
+    dict_kinase : dict[str, KinaseInfo]
+        Loaded kinase dictionary.
+    manifest : Manifest | None
+        Manifest read from the archive, or None if missing.
+    str_path : str
+        Archive path, for messages.
+
+    Returns
+    -------
+    None
+    """
+    if manifest is None:
+        logger.warning(
+            f"No {STR_MANIFEST_FILENAME} in {str_path}; skipping integrity check."
+        )
+        return
+
+    list_diff = manifest.return_mismatches(dict_kinase)
+    if list_diff:
+        raise ValueError(
+            f"{str_path} does not match its {STR_MANIFEST_FILENAME} "
+            f"(generated_at {manifest.generated_at.isoformat()}):\n"
+            + "\n".join(list_diff)
+        )
+
+
+def load_manifest(str_path: str) -> Manifest | None:
+    """Read the build manifest from a KinaseInfo ``.tar.gz`` or directory.
+
+    Parameters
+    ----------
+    str_path : str
+        Path to the archive or per-kinase directory.
+
+    Returns
+    -------
+    Manifest | None
+        The parsed manifest, or None if absent.
+    """
+    if str_path.endswith(".tar.gz"):
+        # an empty list_ids skips every kinase entry but still reads the manifest
+        str_manifest = _untar_in_memory(str_path, list_ids=[])[2]
+    else:
+        path_manifest = os.path.join(str_path, STR_MANIFEST_FILENAME)
+        if not os.path.exists(path_manifest):
+            return None
+        with open(path_manifest) as openfile:
+            str_manifest = openfile.read()
+
+    if str_manifest is None:
+        return None
+    return Manifest.model_validate_json(str_manifest)
+
+
+def print_manifest_summary(str_path: str | None = None) -> None:
+    """Print the manifest summary of a KinaseInfo archive or directory.
+
+    Parameters
+    ----------
+    str_path : str | None, optional
+        Path to the archive or directory, by default None (the packaged tar).
+
+    Returns
+    -------
+    None
+    """
+    if str_path is None:
+        str_path = return_str_path_from_pkg_data()
+    manifest = load_manifest(str_path)
+    if manifest is None:
+        logger.warning(f"No {STR_MANIFEST_FILENAME} in {str_path}.")
+        return
+    print(manifest.return_summary())
 
 
 def get_repo_root():
@@ -97,35 +327,27 @@ def extract_tarfiles(path_from, path_to):
         logger.error(f"Exception {e}")
 
 
-def return_filenotfound_error_if_empty_or_missing(
-    str_path_in: str,
-) -> FileNotFoundError | None:
-    """Return FileNotFoundError for the given path.
+def raise_if_missing_or_empty(str_path_in: str) -> None:
+    """Raise if a path does not exist or is an empty directory.
 
     Parameters
     ----------
     str_path_in : str
-        Path that was not found.
+        Path to a file (e.g. ``KinaseInfo.tar.gz``) or directory.
 
     Returns
     -------
-    FileNotFoundError | None
-        FileNotFoundError for the given path. If the path is not empty, return None.
+    None
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``str_path_in`` does not exist or is a directory with no entries.
     """
-    if os.path.exists(str_path_in) and str_path_in.endswith(".tar.gz"):
-        logger.info(
-            f"File {str_path_in} exists as a tar.gz directory. Will extract in memory..."
-        )
-        return None
-    elif not os.path.exists(str_path_in) or len(os.listdir(str_path_in)) == 0:
-        return FileNotFoundError
-    elif os.path.exists(str_path_in) and str_path_in.endswith(".tar.gz"):
-        logger.info(
-            f"File {str_path_in} exists as a tar.gz directory. Will extract in memory..."
-        )
-        return None
-    else:
-        return None
+    if not os.path.exists(str_path_in):
+        raise FileNotFoundError(f"{str_path_in} does not exist.")
+    if os.path.isdir(str_path_in) and not os.listdir(str_path_in):
+        raise FileNotFoundError(f"{str_path_in} is an empty directory.")
 
 
 def untar_if_neeeded(str_filename: str) -> str:
@@ -169,26 +391,55 @@ def untar_files_in_memory(
 
     Returns
     -------
-    dict[str, str]
-        Dictionary of file names and their contents as strings.
+    tuple[list[str], dict[str, str]]
+        Entry IDs and a dictionary of file names to contents; the build manifest
+        (:data:`STR_MANIFEST_FILENAME`) is excluded from both.
 
+    """
+    return _untar_in_memory(str_path, bool_extract=bool_extract, list_ids=list_ids)[:2]
+
+
+def _untar_in_memory(
+    str_path: str,
+    bool_extract: bool = True,
+    list_ids: list[str] | None = None,
+) -> tuple[list[str], dict[str, str], str | None]:
+    """Untar files in memory, returning the build manifest separately.
+
+    Parameters
+    ----------
+    str_path : str
+        Path to the tar.gz file.
+    bool_extract : bool, optional
+        If True, extract the files to memory, by default True.
+    list_ids : list[str] | None, optional
+        List of IDs to filter the files, by default None (all files).
+
+    Returns
+    -------
+    tuple[list[str], dict[str, str], str | None]
+        Entry IDs, file names to contents, and the manifest contents (None if absent
+        or not extracted).
     """
     with open(str_path, "rb") as f:
         tar_data = f.read()
 
-    list_entries, dict_bytes = [], {}
+    list_entries, dict_bytes, str_manifest = [], {}, None
     with BytesIO(tar_data) as tar_buffer, tarfile.open(
         fileobj=tar_buffer, mode="r"
     ) as tar:
         for member in tar.getmembers():
             filename = os.path.basename(member.name)
-            # make sure entry is file
-            cond1 = member.isfile()
-            # ignore MacOS AppleDouble files
-            cond2 = "._" not in filename
+            # make sure entry is file; ignore MacOS AppleDouble files
+            if not member.isfile() or "._" in filename:
+                continue
+            if filename == STR_MANIFEST_FILENAME:
+                if bool_extract:
+                    with tar.extractfile(member) as f:
+                        str_manifest = f.read().decode("utf-8")
+                continue
             # use list_ids, if provided
-            cond3 = list_ids is None or filename.split(".")[0] in list_ids
-            if cond1 and cond2 and cond3:
+            if list_ids is None or filename.split(".")[0] in list_ids:
                 list_entries.append(filename.split(".")[0])
                 if bool_extract:
                     with tar.extractfile(member) as f:
@@ -198,7 +449,7 @@ def untar_files_in_memory(
         # decode bytes to string
         dict_bytes = {k: v.decode("utf-8") for k, v in dict_bytes.items()}
 
-    return list_entries, dict_bytes
+    return list_entries, dict_bytes, str_manifest
 
 
 def return_str_path_from_pkg_data(
@@ -221,6 +472,11 @@ def return_str_path_from_pkg_data(
     -------
     str
         Path to the package data or user-provided directory.
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``str_path`` is None and the packaged resource is missing or empty.
     """
     if pkg_name is None:
         pkg_name = "mkt.schema"
@@ -228,15 +484,8 @@ def return_str_path_from_pkg_data(
         pkg_resource = "KinaseInfo.tar.gz"
 
     if str_path is None:
-        try:
-            str_path = os.path.join(resources.files(pkg_name), pkg_resource)
-            # str_path = untar_if_neeeded(str_path)
-            return_filenotfound_error_if_empty_or_missing(str_path)
-        except Exception as e:
-            logger.error(
-                f"Could not find {pkg_resource} directory within {pkg_name}: {e}"
-                f"\nPlease provide a path to the {pkg_resource} directory."
-            )
+        str_path = os.path.join(resources.files(pkg_name), pkg_resource)
+        raise_if_missing_or_empty(str_path)
     else:
         if not os.path.exists(str_path):
             os.makedirs(str_path)
@@ -266,6 +515,35 @@ def clean_files_and_delete_directory(list_files: list[str]) -> None:
         logger.info(f"Could not remove unzipped files: {list_files}.")
 
 
+def _raise_if_stem_mismatch(str_filename: str, kinase_obj: BaseModel) -> None:
+    """Raise if a serialized file's stem differs from the ``hgnc_name`` it holds.
+
+    ``list_ids`` loads match filename stems, so the stem must equal ``hgnc_name``.
+
+    Parameters
+    ----------
+    str_filename : str
+        Path or tar member name of the serialized file.
+    kinase_obj : KinaseInfo
+        The object deserialized from that file.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    ValueError
+        If the filename stem is not ``kinase_obj.hgnc_name``.
+    """
+    str_stem = os.path.basename(str_filename).split(".")[0]
+    if str_stem != kinase_obj.hgnc_name:
+        raise ValueError(
+            f"file {str_filename!r} holds hgnc_name {kinase_obj.hgnc_name!r}; "
+            "filenames must match hgnc_name."
+        )
+
+
 # adapted from https://axeldonath.com/scipy-2023-pydantic-tutorial/notebooks-rendered/4-serialisation-and-deserialisation.html
 def serialize_kinase_dict(
     kinase_dict: dict[str, BaseModel],
@@ -286,7 +564,23 @@ def serialize_kinase_dict(
             (e.g., {"indent": 2} for json.dumps, {"sort_keys": False} for yaml.safe_dump).
     str_path: str | None = None
         Path to save the serialized file, by default None will use package data or Github repo data.
+
+    Raises
+    ------
+    ValueError
+        If any key differs from its object's ``hgnc_name`` (files are named by the key).
     """
+    list_mismatch = [
+        (key, val.hgnc_name)
+        for key, val in kinase_dict.items()
+        if getattr(val, "hgnc_name", key) != key
+    ]
+    if list_mismatch:
+        raise ValueError(
+            "dict keys must equal hgnc_name (files are named by key); "
+            f"(key, hgnc_name) mismatches: {list_mismatch}"
+        )
+
     if suffix not in DICT_FUNCS:
         logger.error(
             f"Serialization type ({suffix}) not supported; must be json, yaml, or toml."
@@ -383,11 +677,13 @@ def deserialize_kinase_dict(
 
     str_path = return_str_path_from_pkg_data(str_path)
 
-    dict_import = {}
+    dict_import, manifest = {}, None
     if str_path.endswith(".tar.gz"):
-        dict_str = untar_files_in_memory(str_path, list_ids=list_ids)[1]
-        for val in tqdm(
-            dict_str.values(),
+        _, dict_str, str_manifest = _untar_in_memory(str_path, list_ids=list_ids)
+        if str_manifest is not None:
+            manifest = Manifest.model_validate_json(str_manifest)
+        for str_member, val in tqdm(
+            dict_str.items(),
             desc="Deserializing KinaseInfo objects in memory...",
             bar_format=TQDM_BAR_FORMAT,
         ):
@@ -398,9 +694,15 @@ def deserialize_kinase_dict(
             )
 
             kinase_obj = kinase_schema.KinaseInfo.model_validate(val_deserialized)
+            _raise_if_stem_mismatch(str_member, kinase_obj)
             dict_import[kinase_obj.hgnc_name] = kinase_obj
     else:
-        list_file = glob.glob(os.path.join(str_path, f"*.{suffix}"))
+        list_file = [
+            file
+            for file in glob.glob(os.path.join(str_path, f"*.{suffix}"))
+            if os.path.basename(file) != STR_MANIFEST_FILENAME
+        ]
+        manifest = load_manifest(str_path)
         for file in tqdm(
             list_file,
             desc="Deserializing KinaseInfo objects from files...",
@@ -414,12 +716,17 @@ def deserialize_kinase_dict(
                 )
 
                 kinase_obj = kinase_schema.KinaseInfo.model_validate(val_deserialized)
+                _raise_if_stem_mismatch(file, kinase_obj)
                 dict_import[kinase_obj.hgnc_name] = kinase_obj
 
         if bool_remove:
             clean_files_and_delete_directory(list_file)
 
     dict_import = {key: dict_import[key] for key in sorted(dict_import.keys())}
+
+    # subset loads can't match the manifest; directories are checked only if one exists
+    if list_ids is None and (manifest is not None or str_path.endswith(".tar.gz")):
+        check_kinase_dict_manifest(dict_import, manifest, str_path)
 
     if str_name is not None:
         _deserialization_cache[str_name] = dict_import
