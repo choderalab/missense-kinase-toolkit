@@ -129,8 +129,10 @@ def _reconstruct_dict_obj(dict_kinase: dict[str, Any]) -> dict[str, Any]:
         first = list_obj[0]
         dict_obj[Source.hgnc][base] = first.hgnc_name.split("_")[0]
         dict_obj[Source.uniprot][base] = first.uniprot
-        if first.pfam is not None:
-            dict_obj[Source.pfam][base] = first.pfam
+        # pfam may be dropped from one domain (drop_nonintersecting_pfam); keep any survivor
+        pfam = next((o.pfam for o in list_obj if o.pfam is not None), None)
+        if pfam is not None:
+            dict_obj[Source.pfam][base] = pfam
         dict_obj[Source.kinhub][base] = [o.kinhub for o in list_obj]
         dict_obj[Source.klifs][base] = [o.klifs for o in list_obj]
         dict_obj[Source.kincore][base] = [o.kincore for o in list_obj]

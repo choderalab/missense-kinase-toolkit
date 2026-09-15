@@ -1058,6 +1058,48 @@ def combine_kinaseinfo_kd(
     return dict_kinaseinfo_kd
 
 
+def drop_nonintersecting_pfam(obj: KinaseInfoGenerator) -> KinaseInfoGenerator:
+    """Drop ``pfam`` unless it overlaps the KinCoRe CIF/FASTA span or the KLIFS pocket.
+
+    Pfam annotates one kinase domain per protein, so each domain of a multi-domain entry
+    carries the same span; with no other source, Pfam is kept on single-domain entries only.
+
+    Parameters
+    ----------
+    obj : KinaseInfoGenerator
+        Validated kinase object (mutated in place).
+
+    Returns
+    -------
+    KinaseInfoGenerator
+        The same object, with ``pfam`` set to None if it does not intersect.
+    """
+    if obj.pfam is None:
+        return obj
+
+    list_span = [
+        (rgetattr(obj, f"{attr}.start"), rgetattr(obj, f"{attr}.end"))
+        for attr in ["kincore.cif", "kincore.fasta"]
+    ]
+    list_span.append(obj._klifs_uniprot_idx_bounds())
+    list_span = [span for span in list_span if span is not None and None not in span]
+
+    if list_span:
+        bool_keep = any(
+            obj.pfam.start <= end and start <= obj.pfam.end for start, end in list_span
+        )
+    else:
+        bool_keep = "_" not in obj.uniprot_id
+
+    if not bool_keep:
+        logger.info(
+            f"Dropping Pfam {obj.pfam.start}-{obj.pfam.end} for {obj.uniprot_id}; "
+            "it does not intersect another kinase-domain source."
+        )
+        obj.pfam = None
+    return obj
+
+
 def combine_kinaseinfo(
     dict_uniprot: dict[str, KinaseInfoUniProtGenerator],
     dict_kd: dict[str, KinaseInfoKinaseDomainGenerator],
@@ -1101,7 +1143,9 @@ def combine_kinaseinfo(
         )
 
         try:
-            kinase_info_temp = KinaseInfoGenerator.model_validate(dict_temp)
+            kinase_info_temp = drop_nonintersecting_pfam(
+                KinaseInfoGenerator.model_validate(dict_temp)
+            )
             # add uniprot_id suffix to hgnc_name, if necessary
             if "_" in uniprot_id:
                 suffix = uniprot_id.split("_")[1]
