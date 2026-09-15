@@ -3,8 +3,9 @@
 Several clients (:mod:`mkt.databases.ensembl`, :mod:`mkt.databases.genomenexus`)
 serve each genome build from a different REST host and therefore need the same
 build-alias normalization and host lookup. Those shared pieces live here --
-:data:`DICT_BUILD_ALIAS` with :func:`resolve_rest_host`, plus the JSON request
-headers -- so each client only declares its own build-to-host mapping.
+:data:`DICT_BUILD_ALIAS` with :func:`normalize_build` and :func:`resolve_rest_host`,
+plus the JSON request headers -- so each client only declares its own build-to-host
+mapping.
 """
 
 DICT_BUILD_ALIAS = {
@@ -29,6 +30,23 @@ DICT_HEADER_JSON_POST = {
 """dict[str, str]: Header for POST requests sending and receiving JSON."""
 
 
+def normalize_build(build: object) -> str | None:
+    """Return the canonical assembly name for a genome-build alias.
+
+    Parameters
+    ----------
+    build : object
+        Build as found in the cBioPortal ``ncbiBuild`` column (e.g. ``"37"``, ``"hg19"``,
+        ``"GRCh38"``); missing values are allowed.
+
+    Returns
+    -------
+    str | None
+        ``"GRCh37"`` or ``"GRCh38"``, or None if ``build`` is not a known alias.
+    """
+    return DICT_BUILD_ALIAS.get(str(build).upper())
+
+
 def resolve_rest_host(build: str, dict_host: dict[str, str]) -> str:
     """Return the REST host serving a genome build for a given API.
 
@@ -51,7 +69,7 @@ def resolve_rest_host(build: str, dict_host: dict[str, str]) -> str:
     ValueError
         If the build (after alias normalization) is not a key of ``dict_host``.
     """
-    canonical = DICT_BUILD_ALIAS.get(str(build).upper())
+    canonical = normalize_build(build)
     if canonical in dict_host:
         return dict_host[canonical]
     raise ValueError(
