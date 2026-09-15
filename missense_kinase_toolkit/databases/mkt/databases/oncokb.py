@@ -1,12 +1,70 @@
+"""OncoKB API client for therapeutic levels, protein-change annotations, and the cancer gene list.
+
+Provides :class:`OncoKBInfo` and :class:`OncoKBProteinChange` REST clients plus helpers
+(:func:`get_oncokb_levels`, :func:`adjudicate_prefix`) for OncoKB therapeutic-level and
+variant annotations, and :class:`OncoKBCancerGeneList` for fetching/caching the OncoKB
+cancer gene list.
+"""
+
+import json
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+import pandas as pd
 from mkt.databases import requests_wrapper
-from mkt.databases.api_schema import APIKeyRESTAPIClient
+from mkt.databases.api_schema import APIKeyRESTAPIClient, RESTAPIClient
 from mkt.databases.config import maybe_get_oncokb_token
 
 logger = logging.getLogger(__name__)
+
+
+DICT_ONCOKB_PREFIXES = {
+    "Resistance": "LEVEL_R",
+    "Diagnostic_Implication": "LEVEL_Dx",
+    "Prognostic_Implication": "LEVEL_Px",
+    "FDA": "LEVEL_Fda",
+    "Sensitive": "LEVEL_",  # this needs to be last because all levels start with "LEVEL_"
+}
+"""Mapping of OncoKB level prefixes to their corresponding keys in the highest level dictionary."""
+
+
+def adjudicate_prefix(str_in: str) -> str | None:
+    """Adjudicate the prefix for a given level string.
+
+    Parameters
+    ----------
+    str_in : str
+        String containing the level information (e.g., "LEVEL_1_SENSITIVE")
+
+    Returns
+    -------
+    str | None
+        Prefix of the level string (e.g., "Sensitive") if found, otherwise None
+
+    """
+    for key, prefix in DICT_ONCOKB_PREFIXES.items():
+        if str_in.startswith(prefix):
+            return key
+    logger.error(f"Could not adjudicate prefix for string: {str_in}")
+    return None
+
+
+def get_oncokb_levels() -> dict[str, str] | None:
+    """Query the OncoKB API for the current levels of evidence.
+
+    Returns
+    -------
+    dict[str, str] | None
+        Mapping of level string (e.g. "LEVEL_1") to its description, or None if
+        the levels could not be retrieved from the API.
+
+    """
+    info = OncoKBInfo()
+    if not info.has_json() or "levels" not in info._json:
+        logger.error("Could not retrieve levels of evidence from the OncoKB API.")
+        return None
+    return {i["levelOfEvidence"]: i["description"] for i in info._json["levels"]}
 
 
 @dataclass
@@ -45,6 +103,7 @@ class OncoKB(APIKeyRESTAPIClient, ABC):
         res = requests_wrapper.get_cached_session().get(
             self.url_query, headers=self.header
         )
+        self._stamp_from_response(res)
         if res.ok:
             self._json = res.json()
         else:
@@ -90,6 +149,54 @@ class OncoKB(APIKeyRESTAPIClient, ABC):
             logger.error(f"Could not extract level from string: {str_in}")
             return None
 
+    @property
+    def _label(self) -> str:
+        """Human-readable label for log messages; subclasses override."""
+        return self.url_query or "query"
+
+    def annotate_highest_level(self):
+        """Annotate the highest level of evidence into ``dict_highest_level``.
+
+        Shared by :class:`OncoKBProteinChange` and :class:`OncoKBStructuralVariant`;
+        both expose the same ``highest*Level`` response fields.
+        """
+        for key in self.dict_highest_level.keys():
+            key_orig = (
+                "highest" + "".join([i.title() for i in key.split("_")]) + "Level"
+            )
+            if key_orig in self._json:
+                level = self.extract_level_as_int(self._json[key_orig])
+                if level is not None:
+                    self.dict_highest_level[key] = level
+            else:
+                if self.verbose:
+                    logger.warning(
+                        f"No '{key_orig}' found in response for {self._label}."
+                    )
+
+    def get_treatments(self):
+        """Extract the list of treatments associated with the alteration."""
+        if "treatments" in self._json:
+            try:
+                self.list_treatment = [
+                    [j["drugName"] for j in i["drugs"]]
+                    for i in self._json["treatments"]
+                ]
+            except Exception as e:
+                if self.verbose:
+                    logger.error(f"Error extracting treatments for {self._label}: {e}")
+        else:
+            if self.verbose:
+                logger.warning(f"No 'treatments' found in response for {self._label}.")
+
+
+class OncoKBInfo(OncoKB):
+    """OncoKB API client for OncoKB information."""
+
+    def update_url(self):
+        """Update the URL for the OncoKB API query based on the gene name."""
+        self.url_query = f"{self.url}/info"
+
 
 @dataclass
 class OncoKBProteinChange(OncoKB):
@@ -131,9 +238,14 @@ class OncoKBProteinChange(OncoKB):
 
             json_data = self._json
             gene_exists = json_data["geneExist"]
-            variant_exists = json_data["variantExist"]
+            # The "variantExist" value is False if that specific alteration is not annotated (e.g., truncated)
+            # variant_exists = json_data["variantExist"]
+            variant_summary = json_data["variantSummary"]
+            variant_reviewed = (
+                "has not specifically been reviewed" not in variant_summary
+            )
 
-            if gene_exists and variant_exists:
+            if gene_exists and variant_reviewed:
                 self.annotate_highest_level()
                 self.get_treatments()
                 self.oncogenic = json_data.get("oncogenic", None)
@@ -144,11 +256,11 @@ class OncoKBProteinChange(OncoKB):
                     )
             elif self.verbose:
                 if gene_exists:
-                    msg = f"Alteration {self.alteration} does not exist for gene {self.gene_name} in OncoKB."
-                if variant_exists:
+                    msg = f"Alteration {self.alteration} has not been reviewed for gene {self.gene_name} in OncoKB."
+                elif variant_reviewed:
                     msg = f"Gene {self.gene_name} does not exist in OncoKB for alteration {self.alteration}."
                 else:
-                    msg = f"Gene {self.gene_name} and alteration {self.alteration} does not exist in OncoKB."
+                    msg = f"Gene {self.gene_name} does not exist and alteration {self.alteration} has not been reviewed in OncoKB."
                 logger.error(msg)
 
     def update_url(self):
@@ -161,40 +273,243 @@ class OncoKBProteinChange(OncoKB):
                 f"?hugoSymbol={self.gene_name}&alteration={self.alteration}"
             )
 
-    def annotate_highest_level(self):
-        """Annotate the highest level of evidence for the protein change."""
-        for key in self.dict_highest_level.keys():
-            key_orig = (
-                "highest" + "".join([i.title() for i in key.split("_")]) + "Level"
-            )
-            if key_orig in self._json:
-                level = self.extract_level_as_int(self._json[key_orig])
-                if level is not None:
-                    self.dict_highest_level[key] = level
-            else:
-                if self.verbose:
-                    logger.warning(
-                        f"No '{key_orig}' found in response for "
-                        f"{self.gene_names}_{self.alteration}."
-                    )
+    @property
+    def _label(self) -> str:
+        """Gene/alteration label for log messages."""
+        return f"{self.gene_name}_{self.alteration}"
 
-    def get_treatments(self):
-        """Get the list of treatments associated with the alteration."""
-        if "treatments" in self._json:
-            try:
-                self.list_treatment = [
-                    [j["drugName"] for j in i["drugs"]]
-                    for i in self._json["treatments"]
-                ]
-            except Exception as e:
-                if self.verbose:
-                    logger.error(
-                        f"Error extracting treatments for "
-                        f"{self.gene_name}_{self.alteration}: {e}"
-                    )
+
+@dataclass
+class OncoKBStructuralVariant(OncoKB):
+    """OncoKB API client for structural variants (gene fusions).
+
+    Annotates a fusion via ``/annotate/structuralVariants``. The response schema
+    mirrors :class:`OncoKBProteinChange` (same ``highest*Level`` / ``treatments``
+    fields), so :meth:`OncoKB.annotate_highest_level` and
+    :meth:`OncoKB.get_treatments` are reused. ``gene_a`` is the 5' partner and
+    ``gene_b`` the 3' partner; omit ``gene_b`` for a single-gene / unknown-partner
+    fusion (still annotatable). ``structuralVariantType`` is required by the API,
+    so it defaults to ``"FUSION"``.
+    """
+
+    gene_a: str | None = None
+    """5' fusion partner (HGNC symbol); required."""
+    gene_b: str | None = None
+    """3' fusion partner (HGNC symbol); None for a single-gene/unknown-partner fusion."""
+    sv_type: str = "FUSION"
+    """Structural-variant type; required by the API (FUSION, DELETION, ...)."""
+    is_functional: bool = True
+    """Whether to treat the fusion as functional (kinase domain retained)."""
+    tumor_type: str | None = None
+    """OncoTree code to sharpen therapeutic levels; None for tissue-agnostic."""
+    dict_highest_level: dict[str, int] = field(
+        default_factory=lambda: {
+            "Sensitive": None,
+            "Resistance": None,
+            "Diagnostic_Implication": None,
+            "Prognostic_Implication": None,
+            "FDA": None,
+        }
+    )
+    """Dictionary to store the highest level of evidence for the fusion."""
+    list_treatment: list[str] = field(default_factory=list)
+    """List of treatments associated with the fusion."""
+    oncogenic: str | None = None
+    """Oncogenic status of the fusion."""
+    vus: bool | None = None
+    """Whether the fusion is a Variant of Uncertain Significance (VUS)."""
+    known_effect: str | None = None
+    """Effect of the fusion on the protein."""
+    verbose: bool = True
+    """Whether to log warnings for missing data."""
+
+    def __post_init__(self):
+        """Initialize the OncoKBStructuralVariant client."""
+        if self.gene_a is None:
+            logger.error("gene_a (5' fusion partner) must be provided.")
+            return
+        super().__post_init__()
+        if not self.has_json():
+            return
+
+        json_data = self._json
+        gene_exists = json_data["geneExist"]
+        variant_summary = json_data["variantSummary"]
+        variant_reviewed = "has not specifically been reviewed" not in variant_summary
+
+        if gene_exists and variant_reviewed:
+            self.annotate_highest_level()
+            self.get_treatments()
+            self.oncogenic = json_data.get("oncogenic", None)
+            self.vus = json_data.get("vus", None)
+            if "mutationEffect" in json_data:
+                self.known_effect = json_data["mutationEffect"].get("knownEffect", None)
+        elif self.verbose:
+            logger.error(f"Fusion {self._label} not reviewed / gene absent in OncoKB.")
+
+    def update_url(self):
+        """Build the structural-variant annotation URL."""
+        if self.gene_a is None:
+            logger.error("gene_a (5' fusion partner) must be provided.")
+            return
+        params = [f"hugoSymbolA={self.gene_a}"]
+        if self.gene_b is not None:
+            params.append(f"hugoSymbolB={self.gene_b}")
+        params.append(f"structuralVariantType={self.sv_type}")
+        params.append(f"isFunctionalFusion={str(self.is_functional).lower()}")
+        if self.tumor_type is not None:
+            params.append(f"tumorType={self.tumor_type}")
+        self.url_query = f"{self.url}/annotate/structuralVariants?" + "&".join(params)
+
+    @property
+    def _label(self) -> str:
+        """Fusion label for log messages."""
+        partner = self.gene_b if self.gene_b is not None else "?"
+        return f"{self.gene_a}-{partner}"
+
+
+# record keys whose values are lists (gene aliases); json-encoded when writing to CSV
+LIST_COLUMNS = ("geneAliases",)
+"""Record keys whose values are lists; json-encoded when writing to CSV."""
+
+
+@dataclass
+class OncoKBCancerGeneList(RESTAPIClient):
+    """Client for the OncoKB cancer gene list endpoint.
+
+    Fetches the full OncoKB cancer gene list (``/utils/cancerGeneList``) in a
+    single network call, exposing the raw JSON in ``_json`` and a tidy table in
+    ``_df``. The endpoint is public (no token required), so this subclasses the
+    plain :class:`RESTAPIClient` rather than the token-bearing :class:`OncoKB`
+    hierarchy used for therapeutic-level/variant annotations. Mirrors the
+    cancerhotspots client: query once, filter client-side via :meth:`get_gene`,
+    and round-trip to CSV via :meth:`to_csv` / :meth:`from_csv`.
+    """
+
+    url: str = "https://www.oncokb.org/api/v1/utils/cancerGeneList"
+    """URL for the OncoKB cancer gene list endpoint."""
+    _json: list | None = field(init=False, default=None)
+    _df: pd.DataFrame | None = field(init=False, default=None)
+
+    def __post_init__(self):
+        self.query_api()
+
+    def query_api(self) -> None:
+        """Query the OncoKB cancer gene list endpoint and populate ``_json`` and ``_df``."""
+        res = requests_wrapper.get_cached_session().get(self.url)
+        self._stamp_from_response(res)
+        self.check_response(res)
+
+        if res.ok:
+            self._json = res.json()
+            self._df = pd.DataFrame(self._json)
         else:
-            if self.verbose:
-                logger.warning(
-                    f"No 'treatments' found in response for "
-                    f"{self.gene_name}_{self.alteration}."
+            logger.error("Error querying OncoKB cancer gene list: %s", res.status_code)
+            self._json = None
+            self._df = None
+
+    @property
+    def df(self) -> pd.DataFrame | None:
+        """Cancer gene list as a DataFrame (one row per gene)."""
+        return self._df
+
+    def get_gene(self, hugo_symbol: str) -> pd.DataFrame:
+        """Return the cancer gene list record(s) for a single gene.
+
+        Parameters
+        ----------
+        hugo_symbol : str
+            HGNC gene symbol to filter on (e.g. ``"BRAF"``).
+
+        Returns
+        -------
+        pd.DataFrame
+            Rows of :attr:`df` whose ``hugoSymbol`` matches; empty if none.
+        """
+        if self._df is None:
+            return pd.DataFrame()
+        return self._df[self._df["hugoSymbol"] == hugo_symbol].reset_index(drop=True)
+
+    def to_csv(self, path: str) -> None:
+        """Write the cancer gene list to CSV, json-encoding list-valued columns.
+
+        Parameters
+        ----------
+        path : str
+            Output CSV path.
+        """
+        if self._df is None:
+            logger.warning("No data to write; query returned no records.")
+            return
+        df = self._df.copy()
+        for col in LIST_COLUMNS:
+            if col in df.columns:
+                df[col] = df[col].apply(
+                    lambda x: json.dumps(x) if isinstance(x, list) else x
                 )
+        df.to_csv(path, index=False)
+
+    @staticmethod
+    def read_csv(path: str) -> pd.DataFrame:
+        """Read a cancer gene list written by :meth:`to_csv` back into a DataFrame.
+
+        Inverts :meth:`to_csv`: json-decodes the list-valued columns.
+
+        Parameters
+        ----------
+        path : str
+            Path to a CSV previously written by :meth:`to_csv`.
+
+        Returns
+        -------
+        pd.DataFrame
+            Cancer gene list equivalent to :attr:`df`.
+        """
+        df = pd.read_csv(path)
+        for col in LIST_COLUMNS:
+            if col in df.columns:
+                df[col] = df[col].apply(
+                    lambda x: json.loads(x) if isinstance(x, str) else x
+                )
+        return df
+
+    @classmethod
+    def from_dataframe(cls, df: pd.DataFrame) -> "OncoKBCancerGeneList":
+        """Build a client from an existing table without querying the API.
+
+        Bypasses ``__post_init__`` (which would issue the network query) via
+        ``object.__new__`` and sets ``_df`` directly, so cached data can be
+        reloaded offline. ``_json`` is left None.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Cancer gene list table (e.g. from :meth:`read_csv` or :attr:`df`).
+
+        Returns
+        -------
+        OncoKBCancerGeneList
+            Instance backed by ``df``; :meth:`get_gene` works as usual.
+        """
+        obj = object.__new__(cls)
+        obj.query_datetime = None
+        obj.from_cache = None
+        obj._json = None
+        obj._df = df
+        return obj
+
+    @classmethod
+    def from_csv(cls, path: str) -> "OncoKBCancerGeneList":
+        """Build a client from a CSV written by :meth:`to_csv`, without querying.
+
+        Parameters
+        ----------
+        path : str
+            Path to a CSV previously written by :meth:`to_csv`.
+
+        Returns
+        -------
+        OncoKBCancerGeneList
+            Instance backed by the cached table.
+        """
+        return cls.from_dataframe(cls.read_csv(path))

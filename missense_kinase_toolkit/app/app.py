@@ -1,18 +1,29 @@
 import logging
+import re
 from dataclasses import dataclass
 
 import streamlit as st
 from constants import DICT_RESOURCE_URLS, LIST_CAPTIONS, LIST_OPTIONS
-from generate_alignments import SequenceAlignment
-from generate_properties import PropertyTables
-from generate_structures import StructureVisualizer
+from mkt.databases.alphafold import adjudicate_structure
+from mkt.databases.app.properties import PropertyTables
+from mkt.databases.app.schema import (
+    DefaultConfig,
+    KLIFSImportantConfig,
+    PhosphositesConfig,
+)
+from mkt.databases.app.structures import StructureVisualizer
 from mkt.databases.colors import DICT_COLORS
-from mkt.databases.log_config import configure_logging
-from mkt.databases.utils import try_except_return_none_rgetattr
-from mkt.schema import io_utils
-from mkt.schema.io_utils import DICT_FUNCS
+from mkt.schema.io_utils import (
+    DICT_FUNCS,
+    deserialize_kinase_dict,
+    return_str_path_from_pkg_data,
+    untar_files_in_memory,
+)
 from mkt.schema.kinase_schema import KinaseInfo
+from mkt.schema.log_config import configure_logging
+from mkt.schema.utils import rgetattr
 from streamlit_bokeh import streamlit_bokeh
+from visualizers import SequenceAlignmentGenerator, StructureVisualizerGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +50,9 @@ class Dashboard:
     @st.cache_resource
     def _load_data():
         """Load and cache the data - only load filenames and unload KinaseInfo objects separately."""
-        str_path = io_utils.return_str_path_from_pkg_data()
+        str_path = return_str_path_from_pkg_data()
 
-        list_kinases, _ = io_utils.untar_files_in_memory(str_path, bool_extract=False)
+        list_kinases, _ = untar_files_in_memory(str_path, bool_extract=False)
         list_kinases.sort()
 
         return list_kinases
@@ -124,7 +135,7 @@ class Dashboard:
 
         """
         # load KinaseInfo model
-        obj_temp = io_utils.deserialize_kinase_dict(list_ids=[dashboard_state.kinase])[
+        obj_temp = deserialize_kinase_dict(list_ids=[dashboard_state.kinase])[
             dashboard_state.kinase
         ]
         str_json = self.generate_json_file(obj_temp)
@@ -146,9 +157,10 @@ class Dashboard:
                 "Crimson y-axis labels indicate the absense of a sequence for the chosen kinase in the database queried.\n"
             )
 
-            obj_alignment = SequenceAlignment(
-                obj_temp,
-                DICT_COLORS[dashboard_state.palette]["DICT_COLORS"],
+            obj_alignment = SequenceAlignmentGenerator(
+                str_kinase=dashboard_state.kinase,
+                dict_color=DICT_COLORS[dashboard_state.palette]["DICT_COLORS"],
+                obj_kinase=obj_temp,
             )
 
             streamlit_bokeh(
@@ -161,46 +173,55 @@ class Dashboard:
 
         with col1:
             with st.expander("Structure", expanded=True):
-                st.markdown("### KinCore active structure\n")
-                try:
-                    plot_spot = st.empty()
+                # adjudicate the structure source (KinCoRe CIF preferred, AF fallback)
+                _, structure_source = adjudicate_structure(obj_temp)
 
-                    # allow for annotations if present in the KinaseInfo object
-                    list_idx = [0] + [
-                        idx + 1
-                        for idx, i in enumerate(
-                            [
-                                "uniprot.phospho_sites",
-                                "KLIFS2UniProtIdx",
-                            ]
+                if structure_source is None:
+                    st.error("No structure available for this kinase.", icon="⚠️")
+                else:
+                    st.markdown("### Kinase Domain\n" f"#### {structure_source}\n")
+                    try:
+                        plot_spot = st.empty()
+
+                        # allow for annotations if present in the KinaseInfo object
+                        list_idx = [0] + [
+                            idx + 1
+                            for idx, i in enumerate(
+                                [
+                                    "uniprot.phospho_sites",
+                                    "KLIFS2UniProtIdx",
+                                ]
+                            )
+                            if rgetattr(obj_temp, i) is not None
+                        ]
+
+                        annotation = st.radio(  # noqa: F841
+                            "Select an annotation to render (select one):",
+                            options=[LIST_OPTIONS[i] for i in list_idx],
+                            captions=[LIST_CAPTIONS[i] for i in list_idx],
+                            index=0,
                         )
-                        if try_except_return_none_rgetattr(obj_temp, i) is not None
-                    ]
 
-                    annotation = st.radio(  # noqa: F841
-                        "Select an annotation to render (select one):",
-                        options=[LIST_OPTIONS[i] for i in list_idx],
-                        captions=[LIST_CAPTIONS[i] for i in list_idx],
-                        index=0,
-                    )
+                        with plot_spot:
+                            # map annotation choice to config class
+                            dict_annotation_config = {
+                                "None": DefaultConfig,
+                                "Phosphosites": PhosphositesConfig,
+                                "KLIFS": KLIFSImportantConfig,
+                            }
 
-                    with plot_spot:
-                        viz = StructureVisualizer(
-                            obj_kinase=obj_temp,
-                            dict_align=obj_alignment.dict_align,
-                            str_attr=annotation,
+                            config = dict_annotation_config[annotation](
+                                seq_align=obj_alignment,
+                            )
+                            struct_viz = StructureVisualizer(config)
+                            viz = StructureVisualizerGenerator(struct_viz)
+                            st.components.v1.html(
+                                viz.html, height=600, width=None, scrolling=False
+                            )
+                    except Exception as e:
+                        logger.exception(
+                            f"Error generating structure for {dashboard_state.kinase}: {e}",
                         )
-                        st.components.v1.html(viz.html, height=600)
-
-                except Exception as e:
-                    logger.exception(
-                        f"Error generating structure for {dashboard_state.kinase}: {e}",
-                    )
-                    if obj_temp.kincore is None:
-                        st.error(
-                            "No KinCore objects available for this kinase.", icon="⚠️"
-                        )
-                    else:
                         st.error("No structure available for this kinase.", icon="⚠️")
 
         with col2:
@@ -209,23 +230,97 @@ class Dashboard:
 
                 table = PropertyTables(obj_temp)
 
+                # share one column geometry across all four tables: each column is sized to the
+                # widest content across every table (labels in col 1, values in col 2), measuring
+                # values by their visible text so HTML links don't inflate the width
+                _tables = [
+                    table.df_kinhub,
+                    table.df_klifs,
+                    table.df_kincore,
+                    table.df_computed,
+                ]
+
+                def _visible_len(cell) -> int:
+                    return len(re.sub(r"<[^>]+>", "", str(cell)))
+
+                label_ch = max(
+                    (len(str(i)) for df in _tables if df is not None for i in df.index),
+                    default=10,
+                )
+                # cap the value column so a very long value (e.g. SRMS's ~92-char KLIFS name)
+                # wraps instead of widening the table past its half-page column -- otherwise the
+                # browser scales the whole fixed-layout table (label column included) down to fit
+                VALUE_MAX_CH = 36
+                value_ch = min(
+                    VALUE_MAX_CH,
+                    max(
+                        (
+                            _visible_len(v)
+                            for df in _tables
+                            if df is not None
+                            for v in df["Property"]
+                        ),
+                        default=10,
+                    ),
+                )
+
+                # column geometry shared across all four tables. only the label column is a fixed
+                # width; the table fills its container up to a content-fit max-width, so on a wide
+                # monitor it stays content-sized while on a laptop the value column (not the label)
+                # absorbs the shortfall -- avoiding the browser scaling the whole fixed table down
+                label_w = label_ch + 8
+                table_max_w = label_w + value_ch + 2
+
+                def render_property_table(df, str_source):
+                    # render the Styler HTML directly: st.table/st.dataframe cannot hide the
+                    # column header, so drop the redundant "Property" header (key-value tables)
+                    # via Styler.hide + st.markdown; row labels stay, saving a header row.
+                    if df is not None:
+                        styler = df.style.hide(axis="columns").set_table_styles(
+                            [
+                                {
+                                    "selector": "td, th",
+                                    "props": [
+                                        ("text-align", "left"),
+                                        ("padding", "2px 10px"),
+                                        ("font-weight", "normal"),
+                                        ("overflow-wrap", "anywhere"),
+                                    ],
+                                },
+                                {
+                                    "selector": "table",
+                                    "props": [
+                                        ("table-layout", "fixed"),
+                                        ("width", "100%"),
+                                        ("max-width", f"{table_max_w}ch"),
+                                    ],
+                                },
+                                {
+                                    "selector": "td:first-child, th:first-child",
+                                    # labels are uppercase (wider than the `ch` glyph), so pad
+                                    # generously to keep the widest label on one line
+                                    "props": [("width", f"{label_w}ch")],
+                                },
+                            ]
+                        )
+                        st.markdown(styler.to_html(), unsafe_allow_html=True)
+                    else:
+                        st.error(
+                            f"No {str_source} objects available for this kinase.",
+                            icon="⚠️",
+                        )
+
                 st.markdown("#### KinHub\n")
-                if table.df_kinhub is not None:
-                    st.table(table.df_kinhub)
-                else:
-                    st.error("No KinHub objects available for this kinase.", icon="⚠️")
+                render_property_table(table.df_kinhub, "KinHub")
 
                 st.markdown("#### KLIFS\n")
-                if table.df_klifs is not None:
-                    st.table(table.df_klifs)
-                else:
-                    st.error("No KLIFS objects available for this kinase.", icon="⚠️")
+                render_property_table(table.df_klifs, "KLIFS")
 
-                st.markdown("#### KinCore\n")
-                if table.df_kincore is not None:
-                    st.table(table.df_kincore)
-                else:
-                    st.error("No KinCore objects available for this kinase.", icon="⚠️")
+                st.markdown("#### KinCoRe\n")
+                render_property_table(table.df_kincore, "KinCoRe")
+
+                st.markdown("#### Computed\n")
+                render_property_table(table.df_computed, "computed")
 
 
 def main():

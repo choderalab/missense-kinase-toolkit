@@ -1,6 +1,10 @@
 {{ fullname | escape | underline}}
 
 .. automodule:: {{ fullname }}
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 
    {% block attributes %}
    {% if attributes %}

@@ -1,0 +1,492 @@
+"""OncoTree cancer-type ontology model and parsing.
+
+Provides the :class:`OncoTree` model for loading and navigating the OncoTree
+cancer-type hierarchy.
+"""
+
+import logging
+import re
+from os import path
+
+import pandas as pd
+from mkt.databases import requests_wrapper
+from mkt.schema.io_utils import get_repo_root
+from pydantic import BaseModel, PrivateAttr
+
+logger = logging.getLogger(__name__)
+
+
+DEFAULT_FILENAME = "tumor_types.txt"
+"""Default filename for the OncoTree dump, relative to ``<repo_root>/data``."""
+
+DEFAULT_URL = "https://oncotree.mskcc.org/api/tumor_types.txt"
+"""Upstream URL for the OncoTree dump; used when no local file is found."""
+
+API_TUMOR_TYPES_URL = "https://oncotree.mskcc.org/api/tumorTypes"
+"""OncoTree JSON tumor-types endpoint; exposes per-node ``precursors`` /
+``history`` / ``revocations`` (the bundled TSV does not), used to derive the
+retired-code rename map."""
+
+LEVEL_PREFIX = "level_"
+"""Prefix used by OncoTree's hierarchy columns; count varies by snapshot."""
+
+META_COLS = ["metamaintype", "metacolor", "metanci", "metaumls", "history"]
+"""Metadata columns in the raw OncoTree TSV."""
+
+CODE_RE = re.compile(r"\s*\(([^()]+)\)\s*$")
+"""Regex capturing the trailing ``(CODE)`` suffix on every OncoTree label."""
+
+DICT_ONCOTREE_LEGACY_ALIAS = {
+    # retired/renamed codes (from OncoTree's precursors/history) still stored in
+    # older clinical exports, mapped to their current node
+    "GBM": "GB",  # Glioblastoma, IDH-Wildtype
+    "AODG": "ODG",  # Oligodendroglioma, IDH-mutant and 1p/19q-codeleted
+    "BCL": "MBN",  # Mature B-Cell Neoplasms
+    "ETC": "ET",  # Essential Thrombocythemia
+    "TALL": "TLL",  # T-Lymphoblastic Leukemia/Lymphoma
+    "DIPG": "DMG",  # Diffuse Midline Glioma, H3 K27-Altered
+    "RD": "RDD",  # Rosai-Dorfman Disease
+    "TNKL": "MTNN",  # Mature T and NK Neoplasms
+    "PCV": "PV",  # Polycythemia Vera
+    "AOAST": "GNOS",  # (anaplastic astrocytoma) -> Glioma, NOS
+    "OAST": "GNOS",  # (oligoastrocytoma) -> Glioma, NOS
+    "LGLL": "TLGL",  # T-Cell Large Granular Lymphocytic Leukemia
+    "aCML": "ACML",  # Atypical Chronic Myeloid Leukemia, BCR-ABL1-
+    "SEZS": "SS",  # Sezary Syndrome
+    "MBCL": "PMBL",  # Primary Mediastinal (Thymic) Large B-Cell Lymphoma
+    "SLL": "CLLSLL",  # Chronic Lymphocytic Leukemia/Small Lymphocytic Lymphoma
+    "CLL": "CLLSLL",  # Chronic Lymphocytic Leukemia -> CLL/SLL
+    "AASTR": "ASTR",  # (anaplastic astrocytoma) -> Astrocytoma
+    "MM": "PCM",  # Multiple Myeloma -> Plasma Cell Myeloma
+    "ALL": "BLL",  # Acute Lymphoblastic Leukemia -> B-Lymphoblastic Leukemia/Lymphoma
+    # cBioPortal truncates ONCOTREE_CODE to 10 chars; restore the full codes
+    "AMLMLLT3KM": "AMLMLLT3KMT2A",  # AML with t(9;11); MLLT3-KMT2A
+    "MLNPCM1JAK": "MLNPCM1JAK2",  # Myeloid/Lymphoid Neoplasms with PCM1-JAK2
+    "BLLETV6RUN": "BLLETV6RUNX1",  # B-Lymphoblastic Leukemia with ETV6-RUNX1
+}
+"""Curated map of retired/renamed (or client-truncated) OncoTree codes still
+present in clinical data to their current equivalents. Curated from OncoTree's
+precursors/history; extend as further legacy codes are encountered."""
+
+
+def fetch_oncotree_rename_map(url: str = API_TUMOR_TYPES_URL) -> dict[str, str]:
+    """Query the OncoTree API for a ``retired_code -> current_code`` rename map.
+
+    Builds the map from each node's ``precursors``, ``history`` and
+    ``revocations`` (exposed by the JSON API but not the bundled TSV), so
+    :data:`DICT_ONCOTREE_LEGACY_ALIAS` can be refreshed reliably when OncoTree
+    reclassifies codes. Client-side quirks the API can't know about -- e.g.
+    cBioPortal truncating ``ONCOTREE_CODE`` to 10 characters -- are not covered
+    and stay hand-curated in the alias map.
+
+    Parameters
+    ----------
+    url : str
+        OncoTree tumor-types JSON endpoint; defaults to
+        :data:`API_TUMOR_TYPES_URL`.
+
+    Returns
+    -------
+    dict[str, str]
+        ``{retired_code: current_code}``; the first mapping seen wins if a code
+        is referenced by more than one node.
+    """
+    res = requests_wrapper.get_cached_session().get(url)
+    res.raise_for_status()
+    rename: dict[str, str] = {}
+    for node in res.json():
+        current = node.get("code")
+        if not current:
+            continue
+        for field in ("precursors", "history", "revocations"):
+            for old in node.get(field) or []:
+                if old and old != current:
+                    rename.setdefault(old, current)
+    return rename
+
+
+DICT_TISSUE_COLOR = {
+    # nervous system
+    "CNS/Brain (BRAIN)": "LightGray",
+    "Peripheral Nervous System (PNS)": "LightGray",
+    # unknown primary / catch-all
+    "Other (OTHER)": "DimGray",
+    # skin
+    "Skin (SKIN)": "Black",
+    # male reproductive
+    "Penis (PENIS)": "Blue",
+    "Prostate (PROSTATE)": "Blue",
+    "Testis (TESTIS)": "Blue",
+    # gynecologic
+    "Cervix (CERVIX)": "Orange",
+    "Ovary/Fallopian Tube (OVARY)": "Orange",
+    "Uterus (UTERUS)": "Orange",
+    "Vulva/Vagina (VULVA)": "Orange",
+    # urologic
+    "Bladder/Urinary Tract (BLADDER)": "Yellow",
+    "Kidney (KIDNEY)": "Yellow",
+    # GI core (midgut/hindgut + esophagogastric); GIST joins via override below
+    "Bowel (BOWEL)": "SaddleBrown",
+    "Esophagus/Stomach (STOMACH)": "SaddleBrown",
+    # thoracic; PSEC overridden to Orange below
+    "Lung (LUNG)": "Red",
+    "Peritoneum (PERITONEUM)": "Red",
+    "Pleura (PLEURA)": "Red",
+    "Thymus (THYMUS)": "Red",
+    # endocrine; parathyroid codes join via override below
+    "Adrenal Gland (ADRENAL_GLAND)": "Cyan",
+    "Thyroid (THYROID)": "Cyan",
+    # developmental GI / foregut endoderm derivatives
+    "Ampulla of Vater (AMPULLA_OF_VATER)": "Purple",
+    "Biliary Tract (BILIARY_TRACT)": "Purple",
+    "Liver (LIVER)": "Purple",
+    "Pancreas (PANCREAS)": "Purple",
+    # eye
+    "Eye (EYE)": "Green",
+    # tissues retaining upstream metacolor (no aggregation requested)
+    "Bone (BONE)": "White",
+    "Breast (BREAST)": "HotPink",
+    "Head and Neck (HEAD_NECK)": "DarkRed",
+    "Lymphoid (LYMPH)": "LimeGreen",
+    "Myeloid (MYELOID)": "LightSalmon",
+    "Soft Tissue (SOFT_TISSUE)": "LightYellow",
+}
+"""Curated mapping from OncoTree tissue (``level_1`` label) to plotting color."""
+
+DICT_CODE_COLOR_OVERRIDE = {
+    # GI stromal tumor: administratively Soft Tissue, biologically GI
+    "GIST": "SaddleBrown",
+    # parathyroid: administratively Head and Neck, functionally endocrine
+    "PTH": "Cyan",
+    "PTHC": "Cyan",
+    # peritoneal serous carcinoma: ovarian-equivalent biology, not mesothelial
+    "PSEC": "Orange",
+}
+"""Per-code color overrides where biology diverges from the parent tissue."""
+
+DICT_COLOR_CATEGORY = {
+    "LightGray": "CNS/PNS",
+    "DimGray": "Other",
+    "Black": "Skin",
+    "Blue": "Male Reproductive",
+    "Orange": "Gynecologic",
+    "Yellow": "Urologic",
+    "SaddleBrown": "GI Core",
+    "Red": "Thoracic",
+    "Cyan": "Endocrine",
+    "Purple": "GI Developmental",
+    "Green": "Eye",
+    "White": "Bone",
+    "HotPink": "Breast",
+    "DarkRed": "Head and Neck",
+    "LimeGreen": "Lymphoid",
+    "LightSalmon": "Myeloid",
+    "LightYellow": "Soft Tissue",
+}
+"""Curated color to short category-label mapping (suitable for legends)."""
+
+
+class OncoTree(BaseModel):
+    """Loader for the OncoTree tumor-type hierarchy.
+
+    Source: https://oncotree.mskcc.org/api/tumor_types.txt
+
+    The raw TSV ships hierarchy columns (``level_1`` through ``level_N``;
+    the upstream API currently emits six, older local snapshots emit seven),
+    five metadata columns, and labels in the form ``"Display Name (CODE)"``.
+    Upstream rows are *ragged*: shallow entries only emit tabs up to their
+    deepest populated level, so a depth-1 row has six fields rather than
+    eleven. The loader pads those rows so the metadata columns realign,
+    then exposes a cleaned DataFrame via the ``df`` property with four
+    derived columns added between the levels and metadata: ``depth``
+    (count of populated level cells), ``name`` (the deepest label with
+    its ``(CODE)`` suffix stripped), ``code`` (the OncoTree code parsed
+    from that suffix), and ``parent`` (the immediately shallower level
+    label, empty at depth 1).
+
+    Parameters
+    ----------
+    filepath : str | None
+        Optional path to the OncoTree TSV. If unset, the loader looks for
+        ``<repo_root>/data/tumor_types.txt`` and falls back to fetching
+        ``DEFAULT_URL`` when no local file exists.
+    """
+
+    filepath: str | None = None
+
+    _df: pd.DataFrame = PrivateAttr()
+    _level_code_map: dict[str, list[str | None]] = PrivateAttr(default_factory=dict)
+
+    def model_post_init(self, __context: any) -> None:
+        """Load and clean the OncoTree TSV into ``self._df``."""
+        self._df = self._load()
+        self._level_code_map = self._build_level_code_map()
+
+    def _resolve_source(self) -> str:
+        """Resolve the source path or URL to read.
+
+        Returns
+        -------
+        str
+            ``self.filepath`` if set; otherwise the repo-bundled default
+            path if it exists on disk; otherwise ``DEFAULT_URL``.
+        """
+        if self.filepath is not None:
+            return self.filepath
+        local = path.join(get_repo_root(), "data", DEFAULT_FILENAME)
+        if path.isfile(local):
+            return local
+        logger.info(
+            "No local OncoTree dump at %s; fetching from %s",
+            local,
+            DEFAULT_URL,
+        )
+        return DEFAULT_URL
+
+    @staticmethod
+    def _read_text(source: str) -> str:
+        """Return the raw TSV text from a local path or http(s) URL."""
+        if source.startswith(("http://", "https://")):
+            res = requests_wrapper.get_cached_session().get(source)
+            res.raise_for_status()
+            return res.text
+        with open(source) as f:
+            return f.read()
+
+    @staticmethod
+    def _parse_ragged_tsv(text: str) -> pd.DataFrame:
+        """Parse the ragged OncoTree TSV into a rectangular DataFrame.
+
+        Shallow rows omit trailing empty level cells, so the populated
+        fields are ``[*levels, *metadata]`` with no padding between.
+        Padding is inserted between the levels and the trailing metadata
+        block so every row has ``len(header)`` cells.
+
+        Parameters
+        ----------
+        text : str
+            Raw TSV contents, including the header line.
+
+        Returns
+        -------
+        pd.DataFrame
+            String-typed DataFrame matching the TSV header.
+        """
+        n_meta = len(META_COLS)
+        lines = [
+            line for line in text.splitlines() if line and not line.startswith("#")
+        ]
+        header = lines[0].split("\t")
+        n_total = len(header)
+        n_levels = n_total - n_meta
+
+        rows = []
+        for line in lines[1:]:
+            fields = line.split("\t")
+            level_part = fields[:-n_meta]
+            meta_part = fields[-n_meta:]
+            level_part += [""] * (n_levels - len(level_part))
+            rows.append(level_part + meta_part)
+
+        return pd.DataFrame(rows, columns=header, dtype=str)
+
+    def _load(self) -> pd.DataFrame:
+        """Read the OncoTree TSV and derive ``depth``, ``name``, ``code``, ``parent``.
+
+        Returns
+        -------
+        pd.DataFrame
+            Columns, in order: ``level_1`` ... ``level_N``, ``depth``,
+            ``name``, ``code``, ``parent``, then the five metadata columns.
+            ``N`` is the number of ``level_*`` columns in the source file.
+        """
+        df = self._parse_ragged_tsv(self._read_text(self._resolve_source()))
+
+        level_cols = [c for c in df.columns if c.startswith(LEVEL_PREFIX)]
+
+        # count of populated level cells per row, e.g. 4 for a level_4 leaf
+        df["depth"] = df[level_cols].ne("").sum(axis=1)
+
+        # deepest populated label, e.g. "Adenosquamous Carcinoma of the Gallbladder (GBASC)"
+        leaf = df.apply(lambda r: r[level_cols[r["depth"] - 1]], axis=1)
+
+        # name = leaf with trailing "(CODE)" stripped
+        df["name"] = leaf.str.replace(CODE_RE, "", regex=True).str.strip()
+        # code = the captured contents of "(CODE)"
+        df["code"] = leaf.str.extract(CODE_RE)
+
+        # parent = the level just shallower than leaf; empty string at depth 1
+        df["parent"] = df.apply(
+            lambda r: r[level_cols[r["depth"] - 2]] if r["depth"] > 1 else "",
+            axis=1,
+        )
+
+        return df[level_cols + ["depth", "name", "code", "parent"] + META_COLS]
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """Cleaned OncoTree DataFrame populated at instantiation."""
+        return self._df
+
+    def return_df_tissue_drop(self) -> pd.DataFrame:
+        """Return the OncoTree DataFrame with the tissue-level rows dropped."""
+        return self._df[self._df["depth"] > 1].reset_index(drop=True)
+
+    def _build_level_code_map(self) -> dict[str, list[str | None]]:
+        """Map every OncoTree code -> the codes of its ancestors, level 1 first.
+
+        For each row, walk its populated ``level_*`` cells and capture the
+        ``(CODE)`` from each, giving that node's full lineage (its own code is
+        the last entry). Used by :meth:`ancestor_code_at_level` to roll a code
+        up to a coarser level.
+
+        Returns
+        -------
+        dict[str, list[str | None]]
+            ``{code: [level_1_code, ..., level_depth_code]}``.
+        """
+        level_cols = [c for c in self._df.columns if c.startswith(LEVEL_PREFIX)]
+        mapping: dict[str, list[str | None]] = {}
+        for row in self._df.itertuples(index=False):
+            depth = int(getattr(row, "depth"))
+            lineage: list[str | None] = []
+            for col in level_cols[:depth]:
+                label = getattr(row, col)
+                match = CODE_RE.search(label) if label else None
+                lineage.append(match.group(1) if match else None)
+            mapping[getattr(row, "code")] = lineage
+        return mapping
+
+    @property
+    def dict_code_name(self) -> dict[str, str]:
+        """Map every OncoTree code -> its display name (``(CODE)`` suffix stripped).
+
+        Covers all nodes (each code is the deepest label of exactly one row), so
+        it resolves both leaf and internal (rolled-up) codes to a label.
+
+        Returns
+        -------
+        dict[str, str]
+            ``{code: name}``.
+        """
+        return dict(zip(self._df["code"], self._df["name"]))
+
+    @property
+    def known_codes(self) -> set[str]:
+        """Set of every OncoTree code in the loaded snapshot."""
+        return set(self._level_code_map)
+
+    def resolve_code(self, code: str) -> str:
+        """Map a retired/renamed OncoTree code to its current equivalent.
+
+        Applies :data:`DICT_ONCOTREE_LEGACY_ALIAS` (e.g. ``GBM -> GB``); codes
+        already current, or absent from the alias map, are returned unchanged.
+        This does not guarantee the result exists in the snapshot -- check
+        :attr:`known_codes` for that.
+
+        Parameters
+        ----------
+        code : str
+            OncoTree code as stored (possibly legacy).
+
+        Returns
+        -------
+        str
+            The current-equivalent code.
+        """
+        return DICT_ONCOTREE_LEGACY_ALIAS.get(code, code)
+
+    def ancestor_code_at_level(self, code: str, level: int) -> str | None:
+        """Roll an OncoTree ``code`` up to its ancestor at ``level``.
+
+        Levels are 1-indexed (``level=1`` is the tissue root). A node shallower
+        than ``level`` has no ancestor there, so its own (deepest) code is
+        returned instead.
+
+        Parameters
+        ----------
+        code : str
+            OncoTree code to roll up.
+        level : int
+            Target hierarchy level (>= 1).
+
+        Returns
+        -------
+        str | None
+            The ancestor code at ``level`` (or the node's own code if it is
+            shallower than ``level``); ``None`` if ``code`` is unknown.
+        """
+        if level < 1:
+            raise ValueError(f"level must be >= 1, got {level}")
+        lineage = self._level_code_map.get(code)
+        if not lineage:
+            return None
+        return lineage[level - 1] if level <= len(lineage) else lineage[-1]
+
+    def roll_up_map(
+        self, level: int, codes: list[str] | None = None
+    ) -> dict[str, str | None]:
+        """Build a ``{code: ancestor_code_at_level}`` map for many codes.
+
+        Parameters
+        ----------
+        level : int
+            Target hierarchy level (>= 1); see :meth:`ancestor_code_at_level`.
+        codes : list[str] | None
+            Codes to roll up; when None, every known OncoTree code is used.
+
+        Returns
+        -------
+        dict[str, str | None]
+            ``{code: ancestor_code}`` (value ``None`` for unknown codes).
+        """
+        keys = codes if codes is not None else list(self._level_code_map)
+        return {code: self.ancestor_code_at_level(code, level) for code in keys}
+
+    @property
+    def dict_code_metacolor(self) -> dict[str, str]:
+        """Map OncoTree code -> upstream metacolor.
+
+        Tissue-level (``depth == 1``) rows are dropped so the keys are
+        unique leaf codes.
+
+        Returns
+        -------
+        dict[str, str]
+            ``{code: metacolor}`` for every non-tissue row.
+        """
+        df = self.return_df_tissue_drop()
+        return dict(zip(df["code"], df["metacolor"]))
+
+    @property
+    def dict_code_color(self) -> dict[str, str]:
+        """Map OncoTree code -> curated plotting color.
+
+        The curated color is the tissue-level default from
+        ``DICT_TISSUE_COLOR`` (keyed by ``level_1``), overridden by
+        ``DICT_CODE_COLOR_OVERRIDE`` for codes whose biology differs from
+        their administrative parent tissue (GIST under Soft Tissue,
+        parathyroid carcinomas under Head and Neck, PSEC under Peritoneum).
+
+        Returns
+        -------
+        dict[str, str]
+            ``{code: color}`` for every non-tissue row. A tissue absent
+            from ``DICT_TISSUE_COLOR`` logs a warning and falls back to
+            the upstream metacolor so the mapping still covers every code.
+        """
+        df = self.return_df_tissue_drop()
+        out = {}
+        for code, lvl1, metacolor in zip(df["code"], df["level_1"], df["metacolor"]):
+            if code in DICT_CODE_COLOR_OVERRIDE:
+                out[code] = DICT_CODE_COLOR_OVERRIDE[code]
+            elif lvl1 in DICT_TISSUE_COLOR:
+                out[code] = DICT_TISSUE_COLOR[lvl1]
+            else:
+                logger.warning(
+                    "No curated color for tissue %r; falling back to %r",
+                    lvl1,
+                    metacolor,
+                )
+                out[code] = metacolor
+        return out

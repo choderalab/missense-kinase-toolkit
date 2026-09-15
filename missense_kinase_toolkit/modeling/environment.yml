@@ -1,13 +1,72 @@
 name: mkt_modeling
 channels:
   - conda-forge
-  - schrodinger
+  - bioconda
   - defaults
 dependencies:
   - python=3.10
-  - pymol-open-source>=2.5.0
-  - tqdm>=4.62.0
-  - gitpython
+  - biopython
+  - matplotlib-base
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+  - seaborn
+  - networkx
+  - mdanalysis
+  - pymol-open-source
+  - rdkit
+  - h5py
+  - netcdf4
+  - pillow
+  - setuptools
   - pip
-  - pip:
-    - biopython>=1.79
+  - packaging
+  - tqdm
+  - joblib
+  - filelock
+  - gitpython
+  - sqlalchemy
+  - statsmodels
+  - reportlab
+  - prolif
+  - pyqt
+  - contourpy
+  - kiwisolver
+  - pyparsing
+  - python-dateutil
+  - pytz
+  - six
+  - cycler
+  - fonttools
+  - certifi
+  - chardet
+  - colorama
+  - dill
+  - greenlet
+  - mmtf-python
+  - mrcfile
+  - msgpack-python
+  - multiprocess
+  - munkres
+  - patsy
+  - ply
+  - threadpoolctl
+  - tidynamics
+  - toml
+  - tomli
+  - typing-extensions
+  - wheel
+  - unicodedata2
+  - griddataformats
+  - gsd
+  - mda-xdrlib
+  - pyedr
+  - pytng
+  - rlpycairo
+  - pycairo
+  - smmap
+  - cached-property
+  - ipykernel
+  - jupyter
+  - mols2grid

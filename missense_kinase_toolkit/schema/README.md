@@ -10,7 +10,9 @@ pip install git+https://github.com/choderalab/missense-kinase-toolkit.git#subdir
 To load the package data in the form of a dictionary where the kinase HGNC names are the keys and the `KinaseInfo` `Pydantic` models are the values use the following:
 ```
 from mkt.schema import io_utils
-dict_kinase = io_utils.deserialize_kinase_dict()
+
+# str_name ensures you don't import the dictionary if already in cache
+DICT_KINASE = io_utils.deserialize_kinase_dict(str_name="DICT_KINASE")
 ```
 
 The `KinaseInfo` object contains the following relevant fields:
@@ -24,4 +26,4 @@ The `KinaseInfo` object contains the following relevant fields:
 | `pfam`       | Annotated kinase domain from [Pfam](https://www.ebi.ac.uk/interpro/entry/pfam) (includes "Protein kinase domain" and <br>"Protein tyrosine and serine/threonine kinase" only), aligned to UniProt canonical sequence |
 | `kincore`    | Annotated kinase domains and and active state structures from Dunbrack lab's [KinCore](http://dunbrack.fccc.edu/kincore/activemodels), aligned to UniProt canonical sequence |
 
-The code to generate these can be found in the `databases` pacakge. This sub-package is designed to
+The code to generate these can be found in the `databases` pacakge, which serves as the extract and transform components of the ETL pipeline. This sub-package is designed to act as the load component of the ETL pipeline.

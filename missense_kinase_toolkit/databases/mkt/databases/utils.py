@@ -1,8 +1,23 @@
+"""General-purpose string, dataframe, and structure utility functions.
+
+Collects string-splitting/matching helpers, dataframe aggregation and one-hot encoding
+utilities, and conversions between mmCIF dictionaries, Biopython structures, and
+serialized strings.
+"""
+
 import logging
+import os
+from io import StringIO
+from tempfile import NamedTemporaryFile
 from typing import Any
 
 import numpy as np
 import pandas as pd
+from Bio.PDB import MMCIFParser
+from Bio.PDB.mmcifio import MMCIFIO
+from Bio.PDB.PDBIO import PDBIO
+from Bio.PDB.Structure import Structure
+from mkt.schema.io_utils import deserialize_kinase_dict
 
 logger = logging.getLogger(__name__)
 
@@ -281,7 +296,7 @@ def aggregate_df_by_col_set(
     return df_in_agg
 
 
-def split_on_first_only(str_in, delim):
+def split_on_first_only(str_in, delim, bool_keep_delim=False):
     """Split string on first occurrence of delim.
 
     Parameters
@@ -290,6 +305,10 @@ def split_on_first_only(str_in, delim):
         Input string to split
     delim : str
         Delimiter to split on
+    bool_keep_delim : bool, optional
+        If True, keep any later delimiters in ``str2`` (e.g. "TYR_JAK1_2" -> ("TYR",
+        "JAK1_2"), preserving a multi-KD "_1"/"_2" domain suffix); if False (default),
+        the later delimiters are stripped ("TYR_JAK1_2" -> ("TYR", "JAK12")).
 
     Returns
     -------
@@ -299,7 +318,7 @@ def split_on_first_only(str_in, delim):
     """
     list_split = str_in.split(delim)
     str1 = list_split[0]
-    str2 = "".join(list_split[1:])
+    str2 = (delim if bool_keep_delim else "").join(list_split[1:])
     return str1, str2
 
 
@@ -324,83 +343,6 @@ def flatten_iterables_in_iterable(data):
         else:
             flattened_list.append(item)
     return flattened_list
-
-
-def rgetattr(obj, attr, *args):
-    """Get attribute from object recursively.
-
-    Parameters
-    ----------
-    obj : Any
-        Object to get attribute from.
-    attr : str
-        Attribute to get.
-    *args : Any
-        Any additional arguments to pass to getattr.
-
-    Returns
-    -------
-    Any
-        Value of attribute if found.
-    """
-    import functools
-
-    def _getattr(obj, attr):
-        return getattr(obj, attr, *args)
-
-    return functools.reduce(_getattr, [obj] + attr.split("."))
-
-
-def rsetattr(obj, attr, val, *args):
-    """Set attribute from object recursively.
-
-    Parameters
-    ----------
-    obj : Any
-        Object to get attribute from.
-    attr : str
-        Attribute to get.
-    val : Any
-        Value to set attribute to.
-    *args : Any
-        Any additional arguments to pass to getattr.
-
-    Returns
-    -------
-    Any
-        Value of attribute if found, otherwise default value.
-    """
-    import functools
-
-    def _setattr(obj, attr, val):
-        return setattr(obj, attr, val, *args)
-
-    return functools.reduce(_setattr, [obj] + attr.split("."))
-
-
-def try_except_return_none_rgetattr(obj, attr, *args):
-    """Get attribute from object recursively.
-
-    Parameters
-    ----------
-    obj : Any
-        Object to get attribute from.
-    attr : str
-        Attribute to get.
-    *args : Any
-        Any additional arguments to pass to getattr.
-
-    Returns
-    -------
-    Any
-        Value of attribute if found, otherwise None.
-    """
-
-    try:
-        return rgetattr(obj, attr, *args)
-    except Exception as e:
-        logging.error(f"Unexpected error: {e}")
-        return None
 
 
 def return_bool_at_index(
@@ -528,3 +470,94 @@ def add_one_hot_encoding_to_dataframe(
         df_out = df_base
 
     return df_out
+
+
+def convert_mmcifdict2structure(
+    dict_cif: dict[str, str | list[str]],
+    structure_id: str = "kinase",
+) -> Structure:
+    """Convert an MMCIF2Dict dictionary into a Bio.PDB Structure.
+
+    The CIF data stored on ``KinaseInfo.kincore.cif.cif`` is an ``MMCIF2Dict``
+    object; Bio.PDB cannot build a structure from it directly, so it is round
+    tripped through a temporary CIF file via ``MMCIFIO``/``MMCIFParser``.
+
+    Parameters
+    ----------
+    dict_cif : dict[str, str | list[str]]
+        CIF dictionary (``MMCIF2Dict``), e.g. ``KinaseInfo.kincore.cif.cif``.
+    structure_id : str
+        Identifier assigned to the returned structure, by default "kinase".
+
+    Returns
+    -------
+    Structure
+        Bio.PDB Structure object parsed from the CIF dictionary. Residues are
+        numbered by ``auth_seq_id``, which for KinCoRe CIFs corresponds to the
+        UniProt sequence position.
+
+    """
+    mmcif_io = MMCIFIO()
+    mmcif_io.set_dict(dict_cif)
+
+    temp_string = StringIO()
+    mmcif_io.save(temp_string)
+
+    with NamedTemporaryFile(mode="w+", suffix=".cif", delete=False) as temp_file:
+        temp_file.write(temp_string.getvalue())
+        temp_file_name = temp_file.name
+
+    try:
+        parser = MMCIFParser(QUIET=True)
+        structure = parser.get_structure(structure_id, temp_file_name)
+    finally:
+        os.remove(temp_file_name)
+
+    return structure
+
+
+def convert_structure2string(structure: Structure) -> str:
+    """Serialize a Bio.PDB Structure to a PDB-format string.
+
+    Parameters
+    ----------
+    structure : Structure
+        Bio.PDB Structure object.
+
+    Returns
+    -------
+    str
+        Structure in PDB string format; residue numbering is preserved from
+        ``auth_seq_id`` (UniProt position for KinCoRe CIFs).
+
+    """
+    pdb_io = PDBIO()
+    pdb_io.set_structure(structure)
+    pdb_string = StringIO()
+    pdb_io.save(pdb_string)
+
+    return pdb_string.getvalue()
+
+
+def load_kinase_object(str_in: str):
+    """Load a kinase object from the kinase dictionary based on the given gene name.
+
+    Parameters
+    ----------
+    str_in : str
+        Gene name of the kinase to load.
+
+    Returns
+    -------
+    KinaseInfo
+        KinaseInfo object corresponding to the given gene name.
+
+    Raises
+    ------
+    ValueError
+        If the given gene name is not found in the kinase dictionary.
+    """
+    dict_kinase = deserialize_kinase_dict(list_ids=[str_in])
+    if str_in not in dict_kinase:
+        raise ValueError(f"Kinase {str_in} not found in DICT_KINASE.")
+    return dict_kinase[str_in]

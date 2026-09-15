@@ -14,6 +14,7 @@ from mkt.ml.utils import return_device
 from mkt.ml.utils_wandb import (  # log_metrics_to_wandb,; log_model_to_wandb,; log_plots_to_wandb,; save_checkpoint,
     setup_wandb,
 )
+from mkt.schema.utils import TQDM_BAR_FORMAT
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -338,12 +339,16 @@ def train_model(
     step_val_loss_list = []
 
     # training loop
-    for epoch in tqdm(range(epochs), desc="Training epochs..."):
+    for epoch in tqdm(
+        range(epochs), desc="Training epochs...", bar_format=TQDM_BAR_FORMAT
+    ):
         model.train()
         total_train_loss = 0
         batch_count = 0
 
-        for batch in tqdm(train_dataloader, desc="Training batches..."):
+        for batch in tqdm(
+            train_dataloader, desc="Training batches...", bar_format=TQDM_BAR_FORMAT
+        ):
             batch_count += 1
             global_step += 1
 

@@ -1,0 +1,135 @@
+import pytest
+import requests
+from filelock import FileLock
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "network: marks tests requiring network access")
+
+
+# ---------------------------------------------------------------------------
+# shared config helpers
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def configured_output_dir():
+    """Set OUTPUT_DIR once for the entire test session."""
+    from mkt.databases import config
+
+    config.set_output_dir(".")
+
+
+@pytest.fixture(scope="session")
+def configured_cbioportal(configured_output_dir):
+    """Set cBioPortal config once for the entire test session."""
+    from mkt.databases import config
+
+    config.set_cbioportal_instance("www.cbioportal.org")
+
+
+def is_cbioportal_reachable(str_url: str) -> bool:
+    """Probe the cBioPortal Swagger spec endpoint directly.
+
+    Lets the live tests tell an upstream outage (skip) apart from a broken client
+    in this package (fail), since both surface as a None client.
+
+    Parameters
+    ----------
+    str_url : str
+        cBioPortal Swagger spec URL to probe.
+
+    Returns
+    -------
+    bool
+        True if the endpoint answers with a 2xx, False otherwise
+    """
+    try:
+        response = requests.get(str_url, timeout=30)
+        return response.ok
+    except Exception:
+        return False
+
+
+@pytest.fixture(scope="session")
+def cbioportal_probe():
+    """Expose :func:`is_cbioportal_reachable` so it is only called on failure."""
+    return is_cbioportal_reachable
+
+
+# ---------------------------------------------------------------------------
+# EGFR fixtures (shared by test_kincore, test_klifs, test_uniprot)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def egfr_uniprot():
+    """Fetch EGFR UniProt FASTA once (P00533)."""
+    from mkt.databases.uniprot import UniProtFASTA
+
+    return UniProtFASTA("P00533")
+
+
+@pytest.fixture(scope="session")
+def kincore_harmonized_dict(tmp_path_factory):
+    """Build harmonized KinCoRe FASTA/CIF dict once.
+
+    Uses a file lock so that parallel xdist workers do not
+    concurrently extract the KinCoRe tar.gz to the same directory.
+    """
+    from mkt.databases.kincore import harmonize_kincore_fasta_cif
+
+    # coordinate between xdist workers via a shared lock file
+    root_tmp = tmp_path_factory.getbasetemp().parent
+    lock_file = root_tmp / "kincore_extract.lock"
+
+    with FileLock(str(lock_file)):
+        return harmonize_kincore_fasta_cif()
+
+
+@pytest.fixture(scope="session")
+def egfr_kincore_alignment(kincore_harmonized_dict, egfr_uniprot):
+    """Align EGFR KinCoRe sequence to UniProt once."""
+    from mkt.databases.kincore import align_kincore2uniprot
+
+    return align_kincore2uniprot(
+        str_kincore=kincore_harmonized_dict["P00533"][0].fasta.seq,
+        str_uniprot=egfr_uniprot._sequence,
+    )
+
+
+@pytest.fixture(scope="session")
+def egfr_klifs_info():
+    """Fetch EGFR from KLIFS API once."""
+    from mkt.databases import klifs
+
+    return klifs.KinaseInfo("EGFR")
+
+
+@pytest.fixture(scope="session")
+def egfr_klifs_pocket(egfr_uniprot, egfr_klifs_info, egfr_kincore_alignment):
+    """Build EGFR KLIFSPocket once (depends on KLIFS + KinCoRe data)."""
+    from mkt.databases import klifs
+
+    if egfr_klifs_info.status_code != 200:
+        pytest.skip("KLIFS API returned non-200 status")
+    dict_egfr = egfr_klifs_info.get_kinase_info()[0]
+    return klifs.KLIFSPocket(
+        uniprotSeq=egfr_uniprot._sequence,
+        klifsSeq=dict_egfr["pocket"],
+        idx_kd=(
+            egfr_kincore_alignment["start"] - 1,
+            egfr_kincore_alignment["end"] - 1,
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# reusable bad-request response (used by test_utils_requests)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def uniprot_bad_request_response():
+    """Make a single bad request to UniProt for error-handling tests."""
+    return requests.get("https://rest.uniprot.org/uniprotkb/TEST")

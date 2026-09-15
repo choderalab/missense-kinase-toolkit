@@ -1,3 +1,9 @@
+"""Cached HTTP session wrapper (requests-cache) with retry handling.
+
+Provides :func:`get_cached_session`, a cached ``requests_cache.CachedSession`` with
+retry logic, used for all HTTP calls across the databases package.
+"""
+
 from functools import cache
 
 from mkt.databases.config import maybe_get_request_cache

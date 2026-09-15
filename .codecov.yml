@@ -6,15 +6,24 @@ coverage:
       default:
         threshold: 50%
 
-flags:
-  schema:
-    paths:
-      - missense_kinase_toolkit/schema
+flag_management:
+  default_rules:
     carryforward: true
-  databases:
-    paths:
-      - missense_kinase_toolkit/databases
-    carryforward: true
+  individual_flags_rules:
+    - name: schema
+      target: 90%
+    - name: databases
+      target: auto
+
+# flags:
+#   schema:
+#     paths:
+#       - missense_kinase_toolkit/schema
+#     carryforward: true
+#   databases:
+#     paths:
+#       - missense_kinase_toolkit/databases
+#     carryforward: true
 
 comment:
   layout: "header, flags"

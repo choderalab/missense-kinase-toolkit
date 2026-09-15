@@ -1,15 +1,23 @@
+"""cBioPortal API client and extraction of missense kinase mutations, treatments, and panels.
+
+Builds on :class:`cBioPortal`/:class:`cBioPortalQuery` to pull study, mutation,
+treatment, and gene-panel data; :class:`KinaseMissenseMutations` extracts missense
+mutations restricted to kinase genes.
+"""
+
 import logging
 import os
+import time
 from abc import abstractmethod
 from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
+import requests
 from Bio import Align
 from bravado.client import SwaggerClient
-from mkt.databases import klifs, properties
+from mkt.databases import properties
 from mkt.databases.api_schema import APIKeySwaggerClient
-from mkt.databases.colors import DICT_KINASE_GROUP_COLORS
 from mkt.databases.config import get_cbioportal_instance, maybe_get_cbioportal_token
 from mkt.databases.io_utils import (
     parse_iterabc2dataframe,
@@ -17,12 +25,22 @@ from mkt.databases.io_utils import (
     save_dataframe_to_csv,
 )
 from mkt.databases.utils import add_one_hot_encoding_to_dataframe
+from mkt.schema.utils import TQDM_BAR_FORMAT
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
 
 DICT_KINASE = return_kinase_dict()
+
+INT_CLIENT_RETRIES = 2
+"""int: attempts made to construct the cBioPortal Swagger client before giving up;
+the session already retries at the HTTP level, so this only covers a failure that
+survives the response (e.g. an unparseable Swagger spec)."""
+
+FLOAT_CLIENT_BACKOFF = 2.0
+"""float: seconds to wait before the second client-construction attempt, doubling
+thereafter."""
 
 
 @dataclass
@@ -37,14 +55,27 @@ class cBioPortal(APIKeySwaggerClient):
     """cBioPortal API object (post-init)."""
 
     def __post_init__(self):
-        """Post-initialization to set up cBioPortal API client."""
+        """Post-initialization to set up cBioPortal API client.
+
+        Retries client construction so a transient failure on first contact -- one
+        the session-level retries cannot cover, such as a truncated or unparseable
+        Swagger spec -- does not leave the client permanently unusable.
+        """
         self.instance = get_cbioportal_instance()
         self.url = f"https://{self.instance}/api/v2/api-docs"
-        self._cbioportal = self.query_api()
-        if self._cbioportal is None:
-            logger.error(
-                f"Failed to initialize cBioPortal API client for instance {self.instance}"
-            )
+        for int_attempt in range(1, INT_CLIENT_RETRIES + 1):
+            try:
+                self._cbioportal = self.query_api()
+                break
+            except Exception as e:
+                logger.warning(
+                    f"Error initializing cBioPortal API client "
+                    f"(attempt {int_attempt} of {INT_CLIENT_RETRIES}): {e}\n"
+                    "Can still load data from CSV files if pathfile(s) provided.",
+                    exc_info=True,
+                )
+                if int_attempt < INT_CLIENT_RETRIES:
+                    time.sleep(FLOAT_CLIENT_BACKOFF * 2 ** (int_attempt - 1))
 
     def maybe_get_token(self):
         return maybe_get_cbioportal_token()
@@ -61,6 +92,7 @@ class cBioPortal(APIKeySwaggerClient):
                 "validate_swagger_spec": False,
             },
         )
+        self._stamp_now()
 
         return cbioportal_api
 
@@ -91,13 +123,15 @@ class cBioPortalQuery(cBioPortal):
     _data: list | None = field(init=False, default=None)
     """List of cBioPortal sub-API queries; None if ID not found (post-init)."""
     _df: pd.DataFrame | None = field(init=False, default=None)
+    """DataFrame of cBioPortal data; None if DataFrame could not be created (post-init)."""
 
     def __post_init__(self):
         """Post-initialization to check study ID in instance and query API data."""
         super().__post_init__()
         if not self.check_entity_id():
-            logger.error(
-                f"Study {self.get_entity_id()} not found in cBioPortal instance {self.instance}"
+            logger.warning(
+                f"Study {self.get_entity_id()} not found "
+                f"in cBioPortal instance {self.instance}"
             )
         if self.pathfile is not None:
             try:
@@ -144,23 +178,37 @@ class cBioPortalQuery(cBioPortal):
         """
         ...
 
-    def load_from_csv(self) -> pd.DataFrame | None:
+    def load_from_csv(
+        self,
+        str_path: str | None = None,
+    ) -> pd.DataFrame | None:
         """Load DataFrame from CSV file.
+
+        Parameters
+        ----------
+        str_path : str | None
+            Path to CSV file; if None, use self.pathfile
 
         Returns
         -------
         pd.DataFrame | None
             DataFrame loaded from CSV file if successful, otherwise None
         """
-        if self.pathfile is not None and os.path.exists(self.pathfile):
+        if str_path is not None:
+            path_to_use = str_path
+        else:
+            path_to_use = self.pathfile
+            logger.info(f"Loading DataFrame from CSV file: {path_to_use}.")
+
+        if path_to_use is not None and os.path.exists(path_to_use):
             try:
-                df = pd.read_csv(self.pathfile)
+                df = pd.read_csv(path_to_use)
                 return df
             except Exception as e:
-                logger.error(f"Error loading DataFrame from {self.pathfile}: {e}")
+                logger.error(f"Error loading DataFrame from {path_to_use}: {e}")
                 return None
         else:
-            logger.error(f"Path {self.pathfile} does not exist or is not specified.")
+            logger.error(f"Path {path_to_use} does not exist or is not specified.")
             return None
 
     def regenerate_dataframe(self) -> pd.DataFrame | None:
@@ -178,6 +226,7 @@ class cBioPortalQuery(cBioPortal):
                 f"in cBioPortal instance {self.instance}"
             )
         else:
+            self._stamp_now()
             self._df = self.convert_api_query_to_dataframe()
             if self._df is None:
                 logger.error(
@@ -286,9 +335,18 @@ class StudyData(cBioPortalQuery):
         bool
             True if the study ID is valid, False otherwise
         """
-        studies = self._cbioportal.Studies.getAllStudiesUsingGET().result()
-        study_ids = [study.studyId for study in studies]
-        return self.study_id in study_ids
+        if self._cbioportal is None:
+            logger.warning(
+                f"No cBioPortal client available to check study ID {self.study_id}."
+            )
+            return False
+        try:
+            studies = self._cbioportal.Studies.getAllStudiesUsingGET().result()
+            study_ids = [study.studyId for study in studies]
+            return self.study_id in study_ids
+        except Exception as e:
+            logger.warning(f"Error checking study ID {self.study_id}: {e}")
+            return False
 
 
 @dataclass
@@ -310,10 +368,10 @@ class Mutations(StudyData):
 
         """
         try:
-            # TODO: add incremental error handling beyond missing study
-            muts = self._cbioportal.Mutations.getMutationsInMolecularProfileBySampleListIdUsingGET(
+            # use POST endpoint since GET now requires entrezGeneId
+            muts = self._cbioportal.Mutations.fetchMutationsInMolecularProfileUsingPOST(
                 molecularProfileId=f"{self.study_id}_mutations",
-                sampleListId=f"{self.study_id}_all",
+                mutationFilter={"sampleListId": f"{self.study_id}_all"},
                 projection="DETAILED",
             ).result()
         except Exception as e:
@@ -323,29 +381,112 @@ class Mutations(StudyData):
 
 
 @dataclass
+class StructuralVariant(StudyData):
+    """Class to get structural variants (gene fusions) from a cBioPortal study.
+
+    Fetches from the ``{study_id}_structural_variants`` molecular profile via the
+    cBioPortal ``StructuralVariants`` POST endpoint. Pass ``list_entrez`` to restrict
+    to specific genes (e.g. FGFR2 / FGFR3 for fusion candidacy) — cBioPortal's
+    ``StructuralVariantFilter`` requires either ``entrezGeneIds`` or
+    ``sampleMolecularIdentifiers``, so a gene filter is the efficient path; leave it
+    ``None`` only if the study is small.
+    """
+
+    list_entrez: list[int] | None = None
+    """Entrez gene IDs to restrict the fetch to (e.g. FGFR2=2263, FGFR3=2261). None
+    fetches across all genes (may require the study to expose a default sample list)."""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+    def query_sub_api(self) -> list | None:
+        """Get structural-variant cBioPortal data.
+
+        The ``/api/v2/api-docs`` swagger spec used by the base client predates
+        structural-variant support (its resource list has no ``StructuralVariants``),
+        so this queries the REST endpoint ``POST /api/structural-variant/fetch``
+        directly. Response rows are already flat (``site1*`` / ``site2*`` scalar
+        fields), so no ABC flattening is required downstream.
+
+        Returns
+        -------
+        list | None
+            cBioPortal structural variants as a list of dicts if successful,
+            otherwise None.
+        """
+        sv_filter: dict = {
+            "molecularProfileIds": [f"{self.study_id}_structural_variants"],
+        }
+        if self.list_entrez is not None:
+            sv_filter["entrezGeneIds"] = self.list_entrez
+        token = maybe_get_cbioportal_token()
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        try:
+            resp = requests.post(
+                f"https://{self.instance}/api/structural-variant/fetch",
+                json=sv_filter,
+                headers=headers,
+                timeout=120,
+            )
+            resp.raise_for_status()
+            svs = resp.json()
+        except Exception as e:
+            logger.error(
+                f"Error retrieving structural variants for study {self.study_id}: {e}"
+            )
+            svs = None
+        return svs
+
+    def convert_api_query_to_dataframe(self) -> pd.DataFrame | None:
+        """Build a flat DataFrame from the REST response (a list of dicts).
+
+        Overrides the ABC-flattening base implementation: the structural-variant
+        REST payload is already flat, so a direct ``pd.DataFrame`` is sufficient.
+
+        Returns
+        -------
+        pd.DataFrame | None
+            DataFrame of structural variants if successful, otherwise None.
+        """
+        try:
+            return pd.DataFrame(self._data)
+        except Exception as e:
+            logger.error(f"Error converting structural variants to DataFrame: {e}")
+            return None
+
+
+@dataclass
 class KinaseMissenseMutations(Mutations):
     """Class to get kinase mutations from a cBioPortal study."""
 
     dict_replace: dict[str, str] = field(default_factory=lambda: {"STK19": "WHR1"})
-    """Dictionary mapping cBioPortal to MKT HGNC gene names for mismatches; default is {"STK19": "WHR1"}."""
+    """Dictionary mapping cBioPortal to mkt gene names for mismatches; default is {"STK19": "WHR1"}."""
     str_blosom: str = "BLOSUM80"
     """BLOSUM matrix to use for mutation analysis; default is "BLOSUM80"."""
+    pathfile_filter: str | None = None
+    """Path to CSV file for filtered kinase missense mutations; default is None."""
     _df_filter: pd.DataFrame | None = field(init=False, default=None)
     """DataFrame of kinase missense mutations; None if DataFrame could not be created (post-init)."""
 
     def __post_init__(self):
         super().__post_init__()
-        if self.pathfile is not None:
+        if self.pathfile_filter is not None:
+            str_temp = "loaded"
             logger.info(
-                f"Loading filtered DataFrame from {self.pathfile} for study {self.study_id}."
+                f"Loading filtered DataFrame from CSV file: {self.pathfile_filter}."
             )
-            self._df_filter = self._df.copy()
+            self._df_filter = self.load_from_csv(str_path=self.pathfile_filter)
         else:
+            str_temp = "generated"
             self._df_filter = self.get_kinase_missense_mutations()
-            if self._df_filter is None:
-                logger.error(
-                    f"DataFrame for kinase missense mutations in study {self.study_id} could not be created."
-                )
+
+        if self._df_filter is None:
+            logger.error(
+                "DataFrame for kinase missense mutations in study "
+                f"{self.study_id} could not be {str_temp}."
+            )
 
     def filter_single_aa_missense_mutations(
         self,
@@ -425,7 +566,11 @@ class KinaseMissenseMutations(Mutations):
         dict_hgnc2uniprot = dict.fromkeys(set(list_hgnc))
 
         list_err = []
-        for hgnc_name in tqdm(dict_hgnc2uniprot.keys(), desc="Querying HGNC..."):
+        for hgnc_name in tqdm(
+            dict_hgnc2uniprot.keys(),
+            desc="Querying HGNC...",
+            bar_format=TQDM_BAR_FORMAT,
+        ):
             temp = hgnc.HGNC(input_symbol_or_id=hgnc_name)
             try:
                 uniprot_id = temp.maybe_get_info_from_hgnc_fetch(
@@ -433,9 +578,10 @@ class KinaseMissenseMutations(Mutations):
                 )["uniprot_ids"][0][0]
                 dict_hgnc2uniprot[hgnc_name] = uniprot_id
             except Exception as e:
-                logger.error(f"Error retrieving Uniprot ID for {hgnc_name}: {e}")
-                list_err.append(hgnc_name)
-        logger.error(f"List errors:\n{list_err}")
+                list_err.append(f"{hgnc_name}: {e}")
+        if len(list_err) > 0:
+            str_errors = "\n".join(list_err)
+            logger.error(f"Errors retrieving HGNC gene names:\n{str_errors}")
 
         # replace any HGNC gene names in the dictionary
         for cbio_name, mkt_name in self.dict_replace.items():
@@ -461,7 +607,6 @@ class KinaseMissenseMutations(Mutations):
             DataFrame of kinase mutations if successful, otherwise None
 
         """
-        # dict_in = return_kinase_dict()
 
         col_hgnc = self.return_adjusted_colname("hugoGeneSymbol")
 
@@ -488,9 +633,12 @@ class KinaseMissenseMutations(Mutations):
             for k, v in DICT_KINASE.items()
             if v.uniprot_id.split("_")[0] in dict_hgnc2uniprot_kin.values()
         }
+
         # replace any mismatched gene names in the dictionary
         for cbio_name, mkt_name in self.dict_replace.items():
-            dict_kinase_cbio[cbio_name] = dict_kinase_cbio.pop(mkt_name)
+            if mkt_name in dict_kinase_cbio:
+                dict_kinase_cbio[cbio_name] = dict_kinase_cbio.pop(mkt_name)
+
         # BRD4 and STK19 don't have KLIFS - if want to remove them, uncomment below
         # dict_kinase_cbio = {
         #     k: v for k, v in dict_kinase_cbio.items()
@@ -557,7 +705,12 @@ class KinaseMissenseMutations(Mutations):
 
         # TODO: check non-mismatches for list_set_kinase_mismatch gene_hugoGeneSymbol
         set_kinase_mismatch = {i.split("_")[1] for i in list_mismatch + list_err}
-        logger.error(f"HGNC gene names with mismatches: {set_kinase_mismatch}")
+        if len(set_kinase_mismatch) > 0:
+            str_errors = "\n".join(set_kinase_mismatch)
+            logger.error(
+                "HGNC gene names of kinases with mismatches between "
+                f"cBioPortal and canonical Uniprot sequences:\n{str_errors}"
+            )
         df_filtered = df.loc[
             ~df["gene_hugoGeneSymbol"].isin(set_kinase_mismatch), :
         ].reset_index(drop=True)
@@ -615,8 +768,11 @@ class KinaseMissenseMutations(Mutations):
             else:
                 dict_out["klifs_region"].append(None)
 
-            # KinCore
-            if dict_in[hgnc_name].kincore is None:
+            # KinCoRe (an MSA-only shell has no FASTA -> treat as no KinCoRe KD info)
+            if (
+                dict_in[hgnc_name].kincore is None
+                or dict_in[hgnc_name].kincore.fasta is None
+            ):
                 dict_out["kincore_kd"].append(None)
             elif (
                 dict_in[hgnc_name].kincore.fasta.start
@@ -741,209 +897,6 @@ class KinaseMissenseMutations(Mutations):
 
         return dict_out
 
-    def generate_heatmap_fig(
-        self,
-        filename: str | None = None,
-        colname: str = "klifs_region",
-        bool_onehot: bool = True,
-        bool_log10: bool = True,
-        max_value: int | None = None,
-        dict_clustermap_args: dict | None = None,
-    ) -> None:
-        """Generate a heatmap figure of missense mutation counts by KLIFS region.
-
-        Parameters
-        ----------
-        df_in : pd.DataFrame
-            DataFrame of missense mutations with 'gene_hugoGeneSymbol' and 'klifs_region' columns
-        filename : str | None
-            Path and filename (incl format) to save the heatmap figure;
-                if None, the figure will not be saved
-        colname : str
-            Column name to pivot on; default is "klifs_region" (just counts);
-                if "blosum_penalty", the mean BLOSUM penalty is used instead;
-                    if starts with "_", it is treated as a one-hot encoded column
-        bool_onehot : bool
-            If colname corresponds to one-hot encoded columns, which values to keep;
-                default is True
-        bool_log10 : bool
-            Convert counts to log10 if True; default is True
-        max_value : int | None
-            Maximum value to truncate the log10 counts to if bool_log10 is True;
-                if None, no truncation is applied; default is None
-        dict_clustermap_args : dict | None
-            Additional arguments for the seaborn clustermap function;
-            if None, default arguments are used; default is None
-
-        Returns
-        -------
-        None
-            Displays the heatmap figure; saves it if bool_save is True
-
-        """
-        import matplotlib.colors as mcolors
-        import matplotlib.pyplot as plt
-        import seaborn as sns
-        from matplotlib.colors import ListedColormap
-
-        if filename is not None:
-            plt.ioff()
-
-        dict_data = self.generate_pivot_table(
-            colname=colname,
-            bool_onehot=bool_onehot,
-            bool_log10=bool_log10,
-            max_value=max_value,
-        )
-        if dict_data is None:
-            logger.error(
-                f"Could not generate pivot table for column {colname} in DataFrame."
-            )
-            return
-
-        pivot_table = dict_data["dataframe"]
-        title = dict_data["title"]
-        if pivot_table.empty:
-            logger.error(
-                f"Pivot table for column {colname} is empty. "
-                "No heatmap will be generated."
-            )
-            return
-
-        custom_palette = dict(
-            zip(
-                pivot_table.columns,
-                pivot_table.columns.map(
-                    lambda x: klifs.DICT_POCKET_KLIFS_REGIONS[x.split(":")[0]]["color"]
-                ),
-            )
-        )
-
-        kinfam_palette = dict(
-            zip(
-                pivot_table.index,
-                pivot_table.index.map(
-                    lambda x: DICT_KINASE_GROUP_COLORS[
-                        DICT_KINASE[x].adjudicate_group()
-                    ]
-                ),
-            )
-        )
-
-        vmax_value = int(np.ceil(pivot_table.values.max()))
-
-        # create custom colormap where grey is for 0 values and YlOrRd for >0 to max
-        ylord_cmap = plt.cm.get_cmap("YlOrRd")
-        n_colors = 100
-        # create colors: 1 for grey (0) + n_colors for gradient (>0 to max)
-        colors = ["lightgrey"]  # Grey for exactly 0
-        colors.extend([ylord_cmap(i) for i in np.linspace(0.1, 1, n_colors)])
-        custom_cmap = ListedColormap(colors)
-        # create boundaries: n_colors + 2 boundaries for n_colors + 1 colors
-        bounds = [0]  # Start at 0
-        bounds.extend(
-            np.linspace(0.001, vmax_value, n_colors + 1)
-        )  # n_colors + 1 boundaries from >0 to max
-        norm = mcolors.BoundaryNorm(
-            bounds, len(colors)
-        )  # use len(colors) instead of custom_cmap.N
-
-        dict_kwargs = {
-            "fmt": "d",
-            "cmap": custom_cmap,
-            "norm": norm,
-            "vmin": 0,
-            "vmax": vmax_value,
-            "linewidths": 0.25,
-            "linecolor": "white",
-            "cbar_kws": {
-                "label": "$log_{10}$(count)",
-                "shrink": 0.5,
-                "orientation": "horizontal",
-                "ticks": np.arange(0, vmax_value + 0.5, 0.5),
-            },
-            "cbar_pos": (0.85, 0.98, 0.1, 0.01),
-            "figsize": (20, 20),
-            "dendrogram_ratio": (0.05, 0.05),
-            "row_cluster": True,
-            "col_cluster": False,
-            "method": "average",
-            "metric": "correlation",
-            "row_colors": pivot_table.index.map(kinfam_palette),
-        }
-
-        if dict_clustermap_args is not None:
-            dict_kwargs.update(dict_clustermap_args)
-
-        try:
-            g = sns.clustermap(pivot_table, **dict_kwargs)
-        except Exception as e:
-            plt.close()
-            logger.error(
-                f"Error generating clustermap: {e}\n"
-                f"Inputs: method={dict_kwargs['method'].title()}, "
-                f"metric={dict_kwargs['metric'].title()}\n"
-                f"Adding small, random noise to pivot table to avoid error."
-            )
-            np.random.seed(42)
-            g = sns.clustermap(
-                pivot_table + np.random.normal(0, 1e-10, pivot_table.shape),
-                **dict_kwargs,
-            )
-
-        g.fig.suptitle(
-            f"{title}\n"
-            f"{dict_kwargs['method'].title()} Linkage, "
-            f"{dict_kwargs['metric'].title()} Metric",
-            y=0.98,
-            fontsize=20,
-        )
-        g.ax_heatmap.set_xlabel("KLIFS Region", fontsize=16)
-        g.ax_heatmap.set_ylabel("Gene Symbol", fontsize=16)
-        g.ax_heatmap.tick_params(axis="x", which="major", labelsize=12)
-        g.ax_heatmap.tick_params(axis="y", which="major", labelsize=12)
-
-        # kinase group legend
-        custom_handles = [
-            plt.Line2D([], [], color=color, marker="s", linestyle="None", markersize=8)
-            for color in DICT_KINASE_GROUP_COLORS.values()
-        ]
-        custom_labels = list(DICT_KINASE_GROUP_COLORS.keys())
-        g.fig.legend(
-            handles=custom_handles,
-            labels=custom_labels,
-            loc="lower center",
-            bbox_to_anchor=(0.5, -0.03),
-            ncol=len(custom_labels),
-            title="Kinase Groups",
-            frameon=True,
-            fancybox=True,
-            shadow=True,
-        )
-
-        x_labels = g.ax_heatmap.get_xticklabels()
-        for label in x_labels:
-            label_text = label.get_text()
-            if label_text in custom_palette:
-                label.set_color(custom_palette[label_text])
-
-        plt.xticks(rotation=90, ha="center")
-        plt.yticks(rotation=0)
-
-        if filename:
-            os.makedirs(os.path.dirname(filename), exist_ok=True)
-            plt.savefig(
-                filename,
-                format=filename.split(".")[-1],
-                bbox_inches="tight",
-                dpi=300,
-            )
-            plt.close()
-            plt.ion()
-        else:
-            plt.show()
-            plt.close()
-
     @staticmethod
     def convert_log_and_truncate(
         x: int | float | str,
@@ -1033,9 +986,12 @@ class Treatment(StudyData):
         return treatment
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Clinical(StudyData):
     """Class to get clinical information from a cBioPortal study."""
+
+    bool_sample: bool
+    """If True, return sample-level clinical data; if False, return patient-level clinical data."""
 
     def __post_init__(self):
         """Post-initialization to get clinical info from cBioPortal."""
@@ -1049,18 +1005,53 @@ class Clinical(StudyData):
         list | None
             cBioPortal data as list of Abstract Base Classes
                 objects if successful, otherwise None.
+        bool_sample : bool
+            If True, return sample-level clinical data; if False, return patient-level clinical data
 
         """
         try:
-            clinical = self._cbioportal.Clinical_Data.getAllClinicalDataInStudyUsingGET(
-                studyId=self.study_id
-            ).result()
+            if self.bool_sample:
+                clinical = (
+                    self._cbioportal.Clinical_Data.getAllClinicalDataInStudyUsingGET(
+                        studyId=self.study_id,
+                        clinicalDataType="SAMPLE",
+                    ).result()
+                )
+            else:
+                clinical = (
+                    self._cbioportal.Clinical_Data.getAllClinicalDataInStudyUsingGET(
+                        studyId=self.study_id,
+                        clinicalDataType="PATIENT",
+                    ).result()
+                )
         except Exception as e:
             logger.error(
                 f"Error retrieving clinical data for study {self.study_id}: {e}"
             )
             clinical = None
         return clinical
+
+
+@dataclass
+class ClinicalSample(Clinical):
+    """Class to get sample-level clinical information from a cBioPortal study."""
+
+    bool_sample: bool = field(init=False, default=True)
+    """If True, return sample-level clinical data; if False, return patient-level clinical data"""
+
+    def __post_init__(self):
+        super().__post_init__()
+
+
+@dataclass
+class ClinicalPatient(Clinical):
+    """Class to get patient-level clinical information from a cBioPortal study."""
+
+    bool_sample: bool = field(init=False, default=False)
+    """If True, return sample-level clinical data; if False, return patient-level clinical data"""
+
+    def __post_init__(self):
+        super().__post_init__()
 
 
 @dataclass
@@ -1085,9 +1076,18 @@ class PanelData(cBioPortalQuery):
         bool
             True if the panel ID is valid, False otherwise
         """
-        panels = self._cbioportal.Gene_Panels.getAllGenePanelsUsingGET().result()
-        panel_ids = [panel.genePanelId for panel in panels]
-        return self.panel_id in panel_ids
+        if self._cbioportal is None:
+            logger.warning(
+                f"No cBioPortal client available to check panel ID {self.panel_id}."
+            )
+            return False
+        try:
+            panels = self._cbioportal.Gene_Panels.getAllGenePanelsUsingGET().result()
+            panel_ids = [panel.genePanelId for panel in panels]
+            return self.panel_id in panel_ids
+        except Exception as e:
+            logger.warning(f"Error checking panel ID {self.panel_id}: {e}")
+            return False
 
 
 @dataclass

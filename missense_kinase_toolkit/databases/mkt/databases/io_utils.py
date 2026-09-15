@@ -1,13 +1,108 @@
+"""File I/O helpers for CSV/dataframe round-tripping, tar creation, and kinase-dict loading.
+
+Includes helpers to load and save dataframes, concatenate CSVs by glob, parse iterables
+into dataframes, create metadata-free tar archives, and load the packaged kinase
+dictionary.
+"""
+
 import logging
 import os
 import tarfile
+from dataclasses import dataclass
 
 import git
 import pandas as pd
 from mkt.databases.config import OUTPUT_DIR_VAR
+from mkt.schema.kinase_schema import Provenance
+from mkt.schema.utils import TQDM_BAR_FORMAT, query_date_from_file
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class DataSource:
+    """A provenance-stamped source file that is used locally or downloaded on demand.
+
+    Bundles the metadata and location of an external source (KinCoRe FASTA/CIF, the Dunbrack
+    MSA, ...) so a new on-demand source is a single declaration: :meth:`resolve` returns the
+    local path (streaming it from :attr:`url` when absent, or assuming a pre-provided local file
+    when ``url`` is None), and :meth:`provenance` stamps a :class:`~mkt.schema.kinase_schema.Provenance`
+    with the file's modification date.
+
+    Attributes
+    ----------
+    name : str
+        Source file/archive name, recorded on the provenance.
+    path : str
+        Local path where the file lives (or is downloaded to).
+    url : str | None
+        Download URL; None for a source expected to be present locally, by default None.
+    version : str | None
+        Source version tag, by default None.
+    citation : str | None
+        Short publication citation, by default None.
+    doi : str | None
+        Publication DOI URL, by default None.
+    """
+
+    name: str
+    path: str
+    url: str | None = None
+    version: str | None = None
+    citation: str | None = None
+    doi: str | None = None
+
+    def resolve(self, chunk_size: int = 1 << 20) -> str:
+        """Return the local path, streaming it from :attr:`url` if the file is absent.
+
+        Implements the shared "use the local copy, otherwise download" pattern; the parent
+        directory is created as needed. A source with ``url=None`` is assumed to already exist
+        locally and is returned unchanged.
+
+        Parameters
+        ----------
+        chunk_size : int, optional
+            Streaming chunk size in bytes, by default 1 MiB.
+
+        Returns
+        -------
+        str
+            The local :attr:`path` (guaranteed to exist on return when ``url`` is set).
+        """
+        if self.url is not None and not os.path.exists(self.path):
+            import requests
+
+            logger.info(f"No local file at {self.path}; downloading from {self.url}...")
+            os.makedirs(os.path.dirname(self.path), exist_ok=True)
+            with requests.get(self.url, stream=True) as res:
+                res.raise_for_status()
+                with open(self.path, "wb") as f:
+                    for chunk in res.iter_content(chunk_size=chunk_size):
+                        f.write(chunk)
+        return self.path
+
+    def provenance(self, path: str | None = None) -> Provenance:
+        """Build a :class:`Provenance` stamped with the source file's modification date.
+
+        Parameters
+        ----------
+        path : str | None, optional
+            File whose mtime dates the provenance; defaults to :attr:`path` (use this to date
+            a post-processed derivative, e.g. an extracted/combined file).
+
+        Returns
+        -------
+        Provenance
+            The source provenance with ``query_date`` from the file mtime.
+        """
+        return Provenance(
+            name=self.name,
+            version=self.version,
+            citation=self.citation,
+            doi=self.doi,
+            query_date=query_date_from_file(path or self.path),
+        )
 
 
 def check_outdir_exists() -> str:
@@ -157,7 +252,10 @@ def parse_iterabc2dataframe(
 
     dict_dir = {}
     for attr in tqdm(
-        set_dir, desc="Parsing attributes from ABC...", disable=not verbose
+        set_dir,
+        desc="Parsing attributes from ABC...",
+        disable=not verbose,
+        bar_format=TQDM_BAR_FORMAT,
     ):
         if str_prefix:
             attr_prefix = f"{str_prefix}_{attr}"
@@ -193,7 +291,7 @@ def get_repo_root():
         return repo.working_tree_dir
     except git.InvalidGitRepositoryError:
         logger.info("Not a git repository; using current directory as root...")
-        return "."
+        return os.getcwd()
 
 
 def create_tar_without_metadata(
@@ -249,10 +347,13 @@ def return_kinase_dict(bool_hgnc: bool = True) -> dict[str, object]:
     """
     from mkt.schema import io_utils
 
-    dict_kinase = io_utils.deserialize_kinase_dict()
+    # deserialize_kinase_dict self-guards on MKT_SKIP_KINASE_DICT (returning an
+    # empty dict), so metadata-only callers such as docs builds skip the
+    # expensive load without a check here
+    DICT_KINASE = io_utils.deserialize_kinase_dict(str_name="DICT_KINASE")
 
     # use HGNC IDs as keys if bool_hgnc is True, else use UniProt IDs
     if not bool_hgnc:
-        dict_kinase = {v.uniprot_id: v for v in dict_kinase.values()}
+        DICT_KINASE = {v.uniprot_id: v for v in DICT_KINASE.values()}
 
-    return dict_kinase
+    return DICT_KINASE

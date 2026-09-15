@@ -1,3 +1,11 @@
+"""Builders that assemble :class:`KinaseInfo` objects from API and scraper data.
+
+Defines the ``*Generator`` subclasses (:class:`KinaseInfoGenerator` and friends) and the
+conversion/combination functions that populate
+:class:`mkt.schema.kinase_schema.KinaseInfo` from UniProt, KLIFS, Pfam, KinCoRe, and
+KinHub sources.
+"""
+
 import logging
 import os
 from itertools import chain
@@ -8,10 +16,10 @@ from mkt.databases import hgnc, klifs, pfam, scrapers, uniprot
 from mkt.databases.aligners import ClustalOmegaAligner
 from mkt.databases.colors import map_aa_to_single_letter_code
 from mkt.databases.config import set_request_cache
-from mkt.databases.io_utils import get_repo_root
 from mkt.databases.kincore import align_kincore2uniprot, harmonize_kincore_fasta_cif
-from mkt.databases.utils import return_bool_at_index, rgetattr, rsetattr
-from mkt.schema.constants import LIST_PFAM_KD
+from mkt.databases.utils import return_bool_at_index
+from mkt.schema.constants import LIST_LEGACY_KINASES, LIST_PFAM_KD
+from mkt.schema.io_utils import get_repo_root
 from mkt.schema.kinase_schema import (
     KLIFS,
     Family,
@@ -23,7 +31,14 @@ from mkt.schema.kinase_schema import (
     Pfam,
     UniProt,
 )
+from mkt.schema.utils import (
+    TQDM_BAR_FORMAT,
+    extract_sequence_from_cif,
+    rgetattr,
+    rsetattr,
+)
 from pydantic import ValidationError, model_validator
+from strenum import StrEnum
 from tqdm import tqdm
 from typing_extensions import Self
 
@@ -127,9 +142,16 @@ class KinaseInfoKinaseDomainGenerator(KinaseInfoKinaseDomain):
         if uniprot_id == "Q5S007":
             self.klifs.pocket_seq = "FLLGDGSFGSVYRVAVKIFLLRQELVVLCHLHPSLISLLAAMLVMELASKGSLDRLLQQYLHSAMIIYRDLKPHNVLLIADYGIA"
 
-        # https://klifs.net/details.php?structure_id=9709 just a misalignment vs. UniProt[130:196] aligns matches structure seq
+        # https://klifs.net/details.php?structure_id=9709 misalignment vs. UniProt.
+        # The previous hardcoded string had TWO errors: (1) an off-by-one -- it began one
+        # residue too early at the preceding UniProt residue Q130 ("...KL[Q]SEIGKG..."),
+        # shifting every column right and truncating a.l:85; and (2) a mis-mapping of the
+        # ~10-residue IV:38-linker:52 window that flanks the large alpha-C/beta-4 insert.
+        # The string below is reconstructed directly from this kinase's (correct)
+        # KLIFS2UniProtIdx mapping, which properly skips the inserts; it puts the catalytic
+        # residues back on their canonical columns (III:17=K, c.l:70=D, xDFG:81=D).
         if uniprot_id == "Q8N5S9":
-            self.klifs.pocket_seq = "QSEIGKGAYGVVRHYAMKVERVYQEIAILKKLHVNVVKLIENLYLVFDLRKGPVMEVPCEYLHCQKIVHRDIKPSNLLKIADFGV"
+            self.klifs.pocket_seq = "SEIGKGAYGVVRLYAMKVLRVYQEIAILKKLDVNVVKLIEVLYLVFDLRKGPVMEVPCDYLHCQKIVHRDIKPSNLLLIADFGVS"
 
         # there are no matches when looking manually to canonical UniProt sequence
         if uniprot_id == "P35557":
@@ -147,18 +169,15 @@ class KinaseInfoKinaseDomainGenerator(KinaseInfoKinaseDomain):
 
     @model_validator(mode="after")
     def generate_kincore_fasta2cif_alignment(self) -> Self:
-        """Generate dictionary mapping KinCore FASTA to CIF indices."""
+        """Generate dictionary mapping KinCoRe FASTA to CIF indices."""
         if self.kincore is not None:
 
             # all non-None entries will have fastas
             fasta = self.kincore.fasta.seq
+            cif = extract_sequence_from_cif(self.kincore)
 
-            if self.kincore.cif is not None:
-
-                key_seq = "_entity_poly.pdbx_seq_one_letter_code"
-                cif = self.kincore.cif.cif[key_seq][0].replace("\n", "")
-
-                # KinCoreFASTA2CIF
+            if cif is not None:
+                # KinCoReFASTA2CIF
                 dict_temp = align_kincore2uniprot(fasta, cif)
                 self.kincore.start = dict_temp["start"]
                 self.kincore.end = dict_temp["end"]
@@ -171,6 +190,7 @@ class KinaseInfoGenerator(KinaseInfo):
     """Pydantic model for kinase information."""
 
     bool_offset: bool = True
+    """bool: Whether to use 1-based indexing (True) or 0-based indexing (False). Default is True."""
 
     def standardize_offset(self, idx_in: int) -> int:
         """Standardize offset where necessary.
@@ -192,13 +212,13 @@ class KinaseInfoGenerator(KinaseInfo):
 
     @model_validator(mode="after")
     def generate_kincore2uniprot_alignment(self) -> Self:
-        """Generate dictionary mapping KinCore to UniProt indices."""
+        """Generate dictionary mapping KinCoRe to UniProt indices."""
         if self.kincore is not None:
 
             # all non-None entries will have fastas
             fasta = self.kincore.fasta.seq
 
-            # KinCoreFASTA2UniProt
+            # KinCoReFASTA2UniProt
             dict_fasta = align_kincore2uniprot(fasta, self.uniprot.canonical_seq)
             self.kincore.fasta.start = self.standardize_offset(dict_fasta["start"])
             self.kincore.fasta.end = self.standardize_offset(dict_fasta["end"])
@@ -209,7 +229,7 @@ class KinaseInfoGenerator(KinaseInfo):
                 key_seq = "_entity_poly.pdbx_seq_one_letter_code"
                 cif = self.kincore.cif.cif[key_seq][0].replace("\n", "")
 
-                # KinCoreCIF2UniProt
+                # KinCoReCIF2UniProt
                 dict_cif = align_kincore2uniprot(cif, self.uniprot.canonical_seq)
                 self.kincore.cif.start = self.standardize_offset(dict_cif["start"])
                 self.kincore.cif.end = self.standardize_offset(dict_cif["end"])
@@ -548,66 +568,66 @@ DICT_MERGE_MULTIMAP = {
     },
     "manual": {
         "P23458": [
-            ["JAK1", "JAK1", "JAK1"],
-            ["JAK1_b", "JAK1-b", None],
+            ["JAK1", "JAK1", "JAK1_2"],
+            ["JAK1_b", "JAK1-b", "JAK1_1"],
         ],
         "Q15772": [
-            ["SPEG", "SPEG", "SPEG1"],
-            ["SPEG_b", "SPEG-b", "SPEG2"],
+            ["SPEG", "SPEG", "SPEG_1"],
+            ["SPEG_b", "SPEG-b", "SPEG_2"],
         ],
         "Q9UK32": [
-            ["RSK4", "RPS6KA6", "RPS6KA61"],
-            ["RSK4_b", "RPS6KA6-b", "RPS6KA62"],
+            ["RSK4", "RPS6KA6", "RPS6KA6_1"],
+            ["RSK4_b", "RPS6KA6-b", "RPS6KA6_2"],
         ],
         "P29597": [
-            ["TYK2", "TYK2", "TYK2"],
-            ["TYK2_b", "TYK2-b", None],
+            ["TYK2", "TYK2", "TYK2_2"],
+            ["TYK2_b", "TYK2-b", "TYK2_1"],
         ],
         "Q15349": [
-            ["RSK3", "RPS6KA2", "RPS6KA21"],
-            ["RSK3_b", "RPS6KA2-b", "RPS6KA22"],
+            ["RSK3", "RPS6KA2", "RPS6KA2_1"],
+            ["RSK3_b", "RPS6KA2-b", "RPS6KA2_2"],
         ],
         "Q15418": [
-            ["RSK1", "RPS6KA1", "RPS6KA11"],
-            ["RSK1_b", "RPS6KA1-b", "RPS6KA12"],
+            ["RSK1", "RPS6KA1", "RPS6KA1_1"],
+            ["RSK1_b", "RPS6KA1-b", "RPS6KA1_2"],
         ],
         "Q5VST9": [
-            ["Obscn", "OBSCN", "OBSCN1"],
-            ["Obscn_b", "OBSCN-b", "OBSCN2"],
+            ["Obscn", "OBSCN", "OBSCN_1"],
+            ["Obscn_b", "OBSCN-b", "OBSCN_2"],
         ],
         "O60674": [
-            ["JAK2", "JAK2", "JAK2"],
-            ["JAK2_b", "JAK2-b", None],
+            ["JAK2", "JAK2", "JAK2_2"],
+            ["JAK2_b", "JAK2-b", "JAK2_1"],
         ],
         "Q9P2K8": [
-            ["GCN2", "EIF2AK4", "EIF2AK4"],
-            ["GCN2_b", "EIF2AK4-b", None],
+            ["GCN2", "EIF2AK4", "EIF2AK4_2"],
+            ["GCN2_b", "EIF2AK4-b", "EIF2AK4_1"],
         ],
         "P51812": [
-            ["RSK2", "RPS6KA3", "RPS6KA31"],
-            ["RSK2_b", "RPS6KA3-b", "RPS6KA32"],
+            ["RSK2", "RPS6KA3", "RPS6KA3_1"],
+            ["RSK2_b", "RPS6KA3-b", "RPS6KA3_2"],
         ],
         "O75676": [
-            ["MSK2", "RPS6KA4", "RPS6KA41"],
-            ["MSK2_b", "RPS6KA4-b", "RPS6KA42"],
+            ["MSK2", "RPS6KA4", "RPS6KA4_1"],
+            ["MSK2_b", "RPS6KA4-b", "RPS6KA4_2"],
         ],
         "O75582": [
-            ["MSK1", "RPS6KA5", "RPS6KA51"],
-            ["MSK1_b", "RPS6KA5-b", "RPS6KA52"],
+            ["MSK1", "RPS6KA5", "RPS6KA5_1"],
+            ["MSK1_b", "RPS6KA5-b", "RPS6KA5_2"],
         ],
         "Q8IWB6": [
             ["SgK307", "TEX14", "TEX14"],
             ["SgK424", None, None],
         ],
         "P52333": [
-            ["JAK3", "JAK3", "JAK3"],
-            ["JAK3_b", "JAK3-b", None],
+            ["JAK3", "JAK3", "JAK3_2"],
+            ["JAK3_b", "JAK3-b", "JAK3_1"],
         ],
     },
 }
 """dict[str, dict[str, str] | list[list[str]]]: Dictionary where keys are UniProt IDs with multi-mapping.
     For the "general" sub-dictionary each key is the key of the dict_obj and the value is the attr on which to collapse.
-    For the "manual" sub-dict values are lists where entries are for KinHub, KLIFS, and KinCore, respectively.
+    For the "manual" sub-dict values are lists where entries are for KinHub, KLIFS, and KinCoRe, respectively.
 """
 
 
@@ -647,13 +667,13 @@ def find_alternative_hgnc(
     klifs_dict : dict[str, Any]
         KLIFS dictionary.
     kincore_dict : dict[str, Any]
-        KinCore dictionary.
+        KinCoRe dictionary.
     kinhub_attr : list[str], optional
         List of attributes to access in KinHub dictionary.
     klifs_attr : list[str], optional
         List of attributes to access in KLIFS dictionary.
     kincore_attr : list[str], optional
-        AttribuList of attributeste to access in KinCore dictionary.
+        AttribuList of attributeste to access in KinCoRe dictionary.
 
     Returns
     -------
@@ -696,8 +716,18 @@ def find_alternative_hgnc(
         return list_out
 
 
-def generate_dict_obj_from_api_or_scraper() -> dict[str, pd.DataFrame]:
+def generate_dict_obj_from_api_or_scraper(
+    subset_uniprot: set[str] | None = None,
+) -> dict[str, pd.DataFrame]:
     """Generate dataframes for KinHub, KLIFS, and Pfam databases.
+
+    Parameters
+    ----------
+    subset_uniprot : set[str] | None, optional
+        If provided, restrict the expensive per-UniProt HGNC/UniProt/Pfam queries to
+        this set of UniProt IDs (intersected with the full KinHub/KLIFS/KinCoRe union),
+        by default None (build the entire kinome). Used by the ``--kinase`` one-off
+        update path to rebuild only targeted entries.
 
     Returns
     -------
@@ -723,9 +753,22 @@ def generate_dict_obj_from_api_or_scraper() -> dict[str, pd.DataFrame]:
         list(dict_kinhub.keys()) + list(dict_klifs.keys()) + list(dict_kincore.keys())
     )
 
+    # restrict to the requested subset (one-off --kinase update) if provided
+    if subset_uniprot is not None:
+        set_uniprot &= set(subset_uniprot)
+        if len(set_uniprot) == 0:
+            logger.warning(
+                "subset_uniprot matched no UniProt IDs in the KinHub/KLIFS/KinCoRe "
+                "union; no objects will be built."
+            )
+
     # collect HGNC, UniProt, and Pfam data from API
     dict_hgnc, dict_uniprot, dict_pfam = {}, {}, {}
-    for uniprot_id in tqdm(set_uniprot, desc="Querying UniProt, HGNC, and Pfam..."):
+    for uniprot_id in tqdm(
+        set_uniprot,
+        desc="Querying UniProt, HGNC, and Pfam...",
+        bar_format=TQDM_BAR_FORMAT,
+    ):
         # HGNC
         obj_temp = hgnc.HGNC(uniprot_id)
         obj_temp.maybe_get_symbol_from_hgnc_search(
@@ -796,6 +839,88 @@ def generate_dict_obj_from_api_or_scraper() -> dict[str, pd.DataFrame]:
             logger.info(f"\t{k}: {len(v)} entries\n")
 
     return dict_out
+
+
+class Source(StrEnum):
+    """Base-build source selectable via the ``--only`` partial rebuild."""
+
+    hgnc = "hgnc"
+    uniprot = "uniprot"
+    kinhub = "kinhub"
+    klifs = "klifs"
+    pfam = "pfam"
+    kincore = "kincore"
+
+
+def fetch_source(
+    source: "Source | str",
+    set_uniprot: set[str],
+) -> dict[str, Any]:
+    """Fetch raw data for a single base-build source over the given UniProt IDs.
+
+    Backs the ``--only <source>`` partial rebuild, refreshing one source without
+    re-fetching the rest. Returns the same per-source structure consumed by
+    :func:`combine_kinaseinfo_uniprot` / :func:`combine_kinaseinfo_kd`: hgnc/uniprot/pfam
+    keyed to a single value, kinhub/klifs/kincore keyed to a list.
+
+    Parameters
+    ----------
+    source : Source | str
+        A :class:`Source` member (or its string value).
+    set_uniprot : set[str]
+        Base UniProt IDs to fetch; the result is restricted to this set.
+
+    Returns
+    -------
+    dict[str, Any]
+        Mapping of UniProt ID to the fetched object(s).
+    """
+    source = Source(source)
+    set_request_cache(os.path.join(get_repo_root(), "requests_cache.sqlite"))
+
+    if source is Source.kinhub:
+        dict_src = convert_df2dictobj(scrapers.kinhub(), "kinhub")
+    elif source is Source.klifs:
+        df_klifs = pd.DataFrame(klifs.KinaseInfo().get_kinase_info())
+        dict_src = convert_df2dictobj(df_klifs, "klifs")
+    elif source is Source.kincore:
+        dict_src = harmonize_kincore_fasta_cif()
+    elif source is Source.hgnc:
+        dict_src = {}
+        for uniprot_id in tqdm(
+            set_uniprot, desc="Querying HGNC...", bar_format=TQDM_BAR_FORMAT
+        ):
+            obj_temp = hgnc.HGNC(uniprot_id)
+            obj_temp.maybe_get_symbol_from_hgnc_search(
+                custom_field="uniprot_ids", custom_term=uniprot_id
+            )
+            dict_src[uniprot_id] = obj_temp.hgnc
+    elif source is Source.uniprot:
+        dict_src = {}
+        for uniprot_id in tqdm(
+            set_uniprot, desc="Querying UniProt...", bar_format=TQDM_BAR_FORMAT
+        ):
+            fasta = uniprot.UniProtFASTA(uniprot_id)
+            json = uniprot.UniProtJSON(uniprot_id)
+            dict_temp = {
+                "header": fasta._header,
+                "canonical_seq": fasta._sequence,
+            } | json.dict_mod_res
+            dict_src[uniprot_id] = UniProt.model_validate(dict_temp)
+    else:  # Source.pfam
+        dict_src = {}
+        for uniprot_id in tqdm(
+            set_uniprot, desc="Querying Pfam...", bar_format=TQDM_BAR_FORMAT
+        ):
+            df_pfam = pfam.Pfam(uniprot_id)._pfam
+            if df_pfam is None:
+                continue
+            dict_temp = convert_df2dictobj(df_pfam, "pfam")
+            if dict_temp is None or len(dict_temp.get(uniprot_id, [])) == 0:
+                continue
+            dict_src[uniprot_id] = dict_temp[uniprot_id][0]
+
+    return {k: v for k, v in dict_src.items() if k in set_uniprot}
 
 
 def combine_kinaseinfo_uniprot(
@@ -957,6 +1082,13 @@ def combine_kinaseinfo(
     for uniprot_id, kd_temp in dict_kd.items():
 
         uniprot_temp = dict_uniprot[uniprot_id.split("_")[0]]
+
+        # exclude legacy (mostly Manning) entries that are not canonical kinases
+        if uniprot_temp.hgnc_name in LIST_LEGACY_KINASES:
+            logger.info(
+                f"Skipping legacy kinase {uniprot_temp.hgnc_name} ({uniprot_id})..."
+            )
+            continue
 
         list_uniprot_attr = ["hgnc_name", "uniprot", "pfam"]
         list_kd_attr = ["uniprot_id", "kinhub", "klifs", "kincore"]

@@ -1,3 +1,9 @@
+"""KLIFS API client for kinase names, pocket residues, and KLIFS region annotations.
+
+Provides KLIFS Swagger clients (:class:`KinaseNames`, :class:`KinaseInfo`) and
+:class:`KLIFSPocket` for retrieving and structuring KLIFS pocket and region data.
+"""
+
 import logging
 import re
 from dataclasses import dataclass, field
@@ -202,6 +208,7 @@ class KLIFS(SwaggerAPIClient):
                 "validate_swagger_spec": False,
             },
         )
+        self._stamp_now()
         return klifs_api
 
     def get_url(self):
@@ -1081,7 +1088,7 @@ class KLIFSPocket:
         list_keys = list(dict_in.keys())
         list_idx = [idx for idx, i in enumerate(dict_in.keys()) if region in i]
 
-        # TODO: ATR and CAMKK1 have inter hinge:linker region
+        # ATR and CAMKK1 have inter hinge:linker region
         start = list_idx[idx_in]
         end = list_idx[idx_out]
 
