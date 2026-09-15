@@ -74,7 +74,7 @@ class BuildContext:
     subset_hgnc: set[str] | None = None
     """If not None, the ``hgnc_name`` keys targeted by a subset (``--kinase``) build; enrichment steps iterate only these (reports still characterize the whole spliced dict), by default None."""
     force: bool = False
-    """If True (``--force-regen``), structure steps re-fetch/re-slice and recompute their derived properties (SASA, superposition) even when already present, by default False."""
+    """If True (``--recompute``), structure steps re-fetch/re-slice and recompute their derived properties (SASA, superposition) even when already present, by default False."""
     report_config: Any = None
     """Loaded :class:`KinaseInfoFiguresConfig` for the report steps (aesthetics from the ``kinaseinfo`` config namespace, or defaults), by default None."""
 
@@ -508,11 +508,11 @@ class Pipeline:
             subset_hgnc=subset_hgnc,
             force=force,
         )
-        build_steps._run_steps(names, ctx)
+        build_steps.run_steps(names, ctx)
         self._serialize_and_tar(dict_kinaseinfo)
         if bool_figs:
             ctx.path_reports, ctx.report_config = self._reports_target()
-            build_steps._run_reports(ctx)
+            build_steps.run_reports(ctx)
         shutil.rmtree(self.path_objects)
 
     def figures(self) -> None:
@@ -539,7 +539,7 @@ class Pipeline:
             subset_hgnc=None,
             report_config=report_config,
         )
-        build_steps._run_reports(ctx)
+        build_steps.run_reports(ctx)
 
     def full(
         self, names: list[str], bool_figs: bool = True, force: bool = False
@@ -678,79 +678,48 @@ class Pipeline:
             force=force,
         )
 
-    def _config_figs_only(self) -> bool:
-        """Return whether the study config marks the ``kinaseinfo`` task figures-only.
-
-        Returns
-        -------
-        bool
-            ``kinaseinfo.figs_only`` from :attr:`config_path`, or False without a config.
-        """
-        if self.config_path is None:
-            return False
-        from mkt.databases.plot_config import KinaseInfoFiguresConfig, load_task_config
-
-        return load_task_config(
-            KinaseInfoFiguresConfig, self.config_path, "kinaseinfo"
-        ).figs_only
-
     def run(
         self,
         only: list[str] | None = None,
         skip: list[str] | None = None,
         list_kinase: list[str] | None = None,
+        bool_data: bool | None = None,
         bool_figs: bool = True,
-        figs_only: bool = False,
         force: bool = False,
-        rebuild: bool = False,
     ) -> None:
         """Dispatch to the run mode implied by the arguments.
 
         Parameters
         ----------
         only : list[str] | None, optional
-            Components to rebuild on the existing dict: base-build sources (:class:`Source`
-            values -- hgnc/uniprot/kinhub/klifs/pfam/kincore) and/or enrichment steps. Any
-            ``only`` triggers a partial update (load existing -> refresh sources -> run steps);
-            mutually exclusive with ``skip``.
+            Components to rebuild on the existing dict: data sources
+            (hgnc/uniprot/kinhub/klifs/pfam/kincore) and/or enrichment steps. Any ``only``
+            triggers a partial update; mutually exclusive with ``skip``.
         skip : list[str] | None, optional
-            Skip these enrichment steps in a full regen; all other default-on steps run.
+            Skip these enrichment steps in a full regen; all other steps run.
         list_kinase : list[str] | None, optional
             HGNC name(s) to update one-off; None (with no ``only``) runs a full regen.
+        bool_data : bool | None, optional
+            Build or update the archive; False draws figures from the existing archive. None
+            defers to the config's ``kinaseinfo.data`` (True if unset), by default None.
         bool_figs : bool, optional
-            Regenerate report figures after any dict regeneration, by default True
-            (``--no-figs`` disables).
-        figs_only : bool, optional
-            Skip all rebuilding and only regenerate figures from the existing archive, by
-            default False. Mutually exclusive with the rebuild flags.
+            Draw the report figures, by default True.
         force : bool, optional
-            Force structure steps to re-fetch/re-slice and recompute their derived properties
-            (SASA, superposition) even when already present, by default False.
-        rebuild : bool, optional
-            Rebuild data even if the config sets ``kinaseinfo.figs_only``, by default False.
+            Recompute structure-derived properties (AlphaFold slice, SASA, superposition) even
+            when already present, by default False.
 
         Returns
         -------
         None
         """
-        if rebuild and figs_only:
-            raise ValueError("--rebuild cannot be combined with --figs-only.")
-        if not rebuild and not figs_only and self._config_figs_only():
-            if only or skip or list_kinase:
-                raise ValueError(
-                    "config sets kinaseinfo.figs_only; pass --rebuild to use "
-                    "--only/--skip/--kinase."
-                )
-            logger.info(
-                "config sets kinaseinfo.figs_only; regenerating figures only "
-                "(pass --rebuild to rebuild the data)."
-            )
-            figs_only = True
+        from mkt.databases.plot_config import KinaseInfoFiguresConfig, load_task_config
 
-        if figs_only:
+        cfg = load_task_config(KinaseInfoFiguresConfig, self.config_path, "kinaseinfo")
+        if not cfg.resolve_data(bool_data, bool_figs):
             if only or skip or list_kinase:
                 raise ValueError(
-                    "--figs-only cannot be combined with --only/--skip/--kinase."
+                    "--only/--skip/--kinase select data to rebuild, but data is off "
+                    "(--no-data or kinaseinfo.data: false); pass --data."
                 )
             self.figures()
             return
@@ -778,19 +747,18 @@ def run(
     list_kinase: list[str] | None = None,
     path_objects: str | None = None,
     path_reports: str | None = None,
+    bool_data: bool | None = None,
     bool_figs: bool = True,
-    figs_only: bool = False,
     force: bool = False,
     config_path: str | None = None,
-    rebuild: bool = False,
 ) -> None:
     """Build a :class:`Pipeline` from the given paths and run it (CLI entry point).
 
     Parameters
     ----------
     only : list[str] | None, optional
-        Components to rebuild (base-build sources and/or enrichment steps); mutually
-        exclusive with ``skip``.
+        Components to rebuild (data sources and/or enrichment steps); mutually exclusive
+        with ``skip``.
     skip : list[str] | None, optional
         Enrichment steps to skip in a full regen.
     list_kinase : list[str] | None, optional
@@ -799,17 +767,16 @@ def run(
         Objects directory relative to the repo root, by default the package-data layout.
     path_reports : str | None, optional
         Reports directory relative to the repo root, by default ``images``.
+    bool_data : bool | None, optional
+        Build or update the archive; None defers to the config's ``kinaseinfo.data``, by
+        default None.
     bool_figs : bool, optional
-        Regenerate report figures after any dict regeneration, by default True.
-    figs_only : bool, optional
-        Only regenerate figures from the existing archive (no rebuild), by default False.
+        Draw the report figures, by default True.
     force : bool, optional
-        Force structure steps to regenerate their derived properties, by default False.
+        Recompute structure-derived properties even when already present, by default False.
     config_path : str | None, optional
         Shared study YAML for report aesthetics + ``<config-stem>/kinaseinfo`` output naming,
         by default None (``dict_kinase/<generated_at>`` reports dir).
-    rebuild : bool, optional
-        Rebuild data even if the config sets ``kinaseinfo.figs_only``, by default False.
 
     Returns
     -------
@@ -819,8 +786,7 @@ def run(
         only,
         skip,
         list_kinase,
+        bool_data=bool_data,
         bool_figs=bool_figs,
-        figs_only=figs_only,
         force=force,
-        rebuild=rebuild,
     )

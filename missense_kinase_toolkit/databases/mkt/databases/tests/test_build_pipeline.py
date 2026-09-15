@@ -56,13 +56,12 @@ def test_resolve_step_names_only_and_skip_order(monkeypatch):
     """--only/--skip return steps in registry order regardless of arg order."""
     fake_registry = {name: (lambda ctx: None) for name in ("alpha", "beta", "gamma")}
     monkeypatch.setattr(build_steps, "_ENRICH_STEPS", fake_registry)
-    monkeypatch.setattr(build_steps, "_DEFAULT_STEPS", list(fake_registry))
 
     # --only preserves registry order, not the order supplied
     assert build_steps.resolve_step_names(only=["gamma", "alpha"]) == ["alpha", "gamma"]
     # --skip removes named steps, keeps the rest in registry order
     assert build_steps.resolve_step_names(skip=["beta"]) == ["alpha", "gamma"]
-    # neither runs all default-on steps
+    # neither runs all steps
     assert build_steps.resolve_step_names() == ["alpha", "beta", "gamma"]
 
 
@@ -123,7 +122,7 @@ def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
 
     monkeypatch.setattr(pipeline, "run_base_build", _fake_base_build)
     # enrichment steps fetch structures/transcripts; keep the splice test network-free
-    monkeypatch.setattr(build_steps, "_DEFAULT_STEPS", [])
+    monkeypatch.setattr(build_steps, "_ENRICH_STEPS", {})
 
     pipeline.run(list_kinase=["EGFR"], path_objects=str(path_objects))
 
@@ -272,10 +271,13 @@ def test_source_only_no_dict_falls_back_to_full(monkeypatch, tmp_path):
     assert "full" in calls
 
 
-def _config_pipeline(tmp_path, monkeypatch, bool_figs_only=True):
-    """Pipeline with a study YAML setting ``kinaseinfo.figs_only`` and stubbed run modes."""
-    path_config = tmp_path / "study.yaml"
-    path_config.write_text(f"kinaseinfo:\n  figs_only: {str(bool_figs_only).lower()}\n")
+def _data_pipeline(tmp_path, monkeypatch, str_yaml=None):
+    """Pipeline with an optional study YAML and stubbed figures/full run modes."""
+    config_path = None
+    if str_yaml is not None:
+        path_config = tmp_path / "study.yaml"
+        path_config.write_text(str_yaml)
+        config_path = str(path_config)
     calls = []
     monkeypatch.setattr(
         pipeline.Pipeline, "figures", lambda self: calls.append("figures")
@@ -283,48 +285,53 @@ def _config_pipeline(tmp_path, monkeypatch, bool_figs_only=True):
     monkeypatch.setattr(
         pipeline.Pipeline,
         "full",
-        lambda self, names, bool_figs=True, force=False: calls.append("full"),
+        lambda self, names, bool_figs=True, force=False: calls.append(
+            ("full", bool_figs)
+        ),
     )
     pl = pipeline.Pipeline(
         str(tmp_path / "objects"),
         str(tmp_path / "reports"),
         str(tmp_path / "absent.tar.gz"),
-        config_path=str(path_config),
+        config_path=config_path,
     )
     return pl, calls
 
 
-def test_config_figs_only_runs_figures(tmp_path, monkeypatch):
-    """``kinaseinfo.figs_only: true`` turns a bare run into a figures-only run."""
-    pl, calls = _config_pipeline(tmp_path, monkeypatch)
-    pl.run()
-    assert calls == ["figures"]
+STR_YAML_NO_DATA = "kinaseinfo:\n  data: false\n"
+"""str: Study YAML whose kinaseinfo task draws figures from the existing archive."""
 
 
-def test_config_figs_only_rebuild_overrides(tmp_path, monkeypatch):
-    """``--rebuild`` rebuilds the data despite ``kinaseinfo.figs_only``."""
-    pl, calls = _config_pipeline(tmp_path, monkeypatch)
-    pl.run(rebuild=True)
-    assert calls == ["full"]
+@pytest.mark.parametrize(
+    "str_yaml,kwargs,expected",
+    [
+        (None, {}, [("full", True)]),
+        (None, {"bool_figs": False}, [("full", False)]),
+        (None, {"bool_data": False}, ["figures"]),
+        (STR_YAML_NO_DATA, {}, ["figures"]),
+        (STR_YAML_NO_DATA, {"bool_data": True}, [("full", True)]),
+        ("kinaseinfo:\n  data: true\n", {"bool_data": False}, ["figures"]),
+    ],
+)
+def test_run_data_figs_resolution(tmp_path, monkeypatch, str_yaml, kwargs, expected):
+    """An explicit ``bool_data`` wins over ``kinaseinfo.data``; figures follow ``bool_figs``."""
+    pl, calls = _data_pipeline(tmp_path, monkeypatch, str_yaml)
+    pl.run(**kwargs)
+    assert calls == expected
 
 
-def test_config_figs_only_false_rebuilds(tmp_path, monkeypatch):
-    """Without the key set, a config run still rebuilds the data."""
-    pl, calls = _config_pipeline(tmp_path, monkeypatch, bool_figs_only=False)
-    pl.run()
-    assert calls == ["full"]
-
-
-def test_config_figs_only_rejects_rebuild_flags(tmp_path, monkeypatch):
-    """``--only`` under a figures-only config requires ``--rebuild``."""
-    pl, calls = _config_pipeline(tmp_path, monkeypatch)
-    with pytest.raises(ValueError, match="--rebuild"):
-        pl.run(only=["exon"])
+def test_run_no_data_rejects_rebuild_selectors(tmp_path, monkeypatch):
+    """``--only``/``--skip``/``--kinase`` with data off point the user at ``--data``."""
+    pl, calls = _data_pipeline(tmp_path, monkeypatch, STR_YAML_NO_DATA)
+    for kwargs in ({"only": ["exon"]}, {"skip": ["exon"]}, {"list_kinase": ["ABL1"]}):
+        with pytest.raises(ValueError, match="pass --data"):
+            pl.run(**kwargs)
     assert calls == []
 
 
-def test_rebuild_with_figs_only_raises(tmp_path, monkeypatch):
-    """``--rebuild`` and ``--figs-only`` are mutually exclusive."""
-    pl, _ = _config_pipeline(tmp_path, monkeypatch)
-    with pytest.raises(ValueError, match="--figs-only"):
-        pl.run(figs_only=True, rebuild=True)
+def test_run_no_data_no_figs_raises(tmp_path, monkeypatch):
+    """Turning off both data and figures is an error, not a silent no-op."""
+    pl, calls = _data_pipeline(tmp_path, monkeypatch, STR_YAML_NO_DATA)
+    with pytest.raises(ValueError, match="nothing to do"):
+        pl.run(bool_figs=False)
+    assert calls == []
