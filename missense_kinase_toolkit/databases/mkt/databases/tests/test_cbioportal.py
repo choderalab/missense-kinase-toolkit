@@ -117,6 +117,11 @@ def _stub(**kwargs):
     return SimpleNamespace(**attrs)
 
 
+def _to_list(series):
+    """Return a Series as a list with missing values as None (pandas 3 strings use NaN)."""
+    return [None if pd.isna(value) else value for value in series]
+
+
 def _braf_rows():
     """Return BRAF rows (one matching, one mismatched residue) plus a matching KIN row."""
     seq = cbioportal.DICT_KINASE["BRAF"].uniprot.canonical_seq
@@ -212,7 +217,7 @@ def test_assign_mkt_name_resolves_jak2_v617f_to_jh2():
     df_out = cbioportal.assign_mkt_name(
         df, {"JAK2": ["JAK2_1", "JAK2_2"], "BRAF": ["BRAF"]}, dict_kinase
     )
-    assert df_out["mkt_name"].tolist() == ["JAK2_2", "JAK2", "BRAF", "JAK2", None]
+    assert _to_list(df_out["mkt_name"]) == ["JAK2_2", "JAK2", "BRAF", "JAK2", None]
     assert df_out["in_kinase_domain"].tolist() == [True, False, True, None, None]
 
 
@@ -237,7 +242,7 @@ class TestPositionRoutes:
             _stub(bool_drop_unreconciled=False), df, dict_gene2seq
         )
         assert len(df_out) == 3
-        assert df_out["reconcile_source"].tolist() == ["direct", None, "direct"]
+        assert _to_list(df_out["reconcile_source"]) == ["direct", None, "direct"]
 
     def test_both_routes_emit_the_same_columns(self):
         df, dict_gene2seq = _braf_rows()
@@ -262,5 +267,5 @@ def test_annotate_kinase_regions_skips_bare_symbols():
         }
     )
     df_out = KMM.annotate_kinase_regions(_stub(), df, dict_kinase)
-    assert df_out["klifs_region"].tolist() == [region, None]
+    assert _to_list(df_out["klifs_region"]) == [region, None]
     assert df_out["kincore_kd"].tolist()[1] is None
