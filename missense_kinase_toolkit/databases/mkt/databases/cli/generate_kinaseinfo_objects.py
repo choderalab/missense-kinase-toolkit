@@ -13,6 +13,7 @@ from typing import Annotated, Optional
 
 import typer
 from mkt.databases.generator import pipeline
+from mkt.databases.plot_config import ArgumentError
 from mkt.schema.log_config import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -29,18 +30,17 @@ def main(
         Optional[list[str]],
         typer.Option(
             "--only",
-            help="Rebuild only these component(s); repeatable. A base-build source "
-            "(hgnc/uniprot/kinhub/klifs/pfam/kincore) does a partial rebuild on the "
-            "existing dict; an enrichment step name runs that step. Mutually exclusive "
-            "with --skip.",
+            help="Rebuild only these component(s) on the existing archive; repeatable. "
+            "One of: hgnc, uniprot, kinhub, klifs, pfam, kincore, kincore_msa, "
+            "kincore_structure_props, alphafold, exon. Mutually exclusive with --skip.",
         ),
     ] = None,
     skip: Annotated[
         Optional[list[str]],
         typer.Option(
             "--skip",
-            help="Skip these enrichment step(s); repeatable. All other default-on "
-            "steps run.",
+            help="Skip these component(s) in a full rebuild; repeatable. One of: "
+            "kincore_msa, kincore_structure_props, alphafold, exon.",
         ),
     ] = None,
     kinase: Annotated[
@@ -74,34 +74,31 @@ def main(
             "--config",
             help="Shared study YAML supplying report aesthetics (the 'kinaseinfo' section). "
             "When given, reports go to <output.subdir>/<config-stem>/kinaseinfo/; otherwise "
-            "the mtime-stamped dict_kinase/<tar-mtime>/ convention is used.",
+            "to dict_kinase/<generated_at>/ from the archive manifest.",
         ),
     ] = None,
-    no_figs: Annotated[
-        bool,
+    data: Annotated[
+        Optional[bool],
         typer.Option(
-            "--no-figs",
-            help="Skip regenerating the report figures after the build. By default "
-            "figures are refreshed on any dict regeneration, into a datetime-stamped "
-            "subdirectory keyed by the archive's modified time.",
+            "--data/--no-data",
+            help="Build or update the KinaseInfo archive; --no-data draws figures from the "
+            "existing archive. Defaults to the config's kinaseinfo.data (true if unset).",
+            show_default=False,
         ),
-    ] = False,
-    figs_only: Annotated[
+    ] = None,
+    figs: Annotated[
         bool,
         typer.Option(
-            "--figs-only",
-            help="Only regenerate the report figures from the existing archive (no "
-            "rebuild), reusing the subdirectory keyed by its modified time. Mutually "
-            "exclusive with --only/--skip/--kinase.",
+            "--figs/--no-figs",
+            help="Draw the report figures.",
         ),
-    ] = False,
-    force_regen: Annotated[
+    ] = True,
+    recompute: Annotated[
         bool,
         typer.Option(
-            "--force-regen",
-            help="Force structure steps to re-fetch/re-slice and recompute their derived "
-            "properties (SASA, superposition) even when already present -- e.g. to refresh "
-            "against new structures that would otherwise be kept by the idempotent skip.",
+            "--recompute",
+            help="Recompute structure-derived properties (AlphaFold slice, SASA, "
+            "superposition) even when already stored.",
         ),
     ] = False,
     verbose: Annotated[
@@ -118,12 +115,12 @@ def main(
             list_kinase=kinase,
             path_objects=path_objects,
             path_reports=path_reports,
-            bool_figs=not no_figs,
-            figs_only=figs_only,
-            force=force_regen,
+            bool_data=data,
+            bool_figs=figs,
+            force=recompute,
             config_path=config_path,
         )
-    except ValueError as e:
+    except ArgumentError as e:
         logger.error(str(e))
         raise typer.Exit(code=1)
 
