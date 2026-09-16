@@ -616,6 +616,70 @@ def return_hgvsg_list(df: pd.DataFrame, str_build: str) -> list[str | None]:
     return list_hgvsg
 
 
+def return_genomic_location_list(df: pd.DataFrame, str_build: str) -> list[str | None]:
+    """Return an OncoKB ``genomicLocation`` string per mutation row.
+
+    OncoKB's ``byGenomicChange`` endpoint takes ``chromosome,start,end,ref,alt`` and
+    resolves the alteration on its own transcript, which is the only frame-independent
+    way to annotate a cohort: OncoKB annotates FGFR1 on the MSKCC-override isoform but
+    TGFBR2 on the UniProt canonical, so a ``proteinChange`` from one study transcript
+    asks about the wrong residue for some genes.
+
+    Unlike :func:`return_hgvsg_list`, which is limited to single-base substitutions,
+    this covers indels too, since the endpoint takes an explicit end coordinate.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        cBioPortal mutations with ``chr``, ``startPosition``, ``endPosition``,
+        ``referenceAllele``, ``variantAllele`` and (optionally) ``ncbiBuild``.
+    str_build : str
+        Genome build the coordinates are valid for; rows on another build get None.
+        Builds are compared after alias normalization (``"37"``/``"hg19"`` mean GRCh37).
+
+    Returns
+    -------
+    list[str | None]
+        ``"7,140453136,140453136,A,T"``-style strings, or None for rows on another
+        build or when the coordinate columns are missing.
+    """
+    list_cols = [
+        "chr",
+        "startPosition",
+        "endPosition",
+        "referenceAllele",
+        "variantAllele",
+    ]
+    if not set(list_cols) <= set(df.columns):
+        return [None] * len(df)
+    str_canonical = normalize_build(str_build)
+    list_build = (
+        df["ncbiBuild"].tolist() if "ncbiBuild" in df.columns else [str_build] * len(df)
+    )
+    list_location = []
+    for chrom, start, end, ref, alt, build in zip(
+        df["chr"],
+        df["startPosition"],
+        df["endPosition"],
+        df["referenceAllele"],
+        df["variantAllele"],
+        list_build,
+    ):
+        bool_usable = (
+            str_canonical is not None
+            and normalize_build(build) == str_canonical
+            and pd.notna(chrom)
+            and pd.notna(start)
+            and pd.notna(end)
+            and isinstance(ref, str)
+            and isinstance(alt, str)
+        )
+        list_location.append(
+            f"{chrom},{int(start)},{int(end)},{ref},{alt}" if bool_usable else None
+        )
+    return list_location
+
+
 def assign_mkt_name(
     df: pd.DataFrame,
     dict_gene2names: dict[str, list[str]],
