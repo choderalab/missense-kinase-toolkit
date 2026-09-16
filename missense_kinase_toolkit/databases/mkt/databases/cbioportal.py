@@ -1082,6 +1082,7 @@ class KinaseMissenseMutations(Mutations):
             dict_idx2klifs[name] = dict_rev
 
         dict_out = {
+            "variant_canonical": [],
             "klifs_region": [],
             "kincore_kd": [],
             "blosum_penalty": [],
@@ -1096,6 +1097,16 @@ class KinaseMissenseMutations(Mutations):
             aa_to = codon[-1].upper()
             obj = dict_kinase.get(name)
             idx = None if pd.isna(idx) else int(idx)
+
+            # canonical-frame variant label: the reported proteinChange is in the
+            # study's transcript frame (MSK-IMPACT annotates FGFR1 on the MSKCC
+            # override), so a canonical label is the only key that joins against
+            # UniProt-numbered resources such as ProtVar or the KLIFS maps
+            dict_out["variant_canonical"].append(
+                None
+                if name is None or pd.isna(name) or idx is None
+                else f"{split_domain_suffix(str(name))[0]}_{aa_from}{idx}{aa_to}"
+            )
 
             # KLIFS
             dict_rev = dict_idx2klifs.get(name)
