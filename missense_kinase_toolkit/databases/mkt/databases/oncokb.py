@@ -368,6 +368,111 @@ class OncoKBStructuralVariant(OncoKB):
         return f"{self.gene_a}-{partner}"
 
 
+@dataclass
+class OncoKBGenomicChange(OncoKB):
+    """OncoKB API client for a mutation annotated by genomic change.
+
+    Annotates via ``/annotate/mutations/byGenomicChange``, which takes a
+    ``genomicLocation`` of ``chromosome,start,end,ref,alt`` and resolves the
+    alteration on **OncoKB's own transcript**. This matters because OncoKB does
+    not use one frame for every gene: FGFR1 is annotated on the MSKCC-override
+    isoform (N577K) while TGFBR2 is annotated on the UniProt canonical (R528H),
+    so a protein change taken from one study's transcript is queried against the
+    wrong residue for some genes. Genomic coordinates are transcript-independent,
+    so the same input is correct for every gene.
+
+    The response schema mirrors :class:`OncoKBProteinChange` (same ``highest*Level``
+    / ``treatments`` fields), so :meth:`OncoKB.annotate_highest_level` and
+    :meth:`OncoKB.get_treatments` are reused. The alteration OncoKB resolved is
+    kept in :attr:`alteration`, since it is the caller's only way to know which
+    frame the annotation refers to.
+    """
+
+    genomic_location: str | None = None
+    """``chromosome,start,end,ref,alt`` (e.g. ``"7,140453136,140453136,A,T"``); required."""
+    reference_genome: str = "GRCh37"
+    """Genome build the coordinates are on (GRCh37 or GRCh38)."""
+    tumor_type: str | None = None
+    """OncoTree code to sharpen therapeutic levels; None for tissue-agnostic."""
+    dict_highest_level: dict[str, int] = field(
+        default_factory=lambda: {
+            "Sensitive": None,
+            "Resistance": None,
+            "Diagnostic_Implication": None,
+            "Prognostic_Implication": None,
+            "FDA": None,
+        }
+    )
+    """Dictionary to store the highest level of evidence for the mutation."""
+    list_treatment: list[str] = field(default_factory=list)
+    """List of treatments associated with the mutation."""
+    gene_name: str | None = None
+    """HGNC symbol OncoKB resolved the coordinates to."""
+    alteration: str | None = None
+    """Protein change OncoKB resolved, in OncoKB's transcript frame."""
+    oncogenic: str | None = None
+    """Oncogenic status of the mutation."""
+    vus: bool | None = None
+    """Whether the mutation is a Variant of Uncertain Significance (VUS)."""
+    known_effect: str | None = None
+    """Effect of the mutation on the protein."""
+    verbose: bool = True
+    """Whether to log warnings for missing data."""
+
+    def __post_init__(self):
+        """Initialize the OncoKBGenomicChange client."""
+        if self.genomic_location is None:
+            logger.error("genomic_location must be provided.")
+            return
+        super().__post_init__()
+        if not self.has_json():
+            return
+
+        json_data = self._json
+
+        # the query echo names the gene/alteration OncoKB mapped the coordinates
+        # to; a location outside any annotated gene echoes empty values
+        dict_query = json_data.get("query") or {}
+        self.gene_name = dict_query.get("hugoSymbol", None)
+        self.alteration = dict_query.get("alteration", None)
+
+        gene_exists = json_data.get("geneExist", False)
+        variant_summary = json_data.get("variantSummary", "")
+        variant_reviewed = "has not specifically been reviewed" not in variant_summary
+
+        if gene_exists and variant_reviewed:
+            self.annotate_highest_level()
+            self.get_treatments()
+            self.oncogenic = json_data.get("oncogenic", None)
+            self.vus = json_data.get("vus", None)
+            if "mutationEffect" in json_data:
+                self.known_effect = json_data["mutationEffect"].get("knownEffect", None)
+        elif self.verbose:
+            logger.error(
+                f"Mutation {self._label} not reviewed / gene absent in OncoKB."
+            )
+
+    def update_url(self):
+        """Build the genomic-change annotation URL."""
+        if self.genomic_location is None:
+            logger.error("genomic_location must be provided.")
+            return
+        self.url_query = (
+            f"{self.url}/annotate/mutations/byGenomicChange"
+            f"?genomicLocation={self.genomic_location}"
+            f"&referenceGenome={self.reference_genome}"
+        )
+        if self.tumor_type is not None:
+            self.url_query += f"&tumorType={self.tumor_type}"
+
+    @property
+    def _label(self) -> str:
+        """Genomic-location label for log messages."""
+        if self.gene_name is not None and self.alteration is not None:
+            return f"{self.gene_name}_{self.alteration} ({self.genomic_location})"
+        return str(self.genomic_location)
+
+
 # record keys whose values are lists (gene aliases); json-encoded when writing to CSV
 LIST_COLUMNS = ("geneAliases",)
 """Record keys whose values are lists; json-encoded when writing to CSV."""
