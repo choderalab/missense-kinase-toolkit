@@ -269,3 +269,47 @@ def test_annotate_kinase_regions_skips_bare_symbols():
     df_out = KMM.annotate_kinase_regions(_stub(), df, dict_kinase)
     assert _to_list(df_out["klifs_region"]) == [region, None]
     assert df_out["kincore_kd"].tolist()[1] is None
+
+
+class TestVariantCanonical:
+    """The canonical-frame label built alongside the region annotations."""
+
+    def _annotate(self, df):
+        return KMM.annotate_kinase_regions(
+            _stub(), df, _kinase("BRAF", "JAK2_1", "JAK2_2")
+        )
+
+    def test_label_uses_the_canonical_position(self):
+        # the reported proteinChange is in the study's frame; the label is not
+        df = pd.DataFrame(
+            {
+                "mkt_name": ["BRAF"],
+                "uniprot_idx": pd.array([600], dtype="Int64"),
+                "proteinChange": ["V640E"],
+            }
+        )
+
+        assert self._annotate(df)["variant_canonical"].tolist() == ["BRAF_V600E"]
+
+    def test_domain_suffix_is_stripped(self):
+        # JAK2 V617F resolves to the JH2 domain, but the label names the gene
+        df = pd.DataFrame(
+            {
+                "mkt_name": ["JAK2_2"],
+                "uniprot_idx": pd.array([617], dtype="Int64"),
+                "proteinChange": ["V617F"],
+            }
+        )
+
+        assert self._annotate(df)["variant_canonical"].tolist() == ["JAK2_V617F"]
+
+    def test_unreconciled_or_unnamed_rows_have_no_label(self):
+        df = pd.DataFrame(
+            {
+                "mkt_name": ["BRAF", None],
+                "uniprot_idx": pd.array([None, 600], dtype="Int64"),
+                "proteinChange": ["V600E", "V600E"],
+            }
+        )
+
+        assert _to_list(self._annotate(df)["variant_canonical"]) == [None, None]
