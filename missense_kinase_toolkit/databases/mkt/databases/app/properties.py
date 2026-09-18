@@ -11,7 +11,6 @@ import pandas as pd
 from mkt.schema.constants import (
     DICT_MOLECULAR_BRAKE,
     LIST_KLIFS_DFG_MOTIF,
-    LIST_KLIFS_HRD_MOTIF,
     STR_KLIFS_BETA3_LYSINE,
 )
 from mkt.schema.kinase_schema import KinaseInfo, Provenance
@@ -34,6 +33,8 @@ class PropertyTables:
     """Dataframe containing the KinCoRe information."""
     df_computed: pd.DataFrame | None = None
     """Dataframe containing the adjudicated/computed properties."""
+    dict_computed_keys: dict[str, str] | None = None
+    """Base property key of each df_computed row (e.g. "HRD motif"), keyed by row label."""
 
     def __post_init__(self):
         """Post-initialization method to extract properties."""
@@ -159,11 +160,15 @@ class PropertyTables:
         """
         try:
             obj = self.obj_kinase
-            dict_computed: dict[str, str] = {
-                "is_pseudokinase": str(obj.is_pseudokinase()),
-                "is_pseudogene": str(obj.is_pseudogene()),
-                "is_lipid_kinase": str(obj.is_lipid_kinase()),
-            }
+            # (row label, base property key, value)
+            list_rows: list[tuple[str, str, str]] = [
+                (key, key, str(fn()))
+                for key, fn in [
+                    ("is_pseudokinase", obj.is_pseudokinase),
+                    ("is_pseudogene", obj.is_pseudogene),
+                    ("is_lipid_kinase", obj.is_lipid_kinase),
+                ]
+            ]
 
             # catalytic motifs share is_pseudokinase's KLIFS-or-MSA lookup
             dict_catalytic = obj.return_catalytic_residues(bool_uniprot_idx=True) or {}
@@ -171,34 +176,55 @@ class PropertyTables:
             str_suffix = f" ({source.upper()})" if source is not None else ""
             for label, list_labels in [
                 ("catalytic Lys", [STR_KLIFS_BETA3_LYSINE]),
-                ("HRD motif", LIST_KLIFS_HRD_MOTIF),
+                ("HRD motif", obj.return_hrd_motif_labels()),
                 ("DFG motif", LIST_KLIFS_DFG_MOTIF),
             ]:
-                dict_computed[label + str_suffix] = self._join_motif(
-                    [dict_catalytic.get(i) for i in list_labels]
+                list_rows.append(
+                    (
+                        label + str_suffix,
+                        label,
+                        self._join_motif([dict_catalytic.get(i) for i in list_labels]),
+                    )
                 )
 
             list_ape = obj.adjudicate_ape()
             seq = obj.uniprot.canonical_seq
-            dict_computed["APE motif (MSA)"] = (
-                "-".join("-" if i is None else f"{seq[i - 1]}{i}" for i in list_ape)
-                if list_ape is not None
-                else "None"
+            list_rows.append(
+                (
+                    "APE motif (MSA)",
+                    "APE motif",
+                    (
+                        "-".join(
+                            "-" if i is None else f"{seq[i - 1]}{i}" for i in list_ape
+                        )
+                        if list_ape is not None
+                        else "None"
+                    ),
+                )
             )
 
             # molecular brake states its canonical triad (N-E-K) in the label
             brake_canonical = "-".join(DICT_MOLECULAR_BRAKE.values())
-            dict_computed[f"molecular brake {brake_canonical} (KLIFS)"] = (
-                self._join_motif(
-                    [self._residue_index(i) for i in DICT_MOLECULAR_BRAKE.keys()]
+            list_rows.append(
+                (
+                    f"molecular brake {brake_canonical} (KLIFS)",
+                    "molecular brake",
+                    self._join_motif(
+                        [self._residue_index(i) for i in DICT_MOLECULAR_BRAKE.keys()]
+                    ),
                 )
             )
 
-            df_temp = pd.DataFrame.from_dict(
-                dict_computed, orient="index", columns=["Property"]
+            def _format_label(label: str) -> str:
+                return label.replace("_", " ").upper()
+
+            self.dict_computed_keys = {
+                _format_label(label): base for label, base, _ in list_rows
+            }
+            return pd.DataFrame(
+                {"Property": [value for _, _, value in list_rows]},
+                index=[_format_label(label) for label, _, _ in list_rows],
             )
-            df_temp.index = df_temp.index.map(lambda x: x.replace("_", " ").upper())
-            return df_temp
 
         except Exception as e:
             logger.error(f"Error building computed property table: {e}")

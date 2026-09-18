@@ -52,3 +52,19 @@ def test_computed_table_motifs_name_index_source():
     ser_alpk1 = PropertyTables(dict_obj["ALPK1"]).df_computed["Property"]
     assert ser_alpk1["HRD MOTIF"] == "None"
     assert ser_alpk1["DFG MOTIF"] == "None"
+
+
+def test_computed_table_reversed_hrd_and_help():
+    """PIK/PIKK HRD reads c.l:72-71-70, and every computed row has a base property key."""
+    from mkt.databases.app.properties import PropertyTables
+    from mkt.schema.io_utils import deserialize_kinase_dict
+
+    dict_obj = deserialize_kinase_dict(list_ids=["ATM", "PI4K2A"])
+
+    table = PropertyTables(dict_obj["ATM"])
+    assert table.df_computed["Property"]["HRD MOTIF (KLIFS)"] == "H2872-R2871-D2870"
+    assert set(table.dict_computed_keys) == set(table.df_computed.index)
+    assert table.dict_computed_keys["HRD MOTIF (KLIFS)"] == "HRD motif"
+
+    ser_pi4k2a = PropertyTables(dict_obj["PI4K2A"]).df_computed["Property"]
+    assert ser_pi4k2a["HRD MOTIF (KLIFS)"] == "G310-R309-D308"
