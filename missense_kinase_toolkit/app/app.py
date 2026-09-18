@@ -33,6 +33,9 @@ from visualizers import SequenceAlignmentGenerator, StructureVisualizerGenerator
 
 logger = logging.getLogger(__name__)
 
+# CSS for the info icon after computed-property labels and its hover box, which sits flush
+# below the icon so the pointer can move into it to follow a link. (a comment, not a trailing
+# docstring: Streamlit "magic" renders bare module-level strings in the main script)
 STR_TOOLTIP_CSS = """
 <style>
 .mkt-tip { position: relative; cursor: help; margin-left: 0.3em; opacity: 0.6; }
@@ -49,8 +52,6 @@ STR_TOOLTIP_CSS = """
 .mkt-tip-text a { color: #8ab4f8; }
 </style>
 """
-"""str: CSS for the info icon after computed-property labels and its hover box, which sits
-flush below the icon so the pointer can move into it to follow a link."""
 
 
 def _help_to_html(str_help: str) -> str:
