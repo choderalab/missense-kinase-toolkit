@@ -288,3 +288,21 @@ def test_msa_fallback_does_not_load_corpus(dict_kinase, monkeypatch):
     obj = dict_kinase["PEAK3"]
     assert obj.return_catalytic_residue_source() == "msa"
     assert obj.is_pseudokinase() is True
+
+
+def test_return_hrd_motif_labels(dict_kinase):
+    """PIK/PIKK kinases read the catalytic loop D-R-H, so their HRD sits at c.l:72-71-70."""
+    from mkt.schema.constants import LIST_KLIFS_HRD_MOTIF, LIST_KLIFS_HRD_MOTIF_REVERSED
+
+    assert dict_kinase["ABL1"].return_hrd_motif_labels() == LIST_KLIFS_HRD_MOTIF
+    for name in ["ATM", "PIK3CA", "PI4K2A"]:
+        assert (
+            dict_kinase[name].return_hrd_motif_labels() == LIST_KLIFS_HRD_MOTIF_REVERSED
+        )
+
+    residues = dict_kinase["ATM"].return_catalytic_residues(bool_uniprot_idx=True)
+    assert [residues[i] for i in LIST_KLIFS_HRD_MOTIF_REVERSED] == [
+        "H2872",
+        "R2871",
+        "D2870",
+    ]
