@@ -11,10 +11,13 @@ from enum import Enum
 
 from mkt.schema.constants import (
     LIST_FULL_KLIFS_REGION,
+    LIST_KLIFS_HRD_MOTIF,
+    LIST_KLIFS_HRD_MOTIF_REVERSED,
     LIST_KLIFS_REGION,
     LIST_MSA_APE,
     LIST_MSA_REGION,
     LIST_PFAM_KD,
+    SET_FAMILY_HRD_REVERSED,
 )
 from mkt.schema.utils import fill_missing_none, rgetattr
 from pydantic import BaseModel, ConfigDict, constr, field_validator
@@ -924,6 +927,28 @@ class KinaseInfo(BaseModel):
             )
             for label, idx in dict_idx.items()
         }
+
+    def return_hrd_motif_labels(self) -> list[str]:
+        """Return the KLIFS labels of the HRD motif in His-Arg-Asp order.
+
+        PIK/PIKK kinases read the catalytic loop in reverse (D-R-H), so their His and Arg sit
+        C-terminal to the catalytic aspartate (c.l:72, c.l:71 rather than c.l:68, c.l:69).
+
+        Returns
+        -------
+        list[str]
+            KLIFS region:idx labels of the His, Arg and Asp positions.
+        """
+        set_family = {
+            getattr(family, "value", family)
+            for family in (
+                rgetattr(self, "kinhub.family"),
+                rgetattr(self, "klifs.family"),
+            )
+        }
+        if set_family & SET_FAMILY_HRD_REVERSED:
+            return LIST_KLIFS_HRD_MOTIF_REVERSED
+        return LIST_KLIFS_HRD_MOTIF
 
     def is_pseudokinase(self) -> bool | None:
         """Return boolean if a (predicted) pseudokinase.

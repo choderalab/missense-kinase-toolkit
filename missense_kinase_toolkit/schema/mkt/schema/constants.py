@@ -317,8 +317,13 @@ STR_KLIFS_DFG_ASP = "xDFG:81"
 """str: KLIFS region:idx of the DFG-motif aspartate."""
 LIST_KLIFS_HRD_MOTIF = ["c.l:68", "c.l:69", "c.l:70"]
 """list[str]: KLIFS region:idx labels of the catalytic-loop HRD motif (His-Arg-Asp; the
-aspartate at c.l:70 is the catalytic base). Note the loop can read DRH in lipid/PIKK-like
-kinases (see STR_KLIFS_CATALYTIC_ASP)."""
+aspartate at c.l:70 is the catalytic base). PIK/PIKK kinases read the loop in reverse (see
+LIST_KLIFS_HRD_MOTIF_REVERSED)."""
+LIST_KLIFS_HRD_MOTIF_REVERSED = ["c.l:72", "c.l:71", "c.l:70"]
+"""list[str]: KLIFS region:idx labels of the HRD motif, in His-Arg-Asp order, for kinases
+whose catalytic loop reads D-R-H (SET_FAMILY_HRD_REVERSED)."""
+SET_FAMILY_HRD_REVERSED = {"PIK", "PIKK"}
+"""set[str]: KinHub/KLIFS families (PI3K/PI4K and PIKK) whose catalytic loop reads D-R-H."""
 STR_KLIFS_HRD_MOTIF = "HRD"
 """str: Canonical catalytic-loop motif (His-Arg-Asp)."""
 LIST_KLIFS_DFG_MOTIF = ["xDFG:81", "xDFG:82", "xDFG:83"]
@@ -331,11 +336,14 @@ LIST_KLIFS_CATALYTIC = [
     STR_KLIFS_BETA3_LYSINE,
     STR_KLIFS_BETA2_LYSINE,
     *LIST_KLIFS_HRD_MOTIF,
+    "c.l:71",
+    "c.l:72",
     *LIST_KLIFS_DFG_MOTIF,
 ]
 """list[str]: KLIFS region:idx labels read by \
 :meth:`mkt.schema.kinase_schema.KinaseInfo.return_catalytic_residues` -- the two candidate \
-catalytic lysines plus the HRD and DFG motifs, in N->C order."""
+catalytic lysines, the HRD motif in either orientation (c.l:68-72) and the DFG motif, in \
+N->C order."""
 
 DICT_KLIFS2MSA_CATALYTIC = {
     "III:17": "B3:028",
@@ -343,6 +351,8 @@ DICT_KLIFS2MSA_CATALYTIC = {
     "c.l:68": "CL:109",
     "c.l:69": "CL:110",
     "c.l:70": "CL:111",
+    "c.l:71": "CL:112",
+    "c.l:72": "CL:113",
     "xDFG:81": "ALN:129",
     "xDFG:82": "ALN:130",
     "xDFG:83": "ALN:131",
