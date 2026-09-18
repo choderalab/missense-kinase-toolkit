@@ -33,10 +33,12 @@ from visualizers import SequenceAlignmentGenerator, StructureVisualizerGenerator
 
 logger = logging.getLogger(__name__)
 
-# CSS for the info icon after computed-property labels and its hover box, which sits flush
-# below the icon so the pointer can move into it to follow a link. (a comment, not a trailing
-# docstring: Streamlit "magic" renders bare module-level strings in the main script)
-STR_TOOLTIP_CSS = """
+# CSS for the property tables: the info icon after computed-property labels and its hover box
+# (flush below the icon so the pointer can move into it to follow a link), plus a phone layout.
+# below Streamlit's 640px column-stacking breakpoint the fixed label width would leave the value
+# column ~1 character wide, so the label column takes 40% and the box anchors to the label cell.
+# (a comment, not a trailing docstring: Streamlit "magic" renders bare module-level strings)
+STR_PROPERTY_TABLE_CSS = """
 <style>
 .mkt-tip { position: relative; cursor: help; margin-left: 0.3em; opacity: 0.6; }
 .mkt-tip:hover { opacity: 1; }
@@ -50,6 +52,14 @@ STR_TOOLTIP_CSS = """
 }
 .mkt-tip:hover .mkt-tip-text { visibility: visible; opacity: 1; }
 .mkt-tip-text a { color: #8ab4f8; }
+@media (max-width: 640px) {
+    table.mkt-props td:first-child, table.mkt-props th:first-child {
+        width: 40% !important;
+    }
+    table.mkt-props th { position: relative; }
+    table.mkt-props .mkt-tip { position: static; }
+    table.mkt-props .mkt-tip .mkt-tip-text { width: 85vw; }
+}
 </style>
 """
 
@@ -338,35 +348,41 @@ class Dashboard:
                                     else label
                                 )
                             )
-                        styler = df.style.hide(axis="columns").set_table_styles(
-                            [
-                                {
-                                    "selector": "td, th",
-                                    "props": [
-                                        ("text-align", "left"),
-                                        ("padding", "2px 10px"),
-                                        ("font-weight", "normal"),
-                                        ("overflow-wrap", "anywhere"),
-                                    ],
-                                },
-                                {
-                                    "selector": "table",
-                                    "props": [
-                                        ("table-layout", "fixed"),
-                                        ("width", "100%"),
-                                        ("max-width", f"{table_max_w}ch"),
-                                    ],
-                                },
-                                {
-                                    "selector": "td:first-child, th:first-child",
-                                    # labels are uppercase (wider than the `ch` glyph), so pad
-                                    # generously to keep the widest label on one line
-                                    "props": [("width", f"{label_w}ch")],
-                                },
-                            ]
+                        styler = (
+                            df.style.hide(axis="columns")
+                            .set_table_attributes('class="mkt-props"')
+                            .set_table_styles(
+                                [
+                                    {
+                                        "selector": "td, th",
+                                        "props": [
+                                            ("text-align", "left"),
+                                            ("padding", "2px 10px"),
+                                            ("font-weight", "normal"),
+                                            ("overflow-wrap", "anywhere"),
+                                        ],
+                                    },
+                                    {
+                                        "selector": "table",
+                                        "props": [
+                                            ("table-layout", "fixed"),
+                                            ("width", "100%"),
+                                            ("max-width", f"{table_max_w}ch"),
+                                        ],
+                                    },
+                                    {
+                                        "selector": "td:first-child, th:first-child",
+                                        # labels are uppercase (wider than the `ch` glyph), so pad
+                                        # generously to keep the widest label on one line
+                                        "props": [("width", f"{label_w}ch")],
+                                    },
+                                ]
+                            )
                         )
-                        str_css = STR_TOOLTIP_CSS if dict_help else ""
-                        st.markdown(str_css + styler.to_html(), unsafe_allow_html=True)
+                        st.markdown(
+                            STR_PROPERTY_TABLE_CSS + styler.to_html(),
+                            unsafe_allow_html=True,
+                        )
                     else:
                         st.error(
                             f"No {str_source} objects available for this kinase.",
