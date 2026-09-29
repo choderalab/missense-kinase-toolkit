@@ -203,6 +203,115 @@ def test_return_hgvsg_list():
     assert cbioportal.return_hgvsg_list(df.drop(columns="chr"), "GRCh37") == [None] * 6
 
 
+def test_locus_builders_accept_list_build_override():
+    """An explicit per-row build list replaces the ncbiBuild column."""
+    df = pd.DataFrame(
+        {
+            "chr": ["10"],
+            "startPosition": [43609948],
+            "endPosition": [43609948],
+            "referenceAllele": ["T"],
+            "variantAllele": ["C"],
+            "ncbiBuild": [None],
+        }
+    )
+    assert cbioportal.return_genomic_location_list(df, "GRCh37") == [None]
+    assert cbioportal.return_genomic_location_list(
+        df, "GRCh37", list_build=["GRCh37"]
+    ) == ["10,43609948,43609948,T,C"]
+    assert cbioportal.return_hgvsg_list(df, "GRCh37", list_build=["37"]) == [
+        "10:g.43609948T>C"
+    ]
+
+
+class TestVerifiedBuildList:
+    """Rows with a missing or mismatched ncbiBuild are confirmed via Genome Nexus."""
+
+    def _frame(self, list_build):
+        return pd.DataFrame(
+            {
+                "gene_hugoGeneSymbol": ["RET", "PTPRD", "PTPRD", "EGFR"],
+                "proteinChange": ["C634R", "R1730Q", "G39R", "L858R"],
+                "chr": ["10", "9", "9", "7"],
+                "startPosition": [43609948, 8340407, 8636794, 55259515],
+                "endPosition": [43609948, 8340407, 8636794, 55259515],
+                "referenceAllele": ["T", "C", "C", "T"],
+                "variantAllele": ["C", "T", "T", "G"],
+                "ncbiBuild": list_build,
+            }
+        )
+
+    def _stub(self, monkeypatch, dict_answer):
+        list_calls = []
+
+        def _fake(locations, build, isoform_override):
+            list_calls.append((list(locations), build, isoform_override))
+            return {loc: dict_answer[loc] for loc in locations if loc in dict_answer}
+
+        monkeypatch.setattr(cbioportal, "annotate_genomic_locations", _fake)
+        return list_calls
+
+    def test_matching_tags_skip_genome_nexus(self, monkeypatch):
+        list_calls = self._stub(monkeypatch, {})
+        df = self._frame(["GRCh37", "37", "hg19", "GRCh37"])
+
+        assert cbioportal.return_verified_build_list(df, "GRCh37") == ["GRCh37"] * 4
+        assert list_calls == []
+
+    def test_verified_rows_take_cohort_build(self, monkeypatch):
+        list_calls = self._stub(
+            monkeypatch,
+            {
+                # missing tag, confirmed
+                "10,43609948,43609948,T,C": {
+                    "hugoGeneSymbol": "RET",
+                    "hgvspShort": "p.C634R",
+                },
+                # GRCh38 tag, confirmed
+                "9,8340407,8340407,C,T": {
+                    "hugoGeneSymbol": "PTPRD",
+                    "hgvspShort": "p.R1730Q",
+                },
+                # GRCh38 tag, different protein change -> stays GRCh38
+                "9,8636794,8636794,C,T": {
+                    "hugoGeneSymbol": "PTPRD",
+                    "hgvspShort": "p.G40R",
+                },
+            },
+        )
+        df = self._frame([None, "GRCh38", "GRCh38", "GRCh37"])
+
+        assert cbioportal.return_verified_build_list(df, "GRCh37") == [
+            "GRCh37",
+            "GRCh37",
+            "GRCh38",
+            "GRCh37",
+        ]
+        # only the three disputed rows are sent, on the cohort build and cBioPortal's frame
+        assert len(list_calls) == 1
+        assert sorted(list_calls[0][0]) == sorted(
+            [
+                "10,43609948,43609948,T,C",
+                "9,8340407,8340407,C,T",
+                "9,8636794,8636794,C,T",
+            ]
+        )
+        assert list_calls[0][1:] == ("GRCh37", "mskcc")
+
+    def test_unannotated_missing_tag_stays_none(self, monkeypatch):
+        self._stub(monkeypatch, {})
+        df = self._frame([None, "GRCh37", "GRCh37", "GRCh37"])
+
+        assert cbioportal.return_verified_build_list(df, "GRCh37")[0] is None
+
+    def test_no_ncbibuild_column_assumes_cohort_build(self, monkeypatch):
+        list_calls = self._stub(monkeypatch, {})
+        df = self._frame([None] * 4).drop(columns="ncbiBuild")
+
+        assert cbioportal.return_verified_build_list(df, "GRCh37") == ["GRCh37"] * 4
+        assert list_calls == []
+
+
 def test_assign_mkt_name_resolves_jak2_v617f_to_jh2():
     """JAK2 V617F lies in the JH2 pseudokinase domain (JAK2_2); gaps keep the base name."""
     dict_kinase = _kinase("JAK2_1", "JAK2_2", "BRAF")

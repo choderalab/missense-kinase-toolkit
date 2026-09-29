@@ -21,6 +21,7 @@ from mkt.databases import properties
 from mkt.databases.api_schema import APIKeySwaggerClient
 from mkt.databases.config import get_cbioportal_instance, maybe_get_cbioportal_token
 from mkt.databases.constants import normalize_build
+from mkt.databases.genomenexus import annotate_genomic_locations
 from mkt.databases.io_utils import (
     parse_iterabc2dataframe,
     return_kinase_dict,
@@ -569,7 +570,9 @@ def return_gene2seq(
     return dict_out
 
 
-def return_hgvsg_list(df: pd.DataFrame, str_build: str) -> list[str | None]:
+def return_hgvsg_list(
+    df: pd.DataFrame, str_build: str, list_build: list | None = None
+) -> list[str | None]:
     """Return a Genome Nexus genomic HGVS string per single-base substitution row.
 
     Parameters
@@ -580,6 +583,9 @@ def return_hgvsg_list(df: pd.DataFrame, str_build: str) -> list[str | None]:
     str_build : str
         Genome build the strings are valid for; rows on another build get None. Builds
         are compared after alias normalization (``"37"``/``"hg19"`` mean GRCh37).
+    list_build : list | None
+        Per-row builds used instead of ``ncbiBuild`` (e.g. from
+        :func:`return_verified_build_list`); None reads ``ncbiBuild``.
 
     Returns
     -------
@@ -591,9 +597,12 @@ def return_hgvsg_list(df: pd.DataFrame, str_build: str) -> list[str | None]:
     if not set(list_cols) <= set(df.columns):
         return [None] * len(df)
     str_canonical = normalize_build(str_build)
-    list_build = (
-        df["ncbiBuild"].tolist() if "ncbiBuild" in df.columns else [str_build] * len(df)
-    )
+    if list_build is None:
+        list_build = (
+            df["ncbiBuild"].tolist()
+            if "ncbiBuild" in df.columns
+            else [str_build] * len(df)
+        )
     list_hgvsg = []
     for chrom, start, ref, alt, build in zip(
         df["chr"],
@@ -616,7 +625,9 @@ def return_hgvsg_list(df: pd.DataFrame, str_build: str) -> list[str | None]:
     return list_hgvsg
 
 
-def return_genomic_location_list(df: pd.DataFrame, str_build: str) -> list[str | None]:
+def return_genomic_location_list(
+    df: pd.DataFrame, str_build: str, list_build: list | None = None
+) -> list[str | None]:
     """Return an OncoKB ``genomicLocation`` string per mutation row.
 
     OncoKB's ``byGenomicChange`` endpoint takes ``chromosome,start,end,ref,alt`` and
@@ -636,6 +647,9 @@ def return_genomic_location_list(df: pd.DataFrame, str_build: str) -> list[str |
     str_build : str
         Genome build the coordinates are valid for; rows on another build get None.
         Builds are compared after alias normalization (``"37"``/``"hg19"`` mean GRCh37).
+    list_build : list | None
+        Per-row builds used instead of ``ncbiBuild`` (e.g. from
+        :func:`return_verified_build_list`); None reads ``ncbiBuild``.
 
     Returns
     -------
@@ -653,9 +667,12 @@ def return_genomic_location_list(df: pd.DataFrame, str_build: str) -> list[str |
     if not set(list_cols) <= set(df.columns):
         return [None] * len(df)
     str_canonical = normalize_build(str_build)
-    list_build = (
-        df["ncbiBuild"].tolist() if "ncbiBuild" in df.columns else [str_build] * len(df)
-    )
+    if list_build is None:
+        list_build = (
+            df["ncbiBuild"].tolist()
+            if "ncbiBuild" in df.columns
+            else [str_build] * len(df)
+        )
     list_location = []
     for chrom, start, end, ref, alt, build in zip(
         df["chr"],
@@ -678,6 +695,84 @@ def return_genomic_location_list(df: pd.DataFrame, str_build: str) -> list[str |
             f"{chrom},{int(start)},{int(end)},{ref},{alt}" if bool_usable else None
         )
     return list_location
+
+
+def return_verified_build_list(
+    df: pd.DataFrame, str_build: str, str_col_gene: str | None = None
+) -> list[str | None]:
+    """Return each row's genome build, confirming untagged/mismatched rows via Genome Nexus.
+
+    A row whose ``ncbiBuild`` is missing or differs from ``str_build`` is annotated on
+    ``str_build`` (MSKCC isoform override, cBioPortal's frame) and taken as ``str_build``
+    when Genome Nexus returns the row's own gene and protein change; otherwise it keeps
+    its normalized tag (None when missing), so the locus builders still skip it.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        cBioPortal mutations with the coordinate columns, ``proteinChange``, a gene
+        column and (optionally) ``ncbiBuild``.
+    str_build : str
+        Cohort genome build.
+    str_col_gene : str | None
+        Gene-symbol column; None picks ``gene_hugoGeneSymbol`` or ``hugoGeneSymbol``.
+
+    Returns
+    -------
+    list[str | None]
+        Normalized build per row, for the ``list_build`` of :func:`return_hgvsg_list`
+        and :func:`return_genomic_location_list`.
+    """
+    str_canonical = normalize_build(str_build)
+    if "ncbiBuild" not in df.columns:
+        return [str_canonical] * len(df)
+    list_tag = [normalize_build(build) for build in df["ncbiBuild"]]
+    if str_canonical is None:
+        return list_tag
+
+    if str_col_gene is None:
+        str_col_gene = next(
+            (c for c in ("gene_hugoGeneSymbol", "hugoGeneSymbol") if c in df.columns),
+            None,
+        )
+    if str_col_gene is None or "proteinChange" not in df.columns:
+        return list_tag
+
+    # locations as if every row were on the cohort build; only disputed rows are checked
+    list_location = return_genomic_location_list(
+        df, str_build, list_build=[str_canonical] * len(df)
+    )
+    list_idx = [
+        i
+        for i, (tag, loc) in enumerate(zip(list_tag, list_location))
+        if tag != str_canonical and loc is not None
+    ]
+    if not list_idx:
+        return list_tag
+
+    dict_annotation = annotate_genomic_locations(
+        sorted({list_location[i] for i in list_idx}),
+        build=str_canonical,
+        isoform_override="mskcc",
+    )
+    list_gene = df[str_col_gene].tolist()
+    list_change = df["proteinChange"].tolist()
+    n_verified = 0
+    for i in list_idx:
+        summary = dict_annotation.get(list_location[i]) or {}
+        str_change = (summary.get("hgvspShort") or "").removeprefix("p.")
+        if (
+            summary.get("hugoGeneSymbol") == list_gene[i]
+            and str_change == list_change[i]
+        ):
+            list_tag[i] = str_canonical
+            n_verified += 1
+    logger.info(
+        f"{len(list_idx)} row(s) had a missing or non-{str_canonical} ncbiBuild; "
+        f"{n_verified} verified on {str_canonical} via Genome Nexus, "
+        f"{len(list_idx) - n_verified} left unresolved."
+    )
+    return list_tag
 
 
 def assign_mkt_name(
@@ -1021,7 +1116,13 @@ class KinaseMissenseMutations(Mutations):
                 for codon in list_codon
             ],
             list_refseq=list_refseq,
-            list_hgvsg=return_hgvsg_list(df, self.str_build),
+            list_hgvsg=return_hgvsg_list(
+                df,
+                self.str_build,
+                list_build=return_verified_build_list(
+                    df, self.str_build, str_col_gene=col_gene
+                ),
+            ),
         )
 
         df = df.copy()
