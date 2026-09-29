@@ -2,7 +2,7 @@
 
 Genome Nexus (``genomenexus.org``) is the VEP-based annotation engine behind
 cBioPortal. This wraps its build-specific REST hosts
-(:data:`DICT_GENOME_NEXUS_HOST`) for two uses:
+(:data:`DICT_GENOME_NEXUS_HOST`) for three uses:
 
 - :func:`get_canonical_transcripts` -- the canonical Ensembl transcript per gene
   (exon/UTR structure, protein length, UniProt id), under an isoform-override
@@ -11,6 +11,8 @@ cBioPortal. This wraps its build-specific REST hosts
 - :func:`annotate_variants` -- VEP-style consequence for genomic variants
   (protein position, coding change, consequence), matching how cBioPortal
   annotated the observed mutations.
+- :func:`annotate_genomic_locations` -- the same, keyed by ``chr,start,end,ref,alt``
+  locations so indels are covered too.
 
 Genome Nexus serves GRCh37 from the default host (``www.genomenexus.org``) and
 GRCh38 from ``grch38.genomenexus.org``, so the build must match the coordinates.
@@ -182,6 +184,63 @@ def annotate_variants(
             )
             if summary is not None:
                 dict_annotation[rec.get("variant")] = summary
+    return dict_annotation
+
+
+def annotate_genomic_locations(
+    locations: list[str],
+    build: str = "GRCh37",
+    isoform_override: str = DEFAULT_ISOFORM_OVERRIDE,
+    chunk_size: int = GENOME_NEXUS_POST_MAX,
+) -> dict[str, dict]:
+    """Annotate ``chr,start,end,ref,alt`` locations (SNVs and indels) with Genome Nexus.
+
+    Parameters
+    ----------
+    locations : list[str]
+        Locations as built by :func:`mkt.databases.cbioportal.return_genomic_location_list`,
+        e.g. ``"10,43609942,43609947,GAGCTG,-"``.
+    build : str
+        Genome build selecting the host (e.g. ``"GRCh37"``, ``"GRCh38"``).
+    isoform_override : str
+        Isoform-override source; ``"mskcc"`` reports cBioPortal's protein frame.
+    chunk_size : int
+        Locations per request (capped at :data:`GENOME_NEXUS_POST_MAX`).
+
+    Returns
+    -------
+    dict[str, dict]
+        Mapping of location string to its ``transcriptConsequenceSummary``;
+        locations that failed to annotate are absent.
+    """
+    list_payload = []
+    for str_location in locations:
+        chrom, start, end, ref, alt = str_location.split(",")
+        list_payload.append(
+            {
+                "chromosome": chrom,
+                "start": int(start),
+                "end": int(end),
+                "referenceAllele": ref,
+                "variantAllele": alt,
+            }
+        )
+    url = f"{rest_host(build)}/annotation/genomic"
+    params = {"isoformOverrideSource": isoform_override, "fields": "annotation_summary"}
+    dict_annotation: dict[str, dict] = {}
+    for records in _post_chunks(
+        url,
+        params,
+        list_payload,
+        chunk_size,
+        "Annotating genomic locations in Genome Nexus",
+    ):
+        for rec in records:
+            summary = (rec.get("annotation_summary") or {}).get(
+                "transcriptConsequenceSummary"
+            )
+            if summary is not None:
+                dict_annotation[rec.get("originalVariantQuery")] = summary
     return dict_annotation
 
 

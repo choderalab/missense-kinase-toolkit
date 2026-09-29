@@ -1,5 +1,9 @@
 import pytest
-from mkt.databases.genomenexus import build_exon_map, get_canonical_transcripts
+from mkt.databases.genomenexus import (
+    annotate_genomic_locations,
+    build_exon_map,
+    get_canonical_transcripts,
+)
 
 
 def _record():
@@ -56,3 +60,23 @@ class TestGenomeNexusExons:
         rec = get_canonical_transcripts(["BRAF"], build="GRCh37")["BRAF"]
         idx2exon = build_exon_map(rec, rec["proteinLength"])
         assert idx2exon[600] == 15
+
+
+class TestAnnotateGenomicLocations:
+    def test_snv_and_indel_keyed_by_location(self):
+        # RET C634R (SNV) and E632_L633del (in-frame deletion) at their GRCh37 loci,
+        # reported in cBioPortal's (MSKCC) frame and keyed by the input location
+        list_loc = ["10,43609948,43609948,T,C", "10,43609942,43609947,GAGCTG,-"]
+        dict_out = annotate_genomic_locations(
+            list_loc, build="GRCh37", isoform_override="mskcc"
+        )
+        assert dict_out[list_loc[0]]["hugoGeneSymbol"] == "RET"
+        assert dict_out[list_loc[0]]["hgvspShort"] == "p.C634R"
+        assert dict_out[list_loc[1]]["hgvspShort"] == "p.E632_L633del"
+
+    def test_wrong_build_does_not_annotate(self):
+        # the same GRCh37 coordinates on GRCh38 miss the RET reference base
+        dict_out = annotate_genomic_locations(
+            ["10,43609948,43609948,T,C"], build="GRCh38", isoform_override="mskcc"
+        )
+        assert "10,43609948,43609948,T,C" not in dict_out
