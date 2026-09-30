@@ -64,14 +64,22 @@ class cBioPortal(APIKeySwaggerClient):
     """cBioPortal API object (post-init)."""
 
     def __post_init__(self):
-        """Post-initialization to set up cBioPortal API client.
+        """Post-initialization to set up the cBioPortal API client."""
+        self.set_instance()
+        self.init_client()
+
+    def set_instance(self) -> None:
+        """Set the cBioPortal instance and its Swagger spec URL (no network)."""
+        self.instance = get_cbioportal_instance()
+        self.url = f"https://{self.instance}/api/v2/api-docs"
+
+    def init_client(self) -> None:
+        """Build the cBioPortal API client.
 
         Retries client construction so a transient failure on first contact -- one
         the session-level retries cannot cover, such as a truncated or unparseable
         Swagger spec -- does not leave the client permanently unusable.
         """
-        self.instance = get_cbioportal_instance()
-        self.url = f"https://{self.instance}/api/v2/api-docs"
         for int_attempt in range(1, INT_CLIENT_RETRIES + 1):
             try:
                 self._cbioportal = self.query_api()
@@ -135,24 +143,28 @@ class cBioPortalQuery(cBioPortal):
     """DataFrame of cBioPortal data; None if DataFrame could not be created (post-init)."""
 
     def __post_init__(self):
-        """Post-initialization to check study ID in instance and query API data."""
-        super().__post_init__()
-        if not self.check_entity_id():
-            logger.warning(
-                f"Study {self.get_entity_id()} not found "
-                f"in cBioPortal instance {self.instance}"
-            )
+        """Load from ``pathfile`` if given, else query the API.
+
+        The API client is only built (and the entity ID checked) when a query is
+        needed, so loading cached CSVs makes no cBioPortal requests.
+        """
+        self.set_instance()
         if self.pathfile is not None:
             try:
                 self._df = self.load_from_csv()
+                return
             except Exception as e:
                 logger.error(
                     f"Error loading DataFrame from {self.pathfile}: {e}\n"
                     "Regenerating DataFrame from API query..."
                 )
-                self.regenerate_dataframe()
-        else:
-            self.regenerate_dataframe()
+        self.init_client()
+        if not self.check_entity_id():
+            logger.warning(
+                f"Study {self.get_entity_id()} not found "
+                f"in cBioPortal instance {self.instance}"
+            )
+        self.regenerate_dataframe()
 
     @abstractmethod
     def get_entity_id(self):
