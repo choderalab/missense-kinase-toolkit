@@ -71,7 +71,11 @@ class TestCBioPortalClient:
 @pytest.mark.network
 class TestMutations:
     def test_entity_id_exists(self, mutations_instance):
-        assert mutations_instance.check_entity_id() is True
+        bool_found = mutations_instance.check_entity_id()
+        # None = the study-list request failed (an outage), not a missing study
+        if bool_found is None:
+            pytest.skip("cBioPortal study lookup failed; skipping")
+        assert bool_found is True
 
     def test_entity_id_value(self, mutations_instance):
         assert mutations_instance.get_entity_id() == "msk_impact_2017"
@@ -83,7 +87,11 @@ class TestMutations:
 @pytest.mark.network
 class TestGenePanel:
     def test_panel_entity_id_exists(self, gene_panel_instance):
-        assert gene_panel_instance.check_entity_id() is True
+        bool_found = gene_panel_instance.check_entity_id()
+        # None = the panel-list request failed (an outage), not a missing panel
+        if bool_found is None:
+            pytest.skip("cBioPortal panel lookup failed; skipping")
+        assert bool_found is True
 
     def test_panel_row_count(self, gene_panel_instance):
         assert gene_panel_instance._df.shape[0] == 341
@@ -444,3 +452,88 @@ class TestConvertLogAndTruncate:
     def test_cap_and_nan(self):
         assert self.convert(999, True, 1.5) == 1.5
         assert np.isnan(self.convert(np.nan, True, None))
+
+
+class TestLoadWithoutClient:
+    @pytest.fixture(autouse=True)
+    def _instance(self, monkeypatch):
+        monkeypatch.setenv("CBIOPORTAL_INSTANCE", "www.cbioportal.org")
+
+    def test_csv_load_skips_the_api_client(self, tmp_path, monkeypatch):
+        # a cached CSV is read without building the client or checking the study
+        path = tmp_path / "mutations.csv"
+        pd.DataFrame({"sampleId": ["s1"], "proteinChange": ["V600E"]}).to_csv(
+            path, index=False
+        )
+
+        def _no_network(self):
+            raise AssertionError("cBioPortal contacted during a CSV load")
+
+        monkeypatch.setattr(cbioportal.cBioPortal, "init_client", _no_network)
+        monkeypatch.setattr(cbioportal.StudyData, "check_entity_id", _no_network)
+        obj = cbioportal.Mutations(study_id="msk_impact_2017", pathfile=str(path))
+
+        assert obj._cbioportal is None
+        assert obj._df["proteinChange"].tolist() == ["V600E"]
+
+    def test_no_pathfile_builds_the_client_and_queries(self, monkeypatch):
+        list_calls = []
+        monkeypatch.setattr(
+            cbioportal.cBioPortal,
+            "init_client",
+            lambda self: list_calls.append("client"),
+        )
+        monkeypatch.setattr(
+            cbioportal.StudyData,
+            "check_entity_id",
+            lambda self: list_calls.append("check") or True,
+        )
+        monkeypatch.setattr(
+            cbioportal.cBioPortalQuery,
+            "regenerate_dataframe",
+            lambda self: list_calls.append("query"),
+        )
+        cbioportal.Mutations(study_id="msk_impact_2017")
+
+        assert list_calls == ["client", "check", "query"]
+
+
+class TestCheckEntityId:
+    @staticmethod
+    def _study(client):
+        # check_entity_id only reads study_id and the client
+        return SimpleNamespace(study_id="msk_impact_2017", _cbioportal=client)
+
+    def test_failed_lookup_is_none_not_false(self):
+        def _raise():
+            raise ConnectionError("503")
+
+        client = SimpleNamespace(
+            Studies=SimpleNamespace(
+                getAllStudiesUsingGET=lambda: SimpleNamespace(result=_raise)
+            )
+        )
+        assert cbioportal.StudyData.check_entity_id(self._study(client)) is None
+        assert cbioportal.StudyData.check_entity_id(self._study(None)) is None
+
+    def test_answered_lookup_is_true_or_false(self):
+        def _client(list_ids):
+            studies = [SimpleNamespace(studyId=i) for i in list_ids]
+            return SimpleNamespace(
+                Studies=SimpleNamespace(
+                    getAllStudiesUsingGET=lambda: SimpleNamespace(
+                        result=lambda: studies
+                    )
+                )
+            )
+
+        assert (
+            cbioportal.StudyData.check_entity_id(
+                self._study(_client(["msk_impact_2017"]))
+            )
+            is True
+        )
+        assert (
+            cbioportal.StudyData.check_entity_id(self._study(_client(["other"])))
+            is False
+        )
