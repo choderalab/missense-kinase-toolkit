@@ -1,3 +1,9 @@
+"""Processing of the PKIS2 kinase profiling dataset.
+
+Provides :class:`PKIS2Dataset` and its :class:`PKIS2Config`, plus :func:`read_xlsx_file`,
+to load and harmonize the PKIS2 percent-inhibition data.
+"""
+
 import pandas as pd
 from mkt.databases.datasets.process import (
     DatasetConfig,

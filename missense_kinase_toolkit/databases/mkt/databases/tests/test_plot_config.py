@@ -1,16 +1,20 @@
 from mkt.databases.plot_config import (
     ColKinaseColorConfig,
+    ConservationFiguresConfig,
+    DatasetFiguresConfig,
     DataSourceConfig,
     DynamicRangePlotConfig,
     FamilyColorConfig,
+    KinaseInfoFiguresConfig,
     MatplotlibRCConfig,
     MetricsBoxplotConfig,
     OutputConfig,
-    PlotDatasetConfig,
+    PymolConfig,
     RidgelinePlotConfig,
     SequenceSchematicConfig,
     StackedBarchartConfig,
     VennDiagramConfig,
+    load_task_config,
 )
 
 
@@ -55,21 +59,21 @@ class TestConfigDefaults:
         assert OutputConfig().bool_svg is True
 
 
-class TestPlotDatasetConfigAggregator:
+class TestDatasetFiguresConfigAggregator:
     def test_nested_matplotlib_rc(self):
-        cfg = PlotDatasetConfig()
+        cfg = DatasetFiguresConfig()
         assert isinstance(cfg.matplotlib_rc, MatplotlibRCConfig)
 
     def test_nested_dynamic_range(self):
-        cfg = PlotDatasetConfig()
+        cfg = DatasetFiguresConfig()
         assert isinstance(cfg.dynamic_range, DynamicRangePlotConfig)
 
     def test_nested_data_sources(self):
-        cfg = PlotDatasetConfig()
+        cfg = DatasetFiguresConfig()
         assert isinstance(cfg.data_sources, DataSourceConfig)
 
     def test_output_bool_png(self):
-        assert PlotDatasetConfig().output.bool_png is True
+        assert DatasetFiguresConfig().output.bool_png is True
 
 
 class TestFamilyColorConfigGetColors:
@@ -113,30 +117,61 @@ class TestColKinaseColorConfigAsRGBDict:
         assert abs(rgb["construct_unaligned"][2] - 41 / 255) < 1e-6
 
 
-class TestPlotDatasetConfigFromYAML:
-    def test_overridden_values(self, tmp_path):
+class TestGroupedConfigLoader:
+    def test_shared_blocks_and_task_namespace(self, tmp_path):
         yaml_content = (
             "matplotlib_rc:\n"
             '  svg_fonttype: "none"\n'
             "  pdf_fonttype: 3\n"
-            "dynamic_range:\n"
-            "  bins: 50\n"
-            "  alpha: 0.5\n"
+            "output:\n"
+            "  bool_png: false\n"
+            "dataset:\n"
+            "  dynamic_range:\n"
+            "    bins: 50\n"
+            "    alpha: 0.5\n"
         )
-        yaml_file = tmp_path / "test_config.yaml"
+        yaml_file = tmp_path / "study.yaml"
         yaml_file.write_text(yaml_content)
 
-        cfg = PlotDatasetConfig.from_yaml(yaml_file)
+        cfg = load_task_config(DatasetFiguresConfig, yaml_file, "dataset")
+        # shared top-level blocks merge into the task config
         assert cfg.matplotlib_rc.svg_fonttype == "none"
         assert cfg.matplotlib_rc.pdf_fonttype == 3
+        assert cfg.output.bool_png is False
+        # values under the task namespace override
         assert cfg.dynamic_range.bins == 50
         assert cfg.dynamic_range.alpha == 0.5
 
     def test_unspecified_fields_keep_defaults(self, tmp_path):
-        yaml_content = "dynamic_range:\n  bins: 50\n"
-        yaml_file = tmp_path / "test_config.yaml"
-        yaml_file.write_text(yaml_content)
+        yaml_file = tmp_path / "study.yaml"
+        yaml_file.write_text("dataset:\n  dynamic_range:\n    bins: 50\n")
 
-        cfg = PlotDatasetConfig.from_yaml(yaml_file)
+        cfg = load_task_config(DatasetFiguresConfig, yaml_file, "dataset")
         assert cfg.ridgeline.overlap == 0.1
         assert cfg.output.bool_svg is True
+
+    def test_no_config_returns_defaults(self):
+        assert load_task_config(DatasetFiguresConfig).dynamic_range.bins == 100
+
+    def test_conservation_and_pymol_namespaces(self, tmp_path):
+        yaml_file = tmp_path / "study.yaml"
+        yaml_file.write_text(
+            "conservation:\n"
+            "  conservation_tree:\n"
+            "    split_index: 12\n"
+            "pymol:\n"
+            "  views:\n"
+            "    - gene: ABL1\n"
+            "      config_type: KLIFS_IMPORTANT\n"
+        )
+        cons = load_task_config(ConservationFiguresConfig, yaml_file, "conservation")
+        assert cons.conservation_tree.split_index == 12
+
+        pym = load_task_config(PymolConfig, yaml_file, "pymol")
+        assert len(pym.views) == 1
+        assert pym.views[0].gene == "ABL1"
+        assert pym.views[0].config_type == "KLIFS_IMPORTANT"
+
+        # a namespace absent from the YAML falls back to defaults
+        ki = load_task_config(KinaseInfoFiguresConfig, yaml_file, "kinaseinfo")
+        assert ki.upset_plot.filename == "upset_plot"

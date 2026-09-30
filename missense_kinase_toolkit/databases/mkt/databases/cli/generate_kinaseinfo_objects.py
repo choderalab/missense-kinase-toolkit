@@ -1,120 +1,129 @@
 #!/usr/bin/env python
+"""CLI to build :class:`KinaseInfo` objects from APIs and serialize them to tar.gz.
 
-import argparse
+Entry point (``generate_kinaseinfo_objects``) that drives the compositional build
+pipeline (:mod:`mkt.databases.generator.pipeline`). Supports a full kinome regeneration
+(default), a per-step run via ``--only``/``--skip`` over the enrichment registry, and a
+one-off per-entry update via ``--kinase`` that rebuilds and splices in targeted entries
+without a full rebuild. ``--only``/``--skip`` and ``--kinase`` compose freely.
+"""
+
 import logging
-import os
-import shutil
+from typing import Annotated, Optional
 
-from mkt.databases.config import set_request_cache
-from mkt.databases.io_utils import create_tar_without_metadata
-from mkt.databases.kinase_schema import (
-    combine_kinaseinfo,
-    combine_kinaseinfo_kd,
-    combine_kinaseinfo_uniprot,
-    generate_dict_obj_from_api_or_scraper,
-)
-from mkt.databases.log_config import add_logging_flags, configure_logging
-from mkt.databases.plot import generate_kinase_info_plot
-from mkt.schema.io_utils import get_repo_root, serialize_kinase_dict
+import typer
+from mkt.databases.generator import pipeline
+from mkt.databases.plot_config import ArgumentError
+from mkt.schema.log_config import configure_logging
 
 logger = logging.getLogger(__name__)
 
-
-def get_parser():
-    """Generate a parser for the command line interface.
-
-    Returns
-    -------
-    argparse.ArgumentParser
-        Parser for the command line interface
-
-    """
-    parser = argparse.ArgumentParser(
-        description="Generate KinaseInfo objects from API or scraper."
-    )
-
-    parser.add_argument(
-        "--pathObjects",
-        type=str,
-        default=None,
-        help="Where to save KinaseInfo objects, relative to repo root; if not Github repo relative to current directory.",
-    )
-
-    parser.add_argument(
-        "--pathReports",
-        type=str,
-        default=None,
-        help="Where to save reports, relative to repo root; if not Github repo relative to current directory.",
-    )
-
-    parser = add_logging_flags(parser)
-
-    return parser
+app = typer.Typer(
+    help="Generate KinaseInfo objects from API or scraper.",
+    no_args_is_help=False,
+)
 
 
-def main():
-    configure_logging()
+@app.command()
+def main(
+    only: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--only",
+            help="Rebuild only these component(s) on the existing archive; repeatable. "
+            "One of: hgnc, uniprot, kinhub, klifs, pfam, kincore, kincore_msa, "
+            "kincore_structure_props, alphafold, exon. Mutually exclusive with --skip.",
+        ),
+    ] = None,
+    skip: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--skip",
+            help="Skip these component(s) in a full rebuild; repeatable. One of: "
+            "kincore_msa, kincore_structure_props, alphafold, exon.",
+        ),
+    ] = None,
+    kinase: Annotated[
+        Optional[list[str]],
+        typer.Option(
+            "--kinase",
+            help="HGNC name(s) to update one-off; repeatable. Only these entries are "
+            "rebuilt and spliced into the existing archive. Omit to regenerate the full "
+            "kinome.",
+        ),
+    ] = None,
+    path_objects: Annotated[
+        Optional[str],
+        typer.Option(
+            "--pathObjects",
+            help="Where to save KinaseInfo objects, relative to repo root; if not a "
+            "Github repo, relative to the current directory.",
+        ),
+    ] = None,
+    path_reports: Annotated[
+        Optional[str],
+        typer.Option(
+            "--pathReports",
+            help="Where to save reports, relative to repo root; if not a Github repo, "
+            "relative to the current directory.",
+        ),
+    ] = None,
+    config_path: Annotated[
+        Optional[str],
+        typer.Option(
+            "--config",
+            help="Shared study YAML supplying report aesthetics (the 'kinaseinfo' section). "
+            "When given, reports go to <output.subdir>/<config-stem>/kinaseinfo/; otherwise "
+            "to dict_kinase/<generated_at>/ from the archive manifest.",
+        ),
+    ] = None,
+    data: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--data/--no-data",
+            help="Build or update the KinaseInfo archive; --no-data draws figures from the "
+            "existing archive. Defaults to the config's kinaseinfo.data (true if unset).",
+            show_default=False,
+        ),
+    ] = None,
+    figs: Annotated[
+        bool,
+        typer.Option(
+            "--figs/--no-figs",
+            help="Draw the report figures.",
+        ),
+    ] = True,
+    recompute: Annotated[
+        bool,
+        typer.Option(
+            "--recompute",
+            help="Recompute structure-derived properties (AlphaFold slice, SASA, "
+            "superposition) even when already stored.",
+        ),
+    ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option("--verbose", "-v", help="Enable verbose (DEBUG) logging."),
+    ] = False,
+):
+    configure_logging(verbose=verbose)
 
-    args = get_parser().parse_args()
-
-    path_repo = get_repo_root()
-
-    dict_path = dict(zip(["objects", "reports"], [args.pathObjects, args.pathReports]))
-    for key, val in dict_path.items():
-        if val is not None:
-            path_out = os.path.join(path_repo, val)
-            logger.info(f"Using user-provided path for {key} provided {path_out}...")
-        else:
-            if key == "reports":
-                path_out = os.path.join(path_repo, "images")
-            else:
-                path_out = os.path.join(
-                    path_repo, "missense_kinase_toolkit/schema/mkt/schema/KinaseInfo"
-                )
-            logger.info(f"Using default path for {key} provided {path_out}...")
-        if not os.path.exists(path_out):
-            logger.info(
-                f"Output directory for {key} does not exist: {path_out}. Creating..."
-            )
-            try:
-                os.makedirs(path_out)
-            except Exception as e:
-                logger.error(f"Failed to create directory {path_out}: {e}")
-                exit(1)
-        if not os.path.isdir(path_out):
-            logger.error(f"Output path for {key} is not a directory: {path_out}")
-            exit(1)
-        dict_path[key] = path_out
-    path_objects, path_reports = dict_path["objects"], dict_path["reports"]
-
-    set_request_cache(os.path.join(get_repo_root(), "requests_cache.sqlite"))
-
-    # perform the API or scraper call to generate KinaseInfo objects
-    dict_obj = generate_dict_obj_from_api_or_scraper()
-
-    # harmonize the KinaseInfo objects
-    dict_kinaseinfo_uniprot = combine_kinaseinfo_uniprot(dict_obj)
-    dict_kinaseinfo_kd = combine_kinaseinfo_kd(dict_obj)
-    dict_kinaseinfo = combine_kinaseinfo(dict_kinaseinfo_uniprot, dict_kinaseinfo_kd)
-
-    # serialize the KinaseInfo objects to the objects directory
-    serialize_kinase_dict(dict_kinaseinfo, str_path=path_objects)
-
-    # create tar file without metadata one level from the objects directory
-    filepath_kinaseinfo_tar = os.path.join(
-        dict_path["objects"], "..", "KinaseInfo.tar.gz"
-    )
-    create_tar_without_metadata(
-        path_source=path_objects,
-        filename_tar=filepath_kinaseinfo_tar,
-    )
-
-    # generate kinase info plot
-    generate_kinase_info_plot(dict_kinaseinfo, path_reports)
-
-    # remove all files in the objects directory
-    shutil.rmtree(path_objects)
+    try:
+        pipeline.run(
+            only=only,
+            skip=skip,
+            list_kinase=kinase,
+            path_objects=path_objects,
+            path_reports=path_reports,
+            bool_data=data,
+            bool_figs=figs,
+            force=recompute,
+            config_path=config_path,
+        )
+    except ArgumentError as e:
+        logger.error(str(e))
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
-    main()
+    app()

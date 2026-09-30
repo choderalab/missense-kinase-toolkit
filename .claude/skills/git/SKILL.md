@@ -24,3 +24,66 @@ baseline.
 - This is a mono repo: scope each commit to one sub-package (`schema/`,
   `databases/`, `ml/`, `app/`) where practical — CI workflows are path-filtered
   per sub-package (see the `ci` skill).
+
+## Refreshing a stale topic branch from `main`
+
+I keep long-lived topic branches (e.g. `databases`, `ml`, `app`, `schema`,
+`docs`, `cbioportal`, `oncokb`, `pkis`, `notebooks`) that can sit untouched for
+months. When I pick one up to develop a feature, I want it synced with `main`
+**accepting all incoming changes from `main` on conflict** (I stash unsaved work
+first).
+
+Use:
+
+```bash
+git switch <topic-branch>
+git stash                 # if there are unsaved changes
+git fetch origin
+git merge -X theirs origin/main
+git stash pop             # if you stashed
+```
+
+- `-X theirs` favors the **incoming** branch (`main`). During a merge while on
+  the topic branch, `ours` = the topic branch and `theirs` = `main` — so
+  `theirs` is correct for "take main's version." This only forces `main`'s
+  version on **conflicting** hunks; non-conflicting topic-branch work is kept.
+  It resolves binary-file conflicts (e.g. `KinaseInfo.tar.gz`) cleanly by taking
+  `main`'s blob.
+- This **updates the topic branch** so I can keep developing on a current base;
+  the actual merge into `main` happens later via a PR.
+
+## Opening a PR from a topic branch — just do it, don't ask
+
+When I ask you to open a PR for work committed on a topic branch (`schema`,
+`databases`, `ml`, etc.), **push that topic branch and open the `<branch>` →
+`main` PR directly. Do not ask me whether to use a clean branch off `main`, and
+do not create one.**
+
+- **The commit count is irrelevant.** These branches can be 100+ commits ahead
+  of `main`, but I **squash-and-merge** every topic-branch PR — the whole branch
+  collapses to a single commit on `main`. The PR's *commit list* looks long; the
+  *merged diff* is exactly the branch's net change vs. `main`. A large
+  ahead-of-`main` count is expected and is **not** a reason to hesitate, warn,
+  or propose an alternative.
+- Sync the branch from `main` first if it's stale (see the section above), then
+  `git push origin <branch>` and `gh pr create --base main --head <branch>`.
+- Only branch off `main` for a standalone fix that genuinely belongs to **no**
+  existing topic branch — and even then, don't carve a fix *out* of a topic
+  branch it's already committed on.
+
+## Splitting intermingled changes across topic branches
+
+When one working tree has uncommitted changes spanning several sub-packages and
+each belongs on a different stale topic branch, don't try to carry them across
+`git switch` (stale branches diverge and the switch will conflict or refuse).
+Instead, patch each set onto its freshly-synced branch:
+
+1. Capture per-sub-package patches: `git diff -- <subpkg> > <subpkg>.patch`.
+2. Reset the working tree: `git checkout -- <paths>` (untracked WIP files stay
+   put and travel harmlessly across switches — confirm they aren't tracked on
+   the target branch first).
+3. For each branch: `git switch <branch>`, refresh from `main` (see above), then
+   `git apply --3way <subpkg>.patch`, and commit.
+
+Stage with `git add -u <subpkg>` (not `git add <subpkg>`, which also stages
+untracked WIP files) so pre-commit only lints what you're committing.

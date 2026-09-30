@@ -1,8 +1,16 @@
+import html
 import logging
+import re
 from dataclasses import dataclass
 
 import streamlit as st
-from constants import DICT_RESOURCE_URLS, LIST_CAPTIONS, LIST_OPTIONS
+from constants import (
+    DICT_COMPUTED_HELP,
+    DICT_RESOURCE_URLS,
+    LIST_CAPTIONS,
+    LIST_OPTIONS,
+)
+from mkt.databases.alphafold import adjudicate_structure
 from mkt.databases.app.properties import PropertyTables
 from mkt.databases.app.schema import (
     DefaultConfig,
@@ -11,7 +19,6 @@ from mkt.databases.app.schema import (
 )
 from mkt.databases.app.structures import StructureVisualizer
 from mkt.databases.colors import DICT_COLORS
-from mkt.databases.log_config import configure_logging
 from mkt.schema.io_utils import (
     DICT_FUNCS,
     deserialize_kinase_dict,
@@ -19,11 +26,62 @@ from mkt.schema.io_utils import (
     untar_files_in_memory,
 )
 from mkt.schema.kinase_schema import KinaseInfo
+from mkt.schema.log_config import configure_logging
 from mkt.schema.utils import rgetattr
 from streamlit_bokeh import streamlit_bokeh
 from visualizers import SequenceAlignmentGenerator, StructureVisualizerGenerator
 
 logger = logging.getLogger(__name__)
+
+# CSS for the property tables: the info icon after computed-property labels and its hover box
+# (flush below the icon so the pointer can move into it to follow a link), plus a phone layout.
+# below Streamlit's 640px column-stacking breakpoint the fixed label width would leave the value
+# column ~1 character wide, so the label column takes 40% and the box anchors to the label cell.
+# (a comment, not a trailing docstring: Streamlit "magic" renders bare module-level strings)
+STR_PROPERTY_TABLE_CSS = """
+<style>
+.mkt-tip { position: relative; cursor: help; margin-left: 0.3em; opacity: 0.6; }
+.mkt-tip:hover { opacity: 1; }
+.mkt-tip .mkt-tip-text {
+    visibility: hidden; opacity: 0; transition: opacity 0.15s;
+    position: absolute; left: 0; top: 100%; z-index: 1000;
+    width: 44ch; padding: 6px 10px; border-radius: 4px;
+    background: #262730; color: #fafafa; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    font-size: 0.8rem; font-weight: normal; line-height: 1.4;
+    text-transform: none; white-space: normal; overflow-wrap: normal;
+}
+.mkt-tip:hover .mkt-tip-text { visibility: visible; opacity: 1; }
+.mkt-tip-text a { color: #8ab4f8; }
+@media (max-width: 640px) {
+    table.mkt-props td:first-child, table.mkt-props th:first-child {
+        width: 40% !important;
+    }
+    table.mkt-props th { position: relative; }
+    table.mkt-props .mkt-tip { position: static; }
+    table.mkt-props .mkt-tip .mkt-tip-text { width: 85vw; }
+}
+</style>
+"""
+
+
+def _help_to_html(str_help: str) -> str:
+    """Render a hover description as HTML: Markdown links, line breaks and tab indents.
+
+    Parameters
+    ----------
+    str_help : str
+        Plain-text description; may contain ``[text](url)`` links, ``\\n`` and ``\\t``.
+
+    Returns
+    -------
+    str
+        HTML for the hover box.
+    """
+    str_out = html.escape(str_help, quote=False)
+    str_out = re.sub(
+        r"\[([^\]]+)\]\(([^)\s]+)\)", r'<a href="\2" target="_blank">\1</a>', str_out
+    )
+    return str_out.replace("\n", "<br>").replace("\t", "&emsp;")
 
 
 @dataclass
@@ -171,10 +229,13 @@ class Dashboard:
 
         with col1:
             with st.expander("Structure", expanded=True):
-                if obj_temp.kincore is None:
-                    st.error("No KinCore objects available for this kinase.", icon="⚠️")
+                # adjudicate the structure source (KinCoRe CIF preferred, AF fallback)
+                _, structure_source = adjudicate_structure(obj_temp)
+
+                if structure_source is None:
+                    st.error("No structure available for this kinase.", icon="⚠️")
                 else:
-                    st.markdown("### KinCore active structure\n")
+                    st.markdown("### Kinase Domain\n" f"#### {structure_source}\n")
                     try:
                         plot_spot = st.empty()
 
@@ -225,23 +286,128 @@ class Dashboard:
 
                 table = PropertyTables(obj_temp)
 
+                # share one column geometry across all four tables: each column is sized to the
+                # widest content across every table (labels in col 1, values in col 2), measuring
+                # values by their visible text so HTML links don't inflate the width
+                _tables = [
+                    table.df_kinhub,
+                    table.df_klifs,
+                    table.df_kincore,
+                    table.df_computed,
+                ]
+
+                def _visible_len(cell) -> int:
+                    return len(re.sub(r"<[^>]+>", "", str(cell)))
+
+                label_ch = max(
+                    (
+                        _visible_len(i)
+                        for df in _tables
+                        if df is not None
+                        for i in df.index
+                    ),
+                    default=10,
+                )
+                # cap the value column so a very long value (e.g. SRMS's ~92-char KLIFS name)
+                # wraps instead of widening the table past its half-page column -- otherwise the
+                # browser scales the whole fixed-layout table (label column included) down to fit
+                VALUE_MAX_CH = 36
+                value_ch = min(
+                    VALUE_MAX_CH,
+                    max(
+                        (
+                            _visible_len(v)
+                            for df in _tables
+                            if df is not None
+                            for v in df["Property"]
+                        ),
+                        default=10,
+                    ),
+                )
+
+                # column geometry shared across all four tables. only the label column is a fixed
+                # width; the table fills its container up to a content-fit max-width, so on a wide
+                # monitor it stays content-sized while on a laptop the value column (not the label)
+                # absorbs the shortfall -- avoiding the browser scaling the whole fixed table down
+                label_w = label_ch + 8
+                table_max_w = label_w + value_ch + 2
+
+                def render_property_table(df, str_source, dict_help=None):
+                    # render the Styler HTML directly: st.table/st.dataframe cannot hide the
+                    # column header, so drop the redundant "Property" header (key-value tables)
+                    # via Styler.hide + st.markdown; row labels stay, saving a header row.
+                    if df is not None:
+                        if dict_help:
+                            # an info icon after the label shows its definition (with links)
+                            df = df.rename(
+                                index=lambda label: (
+                                    f'{label}<span class="mkt-tip">ⓘ'
+                                    '<span class="mkt-tip-text">'
+                                    f"{_help_to_html(dict_help[label])}</span></span>"
+                                    if label in dict_help
+                                    else label
+                                )
+                            )
+                        styler = (
+                            df.style.hide(axis="columns")
+                            .set_table_attributes('class="mkt-props"')
+                            .set_table_styles(
+                                [
+                                    {
+                                        "selector": "td, th",
+                                        "props": [
+                                            ("text-align", "left"),
+                                            ("padding", "2px 10px"),
+                                            ("font-weight", "normal"),
+                                            ("overflow-wrap", "anywhere"),
+                                        ],
+                                    },
+                                    {
+                                        "selector": "table",
+                                        "props": [
+                                            ("table-layout", "fixed"),
+                                            ("width", "100%"),
+                                            ("max-width", f"{table_max_w}ch"),
+                                        ],
+                                    },
+                                    {
+                                        "selector": "td:first-child, th:first-child",
+                                        # labels are uppercase (wider than the `ch` glyph), so pad
+                                        # generously to keep the widest label on one line
+                                        "props": [("width", f"{label_w}ch")],
+                                    },
+                                ]
+                            )
+                        )
+                        st.markdown(
+                            STR_PROPERTY_TABLE_CSS + styler.to_html(),
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.error(
+                            f"No {str_source} objects available for this kinase.",
+                            icon="⚠️",
+                        )
+
                 st.markdown("#### KinHub\n")
-                if table.df_kinhub is not None:
-                    st.table(table.df_kinhub)
-                else:
-                    st.error("No KinHub objects available for this kinase.", icon="⚠️")
+                render_property_table(table.df_kinhub, "KinHub")
 
                 st.markdown("#### KLIFS\n")
-                if table.df_klifs is not None:
-                    st.table(table.df_klifs)
-                else:
-                    st.error("No KLIFS objects available for this kinase.", icon="⚠️")
+                render_property_table(table.df_klifs, "KLIFS")
 
-                st.markdown("#### KinCore\n")
-                if table.df_kincore is not None:
-                    st.table(table.df_kincore)
-                else:
-                    st.error("No KinCore objects available for this kinase.", icon="⚠️")
+                st.markdown("#### KinCoRe\n")
+                render_property_table(table.df_kincore, "KinCoRe")
+
+                st.markdown("#### Computed\n")
+                render_property_table(
+                    table.df_computed,
+                    "computed",
+                    {
+                        label: DICT_COMPUTED_HELP[key]
+                        for label, key in (table.dict_computed_keys or {}).items()
+                        if key in DICT_COMPUTED_HELP
+                    },
+                )
 
 
 def main():

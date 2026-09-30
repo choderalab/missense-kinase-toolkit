@@ -1,9 +1,15 @@
+"""Solvent-accessible surface area (SASA) computation configs and residue-level calculation.
+
+Defines SASA configuration dataclasses (Biopython and PyMOL backends, with and without
+hydrogens), the :class:`StandardSASAConfigs` presets, and the :class:`ResidueSASA`
+model produced by residue-level SASA computation.
+"""
+
 import logging
 import os
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import ClassVar
 
 import pandas as pd
 from Bio.PDB.SASA import ShrakeRupley
@@ -302,10 +308,10 @@ def _compute_kinase_sasa(
     """Compute per-residue SASA for one kinase with one backend.
 
     Returns the per-residue DataFrame (without ``hgnc_name``/``method`` tags),
-    or None if the kinase has no KinCore CIF structure.
+    or None if the kinase has no KinCoRe CIF structure.
     """
     if rgetattr(obj_kinase, "kincore.cif") is None:
-        logger.warning(f"No KinCore CIF structure for {obj_kinase.hgnc_name}")
+        logger.warning(f"No KinCoRe CIF structure for {obj_kinase.hgnc_name}")
         return None
 
     structure = convert_mmcifdict2structure(
@@ -314,7 +320,7 @@ def _compute_kinase_sasa(
     )
 
     # guard the silent no-op: explicit-H analysis is meaningless if the
-    # structure was never protonated (some KinCore models are heavy-atom only)
+    # structure was never protonated (some KinCoRe models are heavy-atom only)
     if bool_include_hydrogens and not any(
         atom.element == "H" for atom in structure.get_atoms()
     ):
@@ -358,7 +364,7 @@ def _sasa_task(task: tuple) -> pd.DataFrame | None:
 
 
 class ResidueSASA(BaseModel):
-    """Calculate per-residue solvent accessible surface area from KinCore CIFs.
+    """Calculate per-residue solvent accessible surface area from KinCoRe CIFs.
 
     Configure the run via the fields below, then call :meth:`run` to compute
     per-residue SASA for each kinase with each selected backend; results are
@@ -366,9 +372,11 @@ class ResidueSASA(BaseModel):
     by UniProt sequence position (the CIF ``auth_seq_id``), and hydrogens are
     removed by default so SASA reflects conventional heavy atoms.
 
-    Prefer :meth:`from_dataclass` with a :class:`StandardSASAConfigs` preset for
-    vetted, backend-compatible options; direct construction is allowed but warns
-    that option compatibility is the caller's responsibility.
+    :meth:`from_dataclass` with a :class:`StandardSASAConfigs` preset is a
+    convenient way to get vetted, backend-compatible options; constructing
+    directly is equally supported, since incompatible options are rejected or
+    flagged by the field constraints and :meth:`_validate_config` regardless of
+    which constructor is used.
 
     Parameters:
     -----------
@@ -409,10 +417,6 @@ class ResidueSASA(BaseModel):
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    # toggled True by from_dataclass so model_post_init skips the "verify config
-    # compatibility" nudge for vetted presets; ClassVar -> not a model field
-    _building_from_dataclass: ClassVar[bool] = False
 
     dict_kinase: dict[str, KinaseInfo] | None = None
     """Mapping of HGNC name to ``KinaseInfo``; deserialized on demand if None."""
@@ -487,15 +491,7 @@ class ResidueSASA(BaseModel):
         return self
 
     def model_post_init(self, __context) -> None:
-        """Warn on direct construction and resolve ``dict_kinase``."""
-        if not type(self)._building_from_dataclass:
-            logger.warning(
-                "ResidueSASA was constructed directly; backend-compatible options "
-                "are your responsibility. Prefer ResidueSASA.from_dataclass(...) "
-                "with a StandardSASAConfigs preset to avoid incompatible settings "
-                "(e.g. hydrogen/relative, probe radius, n_points/dot_density)."
-            )
-
+        """Resolve ``dict_kinase``."""
         if self.dict_kinase is None:
             if self.list_ids is None:
                 # whole proteome: one bulk deserialization
@@ -518,9 +514,10 @@ class ResidueSASA(BaseModel):
     ) -> "ResidueSASA":
         """Build a ResidueSASA from a vetted config dataclass or standard preset.
 
-        This is the recommended constructor: presets in
-        :class:`StandardSASAConfigs` carry backend-compatible options, so the
-        direct-construction compatibility warning is suppressed.
+        A convenience constructor: presets in :class:`StandardSASAConfigs` carry
+        backend-compatible options, so they are the easiest way to get a valid
+        configuration. Constructing :class:`ResidueSASA` directly is equally
+        supported and validated identically.
 
         Parameters:
         -----------
@@ -538,11 +535,7 @@ class ResidueSASA(BaseModel):
         if isinstance(config, StandardSASAConfigs):
             config = config.value
 
-        cls._building_from_dataclass = True
-        try:
-            return cls(**asdict(config), **kwargs)
-        finally:
-            cls._building_from_dataclass = False
+        return cls(**asdict(config), **kwargs)
 
     @property
     def df(self) -> pd.DataFrame | None:
@@ -620,7 +613,7 @@ class ResidueSASA(BaseModel):
         """Compute per-residue SASA for all kinases and backends.
 
         Loops over each selected backend and kinase, tagging rows with
-        ``method`` and ``hgnc_name``; kinases without a KinCore CIF are skipped.
+        ``method`` and ``hgnc_name``; kinases without a KinCoRe CIF are skipped.
         The long-format result is stored on :attr:`df` (not returned).
 
         Returns:
@@ -640,7 +633,7 @@ class ResidueSASA(BaseModel):
         list_no_cif = set(self.dict_kinase.keys()) - set(dict_temp.keys())
         if list_no_cif:
             logger.warning(
-                "The following %d kinases have no KinCore CIF structure and will be skipped: %s",
+                "The following %d kinases have no KinCoRe CIF structure and will be skipped: %s",
                 len(list_no_cif),
                 ", ".join(sorted(list_no_cif)),
             )
@@ -704,3 +697,246 @@ class ResidueSASA(BaseModel):
                 )
                 if df is not None
             ]
+
+
+MAX_ASA_REFERENCE = "Tien et al. (2013)"
+"""str: reference maxima used to normalize relative solvent accessibility (see
+``MAX_ASA_TIEN_2013``); recorded as methodology on the stored :class:`SASA`."""
+
+DEFAULT_SASA_CONFIG = BioPythonHeavyConfig()
+"""BioPythonHeavyConfig: default vetted recipe for the stored KLIFS-pocket SASA -- heavy-atom
+Bio.PDB Shrake-Rupley, converged sampling, and Tien-2013-normalized RSA."""
+
+
+def _sasa_method_label(config: BaseSASAConfig) -> str:
+    """Human-readable backend label for the SASA methodology recorded on :class:`SASA`."""
+    return "Shrake-Rupley (Bio.PDB)" if config.bool_biopython else "dot_solvent (PyMOL)"
+
+
+def calculate_residue_sasa(
+    dict_cif: dict,
+    structure_id: str,
+    *,
+    config: BaseSASAConfig | None = None,
+) -> dict[int, tuple[float, float]]:
+    """Compute per-residue SASA and relative solvent accessibility over a KD mmCIF dict.
+
+    Runs the backend selected by ``config`` (default :data:`DEFAULT_SASA_CONFIG`: heavy-atom
+    Bio.PDB Shrake-Rupley) and normalizes to relative solvent accessibility (RSA) by the
+    Tien et al. (2013) maxima. Uses the same computation internals as :class:`ResidueSASA`.
+
+    The default config strips hydrogens (``bool_include_hydrogens=False``) so that KinCoRe v2
+    CIFs (which carry explicit hydrogens) and AlphaFold DB CIFs (heavy-atom only) are computed
+    on the same heavy-atom footing and their results are comparable; RSA is heavy-atom by
+    definition (the Tien maxima are a heavy-atom reference).
+
+    Parameters
+    ----------
+    dict_cif : dict
+        mmCIF dictionary of the (kinase-domain) structure, UniProt-numbered (auth_seq_id).
+    structure_id : str
+        Structure identifier (e.g. HGNC name) for the parsed Bio.PDB structure.
+    config : BaseSASAConfig | None, optional
+        SASA recipe (probe radius, sampling, backend, relative on/off); by default
+        :data:`DEFAULT_SASA_CONFIG`.
+
+    Returns
+    -------
+    dict[int, tuple[float, float]]
+        Mapping of 1-indexed UniProt position to ``(sasa, rsa)`` -- absolute SASA (Å^2)
+        and relative solvent accessibility.
+    """
+    config = config or DEFAULT_SASA_CONFIG
+    structure = convert_mmcifdict2structure(dict_cif, structure_id=structure_id)
+
+    # guard the silent no-op: an explicit-H config is meaningless on a heavy-atom-only
+    # structure (e.g. an AlphaFold DB CIF), which is never protonated here
+    if config.bool_include_hydrogens and not any(
+        atom.element == "H" for atom in structure.get_atoms()
+    ):
+        logger.warning(
+            "bool_include_hydrogens=True but %s has no explicit hydrogens; SASA equals the "
+            "heavy-atom result (structure not protonated).",
+            structure_id,
+        )
+
+    if config.bool_biopython:
+        list_rows = _residue_sasa_biopython(
+            structure,
+            bool_include_hydrogens=config.bool_include_hydrogens,
+            probe_radius=config.probe_radius,
+            n_points=config.n_points,
+        )
+    else:
+        list_rows = _residue_sasa_pymol(
+            structure,
+            bool_include_hydrogens=config.bool_include_hydrogens,
+            probe_radius=config.probe_radius,
+            dot_density=config.dot_density,
+        )
+    df = _assemble_sasa_df(list_rows, bool_relative=config.bool_relative)
+    return {
+        int(idx): (float(sasa), float(rsa))
+        for idx, sasa, rsa in zip(df["uniprot_idx"], df["sasa"], df["rsa"])
+    }
+
+
+def enrich_with_sasa(
+    obj_kinase,
+    config: BaseSASAConfig | None = None,
+) -> None:
+    """Populate KLIFS-pocket SASA on each of a kinase's structures.
+
+    Computes SASA and relative solvent accessibility (per ``config``, default
+    :data:`DEFAULT_SASA_CONFIG`) over **every** structure the kinase carries -- the KinCoRe
+    active-state CIF (stored on ``kincore.cif.sasa``) and the AlphaFold DB model (stored on
+    ``alphafold.sasa``) -- keyed by KLIFS region:idx (mirroring ``KLIFS2UniProtIdx``), so the
+    two are directly comparable. A structure's ``sasa`` is set to None when there is no KLIFS
+    mapping. Idempotent. A single-kinase wrapper over :func:`enrich_kinases_with_sasa`.
+
+    Parameters
+    ----------
+    obj_kinase : KinaseInfo
+        The kinase object to enrich (mutated in place).
+    config : BaseSASAConfig | None, optional
+        SASA recipe; by default :data:`DEFAULT_SASA_CONFIG`.
+
+    Returns
+    -------
+    None
+    """
+    enrich_kinases_with_sasa(
+        {obj_kinase.hgnc_name: obj_kinase}, config=config, n_jobs=1
+    )
+
+
+def _kinase_structures(obj_kinase, only: str | None = None):
+    """Yield each structure model (with a ``.cif`` mmCIF dict and a ``.sasa`` field).
+
+    Yields the KinCoRe active-state CIF (:class:`KinCoReCIF`) and/or the AlphaFold model
+    (:class:`AlphaFold`) that the kinase carries.
+
+    Parameters
+    ----------
+    obj_kinase : KinaseInfo
+        The kinase object.
+    only : str | None, optional
+        Restrict to ``"kincore"`` (the KinCoRe CIF) or ``"alphafold"`` (the AF model); None
+        yields both, by default None.
+    """
+    if (
+        only in (None, "kincore")
+        and obj_kinase.kincore is not None
+        and obj_kinase.kincore.cif is not None
+    ):
+        yield obj_kinase.kincore.cif
+    if only in (None, "alphafold") and obj_kinase.alphafold is not None:
+        yield obj_kinase.alphafold
+
+
+def _build_sasa_model(obj_kinase, lookup, config):
+    """Build the SASA model from a per-UniProt-position lookup, keyed by KLIFS region:idx.
+
+    ``lookup`` maps UniProt position -> ``(sasa, rsa)``; the model mirrors ``KLIFS2UniProtIdx``
+    keys, with None where a KLIFS position is unmapped or not covered by the structure.
+    """
+    from mkt.schema.kinase_schema import SASA
+
+    dict_sasa: dict[str, float | None] = {}
+    dict_rsa: dict[str, float | None] = {}
+    for label, idx in obj_kinase.KLIFS2UniProtIdx.items():
+        if idx is not None and idx in lookup:
+            dict_sasa[label], dict_rsa[label] = lookup[idx]
+        else:
+            dict_sasa[label] = None
+            dict_rsa[label] = None
+    return SASA(
+        sasa=dict_sasa,
+        rsa=dict_rsa,
+        method=_sasa_method_label(config),
+        probe_radius=config.probe_radius,
+        n_points=config.n_points,
+        include_hydrogens=config.bool_include_hydrogens,
+        max_asa_reference=MAX_ASA_REFERENCE,
+    )
+
+
+def _sasa_pool_worker(task):
+    """Picklable worker: compute the per-residue (sasa, rsa) lookup for one structure."""
+    key, dict_cif, config = task
+    try:
+        return key, calculate_residue_sasa(dict_cif, key, config=config)
+    except Exception as e:  # keep one bad structure from aborting the pool
+        logger.error("SASA computation failed for %s: %s", key, e)
+        return key, None
+
+
+def enrich_kinases_with_sasa(
+    dict_targets: dict,
+    config: BaseSASAConfig | None = None,
+    n_jobs: int = 1,
+    only: str | None = None,
+    force: bool = False,
+) -> None:
+    """Compute + store per-structure KLIFS-pocket SASA for many kinases, in parallel.
+
+    Each kinase's structures (KinCoRe CIF and/or AlphaFold) are computed independently -- the
+    CPU-bound per-residue Shrake-Rupley SASA runs in a process pool; the SASA is then stored on
+    the structure it was computed over (``kincore.cif.sasa`` / ``alphafold.sasa``). Structures of
+    a kinase without a KLIFS mapping get ``sasa`` None.
+
+    Parameters
+    ----------
+    dict_targets : dict[str, KinaseInfo]
+        HGNC name -> kinase object to enrich (mutated in place).
+    config : BaseSASAConfig | None, optional
+        SASA recipe; by default :data:`DEFAULT_SASA_CONFIG`.
+    n_jobs : int, optional
+        Worker processes: 1 serial (default), >1 pool, -1 all cores.
+    only : str | None, optional
+        Restrict to one structure type (``"kincore"`` / ``"alphafold"``); None does both,
+        by default None.
+    force : bool, optional
+        Recompute even when a structure already carries SASA, by default False.
+
+    Returns
+    -------
+    None
+    """
+    config = config or DEFAULT_SASA_CONFIG
+
+    tasks = []
+    meta = {}  # task key -> (obj_kinase, structure model)
+    for hgnc, obj in dict_targets.items():
+        if obj.KLIFS2UniProtIdx is None:
+            for struct in _kinase_structures(obj, only=only):
+                struct.sasa = None
+            continue
+        for i, struct in enumerate(_kinase_structures(obj, only=only)):
+            if struct.sasa is not None and not force:
+                continue  # idempotent: keep already-computed SASA (e.g. an unchanged structure)
+            key = f"{hgnc}::{i}"
+            tasks.append((key, struct.cif, config))
+            meta[key] = (obj, struct)
+
+    if not tasks:
+        return
+
+    n_workers = (os.cpu_count() or 1) if n_jobs == -1 else n_jobs
+    n_workers = max(1, min(n_workers, len(tasks)))
+    desc = "Calculating KLIFS-pocket SASA"
+    if n_workers == 1:
+        results = [_sasa_pool_worker(t) for t in tqdm(tasks, desc=f"{desc}...")]
+    else:
+        with ProcessPoolExecutor(max_workers=n_workers) as executor:
+            results = list(
+                tqdm(
+                    executor.map(_sasa_pool_worker, tasks),
+                    total=len(tasks),
+                    desc=f"{desc} ({n_workers} workers)...",
+                )
+            )
+
+    for key, lookup in results:
+        obj, struct = meta[key]
+        struct.sasa = None if lookup is None else _build_sasa_model(obj, lookup, config)

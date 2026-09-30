@@ -1,3 +1,9 @@
+"""Small helpers for inspecting HTTP responses.
+
+Provides :func:`print_status_code_if_res_not_ok` for surfacing non-OK HTTP response
+status codes.
+"""
+
 import requests
 
 

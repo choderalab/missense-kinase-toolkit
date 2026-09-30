@@ -4,10 +4,10 @@ import os
 from datetime import datetime
 
 from mkt.ml.factory import ExperimentFactory
-from mkt.ml.log_config import add_logging_flags, configure_logging
 from mkt.ml.trainer import run_pipeline_with_wandb
 from mkt.ml.utils import set_seed
 from mkt.ml.utils_trainer import batch_submit_folds
+from mkt.schema.log_config import add_logging_flags, configure_logging
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,7 @@ def main():
 
     args = parse_args()
 
-    configure_logging()
+    configure_logging(level=args.verbose)
     set_seed()
 
     experiment = ExperimentFactory(args.config)

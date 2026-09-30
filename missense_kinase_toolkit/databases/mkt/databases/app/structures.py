@@ -1,3 +1,9 @@
+"""Structure visualization backing the Streamlit app.
+
+Provides :class:`StructureVisualizer`, which builds the interactive structure views
+rendered in the Streamlit app.
+"""
+
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -39,11 +45,44 @@ class StructureVisualizer:
     """
 
     def __init__(self, config: "StructureConfig"):
+        from mkt.databases.alphafold import adjudicate_structure
+
         self.config = config
         self.obj_kinase = config.seq_align.obj_kinase
+        self._dict_cif, self.structure_source = adjudicate_structure(
+            self.obj_kinase,
+            prefer_alphafold=config.prefer_alphafold,
+            full_length_af=getattr(config, "bool_full_length_af", False),
+            pfam_slice=getattr(config, "bool_pfam_slice_af", False),
+        )
+        if self._dict_cif is None:
+            raise ValueError(f"No structure available for {self.obj_kinase.hgnc_name}")
         self.structure = self._convert_mmcifdict2structure()
+        if getattr(config, "bool_superpose", True):
+            self._apply_superposition()
         self.pdb_text = self._convert_structure2string()
         self.residues = list(self.structure.get_residues())
+
+    def _apply_superposition(self) -> None:
+        """Transform the structure into the shared 1GAG reference frame, if available.
+
+        Applies the stored :class:`~mkt.schema.kinase_schema.Superposition` for the adjudicated
+        structure (KinCoRe CIF or AlphaFold) in place, so the app render and any downstream
+        PyMOL output (which reuses ``pdb_text``) share the common frame. A no-op when the
+        structure carries no superposition (e.g. an AlphaFold model fetched on the fly).
+        """
+        import numpy as np
+
+        if self.structure_source == "KinCoRe Active State":
+            model = self.obj_kinase.kincore.cif if self.obj_kinase.kincore else None
+        else:
+            model = self.obj_kinase.alphafold
+        superposition = getattr(model, "superposition", None) if model else None
+        if superposition is None:
+            return
+        self.structure.transform(
+            np.array(superposition.rotation), np.array(superposition.translation)
+        )
 
     @staticmethod
     def parse_pdb_line(line: str) -> dict[str, Any] | None:
@@ -85,7 +124,7 @@ class StructureVisualizer:
             Bio.PDB Structure object.
         """
         return convert_mmcifdict2structure(
-            self.obj_kinase.kincore.cif.cif,
+            self._dict_cif,
             structure_id=self.obj_kinase.hgnc_name,
         )
 

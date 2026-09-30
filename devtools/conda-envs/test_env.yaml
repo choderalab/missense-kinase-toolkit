@@ -17,7 +17,11 @@ dependencies:
   - codecov
 
     # databases
-  - pandas
+    # TODO: pinned to match mkt-databases' pandas>=2,<3. the suite passes on pandas 3, but
+    # before lifting the pin confirm regenerated artifacts (e.g., KinaseInfo.tar.gz) are
+    # byte-identical on pandas 3
+  - pandas<3
+  - xlrd
   - bravado
   - requests-cache
   - beautifulsoup4
@@ -25,10 +29,13 @@ dependencies:
   - biopython
   - pymol-open-source
   - matplotlib
+  - bokeh
   - seaborn
   - matplotlib-venn
   - scipy
+  - scikit-learn
   - omegaconf
+  - typer
   - pydantic
   - GitPython
   - importlib-resources

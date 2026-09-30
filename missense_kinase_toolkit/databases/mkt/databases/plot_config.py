@@ -1,7 +1,8 @@
-"""Configuration dataclasses for plot_dataset_data.py.
+"""Configuration dataclasses for the figure CLIs.
 
-Loads plot aesthetics and data source paths from YAML config files
-via OmegaConf, following the pattern used in mkt_impact.
+Per-figure sub-configs plus the grouped per-task aggregators (KinaseInfoFiguresConfig,
+ConservationFiguresConfig, DatasetFiguresConfig, PymolConfig) that each CLI loads from its own
+namespace of a shared study YAML via ``load_task_config`` (OmegaConf), following mkt_impact.
 """
 
 from dataclasses import dataclass, field
@@ -257,6 +258,112 @@ class SequenceSchematicConfig:
     filename: str = "sequence_input_schematic"
 
 
+@dataclass
+class UpsetPlotConfig:
+    """Aesthetics for the KinaseInfo source-coverage upset plot.
+
+    Defaults reproduce the original (pre-config) figure for backwards
+    compatibility. Use :meth:`preprint_2026` for the smaller publication size.
+    """
+
+    figsize: list[float] = field(default_factory=lambda: [8.0, 4.0])
+    dict_colors: dict = field(
+        default_factory=lambda: {
+            "UniProt": "#00FF00",
+            "Pfam": "#00FFFF",
+            "KinCoRe": "#FF00FF",
+            "KLIFS": "#FFA500",
+            "KinHub": "#000000",
+        }
+    )
+    # upsetplot grid layout; ``element_size`` (points/cell) drives the plot-area
+    # size when set, otherwise the figure is sized via ``figsize``.
+    element_size: float | None = None
+    intersection_plot_elements: int = 6
+    totals_plot_elements: int = 2
+    # close the dead whitespace between the totals bars and the category labels
+    # (slides matrix left to fill) and trim the totals right-margin overhang
+    tighten_totals_gap: bool = False
+    totals_gap_margin: float = 0.01
+    # cap the intersections y-axis at the tallest bar so log minor ticks don't
+    # crowd the headroom above it where the percentage labels float
+    cap_intersection_ylim: bool = False
+    pct_label_fontsize: int = 8
+    count_label_fontsize: int = 8
+    filename: str = "upset_plot"
+
+    @classmethod
+    def preprint_2026(cls) -> "UpsetPlotConfig":
+        """~5 x 3.5 in plot-area variant for the 2026 preprint figures.
+
+        ``element_size`` is tuned empirically (with ``intersection_plot_elements``
+        / ``totals_plot_elements``) so the upset grid renders ~5 x 3.5 in rather
+        than the near-square default; the figure is saved tight-cropped.
+        """
+        cfg = cls()
+        cfg.element_size = 30.0
+        cfg.intersection_plot_elements = 4
+        cfg.totals_plot_elements = 2
+        cfg.tighten_totals_gap = True
+        cfg.cap_intersection_ylim = True
+        return cfg
+
+
+@dataclass
+class RegionGapViolinConfig:
+    """Aesthetics for the combined UniProt->KLIFS map + region-gap violin figure.
+
+    The figure stacks the UniProt-to-KLIFS residue map (top, spanning the full
+    width) over two grouped violin panels (inter- and intra-region gaps) on
+    separate log-scaled axes. All statistics are computed on the fly.
+    """
+
+    figsize: list[float] = field(default_factory=lambda: [15.0, 10.9])
+    height_ratios: list[float] = field(default_factory=lambda: [1.0, 1.76])
+    width_ratios: list[float] = field(default_factory=lambda: [2.0, 1.0])
+    hspace: float = 0.12
+    wspace: float = 0.06
+    left_adjust: float = 0.05
+    right_adjust: float = 0.985
+    top_adjust: float = 0.97
+    bottom_adjust: float = 0.085
+
+    # --- map panel ---
+    use_ribbon: bool = False
+    inter_color: str = "#cfcfcf"
+    intra_color: str = "#8c8c8c"
+    ribbon_alpha: float = 0.30
+    map_name_fontsize: int = 21
+    map_range_fontsize: int = 17
+    map_track_fontsize: int = 25
+    map_region_fontsize: int = 12
+    map_ellipsis_fontsize: int = 32
+    map_legend_fontsize: int = 17
+
+    # --- violin panels ---
+    violin_fontsize: int = 22
+    fill_alpha: float = 0.3
+    violin_width: float = 0.85
+    violin_linewidth: float = 1.0
+    violin_edgecolor: str = "#333333"
+    jitter_size: float = 7.0
+    jitter_std: float = 0.06
+    jitter_alpha: float = 0.8
+    jitter_edgecolor: str = "black"
+    jitter_linewidth: float = 0.25
+    # color for gaps whose two flanking regions differ (e.g. III–αC)
+    jitter_mixed_color: str = "orange"
+    grid_alpha: float = 0.3
+    text_color: str = "#333333"
+    ylabel_text: str = "Number of residues"
+    filename: str = "region_gap_violin"
+
+    @classmethod
+    def preprint_2026(cls) -> "RegionGapViolinConfig":
+        """Preset used by the 2026 preprint figures (current defaults)."""
+        return cls()
+
+
 # --- data sources ---
 
 
@@ -279,16 +386,262 @@ class OutputConfig:
     subdir: str = "images"
     bool_svg: bool = True
     bool_png: bool = True
+    bool_pdf: bool = False
 
 
-# --- top-level config ---
+# --- KLIFS hierarchical conservation-tree figures ---
+# defaults mirror the constants in mkt.databases.conservation (kept as literals here so
+# plot_config stays import-light and does not trigger the conservation panel build).
 
 
 @dataclass
-class PlotDatasetConfig:
-    """Top-level config aggregating all sub-configs."""
+class ConservationTreeConfig:
+    """Aesthetics for the static KLIFS conservation-tree supplemental figures.
 
+    Rendered by :class:`mkt.databases.conservation.KLIFSConservationTreeFigure`
+    (summary dendrogram + top/bottom detail panels).
+    """
+
+    min_cluster_size: int = 12
+    font_size: float = 4.0
+    # 47 mirrors conservation.INT_TREE_SPLIT_INDEX (the CMGC/CAMK boundary of the
+    # human-kinome KLIFS tree); set null to auto-pick via _split_index.
+    split_index: int | None = 47
+    formats: list[str] = field(default_factory=lambda: ["pdf"])
+
+
+@dataclass
+class ConservationTreeExplorerConfig:
+    """Params for the interactive KLIFS conservation-tree Bokeh explorer.
+
+    Rendered by :class:`mkt.databases.conservation.KLIFSTreeConservationApp`.
+    """
+
+    min_cluster_size: int = 12
+    logo_cutoff: float = 0.10
+    name_trunc: int = 14
+    filename: str | None = None
+
+
+@dataclass
+class ResidueDotConfig:
+    """Aesthetics for the static per-amino-acid KLIFS dot-plot figure.
+
+    Rendered by
+    :meth:`mkt.databases.conservation.KLIFSConservationTreeFigure.plot_residue_dot`.
+    """
+
+    amino_acid: str = "C"
+    min_cluster_size: int = 12
+    highlight_targets: bool = False
+    formats: list[str] = field(default_factory=lambda: ["pdf"])
+
+
+@dataclass
+class ResidueDotExplorerConfig:
+    """Params for the interactive per-amino-acid KLIFS dot-plot Bokeh explorer.
+
+    Rendered by :class:`mkt.databases.conservation.KLIFSResidueDotApp`.
+    """
+
+    min_cluster_size: int = 12
+    default_aa: str = "C"
+    filename: str | None = None
+
+
+@dataclass
+class CladeMembershipTableConfig:
+    """Params for the LaTeX clade-membership table.
+
+    Rendered by :func:`mkt.databases.plot.write_clade_membership_table`: the named
+    conservation clades within ``str_group`` and their member kinases.
+    """
+
+    str_group: str = "TK"
+    filename: str = "clade_membership_table"
+
+
+@dataclass
+class SASAConcordanceScatterConfig:
+    """Aesthetics for the KinCoRe-vs-AF2 SASA/RSA concordance scatter.
+
+    Faceted with KLIFS region across columns and SASA/RSA down rows; each panel plots AF2 (y)
+    against KinCoRe (x) with a y=x reference and per-panel Spearman rho / p.
+    """
+
+    width_per_region: float = 1.15
+    height: float = 3.6
+    point_size: float = 5.0
+    point_alpha: float = 0.3
+    identity_color: str = "grey"
+    identity_lw: float = 0.6
+    stat_fontsize: float = 6.5
+    title_fontsize: int = 9
+    ylabel_fontsize: int = 11
+    row_label_fontsize: int = 12
+    tick_labelsize: int = 6
+
+
+@dataclass
+class SASAConcordanceDeltaConfig:
+    """Aesthetics for the per-KLIFS-residue KinCoRe-minus-AF2 SASA/RSA delta boxplots.
+
+    85 residue positions on x; SASA (top) and RSA (bottom) facets; per-residue Spearman rho / p
+    above each facet; y-axis focused on the whisker range (rare far-outliers clipped).
+    """
+
+    figsize: list[float] = field(default_factory=lambda: [38.0, 11.0])
+    box_width: float = 0.6
+    box_alpha: float = 0.6
+    jitter_size: float = 2.0
+    jitter_width: float = 0.24
+    jitter_alpha: float = 0.4
+    jitter_color: str = "0.30"
+    band_color: str = "0.955"
+    ylim_pad_frac: float = 0.05
+    stat_fontsize: float = 5.5
+    ylabel_fontsize: int = 14
+    xtick_fontsize: int = 9
+    xlabel_fontsize: int = 14
+    left_adjust: float = 0.03
+    right_adjust: float = 0.996
+    top_adjust: float = 0.94
+    bottom_adjust: float = 0.14
+    hspace: float = 0.12
+
+
+# --- grouped study config: one shared YAML, each CLI reads its own task namespace ---
+
+
+def load_task_config(
+    schema_cls,
+    config_path: str | Path | None = None,
+    task_key: str | None = None,
+    shared_keys: tuple[str, ...] = ("matplotlib_rc", "output"),
+):
+    """Load one task's config from a shared study YAML into a typed dataclass instance.
+
+    Merges the top-level ``shared_keys`` blocks (aesthetics/output common to every task) and the
+    task's own ``task_key`` namespace onto ``schema_cls``'s structured defaults; sections absent
+    from the YAML fall back to defaults, and ``config_path=None`` returns pure defaults. Struct
+    mode is preserved, so an unknown key (a config typo) raises rather than being silently ignored.
+
+    Parameters
+    ----------
+    schema_cls : type
+        The task's aggregator dataclass (e.g. :class:`ConservationFiguresConfig`).
+    config_path : str | Path | None, optional
+        Path to the shared study YAML; None uses defaults, by default None.
+    task_key : str | None, optional
+        Top-level namespace for this task (e.g. ``"conservation"``), by default None.
+    shared_keys : tuple[str, ...], optional
+        Top-level blocks shared across tasks, applied only when the schema declares them.
+
+    Returns
+    -------
+    object
+        A populated instance of ``schema_cls``.
+    """
+    merged = OmegaConf.structured(schema_cls)
+    if config_path is not None:
+        raw = OmegaConf.load(config_path)
+        for key in shared_keys:
+            if key in raw and key in merged:
+                merged = OmegaConf.merge(merged, {key: raw[key]})
+        if task_key is not None and task_key in raw:
+            merged = OmegaConf.merge(merged, raw[task_key])
+    return OmegaConf.to_object(merged)
+
+
+class ArgumentError(ValueError):
+    """An invalid combination of run flags or config values, raised before any work."""
+
+
+@dataclass
+class TaskConfig:
+    """Fields shared by every task section of a study YAML."""
+
+    output: OutputConfig = field(default_factory=OutputConfig)
+    """Output directory and image formats, by default :class:`OutputConfig` defaults."""
+
+
+@dataclass
+class DataFiguresConfig(TaskConfig):
+    """A task that builds a data artifact and renders matplotlib figures from it."""
+
+    data: bool = True
+    """Build the task's data before rendering; ``--data``/``--no-data`` overrides, by default True."""
     matplotlib_rc: MatplotlibRCConfig = field(default_factory=MatplotlibRCConfig)
+    """Matplotlib rcParams for rendering, by default :class:`MatplotlibRCConfig` defaults."""
+
+    def resolve_data(self, bool_data: bool | None, bool_figs: bool) -> bool:
+        """Resolve whether to build the data; an explicit ``--data``/``--no-data`` wins.
+
+        Parameters
+        ----------
+        bool_data : bool | None
+            The ``--data``/``--no-data`` flag, or None when not passed.
+        bool_figs : bool
+            The ``--figs``/``--no-figs`` flag.
+
+        Returns
+        -------
+        bool
+            Whether to build the task's data.
+
+        Raises
+        ------
+        ArgumentError
+            If neither data nor figures would run.
+        """
+        bool_resolved = self.data if bool_data is None else bool_data
+        if not bool_resolved and not bool_figs:
+            raise ArgumentError(
+                "data is off (--no-data or config data: false) and --no-figs is set; "
+                "nothing to do."
+            )
+        return bool_resolved
+
+
+@dataclass
+class KinaseInfoFiguresConfig(DataFiguresConfig):
+    """DICT_KINASE report figures -- the ``kinaseinfo`` task section."""
+
+    upset_plot: UpsetPlotConfig = field(default_factory=UpsetPlotConfig.preprint_2026)
+    region_gap_violin: RegionGapViolinConfig = field(
+        default_factory=RegionGapViolinConfig.preprint_2026
+    )
+    sasa_concordance_scatter: SASAConcordanceScatterConfig = field(
+        default_factory=SASAConcordanceScatterConfig
+    )
+    sasa_concordance_delta: SASAConcordanceDeltaConfig = field(
+        default_factory=SASAConcordanceDeltaConfig
+    )
+
+
+@dataclass
+class ConservationFiguresConfig(DataFiguresConfig):
+    """KLIFS conservation figures -- the ``conservation`` task section."""
+
+    conservation_tree: ConservationTreeConfig = field(
+        default_factory=ConservationTreeConfig
+    )
+    conservation_tree_explorer: ConservationTreeExplorerConfig = field(
+        default_factory=ConservationTreeExplorerConfig
+    )
+    residue_dot: ResidueDotConfig = field(default_factory=ResidueDotConfig)
+    residue_dot_explorer: ResidueDotExplorerConfig = field(
+        default_factory=ResidueDotExplorerConfig
+    )
+    clade_membership_table: CladeMembershipTableConfig = field(
+        default_factory=CladeMembershipTableConfig
+    )
+
+
+@dataclass
+class DatasetFiguresConfig(DataFiguresConfig):
+    """Processed-dataset figures -- the ``dataset`` task section."""
+
     family_colors: FamilyColorConfig = field(default_factory=FamilyColorConfig)
     col_kinase_colors: ColKinaseColorConfig = field(
         default_factory=ColKinaseColorConfig
@@ -306,49 +659,24 @@ class PlotDatasetConfig:
         default_factory=SequenceSchematicConfig
     )
     data_sources: DataSourceConfig = field(default_factory=DataSourceConfig)
-    output: OutputConfig = field(default_factory=OutputConfig)
 
-    @classmethod
-    def from_yaml(cls, config_path: str | Path) -> "PlotDatasetConfig":
-        """Load a PlotDatasetConfig from a YAML file.
 
-        Parameters:
-        -----------
-        config_path : str | Path
-            Path to the YAML configuration file.
+@dataclass
+class PymolViewConfig:
+    """One PyMOL view (one output file) under the ``pymol`` task's ``views`` list."""
 
-        Returns:
-        --------
-        PlotDatasetConfig
-            Fully populated config instance.
-        """
-        omega = OmegaConf.load(config_path)
-        raw = OmegaConf.to_container(omega, resolve=True)
+    gene: str = "ABL1"
+    config_type: str = "KLIFS_IMPORTANT"
+    indices: str | None = None  # KLIFS_CUSTOM: comma-separated UniProt positions
+    colors: str | None = None  # KLIFS_CUSTOM: comma-separated colors matching indices
+    json_mutations: str | None = None  # MUTATIONS_* configs: path to mutations JSON
+    transparency: float = 0.3
+    force_alphafold: bool = False
+    output_dir: str | None = None  # per-view override; else derived from output.subdir
 
-        cfg = cls()
-        if "matplotlib_rc" in raw:
-            cfg.matplotlib_rc = MatplotlibRCConfig(**raw["matplotlib_rc"])
-        if "family_colors" in raw:
-            cfg.family_colors = FamilyColorConfig(**raw["family_colors"])
-        if "col_kinase_colors" in raw:
-            cfg.col_kinase_colors = ColKinaseColorConfig(**raw["col_kinase_colors"])
-        if "dynamic_range" in raw:
-            cfg.dynamic_range = DynamicRangePlotConfig(**raw["dynamic_range"])
-        if "ridgeline" in raw:
-            cfg.ridgeline = RidgelinePlotConfig(**raw["ridgeline"])
-        if "stacked_barchart" in raw:
-            cfg.stacked_barchart = StackedBarchartConfig(**raw["stacked_barchart"])
-        if "venn_diagram" in raw:
-            cfg.venn_diagram = VennDiagramConfig(**raw["venn_diagram"])
-        if "metrics_boxplot" in raw:
-            cfg.metrics_boxplot = MetricsBoxplotConfig(**raw["metrics_boxplot"])
-        if "sequence_schematic" in raw:
-            cfg.sequence_schematic = SequenceSchematicConfig(
-                **raw["sequence_schematic"]
-            )
-        if "data_sources" in raw:
-            cfg.data_sources = DataSourceConfig(**raw["data_sources"])
-        if "output" in raw:
-            cfg.output = OutputConfig(**raw["output"])
 
-        return cfg
+@dataclass
+class PymolConfig(TaskConfig):
+    """Batch PyMOL generation -- the ``pymol`` task section: a list of view specs."""
+
+    views: list[PymolViewConfig] = field(default_factory=list)

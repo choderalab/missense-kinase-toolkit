@@ -1,9 +1,21 @@
+"""Color palettes and colormap helpers for amino acids and percentile-based plotting.
+
+Defines the :class:`AminoAcidPalette`, amino-acid-to-color mapping helpers, and
+utilities for interpolating colors and building percentile colormaps with legends.
+"""
+
 from enum import Enum
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 from mkt.schema.io_utils import save_plot
+
+# source-boundary figure colors (lime green hardcoded to avoid PyMOL default drift)
+STR_SOURCE_UNIPROT_COLOR = "limegreen"
+STR_SOURCE_PFAM_COLOR = "cyan"
+STR_SOURCE_KINCORE_COLOR = "magenta"
+STR_SOURCE_KLIFS_COLOR = "orange"
 
 
 def map_aa_to_single_letter_code(
@@ -495,6 +507,7 @@ def generate_colormap_legend(
     n_gradient_steps: int = 256,
     null_steps: int | None = None,
     figsize: tuple[float, float] = (0.75, 5.5),
+    bool_image_subdir: bool = True,
 ) -> None:
     """Generate a vertical colormap legend image (SVG and PNG) from color stops.
 
@@ -519,6 +532,9 @@ def generate_colormap_legend(
         1/10 the height of one bin (``n_gradient_steps // 10``).
     figsize : tuple[float, float]
         Figure size in inches (width, height). Default: (1, 5).
+    bool_image_subdir : bool
+        If True (default), save under ``<output_path>/images/``; if False, save directly into
+        ``output_path`` (which must already exist).
     """
     plt.rcParams["font.family"] = "Arial"
 
@@ -575,6 +591,7 @@ def generate_colormap_legend(
             output_path=output_path,
             plot_type=desc,
             bool_force_local=False,
+            bool_image_subdir=bool_image_subdir,
         )
 
 
@@ -587,3 +604,98 @@ DICT_BIOCHEM_PROP_COLORS = {
 Keys are property names (e.g., "Charge", "Volume", "Polarity"), and values are hex color codes.
 This dictionary can be used to look up colors for biochemical properties in visualizations.
 """
+
+
+def readable_text_color(color) -> str:
+    """Return ``"black"`` or ``"white"`` for legible text on a background color.
+
+    Parameters
+    ----------
+    color : str | tuple
+        Any matplotlib-recognized color (hex string, named color, or RGB tuple).
+
+    Returns
+    -------
+    str
+        ``"black"`` for light backgrounds, ``"white"`` for dark ones, chosen by
+        perceived luminance (0.299 R + 0.587 G + 0.114 B).
+    """
+    r, g, b = mcolors.to_rgb(color)
+    return "black" if (0.299 * r + 0.587 * g + 0.114 * b) > 0.55 else "white"
+
+
+# --- KLIFS hierarchical-conservation figures / interactive explorer ---
+COLOR_DARK_TEXT = "#2E2E2E"
+"""Near-black grey for axis labels, ticks, and logo text."""
+COLOR_CONSERVATION_PRIMARY = "#2E5B9C"
+"""Primary conservation accent (>=threshold line; breakpoint node fill)."""
+COLOR_CONSERVATION_SECONDARY = "#7B3F8D"
+"""Secondary conservation accent."""
+CMAP_CRITICAL_DEPTH = "plasma"
+"""Colormap for the per-KLIFS-column critical-depth track."""
+COLOR_DEPTH_NA = "#D9D9D9"
+"""Grey for KLIFS columns that never survive up (no finite critical depth)."""
+COLOR_TREE_BREAK = COLOR_CONSERVATION_PRIMARY
+"""Tree node fill for a split that carries >=1 fixed-difference breakpoint."""
+COLOR_TREE_NO_BREAK = "#C9C9C9"
+"""Tree node fill for a split with no fixed difference (structural only)."""
+COLOR_TREE_MIXED_FAMILY = "#CFCFCF"
+"""Branch color once a clade mixes families (not monophyletic)."""
+COLOR_TREE_PSEUDO = "#000000"
+"""Family color for a pseudokinase-pure clade (and inherited-conserved logo letters)."""
+COLOR_LOGO_BAR = "#EFEFEF"
+"""Neutral fill for the per-column logo frequency bars."""
+COLOR_LOGO_SUBTHRESHOLD = "#C9C9C9"
+"""Logo letter color for residues present but below the conservation threshold."""
+COLOR_TREE_TABLE_NO_CONSENSUS = "#EAEAEA"
+"""Static conservation-table cell fill where no residue is >=80% conserved in a leaf row."""
+COLOR_TREE_TABLE_GAP = "#BDBDBD"
+"""Static conservation-table cell fill where a gap ('-') is the >=80% consensus -- a mid
+grey distinct from the blank no-consensus cell and from the amino-acid palette greys
+(I = #808080, E = #191919); paired with a '-' glyph to disambiguate."""
+COLOR_TREE_GUIDE = "#777777"
+"""Thin guide line linking each dendrogram leaf to its conservation-table row."""
+COLOR_TREE_FALLBACK = "#999999"
+"""Fallback fill for a tree leaf whose kinase has no group/family color."""
+COLOR_TREE_SPLIT_MARKER = "#D00000"
+"""Dashed marker on the summary dendrogram showing the top/bottom detail-panel split."""
+
+DICT_CONSURF_GRADE_COLORS = {
+    1: "#10C8D1",  # most variable — teal
+    2: "#8CFFFF",
+    3: "#D7FFFF",
+    4: "#EAFFFF",
+    5: "#FFFFFF",  # average — white
+    6: "#FCEDF4",
+    7: "#FAC9DE",
+    8: "#F07DAB",
+    9: "#A02560",  # most conserved — maroon
+}
+"""Canonical ConSurf 9-grade conservation palette (grade 1 = most variable teal,
+grade 9 = most conserved maroon). Hex values are the exact RGB tuples from the
+ConSurf server's ``rasmol_gradesPE_and_pipe.pm`` (github.com/Rostlab/ConSurf), so
+they carry over to PyMOL/Chimera structure coloring unchanged."""
+
+COLOR_CONSURF_UNGRADED = "#FFFF96"
+"""ConSurf's 'insufficient data' color (RGB 255,255,150) for positions with no
+grade — an all-gap alignment column, or a group below the minimum size for
+grading. Matches the grade-0 color in the ConSurf ``rasmol_gradesPE_and_pipe.pm``."""
+
+
+def get_consurf_grade_color(grade: int | None) -> str:
+    """Return the ConSurf palette color for a conservation grade.
+
+    Parameters
+    ----------
+    grade : int | None
+        ConSurf grade (1-9), or None for an ungraded position.
+
+    Returns
+    -------
+    str
+        Hex color from :data:`DICT_CONSURF_GRADE_COLORS`, or
+        :data:`COLOR_CONSURF_UNGRADED` when ``grade`` is None.
+    """
+    if grade is None:
+        return COLOR_CONSURF_UNGRADED
+    return DICT_CONSURF_GRADE_COLORS.get(grade, COLOR_CONSURF_UNGRADED)

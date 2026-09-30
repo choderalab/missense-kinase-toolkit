@@ -1,3 +1,9 @@
+"""Helper functions for wiring structure visualization in the Streamlit app.
+
+Includes :func:`create_structure_visualizer`, UniProt-index validation, and
+color-to-hex conversion helpers used by the app.
+"""
+
 import logging
 from typing import TYPE_CHECKING
 

@@ -28,6 +28,35 @@ def configured_cbioportal(configured_output_dir):
     config.set_cbioportal_instance("www.cbioportal.org")
 
 
+def is_cbioportal_reachable(str_url: str) -> bool:
+    """Probe the cBioPortal Swagger spec endpoint directly.
+
+    Lets the live tests tell an upstream outage (skip) apart from a broken client
+    in this package (fail), since both surface as a None client.
+
+    Parameters
+    ----------
+    str_url : str
+        cBioPortal Swagger spec URL to probe.
+
+    Returns
+    -------
+    bool
+        True if the endpoint answers with a 2xx, False otherwise
+    """
+    try:
+        response = requests.get(str_url, timeout=30)
+        return response.ok
+    except Exception:
+        return False
+
+
+@pytest.fixture(scope="session")
+def cbioportal_probe():
+    """Expose :func:`is_cbioportal_reachable` so it is only called on failure."""
+    return is_cbioportal_reachable
+
+
 # ---------------------------------------------------------------------------
 # EGFR fixtures (shared by test_kincore, test_klifs, test_uniprot)
 # ---------------------------------------------------------------------------
@@ -43,10 +72,10 @@ def egfr_uniprot():
 
 @pytest.fixture(scope="session")
 def kincore_harmonized_dict(tmp_path_factory):
-    """Build harmonized KinCore FASTA/CIF dict once.
+    """Build harmonized KinCoRe FASTA/CIF dict once.
 
     Uses a file lock so that parallel xdist workers do not
-    concurrently extract the KinCore tar.gz to the same directory.
+    concurrently extract the KinCoRe tar.gz to the same directory.
     """
     from mkt.databases.kincore import harmonize_kincore_fasta_cif
 
@@ -60,7 +89,7 @@ def kincore_harmonized_dict(tmp_path_factory):
 
 @pytest.fixture(scope="session")
 def egfr_kincore_alignment(kincore_harmonized_dict, egfr_uniprot):
-    """Align EGFR KinCore sequence to UniProt once."""
+    """Align EGFR KinCoRe sequence to UniProt once."""
     from mkt.databases.kincore import align_kincore2uniprot
 
     return align_kincore2uniprot(
@@ -79,7 +108,7 @@ def egfr_klifs_info():
 
 @pytest.fixture(scope="session")
 def egfr_klifs_pocket(egfr_uniprot, egfr_klifs_info, egfr_kincore_alignment):
-    """Build EGFR KLIFSPocket once (depends on KLIFS + KinCore data)."""
+    """Build EGFR KLIFSPocket once (depends on KLIFS + KinCoRe data)."""
     from mkt.databases import klifs
 
     if egfr_klifs_info.status_code != 200:

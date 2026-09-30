@@ -1,8 +1,19 @@
+"""Kinase-level property tables backing the Streamlit app.
+
+Provides :class:`PropertyTables`, which assembles the property summary tables rendered
+in the Streamlit app.
+"""
+
 import logging
 from dataclasses import dataclass
 
 import pandas as pd
-from mkt.schema.kinase_schema import KinaseInfo
+from mkt.schema.constants import (
+    DICT_MOLECULAR_BRAKE,
+    LIST_KLIFS_DFG_MOTIF,
+    STR_KLIFS_BETA3_LYSINE,
+)
+from mkt.schema.kinase_schema import KinaseInfo, Provenance
 from mkt.schema.utils import rgetattr
 
 logger = logging.getLogger(__name__)
@@ -19,7 +30,11 @@ class PropertyTables:
     df_klifs: pd.DataFrame | None = None
     """Dataframe containing the KLIFS information."""
     df_kincore: pd.DataFrame | None = None
-    """Dataframe containing the KinCore information."""
+    """Dataframe containing the KinCoRe information."""
+    df_computed: pd.DataFrame | None = None
+    """Dataframe containing the adjudicated/computed properties."""
+    dict_computed_keys: dict[str, str] | None = None
+    """Base property key of each df_computed row (e.g. "HRD motif"), keyed by row label."""
 
     def __post_init__(self):
         """Post-initialization method to extract properties."""
@@ -49,10 +64,15 @@ class PropertyTables:
         pd.DataFrame
             The dataframe containing the properties of the KinaseInfo object.
         """
-        try:
-            obj_temp = rgetattr(self.obj_kinase, str_attr)
+        obj_temp = rgetattr(self.obj_kinase, str_attr)
+        if obj_temp is None:
+            # source absent for this kinase; the app renders a "not available" notice
+            logger.debug(f"No {str_attr} for {self.obj_kinase.hgnc_name}")
+            return None
 
-            dict_temp = obj_temp.__dict__
+        try:
+            # copy so list_drop's `del` does not mutate the cached KinaseInfo object
+            dict_temp = dict(obj_temp.__dict__)
 
             # drop or keep specified attributes
             if list_drop is not None:
@@ -90,5 +110,167 @@ class PropertyTables:
 
         self.df_kincore = self.convert_property2dataframe(
             "kincore.fasta",
-            list_keep=["group", "hgnc", "swissprot", "uniprot", "source_file"],
+            list_keep=["group", "hgnc", "swissprot", "uniprot", "source"],
         )
+
+        self.df_computed = self.build_computed_table()
+
+        self.format_property_columns()
+
+    def _residue_index(self, label: str) -> str | None:
+        """Return the residue + UniProt index at a KLIFS ``region:idx`` label (e.g. "D855").
+
+        Handles a trailing signed offset on the label (e.g. "VIII:79-1"). Returns None when
+        no KLIFS mapping is available or the position is unmapped.
+        """
+        k2u = self.obj_kinase.KLIFS2UniProtIdx
+        if not k2u:
+            return None
+        base, offset = label, 0
+        for sign, mult in (("-", -1), ("+", 1)):
+            head, sep, num = label.rpartition(sign)
+            if sep and num.isdigit():
+                base, offset = head, mult * int(num)
+                break
+        idx = k2u.get(base)
+        if idx is None:
+            return None
+        idx += offset
+        return f"{self.obj_kinase.uniprot.canonical_seq[idx - 1]}{idx}"
+
+    @staticmethod
+    def _join_motif(parts) -> str:
+        """Join per-position residue+index into a motif string (e.g. "H835-R836-D837")."""
+        return "-".join(p or "-" for p in parts) if any(parts) else "None"
+
+    def build_computed_table(self) -> pd.DataFrame | None:
+        """Assemble the adjudicated/computed-property table for the kinase.
+
+        Surfaces the classification flags (``is_pseudokinase``/``is_pseudogene``/
+        ``is_lipid_kinase``) and the pocket/activation-loop motifs -- the catalytic Lys, HRD,
+        DFG, APE, and molecular-brake positions -- as ``residue+UniProt index`` strings (e.g.
+        "A227-P228-E229"). Each motif label names its index source: catalytic Lys/HRD/DFG
+        follow :meth:`KinaseInfo.return_catalytic_residues` (KLIFS, else MSA), APE is MSA and
+        the molecular brake KLIFS. Only the brake states its canonical triad (N-E-K).
+
+        Returns
+        -------
+        pd.DataFrame | None
+            A single-column ("Property") table indexed by property label, or None on error.
+        """
+        try:
+            obj = self.obj_kinase
+            # (row label, base property key, value)
+            list_rows: list[tuple[str, str, str]] = [
+                (key, key, str(fn()))
+                for key, fn in [
+                    ("is_pseudokinase", obj.is_pseudokinase),
+                    ("is_pseudogene", obj.is_pseudogene),
+                    ("is_lipid_kinase", obj.is_lipid_kinase),
+                ]
+            ]
+
+            # catalytic motifs share is_pseudokinase's KLIFS-or-MSA lookup
+            dict_catalytic = obj.return_catalytic_residues(bool_uniprot_idx=True) or {}
+            source = obj.return_catalytic_residue_source()
+            str_suffix = f" ({source.upper()})" if source is not None else ""
+            for label, list_labels in [
+                ("catalytic Lys", [STR_KLIFS_BETA3_LYSINE]),
+                ("HRD motif", obj.return_hrd_motif_labels()),
+                ("DFG motif", LIST_KLIFS_DFG_MOTIF),
+            ]:
+                list_rows.append(
+                    (
+                        label + str_suffix,
+                        label,
+                        self._join_motif([dict_catalytic.get(i) for i in list_labels]),
+                    )
+                )
+
+            list_ape = obj.adjudicate_ape()
+            seq = obj.uniprot.canonical_seq
+            list_rows.append(
+                (
+                    "APE motif (MSA)",
+                    "APE motif",
+                    (
+                        "-".join(
+                            "-" if i is None else f"{seq[i - 1]}{i}" for i in list_ape
+                        )
+                        if list_ape is not None
+                        else "None"
+                    ),
+                )
+            )
+
+            # molecular brake states its canonical triad (N-E-K) in the label
+            brake_canonical = "-".join(DICT_MOLECULAR_BRAKE.values())
+            list_rows.append(
+                (
+                    f"molecular brake {brake_canonical} (KLIFS)",
+                    "molecular brake",
+                    self._join_motif(
+                        [self._residue_index(i) for i in DICT_MOLECULAR_BRAKE.keys()]
+                    ),
+                )
+            )
+
+            def _format_label(label: str) -> str:
+                return label.replace("_", " ").upper()
+
+            self.dict_computed_keys = {
+                _format_label(label): base for label, base, _ in list_rows
+            }
+            return pd.DataFrame(
+                {"Property": [value for _, _, value in list_rows]},
+                index=[_format_label(label) for label, _, _ in list_rows],
+            )
+
+        except Exception as e:
+            logger.error(f"Error building computed property table: {e}")
+            return None
+
+    @staticmethod
+    def _format_property_value(value) -> str:
+        """Render a single property value as a display string.
+
+        Parameters
+        ----------
+        value : Any
+            The raw attribute value from the KinaseInfo sub-object.
+
+        Returns
+        -------
+        str
+            String representation; iterables are comma-joined and None becomes "".
+        """
+        if value is None:
+            return ""
+        if isinstance(value, Provenance):
+            # short citation, linked to the DOI when present (rendered via the Styler HTML)
+            head = value.citation or value.name
+            if value.doi:
+                return f'<a href="{value.doi}" target="_blank">{head}</a>'
+            return head
+        if isinstance(value, (list, tuple, set, frozenset)):
+            return ", ".join(str(v) for v in value)
+        return str(value)
+
+    def format_property_columns(self) -> None:
+        """Stringify the ``Property`` column of each table for ``st.table``.
+
+        The property tables collapse a kinase's heterogeneous attributes (str,
+        int, list, set, ...) into a single column, which pyarrow cannot serialize
+        to an Arrow table. Coercing every value to a string yields a uniform,
+        Arrow-compatible column.
+
+        Returns
+        -------
+        None
+            The ``Property`` column of each populated table is modified in place.
+        """
+        for df_temp in (self.df_kinhub, self.df_klifs, self.df_kincore):
+            if df_temp is not None and "Property" in df_temp.columns:
+                df_temp["Property"] = df_temp["Property"].map(
+                    self._format_property_value
+                )

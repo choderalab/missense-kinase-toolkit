@@ -1,3 +1,10 @@
+"""General-purpose string, dataframe, and structure utility functions.
+
+Collects string-splitting/matching helpers, dataframe aggregation and one-hot encoding
+utilities, and conversions between mmCIF dictionaries, Biopython structures, and
+serialized strings.
+"""
+
 import logging
 import os
 from io import StringIO
@@ -289,7 +296,7 @@ def aggregate_df_by_col_set(
     return df_in_agg
 
 
-def split_on_first_only(str_in, delim):
+def split_on_first_only(str_in, delim, bool_keep_delim=False):
     """Split string on first occurrence of delim.
 
     Parameters
@@ -298,6 +305,10 @@ def split_on_first_only(str_in, delim):
         Input string to split
     delim : str
         Delimiter to split on
+    bool_keep_delim : bool, optional
+        If True, keep any later delimiters in ``str2`` (e.g. "TYR_JAK1_2" -> ("TYR",
+        "JAK1_2"), preserving a multi-KD "_1"/"_2" domain suffix); if False (default),
+        the later delimiters are stripped ("TYR_JAK1_2" -> ("TYR", "JAK12")).
 
     Returns
     -------
@@ -307,7 +318,7 @@ def split_on_first_only(str_in, delim):
     """
     list_split = str_in.split(delim)
     str1 = list_split[0]
-    str2 = "".join(list_split[1:])
+    str2 = (delim if bool_keep_delim else "").join(list_split[1:])
     return str1, str2
 
 
@@ -482,7 +493,7 @@ def convert_mmcifdict2structure(
     -------
     Structure
         Bio.PDB Structure object parsed from the CIF dictionary. Residues are
-        numbered by ``auth_seq_id``, which for KinCore CIFs corresponds to the
+        numbered by ``auth_seq_id``, which for KinCoRe CIFs corresponds to the
         UniProt sequence position.
 
     """
@@ -517,7 +528,7 @@ def convert_structure2string(structure: Structure) -> str:
     -------
     str
         Structure in PDB string format; residue numbering is preserved from
-        ``auth_seq_id`` (UniProt position for KinCore CIFs).
+        ``auth_seq_id`` (UniProt position for KinCoRe CIFs).
 
     """
     pdb_io = PDBIO()

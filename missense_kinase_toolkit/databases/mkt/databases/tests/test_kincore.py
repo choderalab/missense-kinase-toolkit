@@ -1,36 +1,57 @@
-import tarfile
+import os
+import zipfile
 from itertools import chain
 
 import pytest
-from mkt.databases.kincore import PATH_ORIG_CIF
+from mkt.databases.kincore import _resolve_kincore_cif_zip
 
 
 @pytest.mark.network
-class TestKinCoreHarmonization:
+class TestKinCoReHarmonization:
     def test_cif_hgnc_count_matches_cif_file_count(self, kincore_harmonized_dict):
-        """Number of non-None CIF entries matches .cif count in tar.gz archive."""
+        """Number of non-None CIF entries matches the descriptive .cif count in the zip."""
         list_dict_cif_hgnc = [
             [entry.cif.hgnc for entry in v if entry.cif is not None]
             for v in kincore_harmonized_dict.values()
         ]
         list_dict_cif_hgnc = list(chain(*list_dict_cif_hgnc))
-        # count .cif members from the archive index (no extraction);
-        # exclude macOS resource fork entries (._*.cif)
-        with tarfile.open(PATH_ORIG_CIF, "r:gz") as tar:
+        # count the descriptive top-level .cif members as the parser selects them: one
+        # nesting level below the archive root, excluding macOS ._ sidecars and the
+        # redundant flat copies under the nested <author>/ subdir
+        with zipfile.ZipFile(_resolve_kincore_cif_zip()) as zf:
             n_cif_files = sum(
                 1
-                for m in tar.getmembers()
-                if m.name.endswith(".cif") and "/._" not in m.name
+                for n in zf.namelist()
+                if n.endswith(".cif")
+                and n.count("/") == 1
+                and not os.path.basename(n).startswith("._")
             )
         assert len(list_dict_cif_hgnc) == n_cif_files
 
     def test_egfr_has_single_entry(self, kincore_harmonized_dict):
-        """EGFR (P00533) has exactly one KinCore entry."""
+        """EGFR (P00533) has exactly one KinCoRe entry."""
         assert len(kincore_harmonized_dict["P00533"]) == 1
+
+    def test_all_records_have_fasta(self, kincore_harmonized_dict):
+        """Every harmonized KinCoRe record carries a FASTA (no FASTA-less shells)."""
+        recs = [r for v in kincore_harmonized_dict.values() for r in v]
+        assert recs and all(r.fasta is not None for r in recs)
+
+    def test_multikd_second_domains_have_fasta(self, kincore_harmonized_dict):
+        """The JAK-family/EIF2AK4 second (JH2/pseudokinase) domains get their Modi FASTA.
+
+        These lack an active-state structure (cif is None) but must not be FASTA-less --
+        the regression that shipped them as MSA-only shells.
+        """
+        for uniprot in ["P23458", "O60674", "P52333", "P29597", "Q9P2K8"]:
+            recs = kincore_harmonized_dict[uniprot]
+            assert len(recs) == 2
+            jh2 = [r for r in recs if r.cif is None]
+            assert len(jh2) == 1 and jh2[0].fasta is not None
 
 
 @pytest.mark.network
-class TestKinCoreAlignment:
+class TestKinCoReAlignment:
     def test_aligned_sequence(self, egfr_kincore_alignment):
         assert (
             egfr_kincore_alignment["seq"]
@@ -49,7 +70,7 @@ class TestKinCoreAlignment:
 
 @pytest.mark.network
 class TestKLIFSPocketAlignment:
-    """KLIFS pocket alignment tests (depend on KinCore fixtures)."""
+    """KLIFS pocket alignment tests (depend on KinCoRe fixtures)."""
 
     def test_klifs_substr_actual(self, egfr_klifs_pocket):
         assert egfr_klifs_pocket.list_klifs_substr_actual == [

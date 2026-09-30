@@ -1,3 +1,9 @@
+"""Sequence-alignment logic backing the Streamlit app.
+
+Provides :class:`SequenceAlignment`, which computes and formats kinase sequence
+alignments for display in the Streamlit app.
+"""
+
 import logging
 from typing import Any
 
@@ -21,15 +27,25 @@ DICT_ALIGNMENT = {
         "start": "pfam.start",
         "end": "pfam.end",
     },
-    "KinCore, FASTA": {
+    "KinCoRe, FASTA": {
         "seq": "kincore.fasta.seq",
         "start": "kincore.fasta.start",
         "end": "kincore.fasta.end",
     },
-    "KinCore, CIF": {
+    "KinCoRe, CIF": {
         "seq": "kincore.cif.cif",  # need to get from dict "_entity_poly.pdbx_seq_one_letter_code"
         "start": "kincore.cif.start",
         "end": "kincore.cif.end",
+    },
+    "KinCoRe, MSA": {
+        "seq": None,  # ungapped Dunbrack MSA row == canonical KD slice; extracted over msa.start-end
+        "start": "kincore.msa.start",
+        "end": "kincore.msa.end",
+    },
+    "AF2, CIF": {
+        "seq": "alphafold.cif",  # KD-sliced AlphaFold CIF; populated only when no KinCoRe CIF
+        "start": "alphafold.start",
+        "end": "alphafold.end",
     },
     "Phosphosites": {
         "seq": "uniprot.phospho_sites",
@@ -60,6 +76,10 @@ class SequenceAlignment:
     """Whether or not to reverse order of inputs"""
     obj_kinase: KinaseInfo | None = None
     """KinaseInfo object from which to extract sequences (loaded from str_kinase if not provided)."""
+    bool_full_length_af: bool = False
+    """If True, add a gap-free full-length "AF2, full-length" track, by default False."""
+    bool_pfam_slice_af: bool = False
+    """If True, add a Pfam-sliced "AF2, pfam" track (Pfam residues only), by default False."""
 
     def __post_init__(self):
         if self.obj_kinase is None:
@@ -75,6 +95,38 @@ class SequenceAlignment:
             self.list_sequences = self.list_sequences[::-1]
             self.list_ids = self.list_ids[::-1]
             self.list_colors = self.list_colors[::-1]
+
+    @property
+    def str_structure_key(self) -> str | None:
+        """dict_align key for the adjudicated structure alignment.
+
+        A KinCoRe active-state CIF is preferred, else the KD-sliced AlphaFold structure;
+        the two are mutually exclusive, and (being 1-to-1 in bounds/sequence) the same
+        alignment serves a KinCoRe- or AF-rendered structure. The KinCoRe CIF row may
+        have been merged with identical FASTA/MSA rows (e.g. ``"KinCoRe, FASTA/CIF"``),
+        so the collapsed label carrying the CIF source is resolved from ``dict_align``.
+
+        Returns
+        -------
+        str | None
+            The ``dict_align`` key for the structure row (a merged KinCoRe label or
+            ``"AF2, CIF"``), or None if no structure is available.
+        """
+        if self.bool_pfam_slice_af:
+            return "AF2, pfam"
+        if self.bool_full_length_af:
+            return "AF2, full-length"
+        if (
+            self.obj_kinase.kincore is not None
+            and self.obj_kinase.kincore.cif is not None
+        ):
+            for key in self.dict_align:
+                if key.startswith("KinCoRe, ") and "CIF" in key:
+                    return key
+            return "KinCoRe, CIF"
+        if self.obj_kinase.alphafold is not None:
+            return "AF2, CIF"
+        return None
 
     @staticmethod
     def _map_single_alignment(
@@ -153,6 +205,10 @@ class SequenceAlignment:
         int | None
             The parsed start or end index, or None if not found.
         """
+        # no bounds by design (e.g. Phosphosites) or no sequence to derive them from
+        if start_or_end is None or (callable(start_or_end) and str_seq is None):
+            return None
+
         try:
             if isinstance(start_or_end, str):
                 output = rgetattr(self.obj_kinase, start_or_end)
@@ -161,7 +217,7 @@ class SequenceAlignment:
             elif callable(start_or_end):
                 output = start_or_end(str_seq)
             else:
-                logger.info(
+                logger.warning(
                     f"Start or end value {start_or_end} "
                     "is not a string, int, or callable "
                     "and cannot be parsed. Returning None..."
@@ -185,29 +241,53 @@ class SequenceAlignment:
         """
         uniprot_seq = self.obj_kinase.uniprot.canonical_seq
 
-        dict_out = {
-            k: dict.fromkeys(["str_seq", "list_colors"]) for k in DICT_ALIGNMENT.keys()
+        # the AlphaFold DB is queried only as a fallback when no KinCoRe CIF is present, so
+        # the AF2 row is shown only then: present for the fallback entries, missing (with the
+        # KinCoRe CIF row) for entries lacking both; it is dropped for KinCoRe-CIF entries
+        # (never queried, so "missing" would misrepresent them)
+        has_kincore_cif = (
+            self.obj_kinase.kincore is not None
+            and self.obj_kinase.kincore.cif is not None
+        )
+        # the MSA row is shown only when a Dunbrack MSA is present on the kinase
+        has_msa = (
+            self.obj_kinase.kincore is not None
+            and self.obj_kinase.kincore.msa is not None
+        )
+        dict_alignment = {
+            k: v
+            for k, v in DICT_ALIGNMENT.items()
+            if not (k == "AF2, CIF" and has_kincore_cif)
+            and not (k == "KinCoRe, MSA" and not has_msa)
         }
 
-        for key, value in DICT_ALIGNMENT.items():
+        dict_out = {
+            k: dict.fromkeys(["str_seq", "list_colors"]) for k in dict_alignment.keys()
+        }
+
+        for key, value in dict_alignment.items():
             seq = rgetattr(self.obj_kinase, value["seq"])
 
-            # KinCore CIF sequence needs to be extracted from dict and have linebreaks removed
-            if key == "KinCore, CIF" and seq is not None:
+            # CIF sequences (KinCoRe or AlphaFold) are extracted from the mmCIF dict
+            if key in ("KinCoRe, CIF", "AF2, CIF") and seq is not None:
                 seq = seq["_entity_poly.pdbx_seq_one_letter_code"][0].replace("\n", "")
 
-            # CDKL1 KinCore FASTA and CIF have an extra M at the start - remove and add back
-            if self.obj_kinase.hgnc_name == "CDKL1" and key.startswith("KinCore"):
+            # CDKL1 KinCoRe FASTA and CIF have an extra M at the start - remove and add back
+            # (the MSA row is canonical-derived, so it carries no extra M and is excluded)
+            if self.obj_kinase.hgnc_name == "CDKL1" and key in (
+                "KinCoRe, FASTA",
+                "KinCoRe, CIF",
+            ):
                 seq = seq[1:]
 
             start = self._parse_start_end_values(value["start"], seq)
             end = self._parse_start_end_values(value["end"], seq)
 
             seq_out = self._map_single_alignment(start, end, uniprot_seq, seq)
-            # CDKL1 KinCore FASTA and CIF have an extra M at the start
+            # CDKL1 KinCoRe FASTA and CIF have an extra M at the start
             # add back and add "-" for all other sequences
             if self.obj_kinase.hgnc_name == "CDKL1":
-                if key.startswith("KinCore"):
+                if key in ("KinCoRe, FASTA", "KinCoRe, CIF"):
                     seq_out = "M" + seq_out
                 else:
                     seq_out = "-" + seq_out
@@ -245,4 +325,87 @@ class SequenceAlignment:
                         # Claude proposed crimson
                         value["list_colors"][idx] = "#DC143C"
 
+        dict_out = self._collapse_kincore_rows(dict_out)
+
+        # opt-in gap-free full-length track so a full-length AF maps 1..N through the alignment
+        if self.bool_full_length_af:
+            canon = self.obj_kinase.uniprot.canonical_seq
+            dict_out["AF2, full-length"] = {
+                "str_seq": canon,
+                "list_colors": [
+                    self.dict_color.get(aa, self.dict_color.get("-", "#cccccc"))
+                    for aa in canon
+                ],
+            }
+
+        # opt-in Pfam-sliced track (Pfam residues only) so an AF sliced to Pfam bounds maps
+        pfam = self.obj_kinase.pfam
+        if self.bool_pfam_slice_af and pfam and pfam.start and pfam.end:
+            canon = self.obj_kinase.uniprot.canonical_seq
+            seq = (
+                "-" * (pfam.start - 1)
+                + canon[pfam.start - 1 : pfam.end]
+                + "-" * (len(canon) - pfam.end)
+            )
+            dict_out["AF2, pfam"] = {
+                "str_seq": seq,
+                "list_colors": [
+                    self.dict_color.get(a, self.dict_color.get("-", "#cccccc"))
+                    for a in seq
+                ],
+            }
+
         return dict_out
+
+    def _collapse_kincore_rows(
+        self, dict_out: dict[str, dict[str, str | list[str]]]
+    ) -> dict[str, dict[str, str | list[str]]]:
+        """Merge KinCoRe rows (FASTA/CIF/MSA) sharing an identical mapped sequence.
+
+        Identical KinCoRe FASTA, CIF, and MSA rows collapse to a single row whose
+        label lists the merged sources (e.g. ``"KinCoRe, FASTA/CIF/MSA"``). A
+        reconciled MSA (``kincore.msa.reconciled``) is never merged -- it maps from
+        a non-canonical isoform, so it stays a distinct row flagged
+        ``"(reconciled)"`` even when its displayed residues coincide with the other
+        KinCoRe rows.
+
+        Parameters
+        ----------
+        dict_out : dict[str, dict[str, str | list[str]]]
+            Per-track ``{"str_seq", "list_colors"}`` mapping to collapse.
+
+        Returns
+        -------
+        dict[str, dict[str, str | list[str]]]
+            A new ordered mapping with identical KinCoRe rows merged.
+        """
+        str_prefix = "KinCoRe, "
+        set_kincore = {"KinCoRe, FASTA", "KinCoRe, CIF", "KinCoRe, MSA"}
+        bool_reconciled = bool(rgetattr(self.obj_kinase, "kincore.msa.reconciled"))
+
+        dict_collapsed: dict[str, dict[str, str | list[str]]] = {}
+        set_consumed: set[str] = set()
+        for key, value in dict_out.items():
+            if key in set_consumed:
+                continue
+            # a reconciled MSA is flagged and never merged into the structure rows
+            if key == "KinCoRe, MSA" and bool_reconciled:
+                dict_collapsed[f"{key} (reconciled)"] = value
+                continue
+            if key not in set_kincore:
+                dict_collapsed[key] = value
+                continue
+            # gather the mergeable KinCoRe rows sharing this row's mapped sequence
+            list_merge = [key]
+            for other, other_value in dict_out.items():
+                if other in set_consumed or other == key or other not in set_kincore:
+                    continue
+                if other == "KinCoRe, MSA" and bool_reconciled:
+                    continue
+                if other_value["str_seq"] == value["str_seq"]:
+                    list_merge.append(other)
+            set_consumed.update(list_merge)
+            list_suffix = [k.removeprefix(str_prefix) for k in list_merge]
+            dict_collapsed[str_prefix + "/".join(list_suffix)] = value
+
+        return dict_collapsed

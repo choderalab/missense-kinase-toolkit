@@ -1,3 +1,9 @@
+"""Processing of the Davis kinase profiling dataset.
+
+Provides :class:`DavisDataset` and its :class:`DavisConfig`, which load and harmonize
+the Davis Kd profiling data into the common dataset format.
+"""
+
 import logging
 
 import numpy as np

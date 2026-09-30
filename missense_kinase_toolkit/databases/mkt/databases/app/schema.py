@@ -1,3 +1,10 @@
+"""Structure-highlighting configuration classes for the Streamlit app.
+
+Defines the :class:`StructureConfig` hierarchy (default, phosphosites, KLIFS, and
+mutation variants) that parameterizes how kinase structures are colored and annotated
+in the app.
+"""
+
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -8,6 +15,10 @@ from enum import Enum
 from mkt.databases.app.sequences import SequenceAlignment
 from mkt.databases.colors import (
     DICT_QUARTILE_HEATMAP_COLORMAP_PLASMA,
+    STR_SOURCE_KINCORE_COLOR,
+    STR_SOURCE_KLIFS_COLOR,
+    STR_SOURCE_PFAM_COLOR,
+    STR_SOURCE_UNIPROT_COLOR,
     percentile_colormap,
 )
 from mkt.databases.klifs import DICT_POCKET_KLIFS_REGIONS
@@ -47,6 +58,17 @@ class StructureConfig(ABC):
     """Whether to draw leader/connector lines from each residue to its label."""
     highlight_cartoon_transparency: float = 0.0
     """Cartoon transparency applied to colored/highlighted residues (0 = opaque, 1 = invisible)."""
+    prefer_alphafold: bool = False
+    """Force the AlphaFold structure even when a KinCoRe CIF is present (default False)."""
+    bool_full_length_af: bool = False
+    """Render the full-length AlphaFold model (no KD slice) instead of the KD structure (default False)."""
+    bool_pfam_slice_af: bool = False
+    """Render the AlphaFold model sliced to the Pfam kinase-domain bounds (default False)."""
+    bool_shadow_render: bool = False
+    """Use the shadowed/outlined ray-trace instead of the flat colormap-fidelity render (default False)."""
+    bool_superpose: bool = True
+    """Transform the structure into the shared 1GAG reference frame when a stored
+    superposition is present (default True)."""
 
     def __post_init__(self):
         list_idx, list_color, list_style = self.return_list_intersect_color_style()
@@ -106,12 +128,17 @@ class StructureConfig(ABC):
     def return_list_cif_idx(self) -> list[int]:
         """Return list of 0-indexed positions corresponding to the CIF sequence.
 
+        Uses the adjudicated structure alignment (KinCoRe or AlphaFold).
+
         Returns
         -------
         list[int]
-            List of 0-indexed positions where CIF sequence has residues (not gaps).
+            List of 0-indexed positions where the structure sequence has residues (not gaps).
         """
-        str_seq_cif = self.seq_align.dict_align["KinCore, CIF"]["str_seq"]
+        str_key = self.seq_align.str_structure_key
+        if str_key is None:
+            return []
+        str_seq_cif = self.seq_align.dict_align[str_key]["str_seq"]
         list_cif_idx = [idx for idx, i in enumerate(str_seq_cif) if i != "-"]
         return list_cif_idx
 
@@ -124,8 +151,13 @@ class StructureConfig(ABC):
             List of 0-indexed positions where attribute sequence has residues,
             or None if attribute not found in dict_align.
         """
+        # a config that references the structure ("KinCoRe, CIF"/"AF2, CIF") resolves to
+        # whichever structure (KinCoRe or AlphaFold) is present for this kinase
+        str_attr = self.str_attr
+        if str_attr in ("KinCoRe, CIF", "AF2, CIF"):
+            str_attr = self.seq_align.str_structure_key or str_attr
         try:
-            str_seq_attr = self.seq_align.dict_align[self.str_attr]["str_seq"]
+            str_seq_attr = self.seq_align.dict_align[str_attr]["str_seq"]
             list_attr_idx = [idx for idx, i in enumerate(str_seq_attr) if i != "-"]
             return list_attr_idx
         except KeyError:
@@ -185,8 +217,8 @@ class StructureConfig(ABC):
 class DefaultConfig(StructureConfig):
     """Default configuration rendering the whole protein as cartoon with spectrum coloring."""
 
-    str_attr: str = "KinCore, CIF"
-    """Attribute to highlight in the structure (default: 'KinCore, CIF')."""
+    str_attr: str = "KinCoRe, CIF"
+    """Attribute to highlight in the structure (default: 'KinCoRe, CIF')."""
 
     def generate_list_idx(self) -> list[int]:
         """Generate list of 0-indexed positions for all CIF residues.
@@ -533,7 +565,7 @@ class KLIFSCustomConfig(KLIFSConfig):
         list[int]
             Sorted union of 0-indexed KLIFS pocket residues (present in the CIF) and
             custom UniProt positions (1-indexed input converted to 0-indexed), filtered
-            to those present in the KinCore CIF structure.
+            to those present in the KinCoRe CIF structure.
         """
         list_klifs = self.return_list_idx_intersect()
         set_cif = set(self.return_list_cif_idx())
@@ -547,7 +579,7 @@ class KLIFSCustomConfig(KLIFSConfig):
                 logger.warning(
                     f"Custom UniProt position {pos} for "
                     f"{self.seq_align.obj_kinase.hgnc_name} is not present in the "
-                    "KinCore CIF structure; skipping."
+                    "KinCoRe CIF structure; skipping."
                 )
 
         return sorted(set(list_klifs) | set(list_custom))
@@ -646,7 +678,7 @@ class MutationsConfig(StructureConfig):
         list_cif_idx = self.return_list_cif_idx()
         assert all(
             i in list_cif_idx for i in list_attr_idx
-        ), "Some mutation indices are not present in the KinCore CIF sequence."
+        ), "Some mutation indices are not present in the KinCoRe CIF sequence."
         return list_attr_idx
 
     @staticmethod
@@ -1042,6 +1074,80 @@ class MutationsKLIFSConfig(MutationsConfig):
         return labels
 
 
+@dataclass(kw_only=True)
+class SourceUniProtConfig(StructureConfig):
+    """Full-length AlphaFold model, whole protein one color (source boundary: UniProt)."""
+
+    str_attr: str = "AF2, full-length"
+    bool_full_length_af: bool = True
+    bool_shadow_render: bool = True
+
+    def generate_list_idx(self) -> list[int]:
+        """Return every structure residue (whole full-length model)."""
+        return self.return_list_cif_idx()
+
+    def generate_style_color_lists(
+        self, list_idx: list[int]
+    ) -> tuple[list[str], list[str]]:
+        """Cartoon, all residues the UniProt source color."""
+        return ["cartoon"] * len(list_idx), [STR_SOURCE_UNIPROT_COLOR] * len(list_idx)
+
+
+@dataclass(kw_only=True)
+class SourcePfamConfig(StructureConfig):
+    """AlphaFold model sliced to the Pfam kinase-domain bounds, whole one color (source boundary: Pfam)."""
+
+    str_attr: str = "AF2, pfam"
+    bool_pfam_slice_af: bool = True
+    bool_shadow_render: bool = True
+
+    def generate_list_idx(self) -> list[int]:
+        """Return every structure residue (whole Pfam-sliced model)."""
+        return self.return_list_cif_idx()
+
+    def generate_style_color_lists(
+        self, list_idx: list[int]
+    ) -> tuple[list[str], list[str]]:
+        """Cartoon, all residues the Pfam source color."""
+        return ["cartoon"] * len(list_idx), [STR_SOURCE_PFAM_COLOR] * len(list_idx)
+
+
+@dataclass(kw_only=True)
+class SourceKinCoreConfig(StructureConfig):
+    """KinCoRe active-state CIF, whole kinase domain one color (source boundary: KinCoRe)."""
+
+    str_attr: str = "KinCoRe, CIF"
+    bool_shadow_render: bool = True
+
+    def generate_list_idx(self) -> list[int]:
+        """Return every structure residue (whole KinCoRe kinase domain)."""
+        return self.return_list_cif_idx()
+
+    def generate_style_color_lists(
+        self, list_idx: list[int]
+    ) -> tuple[list[str], list[str]]:
+        """Cartoon, all residues the KinCoRe source color."""
+        return ["cartoon"] * len(list_idx), [STR_SOURCE_KINCORE_COLOR] * len(list_idx)
+
+
+@dataclass(kw_only=True)
+class SourceKLIFSConfig(StructureConfig):
+    """KinCoRe CIF, KLIFS pocket highlighted on the grey background (source boundary: KLIFS)."""
+
+    str_attr: str = "KLIFS"
+    bool_shadow_render: bool = True
+
+    def generate_list_idx(self) -> list[int]:
+        """Return the KLIFS pocket residues present in the structure."""
+        return self.return_list_idx_intersect()
+
+    def generate_style_color_lists(
+        self, list_idx: list[int]
+    ) -> tuple[list[str], list[str]]:
+        """Cartoon, pocket residues the KLIFS source color."""
+        return ["cartoon"] * len(list_idx), [STR_SOURCE_KLIFS_COLOR] * len(list_idx)
+
+
 class StandardConfigChoice(str, Enum):
     """String-based enum for CLI choices (dataclass not hashable)."""
 
@@ -1055,6 +1161,10 @@ class StandardConfigChoice(str, Enum):
     MUTATIONS_DEFAULT = "MUTATIONS_DEFAULT"
     MUTATIONS_GROUP = "MUTATIONS_GROUP"
     MUTATIONS_KLIFS = "MUTATIONS_KLIFS"
+    SOURCE_UNIPROT = "SOURCE_UNIPROT"
+    SOURCE_PFAM = "SOURCE_PFAM"
+    SOURCE_KINCORE = "SOURCE_KINCORE"
+    SOURCE_KLIFS = "SOURCE_KLIFS"
 
 
 class StandardConfig(Enum):
@@ -1070,3 +1180,7 @@ class StandardConfig(Enum):
     MUTATIONS_DEFAULT = MutationsDefaultConfig
     MUTATIONS_GROUP = MutationsGroupConfig
     MUTATIONS_KLIFS = MutationsKLIFSConfig
+    SOURCE_UNIPROT = SourceUniProtConfig
+    SOURCE_PFAM = SourcePfamConfig
+    SOURCE_KINCORE = SourceKinCoreConfig
+    SOURCE_KLIFS = SourceKLIFSConfig

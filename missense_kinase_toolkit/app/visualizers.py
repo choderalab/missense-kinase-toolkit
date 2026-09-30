@@ -10,6 +10,8 @@ from bokeh.models import (
     CustomJSTickFormatter,
     FixedTicker,
     Label,
+    LinearAxis,
+    Span,
 )
 from bokeh.models.glyphs import Rect, Text
 from bokeh.plotting import figure
@@ -26,6 +28,7 @@ def render_alignment_plot(
     font_size: int = 9,
     plot_width: int = 1200,
     formatter_code: str | None = None,
+    exon_map: dict[int, int] | None = None,
 ) -> figure:
     """Render a Bokeh sequence alignment plot from pre-computed alignment data.
 
@@ -46,6 +49,10 @@ def render_alignment_plot(
     formatter_code : str | None
         Optional JavaScript code string for a CustomJSTickFormatter on the
         x-axis. If None, default numeric tick labels are used.
+    exon_map : dict[int, int] | None
+        UniProt-index -> exon-number map; when given, an exon ruler (a divider at
+        each exon boundary + one centered exon number above the tracks) is drawn.
+        The x-axis is UniProt index, so exons are contiguous runs. By default None.
 
     Returns:
     --------
@@ -53,6 +60,16 @@ def render_alignment_plot(
         Bokeh figure with the sequence alignment visualization.
     """
     list_text = [i for s in list_sequences for i in s]
+
+    # a missing track (all "-") gets crimson label and residue text so it reads apart from a
+    # misaligned one; its cell background keeps the default gap color
+    str_missing_color = "#DC143C"
+    empty_sequences = [all(c == "-" for c in seq) for seq in list_sequences]
+    text_colors = [
+        str_missing_color if empty else "black"
+        for seq, empty in zip(list_sequences, empty_sequences)
+        for _ in seq
+    ]
     colors = list(chain(*list_colors))
 
     N = len(list_sequences[0])
@@ -75,13 +92,11 @@ def render_alignment_plot(
             recty=recty,
             text=list_text,
             colors=colors,
+            text_colors=text_colors,
         )
     )
 
     viewlen = min(N, 80)
-
-    # determine which sequences consist of only '-' characters
-    empty_sequences = [all(c == "-" for c in seq) for seq in list_sequences]
 
     # sequence text view with ability to scroll along x axis
     # view_range is for the close up view
@@ -105,7 +120,7 @@ def render_alignment_plot(
         text="text",
         text_align="center",
         text_baseline="bottom",
-        text_color="black",
+        text_color="text_colors",
         text_font_size=f"{str(font_size)}pt",
     )
     rects = Rect(
@@ -137,7 +152,7 @@ def render_alignment_plot(
 
     # add custom colored labels
     for i, label in enumerate(list_ids):
-        color = "#DC143C" if empty_sequences[i] else "black"
+        color = str_missing_color if empty_sequences[i] else "black"
         custom_label = Label(
             x=0,  # position at the y-axis
             y=i,  # y position corresponds to the sequence index
@@ -156,6 +171,46 @@ def render_alignment_plot(
     p1.yaxis.major_label_text_color = "black"
     p1.xaxis.axis_label_text_color = "black"
     p1.xaxis.major_label_text_color = "black"
+
+    # exon ruler: a dotted divider at each exon boundary + one centered exon number above the
+    # tracks (only for entries with an exon map). exons are contiguous UniProt-index runs, so we
+    # collapse to per-exon segments -- no per-residue clutter.
+    if exon_map:
+        segments = []  # [exon_no, start_x, end_x]
+        for idx, exon_no in sorted((int(k), int(v)) for k, v in exon_map.items()):
+            if not 1 <= idx <= N:
+                continue
+            if segments and segments[-1][0] == exon_no and idx == segments[-1][2] + 1:
+                segments[-1][2] = idx
+            else:
+                segments.append([exon_no, idx, idx])
+        for _, _, seg_end in segments[:-1]:
+            p1.add_layout(
+                Span(
+                    location=seg_end + 0.5,
+                    dimension="height",
+                    line_color="#444444",
+                    line_width=1.5,
+                    line_dash="dashed",
+                    line_alpha=0.9,
+                )
+            )
+        # exon numbers on a dedicated top axis (ticks at each exon center); an axis renders
+        # reliably above the tracks, avoiding the categorical-y clipping that floating labels hit
+        overrides = {
+            (seg_start + seg_end) / 2: f"Exon {exon_no}"
+            for exon_no, seg_start, seg_end in segments
+        }
+        exon_axis = LinearAxis(
+            ticker=FixedTicker(ticks=list(overrides)),
+            major_label_overrides=overrides,
+            major_label_text_font_size="11pt",
+            major_label_text_color="#333333",
+            axis_line_color=None,
+            major_tick_line_color=None,
+            minor_tick_line_color=None,
+        )
+        p1.add_layout(exon_axis, "above")
 
     return p1
 
@@ -211,6 +266,7 @@ class SequenceAlignmentGenerator(SequenceAlignment):
         figure
             Bokeh figure with the sequence alignment visualization.
         """
+        exon_map = getattr(self.obj_kinase, "exon", None)
         return render_alignment_plot(
             list_sequences=self.list_sequences,
             list_ids=self.list_ids,
@@ -218,6 +274,7 @@ class SequenceAlignmentGenerator(SequenceAlignment):
             font_size=self.font_size,
             plot_width=self.plot_width,
             formatter_code=self._build_klifs_formatter_code(),
+            exon_map=exon_map.idx2exon if exon_map is not None else None,
         )
 
 
