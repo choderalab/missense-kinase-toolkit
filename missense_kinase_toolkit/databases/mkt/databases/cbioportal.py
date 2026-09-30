@@ -1263,10 +1263,9 @@ class KinaseMissenseMutations(Mutations):
                 if "blosum_penalty", the mean BLOSUM penalty is used instead;
                     if starts with "_", it is treated as a one-hot encoded column
         bool_log10 : bool
-            Convert counts to log10 if True; default is True
+            Transform counts to log10(count + 1) if True, else log2(count + 1)
         max_value : int | None
-            Maximum value to truncate the log10 counts to if bool_log10 is True;
-                if None, no truncation is applied; default is None
+            Cap on the transformed counts; None applies no cap
 
         Returns
         -------
@@ -1353,45 +1352,47 @@ class KinaseMissenseMutations(Mutations):
         bool_log10: bool,
         max_value: int | None,
     ) -> int | float | str:
-        """Convert a value to log10 and truncate if necessary.
+        """Log-transform a count with a pseudocount of 1, capped at ``max_value``.
+
+        The pseudocount keeps a count of 1 distinct from 0: log10(1 + 1) ~ 0.30,
+        while 0 (and any negative value) maps to 0.
 
         Parameters
         ----------
         x : int | float | str
-            Value to convert to log10
-        bool_truncate : bool
-            Truncate the value to max_value if True; default is True
-        max_value : int
-            Maximum value to truncate to if bool_truncate is True; default is 1.5
+            Count to transform; a numeric string is converted to float first
+        bool_log10 : bool
+            Use log10(x + 1) if True, else log2(x + 1)
+        max_value : int | None
+            Cap on the transformed value; None applies no cap
 
         Returns
         -------
         int | float | str
-            Log10 converted value if numeric, otherwise original value;
-            truncated to max_value if bool_truncate is True
+            Transformed value (NaN stays NaN); a non-numeric string is returned as is
 
         """
-        # if x is not numeric, try to convert to float or return as is
-        if not isinstance(x, (int, float)):
+        # numeric strings become floats; anything else non-numeric is returned as is
+        if not isinstance(x, (int, float, np.number)):
             try:
                 x = float(x)
             except ValueError:
                 logger.error(f"Value {x} cannot be converted to float.")
-            return x
+                return x
 
         # nan handling
         if pd.isna(x):
             return np.nan
 
-        # if zezro or negative, return 0
+        # zero or negative counts map to 0 (= log of the pseudocount alone)
         if x <= 0:
             return 0
 
-        # log conversion
+        # log conversion with a pseudocount of 1
         if bool_log10:
-            x = np.log10(x)
+            x = np.log10(x + 1)
         else:
-            x = np.log2(x)
+            x = np.log2(x + 1)
 
         # truncate to max_value if provided
         if max_value is not None:
