@@ -38,24 +38,35 @@ jobs:
           df -h
           ulimit -a
 
-      - uses: mamba-org/setup-micromamba@v1
+      # retired micromamba setup, kept for reference (the env file is still used for local dev);
+      # to restore, uncomment and switch the steps below back to `shell: bash -l {0}` with
+      # `pip install -e --no-deps` of schema
+      # - uses: mamba-org/setup-micromamba@v1
+      #   with:
+      #     micromamba-version: '1.5.10-0'
+      #     environment-file: devtools/conda-envs/test_env.yaml
+      #     environment-name: schema_test
+      #     create-args: >-
+      #       python=${{ matrix.python-version }}
+      #     cache-environment: true
+
+      - name: Install uv + Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v10
         with:
-          micromamba-version: '1.5.10-0'
-          environment-file: devtools/conda-envs/test_env.yaml
-          environment-name: schema_test
-          create-args: >-
-            python=${{ matrix.python-version }}
-          # key is derived from the env file + create-args, so editing test_env.yaml busts it
-          cache-environment: true
+          python-version: ${{ matrix.python-version }}
+          activate-environment: true
+          # re-key the uv cache only when declared deps change
+          cache-dependency-glob: "missense_kinase_toolkit/schema/pyproject.toml"
 
       - name: Install package
-        shell: bash -l {0}
+        # only schema's own deps -- the old env file pulled in the full databases stack
+        shell: bash
         run: |
-          python -m pip install -e ./missense_kinase_toolkit/schema --no-deps
-          micromamba list
+          uv pip install -e "./missense_kinase_toolkit/schema[test]"
+          uv pip list
 
       - name: Run tests
-        shell: bash -l {0}
+        shell: bash
         run: |
           set -e
           pytest \

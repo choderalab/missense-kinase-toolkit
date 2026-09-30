@@ -200,7 +200,7 @@ Tests live per sub-package and include live API tests requiring network access. 
 
 ## CI/CD
 
-Path-filtered GitHub Actions workflows run one per setuptools sub-package via micromamba, with Codecov per-package flags; pre-commit enforces formatting/linting. See the **`ci`** skill.
+Path-filtered GitHub Actions workflows run one per setuptools sub-package via uv (installing from each `pyproject.toml`), with Codecov per-package flags; pre-commit enforces formatting/linting. See the **`ci`** skill.
 
 ## Documentation
 

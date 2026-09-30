@@ -28,21 +28,34 @@ One workflow per setuptools sub-package, path-filtered (plus a weekly
 `cron: "0 0 * * 0"`):
 
 - `schema-ci.yaml` — paths `missense_kinase_toolkit/schema/**`, coverage flag
-  `schema`, installs only the schema package.
+  `schema`, installs `schema[test]` only.
 - `databases-ci.yaml` — paths `missense_kinase_toolkit/databases/**`, coverage
-  flag `databases`, installs schema **then** databases (`--no-deps`, because
-  databases depends on schema). Runs pytest with `-n 2 --dist loadfile`.
+  flag `databases`, installs `schema` + `databases[test]` in one `uv pip install`
+  (the local schema path satisfies databases' `mkt.schema` dep) plus
+  `pymol-open-source-whl` for the SASA tests.
 
 Both: matrix `os: [macOS, ubuntu, windows] × python: ["3.10", "3.11"]`,
-`mamba-org/setup-micromamba@v1` with
-`environment-file: devtools/conda-envs/test_env.yaml`, then Codecov upload with
-the per-package `flags`. There is **no** workflow for `ml/`, `experiments/`, or
-`app/`.
+**`astral-sh/setup-uv`** (cached, `activate-environment: true`), pytest with
+`-n 2 --dist loadfile --durations=20`, then Codecov upload with the per-package
+`flags`. `app-ci.yaml` is a Linux/Py3.12 Streamlit smoke test mirroring
+Streamlit Cloud (also uv). There is **no** workflow for `ml/` or `experiments/`.
+
+**Deviation from the baseline:** CI uses uv, not micromamba (~2.5 min/job of
+env solving on macOS/windows). The old micromamba step is left commented out
+in each workflow; `devtools/conda-envs/test_env.yaml` is kept for local dev only
+and is **not** what CI installs.
 
 ### Adding / changing
 
-- New runtime/test dependency → add it to `devtools/conda-envs/test_env.yaml`
-  (CI installs the package with `--no-deps`, so deps must be in the env file).
+- New runtime dependency → add it to the sub-package's `pyproject.toml`
+  `dependencies`; new test-only dependency → its `[test]` extra. CI installs
+  from these, so nothing else needs updating (optionally mirror it in
+  `test_env.yaml` for local conda users).
+- Every dependency must have PyPI wheels (or be pure Python) on all three OSes.
+  Check before adding with
+  `uv pip compile --python-platform x86_64-pc-windows-msvc --only-binary :all: ...`.
+- The workflows' `paths` filters don't include `.github/workflows/**`, so a
+  workflow-only change doesn't trigger CI — touch the sub-package to exercise it.
 
 ### Pre-commit
 

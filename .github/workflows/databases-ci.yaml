@@ -43,31 +43,39 @@ jobs:
           df -h
           ulimit -a
 
-      # More info on options: https://github.com/marketplace/actions/provision-with-micromamba
-      # https://github.com/mamba-org/provision-with-micromamba#migration-to-setup-micromamba%60
-      - uses: mamba-org/setup-micromamba@v1
+      # retired micromamba setup, kept for reference (the env file is still used for local dev);
+      # to restore, uncomment and switch the steps below back to `shell: bash -l {0}` with
+      # `pip install --no-deps` of schema + databases
+      # - uses: mamba-org/setup-micromamba@v1
+      #   with:
+      #     environment-file: devtools/conda-envs/test_env.yaml
+      #     environment-name: test
+      #     channels: conda-forge,defaults
+      #     create-args: >-
+      #       python=${{ matrix.python-version }}
+      #     cache-environment: true
+
+      - name: Install uv + Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v10
         with:
-          environment-file: devtools/conda-envs/test_env.yaml
-          environment-name: test
-          # conda-forge is the default channel now and does not need to be specified
-          channels: conda-forge,defaults
-          # v1 ignores the old `extra-specs` key; `create-args` actually pins the matrix python
-          create-args: >-
-            python=${{ matrix.python-version }}
-          # key is derived from the env file + create-args, so editing test_env.yaml busts it
-          cache-environment: true
+          python-version: ${{ matrix.python-version }}
+          activate-environment: true
+          # re-key the uv cache only when declared deps change
+          cache-dependency-glob: "missense_kinase_toolkit/*/pyproject.toml"
 
       - name: Install package
-        # conda setup requires this special shell
-        shell: bash -l {0}
+        # deps come from the sub-packages' pyproject.toml; pymol (for SASA tests) is not a
+        # declared dep, and PyPI's `pymol-open-source-whl` stands in for conda's pymol-open-source
+        shell: bash
         run: |
-          python -m pip install ./missense_kinase_toolkit/schema --no-deps
-          python -m pip install ./missense_kinase_toolkit/databases --no-deps
-          micromamba list
+          uv pip install \
+            ./missense_kinase_toolkit/schema \
+            "./missense_kinase_toolkit/databases[test]" \
+            pymol-open-source-whl
+          uv pip list
 
       - name: Run tests
-        # conda setup requires this special shell
-        shell: bash -l {0}
+        shell: bash
         run: |
           # run each package test suite; append to coverage file
           # exit immediately if a command exits with a non-zero status
