@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import numpy as np
 import pandas as pd
 import pytest
 from mkt.databases import cbioportal, config
@@ -422,3 +423,24 @@ class TestVariantCanonical:
         )
 
         assert _to_list(self._annotate(df)["variant_canonical"]) == [None, None]
+
+
+class TestConvertLogAndTruncate:
+    convert = staticmethod(cbioportal.KinaseMissenseMutations.convert_log_and_truncate)
+
+    def test_pseudocount_keeps_one_distinct_from_zero(self):
+        assert self.convert(0, True, None) == 0
+        assert self.convert(1, True, None) == pytest.approx(np.log10(2))
+        assert self.convert(9, True, None) == pytest.approx(1.0)
+
+    def test_log2_when_not_log10(self):
+        assert self.convert(3, False, None) == pytest.approx(2.0)
+
+    def test_numpy_and_string_counts_are_transformed(self):
+        assert self.convert(np.int64(9), True, None) == pytest.approx(1.0)
+        assert self.convert("9", True, None) == pytest.approx(1.0)
+        assert self.convert("n/a", True, None) == "n/a"
+
+    def test_cap_and_nan(self):
+        assert self.convert(999, True, 1.5) == 1.5
+        assert np.isnan(self.convert(np.nan, True, None))
