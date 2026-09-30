@@ -159,7 +159,8 @@ class cBioPortalQuery(cBioPortal):
                     "Regenerating DataFrame from API query..."
                 )
         self.init_client()
-        if not self.check_entity_id():
+        # None means the lookup itself failed (already logged); only warn on a miss
+        if self.check_entity_id() is False:
             logger.warning(
                 f"Study {self.get_entity_id()} not found "
                 f"in cBioPortal instance {self.instance}"
@@ -178,13 +179,14 @@ class cBioPortalQuery(cBioPortal):
         ...
 
     @abstractmethod
-    def check_entity_id(self) -> bool:
+    def check_entity_id(self) -> bool | None:
         """Check if the entity ID is valid.
 
         Returns
         -------
-        bool
-            True if the entity ID is valid, False otherwise
+        bool | None
+            True if the entity ID is valid, False if not; None if the lookup
+            could not be made (no client or a failed request)
         """
         ...
 
@@ -348,26 +350,27 @@ class StudyData(cBioPortalQuery):
         """Get cBioPortal study ID."""
         return self.study_id
 
-    def check_entity_id(self) -> bool:
+    def check_entity_id(self) -> bool | None:
         """Check if the study ID is valid.
 
         Returns
         -------
-        bool
-            True if the study ID is valid, False otherwise
+        bool | None
+            True if the study ID is valid, False if not; None if the lookup
+            could not be made (no client or a failed request)
         """
         if self._cbioportal is None:
             logger.warning(
                 f"No cBioPortal client available to check study ID {self.study_id}."
             )
-            return False
+            return None
         try:
             studies = self._cbioportal.Studies.getAllStudiesUsingGET().result()
             study_ids = [study.studyId for study in studies]
             return self.study_id in study_ids
         except Exception as e:
             logger.warning(f"Error checking study ID {self.study_id}: {e}")
-            return False
+            return None
 
 
 @dataclass
@@ -1531,26 +1534,27 @@ class PanelData(cBioPortalQuery):
         """Get cBioPortal panel ID."""
         return self.panel_id
 
-    def check_entity_id(self) -> bool:
+    def check_entity_id(self) -> bool | None:
         """Check if the panel ID is valid.
 
         Returns
         -------
-        bool
-            True if the panel ID is valid, False otherwise
+        bool | None
+            True if the panel ID is valid, False if not; None if the lookup
+            could not be made (no client or a failed request)
         """
         if self._cbioportal is None:
             logger.warning(
                 f"No cBioPortal client available to check panel ID {self.panel_id}."
             )
-            return False
+            return None
         try:
             panels = self._cbioportal.Gene_Panels.getAllGenePanelsUsingGET().result()
             panel_ids = [panel.genePanelId for panel in panels]
             return self.panel_id in panel_ids
         except Exception as e:
             logger.warning(f"Error checking panel ID {self.panel_id}: {e}")
-            return False
+            return None
 
 
 @dataclass
