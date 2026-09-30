@@ -51,8 +51,11 @@ jobs:
           environment-name: test
           # conda-forge is the default channel now and does not need to be specified
           channels: conda-forge,defaults
-          extra-specs: |
+          # v1 ignores the old `extra-specs` key; `create-args` actually pins the matrix python
+          create-args: >-
             python=${{ matrix.python-version }}
+          # key is derived from the env file + create-args, so editing test_env.yaml busts it
+          cache-environment: true
 
       - name: Install package
         # conda setup requires this special shell
@@ -69,11 +72,11 @@ jobs:
           # run each package test suite; append to coverage file
           # exit immediately if a command exits with a non-zero status
           set -e
-          # pytest -n auto --durations=10 -v --cov-report=xml --cov-report=term --color=yes \
           pytest \
             -v \
             -n 2 \
             --dist loadfile \
+            --durations=20 \
             --cov-report=xml \
             --color=yes  \
             --cov=mkt.databases \

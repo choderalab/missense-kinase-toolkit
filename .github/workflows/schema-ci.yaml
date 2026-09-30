@@ -45,6 +45,8 @@ jobs:
           environment-name: schema_test
           create-args: >-
             python=${{ matrix.python-version }}
+          # key is derived from the env file + create-args, so editing test_env.yaml busts it
+          cache-environment: true
 
       - name: Install package
         shell: bash -l {0}
@@ -60,7 +62,7 @@ jobs:
             -v \
             -n 2 \
             --dist loadfile \
-            --durations=10 \
+            --durations=20 \
             --cov-report=xml \
             --color=yes  \
             --cov=mkt.schema \
