@@ -69,9 +69,11 @@ jobs:
         shell: bash
         run: |
           set -e
+          # the full KinaseInfo dict peaks at ~7 GB per xdist worker; macOS runners have
+          # 7 GB RAM (vs 16 GB elsewhere), so two workers swap -- run serially there
           pytest \
             -v \
-            -n 2 \
+            -n ${{ runner.os == 'macOS' && '0' || '2' }} \
             --dist loadfile \
             --durations=20 \
             --cov-report=xml \
