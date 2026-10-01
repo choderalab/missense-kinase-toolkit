@@ -68,10 +68,14 @@ jobs:
         # declared dep, and PyPI's `pymol-open-source-whl` stands in for conda's pymol-open-source
         shell: bash
         run: |
+          # the pymol wheel crashes on Windows at session start (UnicodeDecodeError in
+          # pymol2.PyMOL()), so skip it there; the pymol SASA test then importorskips
+          pymol_pkg="pymol-open-source-whl"
+          if [ "$RUNNER_OS" = "Windows" ]; then pymol_pkg=""; fi
           uv pip install \
             ./missense_kinase_toolkit/schema \
             "./missense_kinase_toolkit/databases[test]" \
-            pymol-open-source-whl
+            $pymol_pkg
           uv pip list
 
       - name: Run tests
