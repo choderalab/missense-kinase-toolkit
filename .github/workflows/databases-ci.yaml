@@ -36,6 +36,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Cache KinCoRe CIF archive
+        # ~90 MB zip the KinCoRe tests download into data/ when absent; the filename
+        # carries the archive version, so a new release gets a new key
+        uses: actions/cache@v4
+        with:
+          path: data/AF2_Active_Models_v2.zip
+          key: kincore-AF2_Active_Models_v2-${{ runner.os }}
+
       - name: Additional info about the build
         shell: bash
         run: |
