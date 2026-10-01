@@ -98,7 +98,7 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           fail_ci_if_error: false # optional (default = false)
-          file: ./coverage.xml
+          files: ./coverage.xml
           flags: databases # optional
           name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
           # https://github.com/codecov/codecov-action

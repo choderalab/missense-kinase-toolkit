@@ -83,7 +83,7 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           fail_ci_if_error: false # optional (default = false)
-          file: ./coverage.xml
+          files: ./coverage.xml
           flags: schema # optional
           name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
           token: ${{ secrets.CODECOV_TOKEN }} # required
