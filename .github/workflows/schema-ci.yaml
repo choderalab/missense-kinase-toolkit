@@ -64,6 +64,8 @@ jobs:
         run: |
           uv pip install -e "./missense_kinase_toolkit/schema[test]"
           uv pip list
+          # io_utils falls back to pure-Python YAML silently; report which backend is live
+          python -c "import yaml; print('PyYAML', yaml.__version__, 'libyaml:', yaml.__with_libyaml__)"
 
       - name: Run tests
         shell: bash
