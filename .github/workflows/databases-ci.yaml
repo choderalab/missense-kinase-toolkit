@@ -64,18 +64,14 @@ jobs:
           cache-dependency-glob: "missense_kinase_toolkit/*/pyproject.toml"
 
       - name: Install package
-        # deps come from the sub-packages' pyproject.toml; pymol (for SASA tests) is not a
-        # declared dep, and PyPI's `pymol-open-source-whl` stands in for conda's pymol-open-source
+        # deps come from the sub-packages' pyproject.toml; the [pymol] extra is a no-op on
+        # Windows (the PyPI wheel crashes there), so the pymol SASA test importorskips and
+        # the pymol-windows job below covers that platform via conda
         shell: bash
         run: |
-          # the pymol wheel crashes on Windows at session start (UnicodeDecodeError in
-          # pymol2.PyMOL()), so skip it there; the pymol SASA test then importorskips
-          pymol_pkg="pymol-open-source-whl"
-          if [ "$RUNNER_OS" = "Windows" ]; then pymol_pkg=""; fi
           uv pip install \
             ./missense_kinase_toolkit/schema \
-            "./missense_kinase_toolkit/databases[test]" \
-            $pymol_pkg
+            "./missense_kinase_toolkit/databases[test,pymol]"
           uv pip list
 
       - name: Run tests
@@ -104,3 +100,40 @@ jobs:
           # https://github.com/codecov/codecov-action
           token: ${{ secrets.CODECOV_TOKEN }} # required
           verbose: true # optional (default = false)
+
+  pymol-windows:
+    # the matrix skips pymol on Windows (the PyPI wheel cannot start a session there),
+    # so exercise the documented Windows route instead: conda-forge pymol-open-source
+    name: PyMOL SASA on windows-latest (conda pymol), Python 3.11
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-name: pymol
+          create-args: >-
+            python=3.11
+            pymol-open-source
+          init-shell: bash
+          cache-environment: true
+
+      - name: Install package
+        # uv targets the active conda env via CONDA_PREFIX and keeps conda's numpy when it
+        # satisfies the constraints, so pymol stays on the numpy it was built against
+        shell: bash -l {0}
+        run: |
+          python -m pip install uv
+          uv pip install \
+            ./missense_kinase_toolkit/schema \
+            "./missense_kinase_toolkit/databases[test]"
+          micromamba list
+
+      - name: Run SASA tests
+        shell: bash -l {0}
+        run: |
+          set -e
+          # fail loudly here, since test_pymol_matches_biopython importorskips pymol2
+          python -c "import pymol2; pymol2.PyMOL().start()"
+          pytest -v --color=yes missense_kinase_toolkit/databases/mkt/databases/tests/test_sasa.py

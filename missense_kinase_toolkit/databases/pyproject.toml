@@ -53,6 +53,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["black>=26.3.1", "flake8==7.0.0", "sphinx==7.3.7", "sphinx-rtd-theme==2.0.0"]
 test = ["pytest>=9.0.3", "pytest-runner==6.0.1", "pytest-cov>=4.0", "pytest-xdist>=3.0", "filelock>=3.0"]
+# in-process PyMOL for SASA; the PyPI wheel crashes on Windows, so use conda-forge
+# pymol-open-source there (SASA falls back to Bio.PDB without it)
+pymol = ["pymol-open-source-whl; sys_platform != 'win32'"]
 
 [project.scripts]
 generate_kinaseinfo_objects = "mkt.databases.cli.generate_kinaseinfo_objects:app"

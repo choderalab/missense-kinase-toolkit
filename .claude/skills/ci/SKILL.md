@@ -30,9 +30,14 @@ One workflow per setuptools sub-package, path-filtered (plus a weekly
 - `schema-ci.yaml` — paths `missense_kinase_toolkit/schema/**`, coverage flag
   `schema`, installs `schema[test]` only.
 - `databases-ci.yaml` — paths `missense_kinase_toolkit/databases/**`, coverage
-  flag `databases`, installs `schema` + `databases[test]` in one `uv pip install`
-  (the local schema path satisfies databases' `mkt.schema` dep) plus
-  `pymol-open-source-whl` for the SASA tests.
+  flag `databases`, installs `schema` + `databases[test,pymol]` in one
+  `uv pip install` (the local schema path satisfies databases' `mkt.schema`
+  dep). The `pymol` extra is `pymol-open-source-whl` with a
+  `sys_platform != 'win32'` marker, because that wheel can't start a session on
+  Windows; there the pymol SASA test importorskips. A separate `pymol-windows`
+  job (micromamba env of `python=3.11` + conda-forge `pymol-open-source`, deps
+  via `uv pip`) runs only `test_sasa.py` to cover the documented Windows route,
+  and fails outright if `pymol2` can't start.
 
 Both: matrix `os: [macOS, ubuntu, windows] × python: ["3.10", "3.11"]`,
 **`astral-sh/setup-uv`** (cached, `activate-environment: true`), pytest with
