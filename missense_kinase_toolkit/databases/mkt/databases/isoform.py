@@ -9,16 +9,33 @@ position to the kinase domain that contains it.
 """
 
 import logging
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from mkt.databases.aligners import BL2UniProtAligner
+from mkt.databases.constants import (
+    RefSeqAccessionShape,
+    RefSeqCodingPrefixes,
+    RefSeqCuratedCodingPrefixes,
+    RefSeqRNAPattern,
+)
 from mkt.databases.ensembl import get_protein_sequence
 from mkt.databases.genomenexus import annotate_variants, get_canonical_transcripts
 from mkt.databases.ncbi import get_cds_translation
 from strenum import StrEnum
 
 logger = logging.getLogger(__name__)
+
+_SET_REFSEQ_NOTED: set[str] = set()
+"""refseqMrnaId elements / prefixes already logged, so each is noted once per session."""
+
+
+def _note_refseq_once(str_key: str, str_msg: str, int_level: int) -> None:
+    """Log ``str_msg`` at ``int_level`` the first time ``str_key`` is seen."""
+    if str_key not in _SET_REFSEQ_NOTED:
+        _SET_REFSEQ_NOTED.add(str_key)
+        logger.log(int_level, str_msg)
 
 
 class SourceTier(StrEnum):
@@ -72,8 +89,15 @@ def map_positions_by_alignment(
     }
 
 
-def clean_refseq_accession(value: object) -> str | None:
-    """Return the first RefSeq mRNA (``NM_``) accession in a ``refseqMrnaId`` cell.
+def return_refseq_accessions(value: object) -> list[str]:
+    """Return the RefSeq RNA accessions in a cBioPortal ``refseqMrnaId`` cell.
+
+    A cell holds one accession, a comma-separated list (cBioPortal truncates the
+    field at 64 characters, cutting off the last entry), or a placeholder such as
+    ``"NA"`` or ``"."``; quotes may wrap it. Each element must fully match
+    :data:`~mkt.databases.constants.RefSeqRNAPattern`, and in a list the last one
+    must carry its version, so a cut-off tail is dropped. An element shaped like
+    some other accession is noted (once) rather than dropped silently.
 
     Parameters
     ----------
@@ -82,13 +106,83 @@ def clean_refseq_accession(value: object) -> str | None:
 
     Returns
     -------
-    str | None
-        The first ``NM_`` accession, or None if there is none.
+    list[str]
+        Accessions as written (versioned when the cell gives one), in cell order;
+        empty for a placeholder or missing value.
     """
     if not isinstance(value, str):
-        return None
-    accession = value.strip().strip('"').split(",")[0].strip()
-    return accession if accession.startswith("NM_") else None
+        return []
+    list_elem = [elem.strip().strip('"').strip() for elem in value.split(",")]
+    bool_list = len(list_elem) > 1
+    list_out = []
+    for idx, elem in enumerate(list_elem):
+        bool_last = bool_list and idx == len(list_elem) - 1
+        if re.fullmatch(RefSeqRNAPattern, elem):
+            # an unversioned last entry of a list may be cut short by the limit
+            if bool_last and "." not in elem:
+                _note_refseq_once(
+                    f"tail:{elem}",
+                    f"Dropped truncated refseqMrnaId tail {elem!r}.",
+                    logging.DEBUG,
+                )
+                continue
+            list_out.append(elem)
+        elif re.match(RefSeqAccessionShape, elem):
+            # a cut-off tail never reaches its version; a versioned one is complete
+            if bool_last and "." not in elem:
+                _note_refseq_once(
+                    f"tail:{elem}",
+                    f"Dropped truncated refseqMrnaId tail {elem!r}.",
+                    logging.DEBUG,
+                )
+            else:
+                _note_refseq_once(
+                    f"element:{elem}",
+                    f"refseqMrnaId element {elem!r} is not a RefSeq RNA accession; "
+                    "skipped.",
+                    logging.WARNING,
+                )
+    return list_out
+
+
+def clean_refseq_accession(value: object, bool_allow_model: bool = False) -> str | None:
+    """Return the first protein-coding RefSeq accession in a ``refseqMrnaId`` cell.
+
+    Parameters
+    ----------
+    value : object
+        Raw cell value, possibly quoted, comma-separated, or missing.
+    bool_allow_model : bool
+        Also accept model (predicted) XM_ records; by default only curated NM_.
+
+    Returns
+    -------
+    str | None
+        The first accepted accession (versioned as written), or None if there is
+        none; RNA accessions skipped for their prefix are noted once per prefix.
+    """
+    tuple_prefix = (
+        RefSeqCodingPrefixes if bool_allow_model else RefSeqCuratedCodingPrefixes
+    )
+    tuple_start = tuple(f"{prefix}_" for prefix in tuple_prefix)
+    list_acc = []
+    for acc in return_refseq_accessions(value):
+        if acc.startswith(tuple_start):
+            list_acc.append(acc)
+            continue
+        str_prefix = acc.split("_")[0]
+        str_hint = (
+            " (pass bool_allow_model=True to include model records)"
+            if f"{str_prefix}_" in {f"{p}_" for p in RefSeqCodingPrefixes}
+            else " (non-coding, no protein translation)"
+        )
+        _note_refseq_once(
+            f"prefix:{str_prefix}:{bool_allow_model}",
+            f"refseqMrnaId has {str_prefix}_ accession(s); not used for the protein "
+            f"lookup{str_hint}.",
+            logging.INFO,
+        )
+    return list_acc[0] if list_acc else None
 
 
 def select_domain_name(
