@@ -2,9 +2,24 @@ import pytest
 import requests as req_lib
 from mkt.databases import chembl
 
+STR_CHEMBL_STATUS_URL = "https://www.ebi.ac.uk/chembl/api/data/status.json"
+"""str: ChEMBL API health endpoint, probed once before any query."""
+
 # ---------------------------------------------------------------------------
 # module-scoped fixtures – one API call per query type
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module", autouse=True)
+def chembl_available():
+    """Skip the module up front if ChEMBL is down, instead of retrying each query."""
+    # plain requests: no retries or caching, so an outage costs one short request
+    try:
+        res = req_lib.get(STR_CHEMBL_STATUS_URL, timeout=(5, 15))
+    except req_lib.exceptions.RequestException as e:
+        pytest.skip(f"ChEMBL API unreachable - skipping tests ({e})")
+    if not res.ok:
+        pytest.skip(f"ChEMBL API unhealthy (HTTP {res.status_code}) - skipping tests")
 
 
 def _build_chembl_query(query_class, query_id):
