@@ -6,11 +6,13 @@ fetchers are replaced by in-memory fakes that count their calls.
 
 import logging
 
+import pytest
 from mkt.databases.isoform import (
     CanonicalReconciler,
     SourceTier,
     clean_refseq_accession,
     map_positions_by_alignment,
+    return_refseq_accessions,
     select_domain_name,
 )
 
@@ -272,3 +274,64 @@ class TestSelectDomainName:
         assert select_domain_name(
             "JAK1", ["JAK1_1", "JAK1_2"], self.DICT_SPAN, None
         ) == ("JAK1", None)
+
+
+class TestRefSeqAccessions:
+    @pytest.fixture(autouse=True)
+    def _fresh_notes(self, monkeypatch):
+        # each test sees every note afresh (notes are once per session)
+        from mkt.databases import isoform
+
+        monkeypatch.setattr(isoform, "_SET_REFSEQ_NOTED", set())
+
+    def test_single_with_or_without_version(self):
+        assert return_refseq_accessions("NM_000546.5") == ["NM_000546.5"]
+        assert return_refseq_accessions("NM_006767") == ["NM_006767"]
+
+    def test_quoted_list_keeps_every_accession(self):
+        assert return_refseq_accessions('"NM_003722.4,NM_001114978.1"') == [
+            "NM_003722.4",
+            "NM_001114978.1",
+        ]
+
+    def test_truncated_tail_is_dropped(self, caplog):
+        str_cell = '"NM_001126112.2,NM_001276761.1,NM_001276760.1,NM_000546.5,NM_0011'
+        with caplog.at_level(logging.DEBUG, logger="mkt.databases.isoform"):
+            assert return_refseq_accessions(str_cell) == [
+                "NM_001126112.2",
+                "NM_001276761.1",
+                "NM_001276760.1",
+                "NM_000546.5",
+            ]
+        assert "truncated refseqMrnaId tail 'NM_0011'" in caplog.text
+        # a tail cut to exactly 6 digits looks valid, but has no version
+        assert return_refseq_accessions("NM_000546.5,NM_001126") == ["NM_000546.5"]
+
+    @pytest.mark.parametrize("value", ["NA", ".", "", None, float("nan")])
+    def test_placeholders_are_empty_and_quiet(self, value, caplog):
+        with caplog.at_level(logging.DEBUG, logger="mkt.databases.isoform"):
+            assert return_refseq_accessions(value) == []
+        assert caplog.text == ""
+
+    def test_unexpected_accession_is_noted_once(self, caplog):
+        with caplog.at_level(logging.WARNING, logger="mkt.databases.isoform"):
+            assert return_refseq_accessions("NG_000007.3,NM_000546.5") == [
+                "NM_000546.5"
+            ]
+            return_refseq_accessions("NG_000007.3")
+            # a versioned last element is complete, so it is noted, not dropped as a tail
+            return_refseq_accessions("NM_000546.5,NC_000017.11")
+        assert caplog.text.count("'NG_000007.3' is not a RefSeq RNA accession") == 1
+        assert "'NC_000017.11' is not a RefSeq RNA accession" in caplog.text
+
+    def test_model_records_need_the_flag(self, caplog):
+        with caplog.at_level(logging.INFO, logger="mkt.databases.isoform"):
+            assert clean_refseq_accession("XM_011533856.1") is None
+            assert (
+                clean_refseq_accession("XM_011533856.1", bool_allow_model=True)
+                == "XM_011533856.1"
+            )
+            # non-coding records are never used for the protein lookup
+            assert clean_refseq_accession("NR_024540.1", bool_allow_model=True) is None
+        assert "XM_ accession(s)" in caplog.text and "bool_allow_model" in caplog.text
+        assert "NR_ accession(s)" in caplog.text and "non-coding" in caplog.text

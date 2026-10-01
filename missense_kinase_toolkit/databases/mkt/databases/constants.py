@@ -5,7 +5,8 @@ serve each genome build from a different REST host and therefore need the same
 build-alias normalization and host lookup. Those shared pieces live here --
 :data:`DICT_BUILD_ALIAS` with :func:`normalize_build` and :func:`resolve_rest_host`,
 plus the JSON request headers -- so each client only declares its own build-to-host
-mapping.
+mapping. It also holds :data:`RefSeqRNAPattern` for the cBioPortal ``refseqMrnaId``
+field.
 """
 
 DICT_BUILD_ALIAS = {
@@ -28,6 +29,26 @@ DICT_HEADER_JSON_POST = {
     "Accept": "application/json",
 }
 """dict[str, str]: Header for POST requests sending and receiving JSON."""
+
+RefSeqRNAPrefixes = ("NM", "NR", "XM", "XR")
+"""tuple[str, ...]: RefSeq RNA accession prefixes -- NM_/NR_ curated mRNA/ncRNA,
+XM_/XR_ model (predicted) mRNA/ncRNA."""
+
+RefSeqRNAPattern = rf"(?:{'|'.join(RefSeqRNAPrefixes)})_(?:\d{{6}}|\d{{9}})(?:\.\d+)?"
+"""str: One RefSeq RNA accession -- 6 or 9 digits after the prefix, optional version
+(e.g. ``NM_000546.5``). Unanchored so it can be matched against each element of a
+cBioPortal ``refseqMrnaId`` cell; use ``re.fullmatch`` to validate a single value."""
+
+RefSeqAccessionShape = r"[A-Z]{2}_\d+"
+"""str: Any RefSeq accession (two-letter prefix, underscore, digits), RNA or not;
+tells an unexpected accession apart from a placeholder such as ``"NA"`` or ``"."``."""
+
+RefSeqCuratedCodingPrefixes = ("NM",)
+"""tuple[str, ...]: Curated protein-coding RefSeq prefixes."""
+
+RefSeqCodingPrefixes = ("NM", "XM")
+"""tuple[str, ...]: Protein-coding RefSeq prefixes, curated and model; NR_/XR_ are
+non-coding and have no protein translation."""
 
 
 def normalize_build(build: object) -> str | None:
