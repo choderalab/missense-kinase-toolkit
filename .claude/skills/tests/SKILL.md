@@ -54,15 +54,16 @@ Created by `bin/create_venv.sh` (`--help` for usage;
 
 - Sub-package flags `--[no-]schema`, `--[no-]databases`, `--[no-]app` (default
   on) and `--[no-]ml` (default off). Selected sub-packages are installed
-  **editable with `[dev,test]` extras** in one `uv pip install` (pip fallback);
+  **editable** in one `uv pip install` (pip fallback) with the positional
+  `EXTRA` args as extras (default: every extra each defines, i.e. `[dev,test]`);
   `--app` adds `app/requirements.txt` minus its git-pinned mkt lines. Schema is
   required by every other selection (it is not on PyPI).
 - `uv venv --seed`, so `VE/bin/python -m pip` works.
 - Appends `.env` vars to `VE/bin/activate`; installs the pre-commit hook if
   `pre-commit` is on PATH.
-
-`missense_kinase_toolkit/editable_overrides.sh` re-applies the schema/databases
-editable installs into an existing venv.
+- `--overrides-only` skips creation and re-applies the selected sub-packages'
+  editable installs into the existing `VE/` (after anything that replaced them
+  with non-editable copies).
 
 Gotchas:
 

@@ -1,45 +1,52 @@
 #!/usr/bin/env bash
-# Usage: ./bin/create_venv.sh [--python X.Y] [--[no-]schema] [--[no-]databases]
-#                             [--[no-]ml] [--[no-]app]
+# Usage: ./bin/create_venv.sh [--overrides-only] [--python X.Y]
+#                             [--[no-]schema] [--[no-]databases] [--[no-]ml]
+#                             [--[no-]app] [EXTRA ...]
 #
-# Creates missense_kinase_toolkit/VE/ with editable installs of the
-# selected mono-repo sub-packages, each with its [dev,test] extras.
+# Creates the project virtual environment (missense_kinase_toolkit/VE/) with
+# editable installs of the selected mono-repo sub-packages and installs the
+# pre-commit hook. EXTRA args pick pyproject optional-dependency groups applied
+# to every selected sub-package (default: all extras each one defines).
 #
 # Sub-package selection (positive/negative flag pairs; later flags win):
-#   --schema    / --no-schema     mkt-schema           (default: on)
-#   --databases / --no-databases  mkt-databases        (default: on)
-#   --ml        / --no-ml         mkt-ml               (default: off)
-#   --app       / --no-app        Streamlit app deps   (default: on)
+#   --schema / --no-schema        mkt-schema          (default: on)
+#   --databases / --no-databases  mkt-databases       (default: on)
+#   --ml / --no-ml                mkt-ml              (default: off)
+#   --app / --no-app              Streamlit app deps  (default: on)
 # databases, ml, and app all depend on mkt-schema, which is not on PyPI, so
 # schema is required whenever any of them is selected.
 #
-# --python X.Y picks the interpreter (3.9-3.12); without it you are prompted.
+# --python X.Y: interpreter to use (3.9-3.12); prompted for if omitted.
 #
-# - If `uv` is installed, uses `uv venv` + a single `uv pip install` so the
-#   local schema checkout satisfies the other sub-packages' mkt.schema dep.
-# - Otherwise falls back to `python3 -m venv` + `pip install -e`.
+# --overrides-only: skip venv creation and only re-apply the editable installs
+# of the selected sub-packages into the existing VE/ (e.g. after a manual
+# install that replaced them with non-editable copies).
 #
-# Prompts before deleting an existing venv. On completion, .env vars are
-# appended to the activate script and the pre-commit hook is installed if
-# pre-commit is on PATH.
+# - If `uv` is installed, uses `uv venv --seed` + a single `uv pip install`, so
+#   the local schema checkout satisfies the other sub-packages' mkt.schema dep.
+# - Otherwise falls back to `python3 -m venv` + `pip install`.
+#
+# In either case, the app requirements are installed minus their git pins of
+# mkt-schema/mkt-databases, so the editable local checkouts are kept.
 
 set -euo pipefail
 
-usage() { sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 VENV_DIR="${VENV_DIR:-VE}"
-EXTRAS="[dev,test]"
 APP_REQUIREMENTS="app/requirements.txt"
 
-# defaults mirror the long-standing dev venv: schema + databases + app deps
+# parse args: flags + positional pyproject extras (none => all)
+OVERRIDES_ONLY=0
 WITH_SCHEMA=1
 WITH_DATABASES=1
 WITH_ML=0
 WITH_APP=1
 py_version=""
-
+EXTRAS=()
 while [ $# -gt 0 ]; do
   case "$1" in
+    --overrides-only) OVERRIDES_ONLY=1 ;;
     --schema) WITH_SCHEMA=1 ;;
     --no-schema) WITH_SCHEMA=0 ;;
     --databases) WITH_DATABASES=1 ;;
@@ -55,7 +62,8 @@ while [ $# -gt 0 ]; do
       ;;
     --python=*) py_version="${1#*=}" ;;
     -h|--help) usage; exit 0 ;;
-    *) echo "error: unknown argument '$1' (see --help)" >&2; exit 1 ;;
+    -*) echo "unknown option: $1" >&2; exit 1 ;;
+    *) EXTRAS+=("$1") ;;
   esac
   shift
 done
@@ -89,6 +97,57 @@ if command -v uv >/dev/null 2>&1; then
 else
   USE_UV=0
   echo "uv not found; falling back to python3 -m venv + pip"
+fi
+
+# selected sub-package dirs, schema first (the others declare mkt.schema)
+SUBPACKAGES=()
+[ "$WITH_SCHEMA" = "1" ] && SUBPACKAGES+=(schema)
+[ "$WITH_DATABASES" = "1" ] && SUBPACKAGES+=(databases)
+[ "$WITH_ML" = "1" ] && SUBPACKAGES+=(ml)
+
+# "[a,b]" suffix for a sub-package: the requested extras, else all it defines
+extras_suffix() {
+  local pkg_dir="$1"
+  local extras_csv
+  if [ "${#EXTRAS[@]}" -gt 0 ]; then
+    extras_csv=$(IFS=,; echo "${EXTRAS[*]}")
+  else
+    extras_csv=$(sed -n '/^\[project.optional-dependencies\]/,/^\[/p' "$pkg_dir/pyproject.toml" \
+      | grep -oE '^[A-Za-z0-9_-]+ *=' | tr -d ' =' | paste -sd, -)
+  fi
+  [ -n "$extras_csv" ] && echo "[$extras_csv]"
+  return 0
+}
+
+# --overrides-only: re-apply editable installs into the existing venv, then stop
+if [ "$OVERRIDES_ONLY" = "1" ]; then
+  if [ -z "${VIRTUAL_ENV:-}" ]; then
+    if [ -d "$VENV_DIR" ]; then
+      # shellcheck disable=SC1091
+      source "$VENV_DIR/bin/activate"
+      echo "activated $VENV_DIR/ for this script"
+    else
+      echo "error: no virtualenv active and no $VENV_DIR/ directory" >&2
+      exit 1
+    fi
+  fi
+  override_args=()
+  for pkg in "${SUBPACKAGES[@]}"; do
+    override_args+=(-e "./$pkg")
+  done
+  if [ "${#override_args[@]}" -eq 0 ]; then
+    echo "no sub-packages selected for editable overrides (app has none)"
+    exit 0
+  fi
+  echo "installing editable: ${SUBPACKAGES[*]}"
+  if [ "$USE_UV" = "1" ]; then
+    uv pip install "${override_args[@]}"
+  else
+    python3 -m pip install "${override_args[@]}"
+  fi
+  echo ""
+  echo "done."
+  exit 0
 fi
 
 # prompt for python version unless given via --python
@@ -154,13 +213,14 @@ else
 fi
 echo "using $(python --version) in $VENV_DIR/"
 
-# assemble one install so the resolver sees the local schema alongside its
-# dependents (schema first; the others declare mkt.schema as a dep)
+# install deps: one resolve so the local schema satisfies its dependents
 install_args=()
 selected=()
-[ "$WITH_SCHEMA" = "1" ] && install_args+=(-e "./schema${EXTRAS}") && selected+=(schema)
-[ "$WITH_DATABASES" = "1" ] && install_args+=(-e "./databases${EXTRAS}") && selected+=(databases)
-[ "$WITH_ML" = "1" ] && install_args+=(-e "./ml${EXTRAS}") && selected+=(ml)
+for pkg in "${SUBPACKAGES[@]}"; do
+  suffix=$(extras_suffix "$pkg")
+  install_args+=(-e "./${pkg}${suffix}")
+  selected+=("${pkg}${suffix}")
+done
 
 # app requirements pin mkt-schema/mkt-databases to git main for Streamlit
 # Cloud; drop those lines so the editable local checkouts are used instead
@@ -172,7 +232,7 @@ if [ "$WITH_APP" = "1" ]; then
   selected+=(app)
 fi
 
-echo "installing: ${selected[*]} (sub-packages editable with extras $EXTRAS)"
+echo "installing: ${selected[*]}"
 "${PIP[@]}" "${install_args[@]}"
 
 # install the pre-commit git hook (idempotent); pre-commit is not a declared
@@ -188,7 +248,7 @@ fi
 if [ -f .env ]; then
   {
     echo ""
-    echo "# load project environment variables"
+    echo "# Load project environment variables"
     cat .env
   } >> "$VENV_DIR/bin/activate"
 else
