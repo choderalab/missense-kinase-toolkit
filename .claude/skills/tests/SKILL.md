@@ -49,7 +49,7 @@ keep them parallel-safe locally too (guard shared on-disk work with
 
 ### Local venv (`VE/`)
 
-Created by `missense_kinase_toolkit/create_venv.sh` (`--help` for usage;
+Created by `bin/create_venv.sh` (`--help` for usage;
 `--python X.Y` or a 3.9–3.12 prompt):
 
 - Sub-package flags `--[no-]schema`, `--[no-]databases`, `--[no-]app` (default

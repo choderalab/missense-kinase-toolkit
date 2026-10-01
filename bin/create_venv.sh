@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Usage: ./create_venv.sh [--python X.Y] [--[no-]schema] [--[no-]databases]
-#                         [--[no-]ml] [--[no-]app]
+# Usage: ./bin/create_venv.sh [--python X.Y] [--[no-]schema] [--[no-]databases]
+#                             [--[no-]ml] [--[no-]app]
 #
-# Creates the project virtual environment with editable installs of the
+# Creates missense_kinase_toolkit/VE/ with editable installs of the
 # selected mono-repo sub-packages, each with its [dev,test] extras.
 #
 # Sub-package selection (positive/negative flag pairs; later flags win):
@@ -60,8 +60,9 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-# run from the mono-repo package root regardless of the caller's cwd
-cd "$(dirname "${BASH_SOURCE[0]}")"
+# work from the mono-repo package dir (where VE/, .env, and the sub-packages
+# live) regardless of the caller's cwd
+cd "$(dirname "${BASH_SOURCE[0]}")/../missense_kinase_toolkit"
 
 # every other sub-package needs the local schema checkout
 if [ "$WITH_SCHEMA" = "0" ] && { [ "$WITH_DATABASES" = "1" ] || [ "$WITH_ML" = "1" ] || [ "$WITH_APP" = "1" ]; }; then
@@ -195,4 +196,5 @@ else
 fi
 
 echo ""
-echo "done. activate with: source $VENV_DIR/bin/activate"
+# absolute path, since the script cd'd away from the caller's cwd
+echo "done. activate with: source $(cd "$VENV_DIR" && pwd)/bin/activate"
