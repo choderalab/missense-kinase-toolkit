@@ -537,3 +537,106 @@ class TestCheckEntityId:
             cbioportal.StudyData.check_entity_id(self._study(_client(["other"])))
             is False
         )
+
+
+class _FakeHGNC:
+    """Offline stand-in for ``hgnc.HGNC`` mirroring its fetch/search behavior."""
+
+    # current symbol -> UniProt IDs ([] for a gene without one)
+    DICT_FETCH = {
+        "BRAF": ["P15056"],
+        "H3C2": ["P68431"],
+        "IKBKE-AS1": ["Q96MC9"],
+        "RTEL1-TNFRSF6B": [],
+    }
+    # (field, term) -> matching current symbols
+    DICT_SEARCH = {
+        ("entrez_id", "8358"): ["H3C2"],
+        ("entrez_id", "100533107"): ["RTEL1-TNFRSF6B"],
+        ("prev_symbol", "C1ORF147"): ["IKBKE-AS1"],
+        ("prev_symbol", "AMBIG"): ["GENE1", "GENE2"],
+    }
+
+    def __init__(self, input_symbol_or_id):
+        self.input_symbol_or_id = input_symbol_or_id
+        self.hgnc = input_symbol_or_id
+
+    def maybe_get_info_from_hgnc_fetch(self, list_to_extract=None):
+        if self.hgnc not in self.DICT_FETCH:
+            return dict.fromkeys(list_to_extract)
+        list_uniprot = self.DICT_FETCH[self.hgnc]
+        return {
+            "symbol": [self.hgnc],
+            "uniprot_ids": [list_uniprot] if list_uniprot else None,
+        }
+
+    def maybe_get_symbol_from_hgnc_search(self, custom_field=None, custom_term=None):
+        list_match = self.DICT_SEARCH.get((custom_field, custom_term), [])
+        if len(list_match) == 1:
+            self.hgnc = list_match[0]
+        return list_match
+
+
+class TestHGNCFallback:
+    @pytest.fixture(autouse=True)
+    def _fake_hgnc(self, monkeypatch):
+        from mkt.databases import hgnc
+
+        monkeypatch.setattr(hgnc, "HGNC", _FakeHGNC)
+
+    def _query(self, list_hgnc, dict_entrez=None):
+        stub = _stub(
+            dict_replace={},
+            _query_hgnc_with_fallback=KMM._query_hgnc_with_fallback,
+        )
+        return KMM.query_hgnc_uniprot_ids(stub, list_hgnc, {}, dict_entrez)
+
+    def test_current_symbol_is_fetched_directly(self):
+        assert self._query(["BRAF"]) == {"BRAF": "P15056"}
+
+    def test_renamed_symbol_resolves_by_entrez_id(self, caplog):
+        with caplog.at_level("INFO"):
+            dict_out = self._query(["HIST1H3B"], {"HIST1H3B": 8358})
+        assert dict_out == {"HIST1H3B": "P68431"}
+        assert "HIST1H3B -> H3C2 (via entrez_id)" in caplog.text
+
+    def test_renamed_symbol_resolves_as_previous_symbol(self):
+        assert self._query(["C1ORF147"], {"C1ORF147": np.nan}) == {"C1ORF147": "Q96MC9"}
+
+    def test_ambiguous_previous_symbol_is_not_used(self, caplog):
+        assert self._query(["AMBIG"]) == {"AMBIG": None}
+        assert "Not found in HGNC" in caplog.text
+
+    def test_gene_without_uniprot_is_reported_not_raised(self, caplog):
+        dict_out = self._query(["RTEL1-TNFRSF6B"], {"RTEL1-TNFRSF6B": 100533107})
+        assert dict_out == {"RTEL1-TNFRSF6B": None}
+        assert "without a UniProt ID" in caplog.text
+        assert "Errors retrieving" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (8358, "8358"),
+        ("8358", "8358"),
+        (" 8358 ", "8358"),
+        (8358.0, None),
+        (np.nan, None),
+        (pd.NA, None),
+        (None, None),
+        (0, None),
+        ("NA", None),
+    ],
+)
+def test_clean_entrez_id(value, expected):
+    assert cbioportal.clean_entrez_id(value) == expected
+
+
+def test_entrez_ids_read_as_nullable_integers():
+    # the cast get_kinase_missense_mutations applies before clean_entrez_id
+    ser = pd.Series([8358.0, np.nan, "100533107"])
+    list_out = [
+        cbioportal.clean_entrez_id(v)
+        for v in pd.to_numeric(ser, errors="coerce").astype("Int64")
+    ]
+    assert list_out == ["8358", None, "100533107"]

@@ -6,7 +6,7 @@ build-alias normalization and host lookup. Those shared pieces live here --
 :data:`DICT_BUILD_ALIAS` with :func:`normalize_build` and :func:`resolve_rest_host`,
 plus the JSON request headers -- so each client only declares its own build-to-host
 mapping. It also holds :data:`RefSeqRNAPattern` for the cBioPortal ``refseqMrnaId``
-field.
+field and :data:`EntrezGeneIDPattern` for its ``entrezGeneId`` field.
 """
 
 DICT_BUILD_ALIAS = {
@@ -49,6 +49,10 @@ RefSeqCuratedCodingPrefixes = ("NM",)
 RefSeqCodingPrefixes = ("NM", "XM")
 """tuple[str, ...]: Protein-coding RefSeq prefixes, curated and model; NR_/XR_ are
 non-coding and have no protein translation."""
+
+EntrezGeneIDPattern = r"[1-9]\d*"
+"""str: One NCBI Entrez Gene ID -- a positive integer with no fixed width (``1`` for
+A1BG to 9 digits); use ``re.fullmatch`` to validate a single value."""
 
 
 def normalize_build(build: object) -> str | None:
