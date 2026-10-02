@@ -274,7 +274,11 @@ def resolve_step_names(
     return [name for name in _ENRICH_STEPS if name not in skipped]
 
 
-def run_steps(names: list[str], ctx: "BuildContext") -> None:
+def run_steps(
+    names: list[str],
+    ctx: "BuildContext",
+    dict_step_subset: dict[str, set[str]] | None = None,
+) -> None:
     """Run the enabled enrichment steps sequentially in registry order.
 
     A failing step is logged and skipped rather than aborting the whole batch (step
@@ -286,14 +290,21 @@ def run_steps(names: list[str], ctx: "BuildContext") -> None:
         Enrichment-step names to run, in registry order.
     ctx : BuildContext
         The build context threaded through each step.
+    dict_step_subset : dict[str, set[str]] | None, optional
+        Step name -> ``hgnc_name`` keys that step runs on, overriding ``ctx.subset_hgnc``
+        per step, by default None (every step uses ``ctx.subset_hgnc``).
     """
+    subset_default = ctx.subset_hgnc
     for name in names:
+        if dict_step_subset is not None:
+            ctx.subset_hgnc = dict_step_subset[name]
         logger.info(f"running enrichment step '{name}'...")
         try:
             _ENRICH_STEPS[name](ctx)
             logger.info(f"enrichment step '{name}' completed.")
         except Exception as e:
             logger.error(f"enrichment step '{name}' failed: {e}", exc_info=True)
+    ctx.subset_hgnc = subset_default
 
 
 def _report_cfg(ctx: "BuildContext"):

@@ -627,6 +627,7 @@ class Pipeline:
         subset_hgnc: set[str] | None,
         bool_figs: bool = True,
         force: bool = False,
+        dict_step_subset: dict[str, set[str]] | None = None,
     ) -> None:
         """Run enrichment steps, serialize + tar, generate reports, and clean up.
 
@@ -644,6 +645,11 @@ class Pipeline:
         bool_figs : bool, optional
             Regenerate the report figures into the datetime-stamped reports subdir, by
             default True; ``--no-figs`` disables them.
+        force : bool, optional
+            Force structure steps to regenerate derived properties, by default False.
+        dict_step_subset : dict[str, set[str]] | None, optional
+            Per-step target keys overriding ``subset_hgnc`` (see
+            :func:`~mkt.databases.generator.steps.run_steps`), by default None.
 
         Returns
         -------
@@ -657,7 +663,7 @@ class Pipeline:
             subset_hgnc=subset_hgnc,
             force=force,
         )
-        build_steps.run_steps(names, ctx)
+        build_steps.run_steps(names, ctx, dict_step_subset=dict_step_subset)
         self._serialize_and_tar(dict_kinaseinfo)
         if bool_figs:
             ctx.path_reports, ctx.report_config = self._reports_target()
@@ -842,23 +848,42 @@ class Pipeline:
                     _strip_kd_suffix(obj.uniprot_id) for obj in dict_existing.values()
                 }
             )
+            # entries with no existing counterpart have nothing to carry over
+            set_new = set(dict_new) - set(dict_existing)
             subset_hgnc = merge_rebuilt_entries(
                 dict_existing, dict_new, names, set_base_uniprot
             )
         elif subset_uniprot is not None:
+            set_new = set()
             subset_hgnc = {
                 hgnc_name
                 for hgnc_name, obj in dict_existing.items()
                 if _strip_kd_suffix(obj.uniprot_id) in subset_uniprot
             }
         else:
+            set_new = set()
             subset_hgnc = set(dict_existing)
+
+        # existing entries get the requested + downstream steps; new entries get every step
+        dict_step_subset = None
+        if set_new:
+            logger.info(
+                f"new entr(ies) {sorted(set_new)} have no existing data; running every "
+                "enrichment step on them."
+            )
+            set_names = set(names)
+            dict_step_subset = {
+                name: (subset_hgnc if name in set_names else set()) | set_new
+                for name in build_steps.resolve_step_names()
+            }
+            names = list(dict_step_subset)
         self._finalize(
             dict_existing,
             names,
             subset_hgnc=subset_hgnc,
             bool_figs=bool_figs,
             force=force,
+            dict_step_subset=dict_step_subset,
         )
 
     def run(

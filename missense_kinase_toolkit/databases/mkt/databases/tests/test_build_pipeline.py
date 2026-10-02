@@ -488,6 +488,30 @@ def test_non_kincore_source_rebuild_handles_missing_kincore(tmp_path, monkeypatc
     _assert_exon_preserved(pl.path_tar, seed)
 
 
+def test_source_rebuild_runs_every_step_on_new_entries(tmp_path, monkeypatch):
+    """An entry the rebuild produces with no existing counterpart (e.g. a domain renamed by
+    a KinHub refresh) gets every step; existing entries get only the downstream ones."""
+    pl, seed, calls = _seeded_pipeline(tmp_path, monkeypatch, ["ABL1", "EGFR"])
+    abl1_renamed = copy.deepcopy(seed["ABL1"])
+    abl1_renamed.hgnc_name = "ABL1_RENAMED"
+    abl1_renamed.exon = None
+
+    def _fake_rebuild(sources, dict_existing, subset_uniprot=None):
+        return {
+            "EGFR": copy.deepcopy(seed["EGFR"]),
+            "ABL1_RENAMED": abl1_renamed,
+        }
+
+    monkeypatch.setattr(pipeline, "run_source_rebuild", _fake_rebuild)
+    pl.run(only=["kinhub"], bool_figs=False)
+
+    # kinhub has no downstream steps, so only the new entry is enriched, by every step
+    assert calls == [(name, {"ABL1_RENAMED"}) for name in build_steps._ENRICH_STEPS]
+    after = deserialize_kinase_dict(str_path=str(pl.path_tar), bool_verbose=False)
+    assert set(after) == {"EGFR", "ABL1_RENAMED"}  # the old ABL1 key is gone
+    assert after["EGFR"].exon == seed["EGFR"].exon
+
+
 def test_only_and_kinase_compose(tmp_path, monkeypatch):
     """Bug 3: ``--only exon --kinase EGFR`` ran exon on the whole kinome."""
     pl, _, calls = _seeded_pipeline(tmp_path, monkeypatch, ["ABL1", "EGFR"])
