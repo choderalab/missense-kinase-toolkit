@@ -49,30 +49,25 @@ keep them parallel-safe locally too (guard shared on-disk work with
 
 ### Local venv (`VE/`)
 
-Created by `missense_kinase_toolkit/create_venv.sh` (prompts for Python
-3.9–3.12):
+Created by `bin/create_venv.sh` (`--help` for usage;
+`--python X.Y` or a 3.9–3.12 prompt):
 
-- Uses `uv sync --all-extras` when `uv` + `uv.lock` are present, else `uv venv`,
-  else `python3 -m venv`.
-- Installs `mkt-schema` then `mkt-databases` (order matters — databases depends
-  on schema) **editable with `[dev,test]` extras**, so the venv has both
-  packages plus pytest, pytest-cov, black, flake8. It does **not** include
-  `ml/`, `app/`, or `experiments/`.
-- Appends `.env` vars to `VE/bin/activate`.
-
-`missense_kinase_toolkit/editable_overrides.sh` re-applies just the two editable
-installs after a manual `uv sync` (which reinstalls them from the lockfile and
-undoes the editable overrides).
+- Sub-package flags `--[no-]schema`, `--[no-]databases`, `--[no-]app` (default
+  on) and `--[no-]ml` (default off). Selected sub-packages are installed
+  **editable** in one `uv pip install` (pip fallback) with the positional
+  `EXTRA` args as extras (default: every extra each defines, i.e. `[dev,test]`);
+  `--app` adds `app/requirements.txt` minus its git-pinned mkt lines. Schema is
+  required by every other selection (it is not on PyPI).
+- `uv venv --seed`, so `VE/bin/python -m pip` works.
+- Appends `.env` vars to `VE/bin/activate`; installs the pre-commit hook if
+  `pre-commit` is on PATH.
+- `--overrides-only` skips creation and re-applies the selected sub-packages'
+  editable installs into the existing `VE/` (after anything that replaced them
+  with non-editable copies).
 
 Gotchas:
 
-- A uv-created `VE/` has **no `pip`**. Add a package with
-  `uv pip install --python missense_kinase_toolkit/VE/bin/python <pkg>`.
-- `pytest-xdist` + `filelock` are in the CI conda env (`test_env.yaml`); the pip
-  `[test]` extras carry them only partially (schema lists `pytest-xdist`,
-  databases lists `filelock`), so a bare `VE/` may need
-  `uv pip install --python missense_kinase_toolkit/VE/bin/python pytest-xdist`
-  before running `-n`.
+- Both `[test]` extras now carry `pytest-xdist`, so `-n` works in a fresh `VE/`.
 - `pre-commit` is usually not on PATH but runs as a git commit hook, so
   black/isort/flake8/pyupgrade fire on `git commit`. To run manually:
   `VE/bin/black`, `VE/bin/flake8 --max-line-length=88 --extend-ignore=E203,E501`,

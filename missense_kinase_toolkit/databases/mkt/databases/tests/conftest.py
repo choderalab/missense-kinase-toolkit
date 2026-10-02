@@ -76,15 +76,18 @@ def kincore_harmonized_dict(tmp_path_factory):
 
     Uses a file lock so that parallel xdist workers do not
     concurrently extract the KinCoRe tar.gz to the same directory.
+    ``MMCIF2Dict`` is stubbed: harmonization matches on filename tokens only, and CIF
+    parsing is covered by ``TestKinCoReCIFIntegrity``.
     """
-    from mkt.databases.kincore import harmonize_kincore_fasta_cif
+    from mkt.databases import kincore
 
     # coordinate between xdist workers via a shared lock file
     root_tmp = tmp_path_factory.getbasetemp().parent
     lock_file = root_tmp / "kincore_extract.lock"
 
-    with FileLock(str(lock_file)):
-        return harmonize_kincore_fasta_cif()
+    with FileLock(str(lock_file)), pytest.MonkeyPatch.context() as mp:
+        mp.setattr(kincore, "MMCIF2Dict", lambda handle: {})
+        return kincore.harmonize_kincore_fasta_cif()
 
 
 @pytest.fixture(scope="session")

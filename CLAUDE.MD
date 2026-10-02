@@ -23,7 +23,7 @@ the baseline.
 - **`tests`** — before adding or running tests (pytest layout, `network` marker,
   token-gated skips, xdist-safe fixtures).
 - **`ci`** — before editing `.github/workflows`, adding a sub-package, or
-  changing the test env (path-filtered per-sub-package workflows, micromamba).
+  changing the test env (path-filtered per-sub-package workflows, uv).
 - **`pymol_viz`** — before generating/editing PyMOL files, structure highlight
   configs, or SASA (licensed-PyMOL scripts vs in-process `pymol2`).
 - **`app_integration`** — before editing the Streamlit app or
@@ -88,12 +88,17 @@ pip install -e ./missense_kinase_toolkit/databases
 pip install -e ./missense_kinase_toolkit/ml
 ```
 
-### Conda/Micromamba Environment (for testing)
+### Local Dev Environment
 
 ```bash
-micromamba create -f devtools/conda-envs/test_env.yaml
-micromamba activate missense-kinase-toolkit-test
+# editable schema + databases + app deps with [dev,test] extras (uv if available)
+./bin/create_venv.sh --python 3.11
+source missense_kinase_toolkit/VE/bin/activate
 ```
+
+`./bin/create_venv.sh --help` lists the sub-package flags. CI also uses uv and
+installs from each `pyproject.toml`. `devtools/conda-envs/test_env.yaml` is kept
+only for local conda users and is not what CI tests.
 
 ### Environment Variables
 
@@ -200,7 +205,7 @@ Tests live per sub-package and include live API tests requiring network access. 
 
 ## CI/CD
 
-Path-filtered GitHub Actions workflows run one per setuptools sub-package via micromamba, with Codecov per-package flags; pre-commit enforces formatting/linting. See the **`ci`** skill.
+Path-filtered GitHub Actions workflows run one per setuptools sub-package via uv (installing from each `pyproject.toml`), with Codecov per-package flags; pre-commit enforces formatting/linting. See the **`ci`** skill.
 
 ## Documentation
 
