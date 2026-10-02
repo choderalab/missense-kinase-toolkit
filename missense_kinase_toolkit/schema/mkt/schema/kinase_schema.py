@@ -256,6 +256,7 @@ class Provenance(BaseModel):
     query_date: str | None = (
         None  # ISO date: download date (re-fetched) or file mtime (local)
     )
+    sha256: str | None = None  # SHA-256 of the source file as downloaded
 
 
 class SASA(BaseModel):

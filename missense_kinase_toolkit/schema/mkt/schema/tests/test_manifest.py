@@ -66,9 +66,30 @@ def _write_tar(tmp_path, dict_entries, manifest=None):
     return str(path_tar)
 
 
+def _write_hashed_tar(tmp_path, dict_entries, str_tamper=None):
+    """Write a tar whose manifest records entry SHA-256s; optionally edit one file after.
+
+    The edit appends a newline, so the JSON stays valid and the stem still matches:
+    only the hash check can catch it.
+    """
+    path_dir = _write_dir(tmp_path, dict_entries)
+    manifest = io_utils.Manifest.from_kinase_dict(
+        dict_entries, entry_sha256=io_utils.return_dir_entry_sha256(str(path_dir))
+    )
+    (path_dir / io_utils.STR_MANIFEST_FILENAME).write_text(manifest.model_dump_json())
+    if str_tamper is not None:
+        path_file = path_dir / str_tamper
+        path_file.write_bytes(path_file.read_bytes() + b"\n")
+    path_tar = tmp_path / "KinaseInfo.tar.gz"
+    with tarfile.open(path_tar, "w:gz") as tar:
+        for path in sorted(path_dir.iterdir()):
+            tar.add(path, arcname=path.name)
+    return str(path_tar), path_dir
+
+
 def test_manifest_tallies_match_corpus(dict_kinase):
     """Tallies on the packaged dict agree with the hardcoded ``test_dict_counts``."""
-    counts, source_versions = return_manifest_tallies(dict_kinase)
+    counts, source_versions, _ = return_manifest_tallies(dict_kinase)
     assert counts == DICT_CORPUS_COUNTS
     assert source_versions == DICT_CORPUS_SOURCE_VERSIONS
 
@@ -140,7 +161,7 @@ def test_manifest_summary(tmp_path, dict_kinase, capsys):
 
     str_tar = _write_tar(tmp_path, {"ABL1": dict_kinase["ABL1"]}, manifest)
     io_utils.print_manifest_summary(str_tar)
-    assert "KinaseInfo manifest v1" in capsys.readouterr().out
+    assert "KinaseInfo manifest v2" in capsys.readouterr().out
 
 
 def test_load_with_matching_manifest(tmp_path, dict_sample, caplog):
@@ -242,3 +263,84 @@ def test_directory_load_checks_manifest(tmp_path, dict_sample):
     (path_dir / io_utils.STR_MANIFEST_FILENAME).write_text(manifest.model_dump_json())
     with pytest.raises(ValueError, match=r"counts\[alphafold\]"):
         io_utils.deserialize_kinase_dict(str_path=str(path_dir), bool_remove=False)
+
+
+def test_entry_sha256_roundtrip(tmp_path, dict_sample):
+    """An archive whose entries match their recorded SHA-256s loads, full or subset."""
+    str_tar, _ = _write_hashed_tar(tmp_path, dict_sample)
+    manifest = io_utils.load_manifest(str_tar)
+    assert manifest.manifest_version == 2
+    assert sorted(manifest.entry_sha256) == ["ABL1.json", "BUB1B.json"]
+    assert "sha256     2 entries" in manifest.return_summary()
+
+    assert list(io_utils.deserialize_kinase_dict(str_path=str_tar)) == ["ABL1", "BUB1B"]
+    assert list(
+        io_utils.deserialize_kinase_dict(str_path=str_tar, list_ids=["ABL1"])
+    ) == ["ABL1"]
+
+
+def test_tampered_entry_raises(tmp_path, dict_sample):
+    """A byte-level edit that still parses raises on the entry's SHA-256."""
+    str_tar, _ = _write_hashed_tar(tmp_path, dict_sample, str_tamper="ABL1.json")
+
+    with pytest.raises(ValueError, match=r"ABL1\.json: SHA-256"):
+        io_utils.deserialize_kinase_dict(str_path=str_tar)
+
+
+def test_subset_load_checks_entry_sha256(tmp_path, dict_sample):
+    """Subset loads skip the count check but still verify the entries they read."""
+    str_tar, _ = _write_hashed_tar(tmp_path, dict_sample, str_tamper="ABL1.json")
+
+    with pytest.raises(ValueError, match=r"ABL1\.json: SHA-256"):
+        io_utils.deserialize_kinase_dict(str_path=str_tar, list_ids=["ABL1"])
+    # an untouched entry in the same archive still loads
+    assert list(
+        io_utils.deserialize_kinase_dict(str_path=str_tar, list_ids=["BUB1B"])
+    ) == ["BUB1B"]
+
+
+def test_directory_load_checks_entry_sha256(tmp_path, dict_sample):
+    """Directory loads verify entry SHA-256s too."""
+    _, path_dir = _write_hashed_tar(tmp_path, dict_sample, str_tamper="BUB1B.json")
+
+    with pytest.raises(ValueError, match=r"BUB1B\.json: SHA-256"):
+        io_utils.deserialize_kinase_dict(str_path=str(path_dir), bool_remove=False)
+
+
+def test_unlisted_entry_raises(tmp_path, dict_kinase, dict_sample):
+    """An entry absent from the manifest's hashes raises, even on a subset load."""
+    str_tar, path_dir = _write_hashed_tar(tmp_path, dict_sample)
+    io_utils.serialize_kinase_dict(
+        {"CDK2": dict_kinase["CDK2"]}, str_path=str(path_dir)
+    )
+    with tarfile.open(str_tar, "w:gz") as tar:
+        for path in sorted(path_dir.iterdir()):
+            tar.add(path, arcname=path.name)
+
+    with pytest.raises(ValueError, match="CDK2.json: not listed"):
+        io_utils.deserialize_kinase_dict(str_path=str_tar, list_ids=["ABL1", "CDK2"])
+
+
+def test_v1_manifest_without_hashes_loads(tmp_path, dict_sample):
+    """A manifest without entry hashes (v1) skips the SHA-256 check."""
+    manifest = io_utils.Manifest.from_kinase_dict(dict_sample, manifest_version=1)
+    assert manifest.entry_sha256 == {}
+    str_tar = _write_tar(tmp_path, dict_sample, manifest)
+
+    assert len(io_utils.deserialize_kinase_dict(str_path=str_tar)) == 2
+
+
+def test_source_sha256_tallied_and_checked(tmp_path, mutable_kinase):
+    """Provenance SHA-256s are tallied by source name and checked on full loads."""
+    abl1 = mutable_kinase("ABL1")
+    abl1.kincore.cif.source.sha256 = "a" * 64
+    dict_entries = {"ABL1": abl1}
+
+    manifest = io_utils.Manifest.from_kinase_dict(dict_entries)
+    str_name = abl1.kincore.cif.source.name
+    assert manifest.source_sha256[str_name] == {"a" * 64: 1}
+
+    manifest.source_sha256[str_name] = {"b" * 64: 1}
+    str_tar = _write_tar(tmp_path, dict_entries, manifest)
+    with pytest.raises(ValueError, match=r"source_sha256\["):
+        io_utils.deserialize_kinase_dict(str_path=str_tar)
