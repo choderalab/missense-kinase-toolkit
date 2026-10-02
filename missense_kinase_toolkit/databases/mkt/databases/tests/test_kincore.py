@@ -5,6 +5,34 @@ from itertools import chain
 import pytest
 from mkt.databases.kincore import _resolve_kincore_cif_zip
 
+SET_KNOWN_STRICT_CIF_ERRORS = {"duplicate tag _struct_ref.id"}
+"""set[str]: Strict-mode gemmi errors expected in every KinCoRe v2 CIF (identical repeated tag)."""
+
+
+def _list_archive_cifs(zf: zipfile.ZipFile) -> list[str]:
+    """Return the descriptive top-level .cif members, as the KinCoRe parser selects them.
+
+    One nesting level below the archive root, excluding macOS ._ sidecars and the
+    redundant flat copies under the nested <author>/ subdir.
+
+    Parameters
+    ----------
+    zf : zipfile.ZipFile
+        Open KinCoRe CIF archive.
+
+    Returns
+    -------
+    list[str]
+        Archive member names of the CIFs that become KinCoReCIF records.
+    """
+    return [
+        n
+        for n in zf.namelist()
+        if n.endswith(".cif")
+        and n.count("/") == 1
+        and not os.path.basename(n).startswith("._")
+    ]
+
 
 @pytest.mark.network
 class TestKinCoReHarmonization:
@@ -15,17 +43,8 @@ class TestKinCoReHarmonization:
             for v in kincore_harmonized_dict.values()
         ]
         list_dict_cif_hgnc = list(chain(*list_dict_cif_hgnc))
-        # count the descriptive top-level .cif members as the parser selects them: one
-        # nesting level below the archive root, excluding macOS ._ sidecars and the
-        # redundant flat copies under the nested <author>/ subdir
         with zipfile.ZipFile(_resolve_kincore_cif_zip()) as zf:
-            n_cif_files = sum(
-                1
-                for n in zf.namelist()
-                if n.endswith(".cif")
-                and n.count("/") == 1
-                and not os.path.basename(n).startswith("._")
-            )
+            n_cif_files = len(_list_archive_cifs(zf))
         assert len(list_dict_cif_hgnc) == n_cif_files
 
     def test_egfr_has_single_entry(self, kincore_harmonized_dict):
@@ -48,6 +67,43 @@ class TestKinCoReHarmonization:
             assert len(recs) == 2
             jh2 = [r for r in recs if r.cif is None]
             assert len(jh2) == 1 and jh2[0].fasta is not None
+
+
+@pytest.mark.network
+class TestKinCoReCIFIntegrity:
+    """Every archive CIF parses and is complete (gemmi; the fixture stubs MMCIF2Dict)."""
+
+    def test_every_cif_parses_and_is_complete(self):
+        """Each CIF parses, and every residue in its sequence has atoms (not truncated)."""
+        import gemmi
+
+        list_problems = []
+        with zipfile.ZipFile(_resolve_kincore_cif_zip()) as zf:
+            list_names = _list_archive_cifs(zf)
+            for name in list_names:
+                str_cif = zf.read(name).decode("utf-8")
+                # strict mode surfaces new syntax problems beyond the known quirk
+                try:
+                    gemmi.cif.read_string(str_cif)
+                except (RuntimeError, ValueError) as e:
+                    str_err = str(e).split(": ", 1)[-1]
+                    if str_err not in SET_KNOWN_STRICT_CIF_ERRORS:
+                        list_problems.append(f"{name}: {str_err}")
+                        continue
+                # lenient mode tolerates the known quirk; check completeness
+                try:
+                    block = gemmi.cif.read_string(str_cif, check_level=0).sole_block()
+                except (RuntimeError, ValueError) as e:
+                    list_problems.append(f"{name}: {e}")
+                    continue
+                n_seq = len(block.find_values("_entity_poly_seq.num"))
+                n_res = len(set(block.find_values("_atom_site.label_seq_id")))
+                if n_seq == 0 or n_res != n_seq:
+                    list_problems.append(
+                        f"{name}: {n_res} of {n_seq} residues have atoms"
+                    )
+        assert list_names
+        assert list_problems == []
 
 
 @pytest.mark.network

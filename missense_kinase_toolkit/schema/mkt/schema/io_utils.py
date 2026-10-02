@@ -12,6 +12,7 @@ import os
 import shutil
 import tarfile
 from datetime import datetime, timezone
+from functools import partial
 from importlib import resources
 from io import BytesIO
 from typing import Any, Optional
@@ -26,6 +27,14 @@ from pydantic import BaseModel
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
+
+# libyaml C bindings when PyYAML was built with them (same output, ~5x faster)
+try:
+    from yaml import CSafeDumper as YAMLDumper
+    from yaml import CSafeLoader as YAMLLoader
+except ImportError:
+    from yaml import SafeDumper as YAMLDumper
+    from yaml import SafeLoader as YAMLLoader
 
 
 _deserialization_cache = {}
@@ -285,10 +294,10 @@ DICT_FUNCS = {
         "kwargs_deserialize": {},
     },
     "yaml": {
-        "serialize": yaml.safe_dump,
+        "serialize": partial(yaml.dump, Dumper=YAMLDumper),
         "kwargs_serialize": {"sort_keys": False},
-        "deserialize_file": yaml.safe_load,
-        "deserialize_str": yaml.safe_load,
+        "deserialize_file": partial(yaml.load, Loader=YAMLLoader),
+        "deserialize_str": partial(yaml.load, Loader=YAMLLoader),
         "kwargs_deserialize": {},
     },
     "toml": {
@@ -561,7 +570,7 @@ def serialize_kinase_dict(
         Serialization types supported: json, yaml, toml.
     serialization_kwargs : dict[str, Any], optional
         Additional keyword arguments for serialization function, by default None;
-            (e.g., {"indent": 2} for json.dumps, {"sort_keys": False} for yaml.safe_dump).
+            (e.g., {"indent": 2} for json.dumps, {"sort_keys": False} for yaml.dump).
     str_path: str | None = None
         Path to save the serialized file, by default None will use package data or Github repo data.
 

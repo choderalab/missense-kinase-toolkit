@@ -36,6 +36,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Cache KinCoRe CIF archive
+        # ~90 MB zip the KinCoRe tests download into data/ when absent; the filename
+        # carries the archive version, so a new release gets a new key
+        uses: actions/cache@v4
+        with:
+          path: data/AF2_Active_Models_v2.zip
+          key: kincore-AF2_Active_Models_v2-${{ runner.os }}
+
       - name: Additional info about the build
         shell: bash
         run: |
@@ -43,37 +51,58 @@ jobs:
           df -h
           ulimit -a
 
-      # More info on options: https://github.com/marketplace/actions/provision-with-micromamba
-      # https://github.com/mamba-org/provision-with-micromamba#migration-to-setup-micromamba%60
-      - uses: mamba-org/setup-micromamba@v1
+      # retired micromamba setup, kept for reference (the env file is still used for local dev);
+      # to restore, uncomment and switch the steps below back to `shell: bash -l {0}` with
+      # `pip install --no-deps` of schema + databases
+      # - uses: mamba-org/setup-micromamba@v1
+      #   with:
+      #     environment-file: devtools/conda-envs/test_env.yaml
+      #     environment-name: test
+      #     channels: conda-forge,defaults
+      #     create-args: >-
+      #       python=${{ matrix.python-version }}
+      #     cache-environment: true
+
+      - name: Install uv + Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v10.2.0  # no floating major tags since v8
         with:
-          environment-file: devtools/conda-envs/test_env.yaml
-          environment-name: test
-          # conda-forge is the default channel now and does not need to be specified
-          channels: conda-forge,defaults
-          extra-specs: |
-            python=${{ matrix.python-version }}
+          python-version: ${{ matrix.python-version }}
+          activate-environment: true
+          # re-key the uv cache only when declared deps change
+          cache-dependency-glob: "missense_kinase_toolkit/*/pyproject.toml"
 
       - name: Install package
-        # conda setup requires this special shell
-        shell: bash -l {0}
+        # deps come from the sub-packages' pyproject.toml; the [pymol] extra is a no-op on
+        # Windows (the PyPI wheel crashes there), so the pymol SASA test importorskips and
+        # the pymol-windows job below covers that platform via conda
+        shell: bash
         run: |
-          python -m pip install ./missense_kinase_toolkit/schema --no-deps
-          python -m pip install ./missense_kinase_toolkit/databases --no-deps
-          micromamba list
+          # retry transient network failures (DNS, PyPI hiccups) with backoff; a real
+          # resolution error fails every attempt and still trips fail-fast
+          retry() {
+            for attempt in 1 2 3; do
+              "$@" && return 0
+              [ "$attempt" = 3 ] && return 1
+              echo "attempt $attempt failed; retrying in $((attempt * 20))s"
+              sleep $((attempt * 20))
+            done
+          }
+          retry uv pip install \
+            ./missense_kinase_toolkit/schema \
+            "./missense_kinase_toolkit/databases[test,pymol]"
+          uv pip list
 
       - name: Run tests
-        # conda setup requires this special shell
-        shell: bash -l {0}
+        shell: bash
         run: |
           # run each package test suite; append to coverage file
           # exit immediately if a command exits with a non-zero status
           set -e
-          # pytest -n auto --durations=10 -v --cov-report=xml --cov-report=term --color=yes \
           pytest \
             -v \
             -n 2 \
             --dist loadfile \
+            --durations=20 \
             --cov-report=xml \
             --color=yes  \
             --cov=mkt.databases \
@@ -83,9 +112,57 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           fail_ci_if_error: false # optional (default = false)
-          file: ./coverage.xml
+          files: ./coverage.xml
           flags: databases # optional
           name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
           # https://github.com/codecov/codecov-action
           token: ${{ secrets.CODECOV_TOKEN }} # required
           verbose: true # optional (default = false)
+
+  pymol-windows:
+    # the matrix skips pymol on Windows (the PyPI wheel cannot start a session there),
+    # so exercise the documented Windows route instead: conda-forge pymol-open-source
+    name: PyMOL SASA on windows-latest (conda pymol), Python 3.11
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-name: pymol
+          create-args: >-
+            python=3.11
+            pymol-open-source
+          init-shell: bash
+          cache-environment: true
+
+      - name: Install package
+        # uv targets the active conda env via CONDA_PREFIX and keeps conda's numpy when it
+        # satisfies the constraints, so pymol stays on the numpy it was built against
+        shell: bash -l {0}
+        run: |
+          set -e
+          # retry transient network failures (DNS, PyPI hiccups) with backoff; a real
+          # resolution error fails every attempt and still trips fail-fast
+          retry() {
+            for attempt in 1 2 3; do
+              "$@" && return 0
+              [ "$attempt" = 3 ] && return 1
+              echo "attempt $attempt failed; retrying in $((attempt * 20))s"
+              sleep $((attempt * 20))
+            done
+          }
+          retry python -m pip install uv
+          retry uv pip install \
+            ./missense_kinase_toolkit/schema \
+            "./missense_kinase_toolkit/databases[test]"
+          micromamba list
+
+      - name: Run SASA tests
+        shell: bash -l {0}
+        run: |
+          set -e
+          # fail loudly here, since test_pymol_matches_biopython importorskips pymol2
+          python -c "import pymol2; pymol2.PyMOL().start()"
+          pytest -v --color=yes missense_kinase_toolkit/databases/mkt/databases/tests/test_sasa.py

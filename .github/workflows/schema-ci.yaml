@@ -38,29 +38,56 @@ jobs:
           df -h
           ulimit -a
 
-      - uses: mamba-org/setup-micromamba@v1
+      # retired micromamba setup, kept for reference (the env file is still used for local dev);
+      # to restore, uncomment and switch the steps below back to `shell: bash -l {0}` with
+      # `pip install -e --no-deps` of schema
+      # - uses: mamba-org/setup-micromamba@v1
+      #   with:
+      #     micromamba-version: '1.5.10-0'
+      #     environment-file: devtools/conda-envs/test_env.yaml
+      #     environment-name: schema_test
+      #     create-args: >-
+      #       python=${{ matrix.python-version }}
+      #     cache-environment: true
+
+      - name: Install uv + Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v10.2.0  # no floating major tags since v8
         with:
-          micromamba-version: '1.5.10-0'
-          environment-file: devtools/conda-envs/test_env.yaml
-          environment-name: schema_test
-          create-args: >-
-            python=${{ matrix.python-version }}
+          python-version: ${{ matrix.python-version }}
+          activate-environment: true
+          # re-key the uv cache only when declared deps change
+          cache-dependency-glob: "missense_kinase_toolkit/schema/pyproject.toml"
 
       - name: Install package
-        shell: bash -l {0}
+        # only schema's own deps -- the old env file pulled in the full databases stack
+        shell: bash
         run: |
-          python -m pip install -e ./missense_kinase_toolkit/schema --no-deps
-          micromamba list
+          # retry transient network failures (DNS, PyPI hiccups) with backoff; a real
+          # resolution error fails every attempt and still trips fail-fast
+          retry() {
+            for attempt in 1 2 3; do
+              "$@" && return 0
+              [ "$attempt" = 3 ] && return 1
+              echo "attempt $attempt failed; retrying in $((attempt * 20))s"
+              sleep $((attempt * 20))
+            done
+          }
+          retry uv pip install -e "./missense_kinase_toolkit/schema[test]"
+          uv pip list
+          # io_utils falls back to pure-Python YAML silently; report which backend is live
+          python -c "import yaml; print('PyYAML', yaml.__version__, 'libyaml:', yaml.__with_libyaml__)"
 
       - name: Run tests
-        shell: bash -l {0}
+        shell: bash
         run: |
           set -e
+          # the full KinaseInfo dict peaks at ~7 GB per xdist worker; macOS runners have
+          # 7 GB RAM (vs 16 GB elsewhere), so two workers swap -- run serially there
           pytest \
             -v \
-            -n 2 \
+            -n ${{ runner.os == 'macOS' && '0' || '2' }} \
             --dist loadfile \
-            --durations=10 \
+            --durations=20 \
             --cov-report=xml \
             --color=yes  \
             --cov=mkt.schema \
@@ -70,7 +97,7 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           fail_ci_if_error: false # optional (default = false)
-          file: ./coverage.xml
+          files: ./coverage.xml
           flags: schema # optional
           name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
           token: ${{ secrets.CODECOV_TOKEN }} # required
