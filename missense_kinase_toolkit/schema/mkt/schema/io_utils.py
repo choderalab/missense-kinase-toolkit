@@ -22,7 +22,7 @@ import toml
 import yaml
 from mkt.schema import kinase_schema
 from mkt.schema.config import get_output_dir
-from mkt.schema.utils import TQDM_BAR_FORMAT, return_manifest_tallies
+from mkt.schema.utils import TQDM_BAR_FORMAT, return_manifest_tallies, return_sha256
 from pydantic import BaseModel
 from tqdm import tqdm
 
@@ -46,8 +46,8 @@ STR_MANIFEST_FILENAME = "manifest.json"
 class Manifest(BaseModel):
     """Build record of a :class:`KinaseInfo` archive, checked against the loaded dict."""
 
-    manifest_version: int = 1
-    """Manifest schema version, by default 1."""
+    manifest_version: int = 2
+    """Manifest schema version, by default 2 (v1 predates the SHA-256 fields)."""
     generated_at: datetime
     """UTC build timestamp."""
     git: dict[str, str | bool | None] = {}
@@ -60,6 +60,10 @@ class Manifest(BaseModel):
     """Dotted sub-model path -> number of non-None entries."""
     source_versions: dict[str, dict[str, int]] = {}
     """Dotted sub-model path -> ``Provenance.version`` tally, by default empty."""
+    source_sha256: dict[str, dict[str, int]] = {}
+    """Source file name -> ``Provenance.sha256`` tally, by default empty."""
+    entry_sha256: dict[str, str] = {}
+    """Archive entry filename -> SHA-256 of its serialized bytes, by default empty."""
 
     @classmethod
     def from_kinase_dict(
@@ -77,8 +81,8 @@ class Manifest(BaseModel):
         list_paths : list[str] | None, optional
             Paths to tally, by default None (see :func:`return_manifest_tallies`).
         **kwargs : Any
-            Additional fields (``git``, ``packages``, ``generated_at``); ``generated_at``
-            defaults to now (UTC).
+            Additional fields (``git``, ``packages``, ``generated_at``,
+            ``entry_sha256``); ``generated_at`` defaults to now (UTC).
 
         Returns
         -------
@@ -86,11 +90,14 @@ class Manifest(BaseModel):
             Manifest with counts and source versions computed from ``dict_kinase``.
         """
         kwargs.setdefault("generated_at", datetime.now(timezone.utc))
-        counts, source_versions = return_manifest_tallies(dict_kinase, list_paths)
+        counts, source_versions, source_sha256 = return_manifest_tallies(
+            dict_kinase, list_paths
+        )
         return cls(
             n_entries=len(dict_kinase),
             counts=counts,
             source_versions=source_versions,
+            source_sha256=source_sha256,
             **kwargs,
         )
 
@@ -116,7 +123,7 @@ class Manifest(BaseModel):
             list_diff.append(
                 f"n_entries: expected {self.n_entries}, got {actual.n_entries}"
             )
-        for field in ("counts", "source_versions"):
+        for field in ("counts", "source_versions", "source_sha256"):
             dict_expected, dict_actual = getattr(self, field), getattr(actual, field)
             list_diff.extend(
                 f"{field}[{key}]: expected {val}, got {dict_actual.get(key)}"
@@ -166,6 +173,16 @@ class Manifest(BaseModel):
             f"  packages   {list_packages[0] if list_packages else 'n/a'}",
             *(f"             {pkg}" for pkg in list_packages[1:]),
             f"  entries    {self.n_entries:,}",
+            *(
+                [f"  sha256     {len(self.entry_sha256):,} entries"]
+                + [
+                    f"             {name} {sha[:12]} ({n:,})"
+                    for name, dict_sha in self.source_sha256.items()
+                    for sha, n in dict_sha.items()
+                ]
+                if self.entry_sha256 or self.source_sha256
+                else []
+            ),
             "",
             f"  {'field':<{int_label}}  {'n':>5}  {'%':>6}",
             "  " + "─" * (int_label + 17 + int_bar_width),
@@ -215,6 +232,77 @@ def check_kinase_dict_manifest(
     if list_diff:
         raise ValueError(
             f"{str_path} does not match its {STR_MANIFEST_FILENAME} "
+            f"(generated_at {manifest.generated_at.isoformat()}):\n"
+            + "\n".join(list_diff)
+        )
+
+
+def return_dir_entry_sha256(str_path: str) -> dict[str, str]:
+    """Return the SHA-256 of each serialized entry file in a directory.
+
+    Parameters
+    ----------
+    str_path : str
+        Directory of per-kinase files (the build manifest is skipped).
+
+    Returns
+    -------
+    dict[str, str]
+        Entry filename -> hex digest, for :attr:`Manifest.entry_sha256`.
+    """
+    dict_sha256 = {}
+    for str_file in sorted(os.listdir(str_path)):
+        path_file = os.path.join(str_path, str_file)
+        if str_file == STR_MANIFEST_FILENAME or not os.path.isfile(path_file):
+            continue
+        with open(path_file, "rb") as openfile:
+            dict_sha256[str_file] = return_sha256(openfile.read())
+    return dict_sha256
+
+
+def check_entry_sha256(
+    dict_sha256: dict[str, str],
+    manifest: Manifest | None,
+    str_path: str,
+) -> None:
+    """Raise if loaded entries' SHA-256 digests disagree with the manifest.
+
+    Skipped for manifests without entry hashes (v1) or whose entries are in another
+    serialization format than the files loaded.
+
+    Parameters
+    ----------
+    dict_sha256 : dict[str, str]
+        Loaded entry filename -> hex digest of its bytes.
+    manifest : Manifest | None
+        Manifest read from the archive, or None if missing.
+    str_path : str
+        Archive path, for messages.
+
+    Returns
+    -------
+    None
+    """
+    if manifest is None or not manifest.entry_sha256 or not dict_sha256:
+        return
+
+    list_unlisted = [k for k in dict_sha256 if k not in manifest.entry_sha256]
+    if len(list_unlisted) == len(dict_sha256):
+        logger.warning(
+            f"{STR_MANIFEST_FILENAME} in {str_path} has no hashes for these files "
+            "(different serialization format?); skipping SHA-256 check."
+        )
+        return
+
+    list_diff = [f"{k}: not listed in the manifest" for k in sorted(list_unlisted)]
+    list_diff.extend(
+        f"{k}: SHA-256 {sha[:12]}..., expected {manifest.entry_sha256[k][:12]}..."
+        for k, sha in sorted(dict_sha256.items())
+        if k in manifest.entry_sha256 and sha != manifest.entry_sha256[k]
+    )
+    if list_diff:
+        raise ValueError(
+            f"{str_path} entries do not match their {STR_MANIFEST_FILENAME} hashes "
             f"(generated_at {manifest.generated_at.isoformat()}):\n"
             + "\n".join(list_diff)
         )
@@ -412,8 +500,8 @@ def _untar_in_memory(
     str_path: str,
     bool_extract: bool = True,
     list_ids: list[str] | None = None,
-) -> tuple[list[str], dict[str, str], str | None]:
-    """Untar files in memory, returning the build manifest separately.
+) -> tuple[list[str], dict[str, str], str | None, dict[str, str]]:
+    """Untar files in memory, returning the build manifest and entry hashes separately.
 
     Parameters
     ----------
@@ -426,14 +514,14 @@ def _untar_in_memory(
 
     Returns
     -------
-    tuple[list[str], dict[str, str], str | None]
-        Entry IDs, file names to contents, and the manifest contents (None if absent
-        or not extracted).
+    tuple[list[str], dict[str, str], str | None, dict[str, str]]
+        Entry IDs, file names to contents, the manifest contents (None if absent or
+        not extracted), and entry filename -> SHA-256 of its raw bytes.
     """
     with open(str_path, "rb") as f:
         tar_data = f.read()
 
-    list_entries, dict_bytes, str_manifest = [], {}, None
+    list_entries, dict_bytes, str_manifest, dict_sha256 = [], {}, None, {}
     with BytesIO(tar_data) as tar_buffer, tarfile.open(
         fileobj=tar_buffer, mode="r"
     ) as tar:
@@ -453,12 +541,13 @@ def _untar_in_memory(
                 if bool_extract:
                     with tar.extractfile(member) as f:
                         dict_bytes[member.name] = f.read()
+                    dict_sha256[filename] = return_sha256(dict_bytes[member.name])
 
     if bool_extract:
         # decode bytes to string
         dict_bytes = {k: v.decode("utf-8") for k, v in dict_bytes.items()}
 
-    return list_entries, dict_bytes, str_manifest
+    return list_entries, dict_bytes, str_manifest, dict_sha256
 
 
 def return_str_path_from_pkg_data(
@@ -688,9 +777,13 @@ def deserialize_kinase_dict(
 
     dict_import, manifest = {}, None
     if str_path.endswith(".tar.gz"):
-        _, dict_str, str_manifest = _untar_in_memory(str_path, list_ids=list_ids)
+        _, dict_str, str_manifest, dict_sha256 = _untar_in_memory(
+            str_path, list_ids=list_ids
+        )
         if str_manifest is not None:
             manifest = Manifest.model_validate_json(str_manifest)
+        # verify bytes before parsing, so a corrupt entry fails as such
+        check_entry_sha256(dict_sha256, manifest, str_path)
         for str_member, val in tqdm(
             dict_str.items(),
             desc="Deserializing KinaseInfo objects in memory...",
@@ -712,21 +805,28 @@ def deserialize_kinase_dict(
             if os.path.basename(file) != STR_MANIFEST_FILENAME
         ]
         manifest = load_manifest(str_path)
-        for file in tqdm(
-            list_file,
+        dict_file_bytes = {}
+        for file in list_file:
+            with open(file, "rb") as openfile:
+                dict_file_bytes[file] = openfile.read()
+        check_entry_sha256(
+            {os.path.basename(k): return_sha256(v) for k, v in dict_file_bytes.items()},
+            manifest,
+            str_path,
+        )
+        for file, bytes_file in tqdm(
+            dict_file_bytes.items(),
             desc="Deserializing KinaseInfo objects from files...",
             bar_format=TQDM_BAR_FORMAT,
         ):
-            with open(file) as openfile:
+            val_deserialized = DICT_FUNCS[suffix]["deserialize_str"](
+                bytes_file.decode("utf-8"),
+                **deserialization_kwargs,
+            )
 
-                val_deserialized = DICT_FUNCS[suffix]["deserialize_file"](
-                    openfile,
-                    **deserialization_kwargs,
-                )
-
-                kinase_obj = kinase_schema.KinaseInfo.model_validate(val_deserialized)
-                _raise_if_stem_mismatch(file, kinase_obj)
-                dict_import[kinase_obj.hgnc_name] = kinase_obj
+            kinase_obj = kinase_schema.KinaseInfo.model_validate(val_deserialized)
+            _raise_if_stem_mismatch(file, kinase_obj)
+            dict_import[kinase_obj.hgnc_name] = kinase_obj
 
         if bool_remove:
             clean_files_and_delete_directory(list_file)

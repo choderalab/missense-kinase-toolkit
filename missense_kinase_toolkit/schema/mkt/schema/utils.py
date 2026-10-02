@@ -6,6 +6,7 @@ Provides :func:`rgetattr`/:func:`rsetattr` for traversing nested Pydantic models
 helpers :func:`return_klifs2msa_dict`/:func:`return_catalytic_klifs2msa_dict`.
 """
 
+import hashlib
 import logging
 import os
 from datetime import date
@@ -166,11 +167,29 @@ def return_submodel_paths(model_cls=None, str_prefix: str = "") -> list[str]:
     return list_paths
 
 
+def return_sha256(bytes_data: bytes) -> str:
+    """Return the hex SHA-256 digest of raw bytes.
+
+    Shared by the manifest writer and the load-time check so the two cannot drift.
+
+    Parameters
+    ----------
+    bytes_data : bytes
+        Data to hash.
+
+    Returns
+    -------
+    str
+        Hex digest.
+    """
+    return hashlib.sha256(bytes_data).hexdigest()
+
+
 def return_manifest_tallies(
     dict_kinase: dict[str, "KinaseInfo"],
     list_paths: list[str] | None = None,
-) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
-    """Count non-None values and tally ``source.version`` per dotted path in one pass.
+) -> tuple[dict[str, int], dict[str, dict[str, int]], dict[str, dict[str, int]]]:
+    """Count non-None values and tally ``source.version``/``source.sha256`` in one pass.
 
     Shared by the manifest writer and the load-time check so the two cannot drift.
 
@@ -184,9 +203,9 @@ def return_manifest_tallies(
 
     Returns
     -------
-    tuple[dict[str, int], dict[str, dict[str, int]]]
-        Path -> non-None count, and path -> version -> count (paths without a
-        versioned source omitted).
+    tuple[dict[str, int], dict[str, dict[str, int]], dict[str, dict[str, int]]]
+        Path -> non-None count; path -> version -> count (paths without a versioned
+        source omitted); and source name -> SHA-256 -> count (unhashed sources omitted).
     """
     from collections import Counter
 
@@ -195,6 +214,7 @@ def return_manifest_tallies(
 
     dict_counts = dict.fromkeys(list_paths, 0)
     dict_versions = {path: Counter() for path in list_paths}
+    dict_sha256 = {}
     for obj in dict_kinase.values():
         for path in list_paths:
             if rgetattr(obj, path) is None:
@@ -203,12 +223,23 @@ def return_manifest_tallies(
             version = rgetattr(obj, f"{path}.source.version")
             if version is not None:
                 dict_versions[path][version] += 1
+            sha256 = rgetattr(obj, f"{path}.source.sha256")
+            if sha256 is not None:
+                str_name = rgetattr(obj, f"{path}.source.name")
+                dict_sha256.setdefault(str_name, Counter())[sha256] += 1
 
-    return dict_counts, {
-        path: dict(sorted(counter.items()))
-        for path, counter in dict_versions.items()
-        if counter
-    }
+    return (
+        dict_counts,
+        {
+            path: dict(sorted(counter.items()))
+            for path, counter in dict_versions.items()
+            if counter
+        },
+        {
+            name: dict(sorted(counter.items()))
+            for name, counter in sorted(dict_sha256.items())
+        },
+    )
 
 
 # adapted from: https://nathanielknight.ca/articles/consistent_random_uuids_in_python.html
