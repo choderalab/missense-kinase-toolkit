@@ -21,7 +21,7 @@ set -uo pipefail
 # --- constants (edit here) ---
 ALL_TASKS="kinaseinfo conservation dataset pymol"
 PATH_TO_VENV="missense_kinase_toolkit/VE/bin/activate"
-CREATE_VENV_SCRIPT="missense_kinase_toolkit/create_venv.sh"
+CREATE_VENV_SCRIPT="bin/create_venv.sh"
 
 CONFIG=""
 DATA_TASKS=""

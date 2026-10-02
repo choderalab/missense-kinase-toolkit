@@ -91,10 +91,11 @@ def test_serde_roundtrip(serde_sample, tmp_path, suffix):
     if os.name == "nt" and suffix == "toml":
         pytest.skip("TOML serialization is not supported on Windows.")
 
-    # yaml serialization is ~8s per kinase, so round-trip a single entry only
+    # yaml cost scales with node count and KinCore CIFs dominate it, so round-trip one
+    # CIF-free entry (json/toml cover CIFs via the full sample)
     dict_sample = serde_sample
     if suffix == "yaml":
-        dict_sample = {"CDK2": serde_sample["CDK2"]}
+        dict_sample = {"BUB1B": serde_sample["BUB1B"]}
 
     str_path = str(tmp_path / suffix)
 
