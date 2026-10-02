@@ -30,8 +30,9 @@ def main(
         Optional[list[str]],
         typer.Option(
             "--only",
-            help="Rebuild only these component(s) on the existing archive; repeatable. "
-            "One of: hgnc, uniprot, kinhub, klifs, pfam, kincore, kincore_msa, "
+            help="Rebuild only these component(s) on the existing archive, plus every "
+            "step downstream of them (other fields are kept); repeatable. One of: hgnc, "
+            "uniprot, kinhub, klifs, pfam, kincore, kincore_msa, "
             "kincore_structure_props, alphafold, exon. Mutually exclusive with --skip.",
         ),
     ] = None,
@@ -48,8 +49,8 @@ def main(
         typer.Option(
             "--kinase",
             help="HGNC name(s) to update one-off; repeatable. Only these entries are "
-            "rebuilt and spliced into the existing archive. Omit to regenerate the full "
-            "kinome.",
+            "rebuilt and spliced into the existing archive (with --only, only the named "
+            "components run on them). Omit to regenerate the full kinome.",
         ),
     ] = None,
     path_objects: Annotated[

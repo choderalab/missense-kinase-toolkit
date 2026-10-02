@@ -209,17 +209,27 @@ _ENRICH_STEPS: dict[str, Callable[["BuildContext"], None]] = {
 }
 """dict[str, Callable]: Ordered enrichment-step registry (name -> step function)."""
 
-_STEP_DEPS: dict[str, set[str]] = {
-    "kincore_msa": set(),
-    "kincore_structure_props": set(),
-    "alphafold": set(),
-    "exon": set(),
+_STEP_WRITES: dict[str, list[str]] = {
+    "kincore_msa": ["kincore.msa"],
+    "kincore_structure_props": ["kincore.cif.sasa", "kincore.cif.superposition"],
+    "alphafold": ["alphafold"],
+    "exon": ["exon"],
 }
-"""dict[str, set[str]]: Enrichment-step name -> prerequisite step names. All read base-build
-fields (KLIFS mapping, adjudicated bounds) that are always populated before steps run; each
-structure step owns its structure's derived properties, so there is no inter-step dependency.
-The MSA superposition tier benefits from ``kincore_msa`` running first, but degrades to the
-sequence tier if absent."""
+"""dict[str, list[str]]: Enrichment-step name -> dotted KinaseInfo fields it owns. A partial
+rebuild carries these over from the existing entry when the step does not run, and clears
+them before the step re-runs."""
+
+_STEP_READS: dict[str, set[str]] = {
+    # KLIFS2UniProtIdx (uniprot + klifs + kincore) picks the domain; hgnc is the fallback
+    "kincore_msa": {"hgnc", "uniprot", "klifs", "kincore"},
+    # SASA keys on KLIFS2UniProtIdx; superposition falls back to the MSA tier
+    "kincore_structure_props": {"uniprot", "klifs", "kincore", "kincore_msa"},
+    # slices to adjudicated KD bounds: kincore cif > fasta > msa > pfam > KLIFS span
+    "alphafold": {"uniprot", "klifs", "kincore", "pfam", "kincore_msa"},
+    "exon": {"hgnc", "uniprot"},
+}
+"""dict[str, set[str]]: Enrichment-step name -> base-build sources and steps whose output it
+reads. Requesting any of these also re-runs the step (see :func:`resolve_step_names`)."""
 
 
 def resolve_step_names(
@@ -228,13 +238,17 @@ def resolve_step_names(
 ) -> list[str]:
     """Resolve the enrichment steps to run into registry order.
 
-    Names are validated by :meth:`mkt.databases.generator.pipeline.Pipeline.run`; unknown
-    names are ignored here.
+    ``only`` may name base-build sources and/or steps; the result is the requested steps
+    plus every step downstream of a requested source or step (transitively, via
+    :data:`_STEP_READS`), so nothing that depends on refreshed data is left stale. Names
+    are validated by :meth:`mkt.databases.generator.pipeline.Pipeline.run`; unknown names
+    are ignored here.
 
     Parameters
     ----------
     only : list[str] | None, optional
-        Run only these steps; takes precedence over ``skip``.
+        Rebuild only these components and their downstream steps; takes precedence over
+        ``skip``.
     skip : list[str] | None, optional
         Skip these steps; all other steps run.
 
@@ -244,8 +258,18 @@ def resolve_step_names(
         Enrichment-step names to run, in registry order.
     """
     if only:
-        requested = set(only)
-        return [name for name in _ENRICH_STEPS if name in requested]
+        set_closure = set(only)
+        bool_grew = True
+        while bool_grew:
+            set_downstream = {
+                name
+                for name in _ENRICH_STEPS
+                if name not in set_closure
+                and _STEP_READS.get(name, set()) & set_closure
+            }
+            set_closure |= set_downstream
+            bool_grew = bool(set_downstream)
+        return [name for name in _ENRICH_STEPS if name in set_closure]
     skipped = set(skip or [])
     return [name for name in _ENRICH_STEPS if name not in skipped]
 
@@ -263,14 +287,7 @@ def run_steps(names: list[str], ctx: "BuildContext") -> None:
     ctx : BuildContext
         The build context threaded through each step.
     """
-    set_names = set(names)
     for name in names:
-        missing = _STEP_DEPS.get(name, set()) - set_names
-        if missing:
-            logger.warning(
-                f"enrichment step '{name}' requested without prerequisite step(s) "
-                f"{sorted(missing)}; running anyway (they may already be materialized)."
-            )
         logger.info(f"running enrichment step '{name}'...")
         try:
             _ENRICH_STEPS[name](ctx)
