@@ -11,7 +11,7 @@ description: >-
 ## Baseline — fetch first
 
 Apply my canonical `ci` conventions (path-filtered per-package workflows,
-micromamba env, OS/Python matrix, Codecov flags, pre-commit hook set) before the
+uv test envs, OS/Python matrix, Codecov flags, pre-commit hook set) before the
 repo-specific notes below. WebFetch and follow:
 
 https://raw.githubusercontent.com/jessicaw9910/skills/main/.claude/skills/ci/SKILL.md
@@ -45,10 +45,19 @@ Both: matrix `os: [macOS, ubuntu, windows] × python: ["3.10", "3.11"]`,
 `flags`. `app-ci.yaml` is a Linux/Py3.12 Streamlit smoke test mirroring
 Streamlit Cloud (also uv). There is **no** workflow for `ml/` or `experiments/`.
 
-**Deviation from the baseline:** CI uses uv, not micromamba (~2.5 min/job of
-env solving on macOS/windows). The old micromamba step is left commented out
-in each workflow; `devtools/conda-envs/test_env.yaml` is kept for local dev only
-and is **not** what CI installs.
+The old micromamba step is left commented out in each workflow for reference;
+`devtools/conda-envs/test_env.yaml` is kept for local conda users only and is
+**not** what CI installs. Every `uv pip install` is wrapped in a `retry` shell
+function (3 attempts, 20s/40s backoff) so a transient network failure doesn't
+trip the matrix's `fail-fast`.
+
+Test-speed notes:
+- schema-ci runs `-n 0` on macOS: the full `KinaseInfo` dict is ~7 GB per xdist
+  worker and macOS runners have 7 GB RAM.
+- `test_chembl.py` probes ChEMBL's status endpoint once and skips the module if
+  it's down; `kincore_harmonized_dict` stubs `MMCIF2Dict` (CIF parsing is
+  covered by the gemmi-based `TestKinCoReCIFIntegrity`); databases-ci caches
+  `data/AF2_Active_Models_v2.zip` via `actions/cache`.
 
 ### Adding / changing
 
@@ -60,7 +69,9 @@ and is **not** what CI installs.
   Check before adding with
   `uv pip compile --python-platform x86_64-pc-windows-msvc --only-binary :all: ...`.
 - The workflows' `paths` filters don't include `.github/workflows/**`, so a
-  workflow-only change doesn't trigger CI — touch the sub-package to exercise it.
+  workflow-only change doesn't trigger CI on its own — touch the sub-package to
+  exercise it. On a PR, though, the filter is applied to the whole PR diff, so
+  every push reruns every workflow the PR touches.
 
 ### Pre-commit
 
