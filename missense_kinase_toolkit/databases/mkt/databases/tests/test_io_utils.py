@@ -72,6 +72,37 @@ class TestCreateTarWithoutMetadata:
             )
 
 
+class TestDataSourceSha256:
+    def test_provenance_stamps_source_sha256(self, tmp_path):
+        """provenance() records the SHA-256 of the source file, even when dated by another."""
+        import hashlib
+
+        path_src = tmp_path / "source.txt"
+        path_src.write_bytes(b"kinase data")
+        path_derived = tmp_path / "derived.txt"
+        path_derived.write_bytes(b"processed")
+        source = io_utils.DataSource(name="source.txt", path=str(path_src))
+
+        prov = source.provenance(str(path_derived))
+        assert prov.sha256 == hashlib.sha256(b"kinase data").hexdigest()
+
+    def test_changed_file_rehashes(self, tmp_path):
+        """A changed file (new mtime/size) gets a new hash despite the cache."""
+        path_src = tmp_path / "source.txt"
+        path_src.write_bytes(b"v1")
+        source = io_utils.DataSource(name="source.txt", path=str(path_src))
+        sha_v1 = source.sha256()
+
+        path_src.write_bytes(b"version 2")
+        assert source.sha256() != sha_v1
+
+    def test_missing_file_has_no_sha256(self, tmp_path):
+        """A source file that isn't present yields no hash rather than raising."""
+        source = io_utils.DataSource(name="absent", path=str(tmp_path / "absent"))
+        assert source.sha256() is None
+        assert source.provenance(str(tmp_path)).sha256 is None
+
+
 class TestConvertStr2List:
     def test_comma_separated(self):
         assert io_utils.convert_str2list("a,b,c") == ["a", "b", "c"]

@@ -34,6 +34,7 @@ from mkt.schema.io_utils import (
     deserialize_kinase_dict,
     get_repo_root,
     load_manifest,
+    return_dir_entry_sha256,
     serialize_kinase_dict,
 )
 from mkt.schema.utils import split_domain_suffix
@@ -401,10 +402,12 @@ class Pipeline:
         None
         """
         serialize_kinase_dict(dict_kinaseinfo, str_path=self.path_objects)
+        # hash the files exactly as they will be tarred, so loads verify the bytes
         manifest = Manifest.from_kinase_dict(
             dict_kinaseinfo,
             git=_return_git_info(),
             packages=_return_package_versions(),
+            entry_sha256=return_dir_entry_sha256(self.path_objects),
         )
         path_manifest = os.path.join(self.path_objects, STR_MANIFEST_FILENAME)
         with open(path_manifest, "w") as outfile:

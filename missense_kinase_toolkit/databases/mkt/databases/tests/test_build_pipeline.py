@@ -130,6 +130,8 @@ def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
     assert manifest is not None
     assert manifest.return_mismatches(after) == []
     assert set(manifest.packages) == set(pipeline.LIST_MANIFEST_PACKAGES)
+    # entry hashes are recorded (the reload above already verified them)
+    assert sorted(manifest.entry_sha256) == ["ABL1.json", "EGFR.json"]
 
 
 def test_dated_reports_dir_uses_manifest(tmp_path):
