@@ -62,6 +62,7 @@ class TestGenomeNexusExons:
         assert idx2exon[600] == 15
 
 
+@pytest.mark.network
 class TestAnnotateGenomicLocations:
     def test_snv_and_indel_keyed_by_location(self):
         # RET C634R (SNV) and E632_L633del (in-frame deletion) at their GRCh37 loci,
