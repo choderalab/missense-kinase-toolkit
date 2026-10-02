@@ -12,7 +12,7 @@ additive optional fields on the assembled objects.
 
 import logging
 import os
-import shutil
+import tempfile
 from dataclasses import dataclass
 from importlib.metadata import version
 from typing import Any
@@ -67,7 +67,8 @@ class BuildContext:
     dict_kinaseinfo: dict[str, Any]
     """Assembled KinaseInfo objects keyed by ``hgnc_name`` (incl. ``_1``/``_2`` multi-kinase-domain suffixes)."""
     path_objects: str
-    """Absolute path to the per-kinase serialization directory."""
+    """Absolute path to the objects directory; the archive is written beside it, and
+    entries are staged in a temporary directory, never here."""
     path_reports: str
     """Absolute path to the reports/figures directory."""
     path_tar: str
@@ -330,7 +331,8 @@ class Pipeline:
     """
 
     path_objects: str
-    """Absolute path to the per-kinase serialization directory."""
+    """Absolute path to the objects directory; the archive is written beside it, and
+    entries are staged in a temporary directory, never here."""
     path_reports: str
     """Absolute path to the reports/figures directory."""
     path_tar: str
@@ -367,11 +369,16 @@ class Pipeline:
         # persist HTTP responses (incl. AlphaFold) so every mode -- not just the base
         # build -- reuses the SQLite cache rather than the per-run in-memory backend
         set_request_cache(os.path.join(path_repo, "requests_cache.sqlite"))
-        path_objects = _resolve_dir(path_repo, path_objects, DEFAULT_PATH_OBJECTS)
+        # not created: entries are staged in a temp dir; only the tar's parent must exist
+        path_objects = os.path.join(
+            path_repo,
+            path_objects if path_objects is not None else DEFAULT_PATH_OBJECTS,
+        )
         path_reports = _resolve_dir(path_repo, path_reports, DEFAULT_PATH_REPORTS)
         path_tar = os.path.normpath(
             os.path.join(path_objects, "..", "KinaseInfo.tar.gz")
         )
+        os.makedirs(os.path.dirname(path_tar), exist_ok=True)
         return cls(path_objects, path_reports, path_tar, config_path=config_path)
 
     def _load_existing(self) -> dict[str, Any]:
@@ -401,22 +408,31 @@ class Pipeline:
         -------
         None
         """
-        serialize_kinase_dict(dict_kinaseinfo, str_path=self.path_objects)
-        # hash the files exactly as they will be tarred, so loads verify the bytes
-        manifest = Manifest.from_kinase_dict(
-            dict_kinaseinfo,
-            git=_return_git_info(),
-            packages=_return_package_versions(),
-            entry_sha256=return_dir_entry_sha256(self.path_objects),
-        )
-        path_manifest = os.path.join(self.path_objects, STR_MANIFEST_FILENAME)
-        with open(path_manifest, "w") as outfile:
-            outfile.write(manifest.model_dump_json(indent=4))
-        if os.path.exists(self.path_tar):
-            os.remove(self.path_tar)
-        create_tar_without_metadata(
-            path_source=self.path_objects, filename_tar=self.path_tar
-        )
+        # stage in a fresh system temp dir: removed on success, error, or Ctrl-C, never
+        # left in the repo/package, and never mixed with files from an earlier run
+        with tempfile.TemporaryDirectory(prefix="KinaseInfo_") as path_staging:
+            serialize_kinase_dict(dict_kinaseinfo, str_path=path_staging)
+            # hash the files exactly as they will be tarred, so loads verify the bytes
+            manifest = Manifest.from_kinase_dict(
+                dict_kinaseinfo,
+                git=_return_git_info(),
+                packages=_return_package_versions(),
+                entry_sha256=return_dir_entry_sha256(path_staging),
+            )
+            path_manifest = os.path.join(path_staging, STR_MANIFEST_FILENAME)
+            with open(path_manifest, "w") as outfile:
+                outfile.write(manifest.model_dump_json(indent=4))
+            # write beside the target, then swap atomically: a failed build keeps the
+            # previous archive instead of deleting it first
+            path_partial = f"{self.path_tar}.partial"
+            try:
+                create_tar_without_metadata(
+                    path_source=path_staging, filename_tar=path_partial
+                )
+                os.replace(path_partial, self.path_tar)
+            finally:
+                if os.path.exists(path_partial):
+                    os.remove(path_partial)
         logger.info(f"built {self.path_tar}\n{manifest.return_summary()}")
 
     def _dated_reports_dir(self) -> str:
@@ -519,7 +535,6 @@ class Pipeline:
         if bool_figs:
             ctx.path_reports, ctx.report_config = self._reports_target()
             build_steps.run_reports(ctx)
-        shutil.rmtree(self.path_objects)
 
     def figures(self) -> None:
         """Regenerate the report figures from the existing archive without rebuilding.

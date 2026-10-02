@@ -56,8 +56,9 @@ def main(
         Optional[str],
         typer.Option(
             "--pathObjects",
-            help="Where to save KinaseInfo objects, relative to repo root; if not a "
-            "Github repo, relative to the current directory.",
+            help="Objects directory, relative to repo root (or the current directory "
+            "outside a Github repo); KinaseInfo.tar.gz is written beside it. Entries "
+            "are staged in a temporary directory.",
         ),
     ] = None,
     path_reports: Annotated[

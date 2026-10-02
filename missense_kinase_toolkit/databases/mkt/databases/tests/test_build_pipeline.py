@@ -155,6 +155,38 @@ def test_dated_reports_dir_uses_manifest(tmp_path):
     assert os.path.basename(path_before) == stamp
 
 
+def test_interrupted_build_leaves_no_staging(tmp_path, monkeypatch):
+    """A build that fails mid-archive leaves no staging files and keeps the old archive."""
+    import tempfile
+
+    seed = deserialize_kinase_dict(list_ids=["ABL1"], bool_verbose=False)
+    path_tmp = tmp_path / "tmp"
+    path_tmp.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(path_tmp))
+    path_tar = tmp_path / "KinaseInfo.tar.gz"
+    path_tar.write_bytes(b"previous archive")
+
+    def _fail_tar(path_source, filename_tar):
+        # fail after a partial archive has been started
+        with open(filename_tar, "wb") as f:
+            f.write(b"partial")
+        raise RuntimeError("interrupted")
+
+    monkeypatch.setattr(pipeline, "create_tar_without_metadata", _fail_tar)
+    pl = pipeline.Pipeline(
+        str(tmp_path / "KinaseInfo"),
+        str(tmp_path / "reports"),
+        str(tmp_path / "KinaseInfo.tar.gz"),
+    )
+    with pytest.raises(RuntimeError, match="interrupted"):
+        pl._serialize_and_tar(seed)
+
+    assert not (tmp_path / "KinaseInfo").exists()
+    assert list(path_tmp.iterdir()) == []
+    assert path_tar.read_bytes() == b"previous archive"
+    assert not (tmp_path / "KinaseInfo.tar.gz.partial").exists()
+
+
 def test_dated_reports_dir_requires_manifest(tmp_path):
     """A manifest-less archive has no version to name a reports folder by, so it raises."""
     seed = deserialize_kinase_dict(list_ids=["ABL1"], bool_verbose=False)
