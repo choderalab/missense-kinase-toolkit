@@ -62,7 +62,17 @@ jobs:
         # only schema's own deps -- the old env file pulled in the full databases stack
         shell: bash
         run: |
-          uv pip install -e "./missense_kinase_toolkit/schema[test]"
+          # retry transient network failures (DNS, PyPI hiccups) with backoff; a real
+          # resolution error fails every attempt and still trips fail-fast
+          retry() {
+            for attempt in 1 2 3; do
+              "$@" && return 0
+              [ "$attempt" = 3 ] && return 1
+              echo "attempt $attempt failed; retrying in $((attempt * 20))s"
+              sleep $((attempt * 20))
+            done
+          }
+          retry uv pip install -e "./missense_kinase_toolkit/schema[test]"
           uv pip list
           # io_utils falls back to pure-Python YAML silently; report which backend is live
           python -c "import yaml; print('PyYAML', yaml.__version__, 'libyaml:', yaml.__with_libyaml__)"

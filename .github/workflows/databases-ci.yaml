@@ -77,7 +77,17 @@ jobs:
         # the pymol-windows job below covers that platform via conda
         shell: bash
         run: |
-          uv pip install \
+          # retry transient network failures (DNS, PyPI hiccups) with backoff; a real
+          # resolution error fails every attempt and still trips fail-fast
+          retry() {
+            for attempt in 1 2 3; do
+              "$@" && return 0
+              [ "$attempt" = 3 ] && return 1
+              echo "attempt $attempt failed; retrying in $((attempt * 20))s"
+              sleep $((attempt * 20))
+            done
+          }
+          retry uv pip install \
             ./missense_kinase_toolkit/schema \
             "./missense_kinase_toolkit/databases[test,pymol]"
           uv pip list
@@ -132,8 +142,19 @@ jobs:
         # satisfies the constraints, so pymol stays on the numpy it was built against
         shell: bash -l {0}
         run: |
-          python -m pip install uv
-          uv pip install \
+          set -e
+          # retry transient network failures (DNS, PyPI hiccups) with backoff; a real
+          # resolution error fails every attempt and still trips fail-fast
+          retry() {
+            for attempt in 1 2 3; do
+              "$@" && return 0
+              [ "$attempt" = 3 ] && return 1
+              echo "attempt $attempt failed; retrying in $((attempt * 20))s"
+              sleep $((attempt * 20))
+            done
+          }
+          retry python -m pip install uv
+          retry uv pip install \
             ./missense_kinase_toolkit/schema \
             "./missense_kinase_toolkit/databases[test]"
           micromamba list
