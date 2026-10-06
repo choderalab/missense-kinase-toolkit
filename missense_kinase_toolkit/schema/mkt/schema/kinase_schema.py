@@ -206,6 +206,15 @@ class UniProt(BaseModel):
     phospho_evidence: list[set[str]] | None = None
     phospho_description: list[str] | None = None
 
+    @field_serializer("phospho_evidence")
+    def serialize_phospho_evidence(
+        self, phospho_evidence: list[set[str]] | None
+    ) -> list[list[str]] | None:
+        """Sort each set so serialized output does not depend on set order."""
+        if phospho_evidence is None:
+            return None
+        return [sorted(evidence) for evidence in phospho_evidence]
+
 
 class KLIFS(BaseModel):
     """Pydantic model for KLIFS information."""
