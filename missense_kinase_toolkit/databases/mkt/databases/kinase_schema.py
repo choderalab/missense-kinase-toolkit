@@ -655,8 +655,11 @@ def find_alternative_hgnc(
     kinhub_attr: str = ["hgnc_name", "xname"],
     klifs_attr: str = ["gene_name"],
     kincore_attr: str = ["fasta.hgnc"],
-) -> str | list[str] | None:
-    """Find alternative HGNC names for a given UniProt ID.
+) -> str:
+    """Find a name for a UniProt ID that has no HGNC symbol, from KinHub/KLIFS/KinCoRe.
+
+    Names are checked in source order (KinHub, KLIFS, KinCoRe); the first distinct name is
+    returned, with a warning if the sources disagree.
 
     Parameters
     ----------
@@ -673,12 +676,17 @@ def find_alternative_hgnc(
     klifs_attr : list[str], optional
         List of attributes to access in KLIFS dictionary.
     kincore_attr : list[str], optional
-        AttribuList of attributeste to access in KinCoRe dictionary.
+        List of attributes to access in KinCoRe dictionary.
 
     Returns
     -------
-    str | list[str] | None
-        String, list of strings of alternative HGNC names if found, else None.
+    str
+        The first name found.
+
+    Raises
+    ------
+    ValueError
+        If no source has a name for the UniProt ID.
     """
     list_dict = [kinhub_dict, klifs_dict, kincore_dict]
     list_attr = [kinhub_attr, klifs_attr, kincore_attr]
@@ -708,52 +716,41 @@ def find_alternative_hgnc(
                 )
                 pass
 
-    if len(list_out) == 0:
-        return None
-    elif len(list_out) == 1:
-        return list_out[0]
-    else:
-        return list_out
+    # de-duplicate in source order (a set would lose which source came first)
+    list_unique = list(dict.fromkeys(name for name in list_out if name is not None))
+    if not list_unique:
+        raise ValueError(f"No HGNC name for {id_uniprot} in KinHub, KLIFS, or KinCoRe.")
+    if len(list_unique) > 1:
+        logger.warning(
+            f"{id_uniprot}: sources give different names ({', '.join(list_unique)}); "
+            f"using {list_unique[0]}."
+        )
+    return list_unique[0]
 
 
 def generate_dict_obj_from_api_or_scraper(
     subset_uniprot: set[str] | None = None,
-) -> dict[str, pd.DataFrame]:
-    """Generate dataframes for KinHub, KLIFS, and Pfam databases.
+) -> dict[str, dict[str, Any]]:
+    """Fetch every base-build source over the same set of UniProt IDs.
+
+    The discovery sources (KinHub, KLIFS, KinCoRe) define the IDs; the per-ID sources
+    (HGNC, UniProt, Pfam) are queried for those. All six are restricted to the same IDs, so
+    the combine_* functions see a consistent set (a ``--kinase`` subset included).
 
     Parameters
     ----------
     subset_uniprot : set[str] | None, optional
-        If provided, restrict the expensive per-UniProt HGNC/UniProt/Pfam queries to
-        this set of UniProt IDs (intersected with the full KinHub/KLIFS/KinCoRe union),
-        by default None (build the entire kinome). Used by the ``--kinase`` one-off
-        update path to rebuild only targeted entries.
+        Restrict the build to these UniProt IDs (``--kinase``), by default None (the whole
+        kinome).
 
     Returns
     -------
-    dict[str, pd.DataFrame]
-        Dictionary containing processed dataframes.
+    dict[str, dict[str, Any]]
+        Raw per-source data keyed by :class:`Source` values.
     """
-    # set up request cache
-    set_request_cache(os.path.join(get_repo_root(), "requests_cache.sqlite"))
+    dict_obj = {source: fetch_source(source, None) for source in LIST_DISCOVERY_SOURCES}
+    set_uniprot = set().union(*(dict_obj[source] for source in LIST_DISCOVERY_SOURCES))
 
-    # kinhub
-    df_kinhub = scrapers.kinhub()
-    dict_kinhub = convert_df2dictobj(df_kinhub, "kinhub")
-
-    # klifs
-    klifs_kinase_info = klifs.KinaseInfo()
-    df_klifs = pd.DataFrame(klifs_kinase_info.get_kinase_info())
-    dict_klifs = convert_df2dictobj(df_klifs, "klifs")
-
-    # kincore
-    dict_kincore = harmonize_kincore_fasta_cif()
-
-    set_uniprot = set(
-        list(dict_kinhub.keys()) + list(dict_klifs.keys()) + list(dict_kincore.keys())
-    )
-
-    # restrict to the requested subset (one-off --kinase update) if provided
     if subset_uniprot is not None:
         set_uniprot &= set(subset_uniprot)
         if len(set_uniprot) == 0:
@@ -761,84 +758,28 @@ def generate_dict_obj_from_api_or_scraper(
                 "subset_uniprot matched no UniProt IDs in the KinHub/KLIFS/KinCoRe "
                 "union; no objects will be built."
             )
+    for source in LIST_DISCOVERY_SOURCES:
+        dict_obj[source] = {
+            k: v for k, v in dict_obj[source].items() if k in set_uniprot
+        }
 
-    # collect HGNC, UniProt, and Pfam data from API
-    dict_hgnc, dict_uniprot, dict_pfam = {}, {}, {}
-    for uniprot_id in tqdm(
-        set_uniprot,
-        desc="Querying UniProt, HGNC, and Pfam...",
-        bar_format=TQDM_BAR_FORMAT,
-    ):
-        # HGNC
-        obj_temp = hgnc.HGNC(uniprot_id)
-        obj_temp.maybe_get_symbol_from_hgnc_search(
-            custom_field="uniprot_ids", custom_term=uniprot_id
-        )
-        hgnc_name = obj_temp.hgnc
-        dict_hgnc[uniprot_id] = hgnc_name
+    for source in LIST_PER_ID_SOURCES:
+        dict_obj[source] = fetch_source(source, set_uniprot)
+    apply_hgnc_fallback(dict_obj)
 
-        # UniProt
-        fasta = uniprot.UniProtFASTA(uniprot_id)
-        json = uniprot.UniProtJSON(uniprot_id)
-        dict_temp = {
-            "header": fasta._header,
-            "canonical_seq": fasta._sequence,
-        } | json.dict_mod_res
-        obj_temp = UniProt.model_validate(dict_temp)
-        dict_uniprot[uniprot_id] = obj_temp
-
-        # Pfam
-        df_pfam = pfam.Pfam(uniprot_id)._pfam
-        if df_pfam is not None:
-            dict_temp = convert_df2dictobj(df_pfam, "pfam")
-            if dict_temp is None:
-                logger.warning(f"{uniprot_id} has no Pfam entry...")
-            elif len(dict_temp[uniprot_id]) == 0:
-                logger.warning(f"{uniprot_id} has no Pfam annotated KD...")
-            else:
-                try:
-                    assert len(dict_temp[uniprot_id]) == 1
-                except AssertionError:
-                    logger.warning(
-                        f"{uniprot_id} has multiple Pfam KD entries. Defaulting to first..."
-                    )
-                dict_pfam[uniprot_id] = dict_temp[uniprot_id][0]
-
-    # B5MCJ9, A0A0B4J2F2, and Q6IBK5 are missing HGNC names
-    # alternative option (not for A0A0B4J2F2 which is no longer in SwissProt):
-    # uniprot.UniProtJSON(uniprot_id)._json["genes"][0]["geneName"]["value"]
-    list_hgnc_missing = [k for k, v in dict_hgnc.items() if k == v]
-    list_hgnc_new = [
-        find_alternative_hgnc(i, dict_kinhub, dict_klifs, dict_kincore)
-        for i in list_hgnc_missing
-    ]
-    dict_replace = dict(zip(list_hgnc_missing, list_hgnc_new))
-    dict_hgnc.update(dict_replace)
-
-    try:
-        assert len(dict_uniprot) == len(set_uniprot)
-    except AssertionError:
+    if len(dict_obj[Source.uniprot]) != len(set_uniprot):
         logger.warning(
-            f"UniProt dictionary has {len(dict_uniprot)} entries but {len(set_uniprot)} unique UniProt IDs."
+            f"UniProt dictionary has {len(dict_obj[Source.uniprot])} entries but "
+            f"{len(set_uniprot)} unique UniProt IDs."
         )
 
-    dict_out = {
-        "kinhub": dict_kinhub,
-        "klifs": dict_klifs,
-        "kincore": dict_kincore,
-        "hgnc": dict_hgnc,
-        "uniprot": dict_uniprot,
-        "pfam": dict_pfam,
-    }
-
-    logger.info("Retrieved the following...")
-    for idx, (k, v) in enumerate(dict_out.items()):
-        if idx != len(dict_out) - 1:
-            logger.info(f"\t{k}: {len(v)} entries")
-        else:
-            logger.info(f"\t{k}: {len(v)} entries\n")
-
-    return dict_out
+    logger.info(
+        "Retrieved the following...\n"
+        + "\n".join(
+            f"\t{source}: {len(val)} entries" for source, val in dict_obj.items()
+        )
+    )
+    return dict_obj
 
 
 class Source(StrEnum):
@@ -852,23 +793,33 @@ class Source(StrEnum):
     kincore = "kincore"
 
 
+LIST_DISCOVERY_SOURCES = [Source.kinhub, Source.klifs, Source.kincore]
+"""list[Source]: Sources fetched for the whole kinome; their union defines which UniProt IDs
+the base build covers."""
+
+LIST_PER_ID_SOURCES = [Source.hgnc, Source.uniprot, Source.pfam]
+"""list[Source]: Sources queried one UniProt ID at a time, over the IDs the discovery
+sources found."""
+
+
 def fetch_source(
     source: "Source | str",
-    set_uniprot: set[str],
+    set_uniprot: set[str] | None,
 ) -> dict[str, Any]:
     """Fetch raw data for a single base-build source over the given UniProt IDs.
 
-    Backs the ``--only <source>`` partial rebuild, refreshing one source without
-    re-fetching the rest. Returns the same per-source structure consumed by
-    :func:`combine_kinaseinfo_uniprot` / :func:`combine_kinaseinfo_kd`: hgnc/uniprot/pfam
-    keyed to a single value, kinhub/klifs/kincore keyed to a list.
+    Shared by the base build and the ``--only <source>`` partial rebuild. Returns the
+    per-source structure consumed by :func:`combine_kinaseinfo_uniprot` /
+    :func:`combine_kinaseinfo_kd`: hgnc/uniprot/pfam keyed to a single value,
+    kinhub/klifs/kincore keyed to a list.
 
     Parameters
     ----------
     source : Source | str
         A :class:`Source` member (or its string value).
-    set_uniprot : set[str]
-        Base UniProt IDs to fetch; the result is restricted to this set.
+    set_uniprot : set[str] | None
+        Base UniProt IDs to fetch, and to restrict the result to; None (discovery sources
+        only) returns everything the source has.
 
     Returns
     -------
@@ -916,11 +867,42 @@ def fetch_source(
             if df_pfam is None:
                 continue
             dict_temp = convert_df2dictobj(df_pfam, "pfam")
-            if dict_temp is None or len(dict_temp.get(uniprot_id, [])) == 0:
+            if dict_temp is None:
+                logger.warning(f"{uniprot_id} has no Pfam entry...")
                 continue
+            if len(dict_temp.get(uniprot_id, [])) == 0:
+                logger.warning(f"{uniprot_id} has no Pfam annotated KD...")
+                continue
+            if len(dict_temp[uniprot_id]) > 1:
+                logger.warning(
+                    f"{uniprot_id} has multiple Pfam KD entries. Defaulting to first..."
+                )
             dict_src[uniprot_id] = dict_temp[uniprot_id][0]
 
+    if set_uniprot is None:
+        return dict_src
     return {k: v for k, v in dict_src.items() if k in set_uniprot}
+
+
+def apply_hgnc_fallback(dict_obj: dict[str, dict[str, Any]]) -> None:
+    """Replace HGNC names that came back as the UniProt ID itself, in place.
+
+    Some entries (e.g. A0A0B4J2F2, named SIK1B by KinCoRe) have no HGNC symbol; their name
+    is taken from KinHub/KLIFS/KinCoRe instead (see :func:`find_alternative_hgnc`).
+
+    Parameters
+    ----------
+    dict_obj : dict[str, dict[str, Any]]
+        Raw per-source data keyed by :class:`Source` values (``hgnc`` is updated).
+    """
+    dict_hgnc = dict_obj[Source.hgnc]
+    for uniprot_id in [k for k, v in dict_hgnc.items() if k == v]:
+        dict_hgnc[uniprot_id] = find_alternative_hgnc(
+            uniprot_id,
+            dict_obj[Source.kinhub],
+            dict_obj[Source.klifs],
+            dict_obj[Source.kincore],
+        )
 
 
 def combine_kinaseinfo_uniprot(

@@ -23,6 +23,7 @@ from mkt.databases.generator import steps as build_steps
 from mkt.databases.io_utils import create_tar_without_metadata
 from mkt.databases.kinase_schema import (
     Source,
+    apply_hgnc_fallback,
     combine_kinaseinfo,
     combine_kinaseinfo_kd,
     combine_kinaseinfo_uniprot,
@@ -275,7 +276,7 @@ def merge_rebuilt_entries(
     set_names = set(names)
     for hgnc_name, obj_new in dict_new.items():
         obj_old = dict_existing.get(hgnc_name)
-        for step, list_paths in build_steps._STEP_WRITES.items():
+        for step, list_paths in build_steps.return_step_writes().items():
             for str_path in list_paths:
                 if step in set_names:
                     _clear_field(obj_new, str_path)
@@ -338,6 +339,8 @@ def run_source_rebuild(
             f"refreshing source '{source}' for {len(set_uniprot)} UniProt IDs..."
         )
         dict_obj[source] = fetch_source(source, set_uniprot)
+    if Source.hgnc in sources:
+        apply_hgnc_fallback(dict_obj)
     dict_uniprot = combine_kinaseinfo_uniprot(dict_obj)
     dict_kd = combine_kinaseinfo_kd(dict_obj)
     return combine_kinaseinfo(dict_uniprot, dict_kd)
@@ -983,8 +986,8 @@ class Pipeline:
         # validate --only/--skip once, before any work, against every valid component
         if only and skip:
             raise ArgumentError("--only and --skip are mutually exclusive.")
-        list_sources = [source.value for source in Source]
-        list_steps = build_steps.resolve_step_names()
+        list_sources = build_steps.return_component_names("source")
+        list_steps = build_steps.return_component_names("step")
         list_components = list_sources + list_steps
         unknown_only = [name for name in only or [] if name not in list_components]
         if unknown_only:
@@ -1010,6 +1013,13 @@ class Pipeline:
         sources = [name for name in only or [] if name in list_sources]
         # requested steps plus everything downstream of a requested source or step
         names = build_steps.resolve_step_names(only, skip)
+        if skip:
+            str_scope = (
+                f"the --kinase entries ({', '.join(list_kinase)})"
+                if list_kinase
+                else "all entries"
+            )
+            build_steps.warn_skipped_steps(skip, names, str_scope)
 
         if only:
             self.partial(
