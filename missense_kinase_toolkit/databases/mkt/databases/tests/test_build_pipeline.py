@@ -187,6 +187,37 @@ def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
     assert sorted(manifest.entry_sha256) == ["ABL1.json", "EGFR.json"]
 
 
+def test_archive_writes_sources_table(tmp_path, monkeypatch):
+    """A SHA-256-only record source is written to the manifest's sources table and
+    resolves after reload; an unregistered one fails before anything is written."""
+    from mkt.schema import kinase_schema
+    from mkt.schema.kinase_schema import Provenance
+
+    monkeypatch.setattr(kinase_schema, "_DICT_SOURCES", {})
+    seed = deserialize_kinase_dict(list_ids=["ABL1"], bool_verbose=False)
+    abl1 = copy.deepcopy(seed["ABL1"])
+    str_sha = "e" * 64
+    full = abl1.kincore.cif.source.model_copy(update={"sha256": str_sha})
+    abl1.kincore.cif.source = Provenance(sha256=str_sha)
+    pl = pipeline.Pipeline(
+        str(tmp_path / "KinaseInfo"),
+        str(tmp_path / "reports"),
+        str(tmp_path / "KinaseInfo.tar.gz"),
+    )
+
+    with pytest.raises(ValueError, match="no registered provenance"):
+        pl._serialize_and_tar({"ABL1": abl1})
+    assert not (tmp_path / "KinaseInfo.tar.gz").exists()
+
+    kinase_schema.register_sources({str_sha: full})
+    pl._serialize_and_tar({"ABL1": abl1})
+    assert load_manifest(pl.path_tar).sources == {str_sha: full}
+
+    kinase_schema._DICT_SOURCES.clear()  # a fresh session
+    after = deserialize_kinase_dict(str_path=pl.path_tar, bool_verbose=False)
+    assert after["ABL1"].kincore.cif.source.resolve() == full
+
+
 def test_dated_reports_dir_uses_manifest(tmp_path):
     """The reports subdir is named by ``generated_at``, independent of the tar mtime."""
     import os

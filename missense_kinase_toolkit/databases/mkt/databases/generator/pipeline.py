@@ -29,6 +29,7 @@ from mkt.databases.kinase_schema import (
     fetch_source,
     generate_dict_obj_from_api_or_scraper,
 )
+from mkt.schema import kinase_schema
 from mkt.schema.io_utils import (
     STR_MANIFEST_FILENAME,
     Manifest,
@@ -36,12 +37,52 @@ from mkt.schema.io_utils import (
     get_repo_root,
     load_manifest,
     return_dir_entry_sha256,
+    return_str_path_from_pkg_data,
     serialize_kinase_dict,
 )
-from mkt.schema.utils import rgetattr, split_domain_suffix
+from mkt.schema.kinase_schema import Provenance, register_sources
+from mkt.schema.utils import return_submodel_paths, rgetattr, split_domain_suffix
 from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger(__name__)
+
+
+def return_manifest_sources(dict_kinase: dict[str, Any]) -> dict[str, Provenance]:
+    """Return the manifest ``sources`` table for every SHA-256-only source in the dict.
+
+    Parameters
+    ----------
+    dict_kinase : dict[str, KinaseInfo]
+        The dict being archived.
+
+    Returns
+    -------
+    dict[str, Provenance]
+        Source-file SHA-256 -> full Provenance, from the registered sources.
+
+    Raises
+    ------
+    ValueError
+        If a record's SHA-256-only source was never registered (the archive could not
+        resolve it).
+    """
+    dict_sources, set_missing = {}, set()
+    for obj in dict_kinase.values():
+        for path in return_submodel_paths():
+            source = rgetattr(obj, f"{path}.source")
+            if source is None or source.name is not None:
+                continue
+            full = kinase_schema._DICT_SOURCES.get(source.sha256)
+            if full is None:
+                set_missing.add(source.sha256)
+            else:
+                dict_sources[source.sha256] = full
+    if set_missing:
+        raise ValueError(
+            "record sources with no registered provenance: "
+            + ", ".join(f"{sha[:12]}..." for sha in sorted(set_missing))
+        )
+    return dict(sorted(dict_sources.items()))
 
 
 DEFAULT_PATH_OBJECTS = "missense_kinase_toolkit/schema/mkt/schema/KinaseInfo"
@@ -545,6 +586,7 @@ class Pipeline:
                 git=_return_git_info(),
                 packages=_return_package_versions(),
                 entry_sha256=return_dir_entry_sha256(path_staging),
+                sources=return_manifest_sources(dict_kinaseinfo),
             )
             path_manifest = os.path.join(path_staging, STR_MANIFEST_FILENAME)
             with open(path_manifest, "w") as outfile:
@@ -713,6 +755,15 @@ class Pipeline:
         -------
         None
         """
+        # register the previous archive's sources so unchanged files keep their query_date
+        path_previous = (
+            self.path_tar
+            if os.path.exists(self.path_tar)
+            else return_str_path_from_pkg_data()
+        )
+        manifest_previous = load_manifest(path_previous)
+        if manifest_previous is not None:
+            register_sources(manifest_previous.sources)
         dict_ki = run_base_build(subset_uniprot=None)
         self._finalize(
             dict_ki, names, subset_hgnc=None, bool_figs=bool_figs, force=force
