@@ -2,7 +2,7 @@ import logging
 import tarfile
 
 import pytest
-from mkt.schema import io_utils
+from mkt.schema import io_utils, kinase_schema
 from mkt.schema.utils import (
     LIST_MANIFEST_EXTRA_PATHS,
     return_manifest_tallies,
@@ -161,7 +161,7 @@ def test_manifest_summary(tmp_path, dict_kinase, capsys):
 
     str_tar = _write_tar(tmp_path, {"ABL1": dict_kinase["ABL1"]}, manifest)
     io_utils.print_manifest_summary(str_tar)
-    assert "KinaseInfo manifest v2" in capsys.readouterr().out
+    assert "KinaseInfo manifest (mkt-schema 0.1.0)" in capsys.readouterr().out
 
 
 def test_load_with_matching_manifest(tmp_path, dict_sample, caplog):
@@ -269,7 +269,6 @@ def test_entry_sha256_roundtrip(tmp_path, dict_sample):
     """An archive whose entries match their recorded SHA-256s loads, full or subset."""
     str_tar, _ = _write_hashed_tar(tmp_path, dict_sample)
     manifest = io_utils.load_manifest(str_tar)
-    assert manifest.manifest_version == 2
     assert sorted(manifest.entry_sha256) == ["ABL1.json", "BUB1B.json"]
     assert "sha256     2 entries" in manifest.return_summary()
 
@@ -321,9 +320,28 @@ def test_unlisted_entry_raises(tmp_path, dict_kinase, dict_sample):
         io_utils.deserialize_kinase_dict(str_path=str_tar, list_ids=["ABL1", "CDK2"])
 
 
-def test_v1_manifest_without_hashes_loads(tmp_path, dict_sample):
-    """A manifest without entry hashes (v1) skips the SHA-256 check."""
-    manifest = io_utils.Manifest.from_kinase_dict(dict_sample, manifest_version=1)
+def test_manifest_cached_until_archive_changes(tmp_path, dict_sample):
+    """A repeat load reuses the parsed manifest; a rebuilt archive is re-read."""
+    import os
+
+    manifest = io_utils.Manifest.from_kinase_dict(dict_sample)
+    str_tar = _write_tar(tmp_path, dict_sample, manifest)
+    first = io_utils.load_manifest(str_tar)
+    assert io_utils.load_manifest(str_tar) is first
+    io_utils.deserialize_kinase_dict(str_path=str_tar, list_ids=["ABL1"])
+    assert io_utils.load_manifest(str_tar) is first
+
+    manifest.counts["kincore"] += 1
+    _write_tar(tmp_path, dict_sample, manifest)
+    os.utime(str_tar, ns=(0, os.stat(str_tar).st_mtime_ns + 1))
+    rebuilt = io_utils.load_manifest(str_tar)
+    assert rebuilt is not first
+    assert rebuilt.counts["kincore"] == first.counts["kincore"] + 1
+
+
+def test_manifest_without_hashes_loads(tmp_path, dict_sample):
+    """A manifest without entry hashes skips the SHA-256 check."""
+    manifest = io_utils.Manifest.from_kinase_dict(dict_sample)
     assert manifest.entry_sha256 == {}
     str_tar = _write_tar(tmp_path, dict_sample, manifest)
 
@@ -344,3 +362,95 @@ def test_source_sha256_tallied_and_checked(tmp_path, mutable_kinase):
     str_tar = _write_tar(tmp_path, dict_entries, manifest)
     with pytest.raises(ValueError, match=r"source_sha256\["):
         io_utils.deserialize_kinase_dict(str_path=str_tar)
+
+
+STR_SOURCE_SHA256 = "f" * 64
+"""str: Stand-in SHA-256 for a file source stored only by hash."""
+
+
+@pytest.fixture
+def _empty_sources(monkeypatch):
+    """Isolate the module-level sources lookup so registrations don't leak across tests."""
+    monkeypatch.setattr(kinase_schema, "_DICT_SOURCES", {})
+
+
+def _abl1_by_sha256(mutable_kinase):
+    """ABL1 whose KinCoRe CIF source is stored by SHA-256, plus the matching table entry."""
+    abl1 = mutable_kinase("ABL1")
+    full = abl1.kincore.cif.source.model_copy(update={"sha256": STR_SOURCE_SHA256})
+    abl1.kincore.cif.source = kinase_schema.Provenance(sha256=STR_SOURCE_SHA256)
+    return abl1, {STR_SOURCE_SHA256: full}
+
+
+def test_provenance_sha256_only_is_compact_and_needs_an_identifier():
+    """A hash-only entry serializes as just its SHA-256; an empty one is rejected."""
+    from pydantic import ValidationError
+
+    prov = kinase_schema.Provenance(sha256=STR_SOURCE_SHA256)
+    assert prov.model_dump() == {"sha256": STR_SOURCE_SHA256}
+    assert kinase_schema.Provenance(name="AlphaFold DB").model_dump() == {
+        "name": "AlphaFold DB"
+    }
+    with pytest.raises(ValidationError, match="name or a sha256"):
+        kinase_schema.Provenance()
+
+
+def test_provenance_resolve_and_str(_empty_sources):
+    """resolve() looks hash-only entries up (registered or via a manifest); str() prints it."""
+    full = kinase_schema.Provenance(
+        name="AF2_Active_Models_v2.zip",
+        version="v2",
+        citation="Gizzio et al., 2026.",
+        doi="https://doi.org/10.1042/BCJ20260137",
+        query_date="2026-08-26",
+        sha256=STR_SOURCE_SHA256,
+    )
+    prov = kinase_schema.Provenance(sha256=STR_SOURCE_SHA256)
+    assert prov.resolve() is None
+    assert "unresolved" in str(prov)
+
+    manifest = io_utils.Manifest(
+        generated_at="2026-10-06T00:00:00Z",
+        n_entries=0,
+        counts={},
+        sources={STR_SOURCE_SHA256: full},
+    )
+    assert prov.resolve(manifest) == full
+
+    kinase_schema.register_sources({STR_SOURCE_SHA256: full})
+    assert prov.resolve() == full
+    assert str(prov) == (
+        "AF2_Active_Models_v2.zip (v2) · Gizzio et al., 2026. · "
+        "https://doi.org/10.1042/BCJ20260137\n"
+        "  queried 2026-08-26 · sha256 ffffffffffff…"
+    )
+    # inline provenance resolves to itself
+    assert full.resolve() is full
+
+
+def test_sources_table_resolves_after_load(tmp_path, mutable_kinase, _empty_sources):
+    """Hash-only record sources resolve after a full or subset load, and tallies use them."""
+    abl1, dict_sources = _abl1_by_sha256(mutable_kinase)
+    dict_entries = {"ABL1": abl1}
+    kinase_schema.register_sources(dict_sources)  # as a build would
+    manifest = io_utils.Manifest.from_kinase_dict(dict_entries, sources=dict_sources)
+    assert manifest.source_versions["kincore.cif"] == {"v2": 1}
+    str_tar = _write_tar(tmp_path, dict_entries, manifest)
+
+    for list_ids in (None, ["ABL1"]):
+        kinase_schema._DICT_SOURCES.clear()  # a fresh session knows nothing yet
+        loaded = io_utils.deserialize_kinase_dict(str_path=str_tar, list_ids=list_ids)
+        source = loaded["ABL1"].kincore.cif.source
+        assert source.model_dump() == {"sha256": STR_SOURCE_SHA256}
+        assert source.resolve().name == "AF2_Active_Models_v2.zip"
+
+
+def test_missing_sources_entry_raises(tmp_path, mutable_kinase, _empty_sources):
+    """A hash-only record source absent from the sources table raises, subset loads too."""
+    abl1, _ = _abl1_by_sha256(mutable_kinase)
+    manifest = io_utils.Manifest.from_kinase_dict({"ABL1": abl1})
+    str_tar = _write_tar(tmp_path, {"ABL1": abl1}, manifest)
+
+    for list_ids in (None, ["ABL1"]):
+        with pytest.raises(ValueError, match="missing from its manifest.json sources"):
+            io_utils.deserialize_kinase_dict(str_path=str_tar, list_ids=list_ids)

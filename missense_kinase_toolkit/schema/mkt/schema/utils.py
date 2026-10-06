@@ -241,13 +241,16 @@ def return_manifest_tallies(
             if rgetattr(obj, path) is None:
                 continue
             dict_counts[path] += 1
-            version = rgetattr(obj, f"{path}.source.version")
-            if version is not None:
-                dict_versions[path][version] += 1
-            sha256 = rgetattr(obj, f"{path}.source.sha256")
-            if sha256 is not None:
-                str_name = rgetattr(obj, f"{path}.source.name")
-                dict_sha256.setdefault(str_name, Counter())[sha256] += 1
+            source = rgetattr(obj, f"{path}.source")
+            if source is None:
+                continue
+            # SHA-256-only entries carry name/version in the sources table
+            resolved = source.resolve() or source
+            if resolved.version is not None:
+                dict_versions[path][resolved.version] += 1
+            if source.sha256 is not None:
+                str_name = resolved.name or "unresolved"
+                dict_sha256.setdefault(str_name, Counter())[source.sha256] += 1
 
     return (
         dict_counts,
