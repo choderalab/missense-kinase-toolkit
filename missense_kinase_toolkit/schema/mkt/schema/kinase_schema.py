@@ -20,7 +20,14 @@ from mkt.schema.constants import (
     SET_FAMILY_HRD_REVERSED,
 )
 from mkt.schema.utils import fill_missing_none, rgetattr
-from pydantic import BaseModel, ConfigDict, constr, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    constr,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 from strenum import StrEnum
 
 logger = logging.getLogger(__name__)
@@ -246,10 +253,31 @@ class KinCoReStructureSource(str, Enum):
     )
 
 
-class Provenance(BaseModel):
-    """Source provenance for a derived record (dataset name, version, citation, query date)."""
+_DICT_SOURCES: dict[str, "Provenance"] = {}
+"""dict[str, Provenance]: Source-file SHA-256 -> full Provenance, filled from loaded archive
+manifests (and by builds) so SHA-256-only entries can be resolved; see
+:func:`register_sources`."""
 
-    name: str  # dataset/archive/file name
+
+def register_sources(dict_sources: dict[str, "Provenance"]) -> None:
+    """Make source-file provenance available to :meth:`Provenance.resolve`.
+
+    Parameters
+    ----------
+    dict_sources : dict[str, Provenance]
+        Source-file SHA-256 -> full Provenance (e.g. an archive manifest's ``sources``).
+    """
+    _DICT_SOURCES.update(dict_sources)
+
+
+class Provenance(BaseModel):
+    """Source provenance for a derived record (dataset name, version, citation, query date).
+
+    File-source records store only ``sha256``; :meth:`resolve` looks the full entry up in
+    the archive manifest's ``sources`` table. API sources (e.g. AlphaFold DB) store it inline.
+    """
+
+    name: str | None = None  # dataset/archive/file name
     version: str | None = None  # e.g. "v1"
     citation: str | None = None  # short publication citation
     doi: str | None = None  # publication DOI URL
@@ -257,6 +285,59 @@ class Provenance(BaseModel):
         None  # ISO date: download date (re-fetched) or file mtime (local)
     )
     sha256: str | None = None  # SHA-256 of the source file as downloaded
+
+    @model_validator(mode="after")
+    def check_name_or_sha256(self) -> "Provenance":
+        """Require a name (inline provenance) or a SHA-256 (sources-table entry)."""
+        if self.name is None and self.sha256 is None:
+            raise ValueError("Provenance needs a name or a sha256.")
+        return self
+
+    @model_serializer(mode="wrap")
+    def drop_none(self, handler) -> dict:
+        """Serialize without empty fields, so SHA-256-only entries stay compact."""
+        return {k: v for k, v in handler(self).items() if v is not None}
+
+    def resolve(self, manifest=None) -> "Provenance | None":
+        """Return the full provenance, looking up a SHA-256-only entry in the sources table.
+
+        Parameters
+        ----------
+        manifest : Manifest | None, optional
+            Manifest whose ``sources`` table to use, by default None (sources registered from
+            loaded archives; see :func:`register_sources`).
+
+        Returns
+        -------
+        Provenance | None
+            ``self`` if already full, the matching table entry, or None if unregistered.
+        """
+        if self.name is not None:
+            return self
+        dict_sources = manifest.sources if manifest is not None else _DICT_SOURCES
+        return dict_sources.get(self.sha256)
+
+    def __str__(self) -> str:
+        """Readable one- or two-line summary, resolving SHA-256-only entries."""
+        resolved = self.resolve()
+        if resolved is None:
+            return (
+                f"source sha256 {self.sha256[:12]}… (unresolved: load the archive it "
+                "came from, or pass its manifest to resolve())"
+            )
+        str_name = resolved.name + (
+            f" ({resolved.version})" if resolved.version else ""
+        )
+        list_line1 = [str_name, resolved.citation, resolved.doi]
+        list_line2 = []
+        if resolved.query_date:
+            list_line2.append(f"queried {resolved.query_date}")
+        if resolved.sha256:
+            list_line2.append(f"sha256 {resolved.sha256[:12]}…")
+        str_out = " · ".join(str_part for str_part in list_line1 if str_part)
+        if list_line2:
+            str_out += "\n  " + " · ".join(list_line2)
+        return str_out
 
 
 class SASA(BaseModel):
