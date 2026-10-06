@@ -22,7 +22,13 @@ import toml
 import yaml
 from mkt.schema import kinase_schema
 from mkt.schema.config import get_output_dir
-from mkt.schema.utils import TQDM_BAR_FORMAT, return_manifest_tallies, return_sha256
+from mkt.schema.utils import (
+    TQDM_BAR_FORMAT,
+    return_manifest_tallies,
+    return_sha256,
+    return_submodel_paths,
+    rgetattr,
+)
 from pydantic import BaseModel
 from tqdm import tqdm
 
@@ -46,8 +52,6 @@ STR_MANIFEST_FILENAME = "manifest.json"
 class Manifest(BaseModel):
     """Build record of a :class:`KinaseInfo` archive, checked against the loaded dict."""
 
-    manifest_version: int = 2
-    """Manifest schema version, by default 2 (v1 predates the SHA-256 fields)."""
     generated_at: datetime
     """UTC build timestamp."""
     git: dict[str, str | bool | None] = {}
@@ -64,6 +68,9 @@ class Manifest(BaseModel):
     """Source file name -> ``Provenance.sha256`` tally, by default empty."""
     entry_sha256: dict[str, str] = {}
     """Archive entry filename -> SHA-256 of its serialized bytes, by default empty."""
+    sources: dict[str, kinase_schema.Provenance] = {}
+    """Source-file SHA-256 -> full Provenance, for records whose ``source`` stores only the
+    SHA-256 (see :meth:`~mkt.schema.kinase_schema.Provenance.resolve`), by default empty."""
 
     @classmethod
     def from_kinase_dict(
@@ -167,7 +174,7 @@ class Manifest(BaseModel):
         list_packages = [f"{name} {ver}" for name, ver in self.packages.items()]
 
         list_lines = [
-            f"KinaseInfo manifest v{self.manifest_version}",
+            f"KinaseInfo manifest (mkt-schema {self.packages.get('mkt-schema', 'n/a')})",
             f"  generated  {self.generated_at:%Y-%m-%d %H:%M:%S %Z}".rstrip(),
             f"  git        {str_git}",
             f"  packages   {list_packages[0] if list_packages else 'n/a'}",
@@ -267,8 +274,7 @@ def check_entry_sha256(
 ) -> None:
     """Raise if loaded entries' SHA-256 digests disagree with the manifest.
 
-    Skipped for manifests without entry hashes (v1) or whose entries are in another
-    serialization format than the files loaded.
+    Skipped when the manifest has no entry hashes or lists another serialization format.
 
     Parameters
     ----------
@@ -308,6 +314,45 @@ def check_entry_sha256(
         )
 
 
+def check_source_sha256(
+    dict_kinase: dict[str, BaseModel],
+    manifest: Manifest | None,
+    str_path: str,
+) -> None:
+    """Raise if a record's SHA-256-only source has no entry in the manifest's sources table.
+
+    Parameters
+    ----------
+    dict_kinase : dict[str, KinaseInfo]
+        Loaded kinase dictionary (full or subset).
+    manifest : Manifest | None
+        Manifest read from the archive, or None if missing.
+    str_path : str
+        Archive path, for messages.
+
+    Returns
+    -------
+    None
+    """
+    dict_sources = manifest.sources if manifest is not None else {}
+    set_missing = set()
+    for obj in dict_kinase.values():
+        for path in return_submodel_paths():
+            source = rgetattr(obj, f"{path}.source")
+            if (
+                source is not None
+                and source.name is None
+                and source.sha256 not in dict_sources
+            ):
+                set_missing.add(source.sha256)
+    if set_missing:
+        raise ValueError(
+            f"{str_path} has records whose source is stored by SHA-256 but missing from "
+            f"its {STR_MANIFEST_FILENAME} sources table: "
+            + ", ".join(f"{sha[:12]}..." for sha in sorted(set_missing))
+        )
+
+
 def load_manifest(str_path: str) -> Manifest | None:
     """Read the build manifest from a KinaseInfo ``.tar.gz`` or directory.
 
@@ -322,18 +367,35 @@ def load_manifest(str_path: str) -> Manifest | None:
         The parsed manifest, or None if absent.
     """
     if str_path.endswith(".tar.gz"):
-        # an empty list_ids skips every kinase entry but still reads the manifest
-        str_manifest = _untar_in_memory(str_path, list_ids=[])[2]
-    else:
-        path_manifest = os.path.join(str_path, STR_MANIFEST_FILENAME)
-        if not os.path.exists(path_manifest):
-            return None
-        with open(path_manifest) as openfile:
-            str_manifest = openfile.read()
+        key = _return_archive_key(str_path)
+        if key not in _DICT_MANIFEST_CACHE:
+            # an empty list_ids skips every kinase entry but still reads the manifest
+            _cache_manifest(key, _untar_in_memory(str_path, list_ids=[])[2])
+        return _DICT_MANIFEST_CACHE[key]
 
-    if str_manifest is None:
+    path_manifest = os.path.join(str_path, STR_MANIFEST_FILENAME)
+    if not os.path.exists(path_manifest):
         return None
-    return Manifest.model_validate_json(str_manifest)
+    with open(path_manifest) as openfile:
+        return Manifest.model_validate_json(openfile.read())
+
+
+_DICT_MANIFEST_CACHE: dict[tuple[str, int, int], Manifest | None] = {}
+"""dict[tuple[str, int, int], Manifest | None]: Parsed archive manifests by (path, mtime,
+size), so repeated loads of one archive parse its manifest once."""
+
+
+def _return_archive_key(str_path: str) -> tuple[str, int, int]:
+    """Return the manifest-cache key of an archive: (real path, mtime, size)."""
+    stat = os.stat(str_path)
+    return os.path.realpath(str_path), stat.st_mtime_ns, stat.st_size
+
+
+def _cache_manifest(key: tuple[str, int, int], str_manifest: str | None) -> None:
+    """Parse and cache an archive's manifest (None if it has none)."""
+    _DICT_MANIFEST_CACHE[key] = (
+        None if str_manifest is None else Manifest.model_validate_json(str_manifest)
+    )
 
 
 def print_manifest_summary(str_path: str | None = None) -> None:
@@ -780,8 +842,10 @@ def deserialize_kinase_dict(
         _, dict_str, str_manifest, dict_sha256 = _untar_in_memory(
             str_path, list_ids=list_ids
         )
-        if str_manifest is not None:
-            manifest = Manifest.model_validate_json(str_manifest)
+        key = _return_archive_key(str_path)
+        if key not in _DICT_MANIFEST_CACHE:
+            _cache_manifest(key, str_manifest)
+        manifest = _DICT_MANIFEST_CACHE[key]
         # verify bytes before parsing, so a corrupt entry fails as such
         check_entry_sha256(dict_sha256, manifest, str_path)
         for str_member, val in tqdm(
@@ -832,6 +896,12 @@ def deserialize_kinase_dict(
             clean_files_and_delete_directory(list_file)
 
     dict_import = {key: dict_import[key] for key in sorted(dict_import.keys())}
+
+    # make the archive's sources resolvable (Provenance.resolve, manifest tallies), and
+    # require one for every SHA-256-only record source, subset loads included
+    if manifest is not None:
+        kinase_schema.register_sources(manifest.sources)
+    check_source_sha256(dict_import, manifest, str_path)
 
     # subset loads can't match the manifest; directories are checked only if one exists
     if list_ids is None and (manifest is not None or str_path.endswith(".tar.gz")):
