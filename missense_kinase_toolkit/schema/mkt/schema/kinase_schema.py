@@ -24,6 +24,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     constr,
+    field_serializer,
     field_validator,
     model_serializer,
     model_validator,
@@ -421,6 +422,11 @@ class KinCoReFASTA(BaseModel):
     start: int | None = None  # fasta2uniprot
     end: int | None = None  # fasta2uniprot
     mismatch: list[int] | None = None  # fasta2uniprot
+
+    @field_serializer("hgnc")
+    def serialize_hgnc(self, hgnc: set[str]) -> list[str]:
+        """Sort the set so serialized output does not depend on set order."""
+        return sorted(hgnc)
 
 
 class KinCoReCIF(BaseModel):

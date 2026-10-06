@@ -103,3 +103,13 @@ def test_serde_roundtrip(serde_sample, tmp_path, suffix):
     dict_temp = io_utils.deserialize_kinase_dict(suffix=suffix, str_path=str_path)
 
     _assert_kinase_dicts_equal(dict_sample, dict_temp)
+
+
+def test_kincore_fasta_hgnc_serializes_sorted(mutable_kinase):
+    """The hgnc set serializes as a sorted list, so output and entry hashes are stable."""
+    fasta = mutable_kinase("JAK3_2").kincore.fasta
+    assert len(fasta.hgnc) == 2
+
+    assert fasta.model_dump()["hgnc"] == sorted(fasta.hgnc)
+    assert fasta.model_dump(mode="json")["hgnc"] == sorted(fasta.hgnc)
+    assert type(fasta).model_validate_json(fasta.model_dump_json()).hgnc == fasta.hgnc
