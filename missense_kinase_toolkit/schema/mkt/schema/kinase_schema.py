@@ -280,6 +280,9 @@ class SASA(BaseModel):
     n_points: int
     include_hydrogens: bool
     max_asa_reference: str  # reference maxima used to normalize rsa
+    input_sha256: dict[str, str] | None = (
+        None  # input name -> SHA-256 it was computed from (structure, residue_map, code)
+    )
 
     @field_validator("sasa", "rsa", mode="before")
     @classmethod
@@ -309,6 +312,9 @@ class Superposition(BaseModel):
     rmsd: float | None = None  # superposition RMSD (Å) over the matched C-alpha atoms
     n_atoms: int | None = None  # number of matched C-alpha atoms
     source: Provenance | None = None  # reference-template provenance
+    input_sha256: dict[str, str] | None = (
+        None  # input name -> SHA-256 it was computed from (structure, residue_map, code)
+    )
 
 
 class KinCoReFASTA(BaseModel):
@@ -362,6 +368,7 @@ class KinCoReCIF(BaseModel):
     source: Provenance | None = (
         None  # structure source provenance (see KinCoReStructureSource)
     )
+    sha256: str | None = None  # SHA-256 of the canonical-JSON cif (return_json_sha256)
     sasa: SASA | None = (
         None  # KLIFS-pocket SASA over this KinCoRe active-state structure
     )
@@ -436,6 +443,10 @@ class AlphaFold(BaseModel):
         None  # KD-slice positions differing from canonical UniProt
     )
     source: Provenance | None = None  # EBI AlphaFold DB provenance
+    sha256: str | None = None  # SHA-256 of the canonical-JSON cif (return_json_sha256)
+    input_sha256: dict[str, str] | None = (
+        None  # input name -> SHA-256 it was computed from (canonical_seq, code)
+    )
     sasa: SASA | None = None  # KLIFS-pocket SASA over this AlphaFold structure
     superposition: Superposition | None = (
         None  # reference-frame transform for this AF structure

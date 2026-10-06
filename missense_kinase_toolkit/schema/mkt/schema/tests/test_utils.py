@@ -124,3 +124,49 @@ def test_kinase_group_constants_match_corpus(dict_kinase):
 
     assert return_kinase_group_dict(dict_kinase) == DICT_KINASE_GROUP
     assert return_lipid_kinase_set(dict_kinase) == SET_LIPID_KINASE
+
+
+def test_return_json_sha256_is_canonical():
+    """The JSON hash ignores key order and matches its documented definition."""
+    import hashlib
+    import json
+
+    from mkt.schema.utils import return_json_sha256
+
+    dict_a = {"b": [1, 2], "a": {"y": None, "x": "1"}}
+    dict_b = {"a": {"x": "1", "y": None}, "b": [1, 2]}
+    assert return_json_sha256(dict_a) == return_json_sha256(dict_b)
+
+    str_canonical = json.dumps(dict_a, sort_keys=True, separators=(",", ":"))
+    assert (
+        return_json_sha256(dict_a)
+        == hashlib.sha256(str_canonical.encode("utf-8")).hexdigest()
+    )
+    assert return_json_sha256(dict_a) != return_json_sha256({**dict_a, "b": [2, 1]})
+
+
+def test_input_sha256_fields_default_none_and_roundtrip(mutable_kinase):
+    """Archives without input hashes load with None; set hashes survive JSON round trip."""
+    from mkt.schema.kinase_schema import KinaseInfo
+    from mkt.schema.utils import return_json_sha256
+
+    abl1 = mutable_kinase("ABL1")
+    for model in (
+        abl1.kincore.cif,
+        abl1.kincore.cif.sasa,
+        abl1.kincore.cif.superposition,
+        abl1.alphafold,
+        abl1.alphafold.sasa,
+        abl1.alphafold.superposition,
+    ):
+        for str_field in ("sha256", "input_sha256"):
+            if str_field in type(model).model_fields:
+                assert getattr(model, str_field) is None
+
+    abl1.kincore.cif.sha256 = return_json_sha256(abl1.kincore.cif.cif)
+    abl1.kincore.cif.sasa.input_sha256 = {"structure": abl1.kincore.cif.sha256}
+    roundtrip = KinaseInfo.model_validate_json(abl1.model_dump_json())
+    assert roundtrip.kincore.cif.sha256 == abl1.kincore.cif.sha256
+    assert roundtrip.kincore.cif.sasa.input_sha256 == {
+        "structure": abl1.kincore.cif.sha256
+    }
