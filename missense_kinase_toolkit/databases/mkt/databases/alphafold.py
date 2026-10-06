@@ -8,12 +8,15 @@ UniProt accession.
 import ast
 import io
 import logging
+import sys
 
 from Bio.Data.PDBData import protein_letters_3to1
 from Bio.PDB import MMCIFIO, MMCIFParser, Select
 from Bio.PDB.MMCIF2Dict import MMCIF2Dict
 from mkt.databases import requests_wrapper
 from mkt.databases.api_schema import RESTAPIClient
+from mkt.databases.input_check import InputCheck, return_inputs_sha256
+from mkt.schema.utils import return_json_sha256
 from pydantic.dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -338,6 +341,7 @@ def fetch_alphafold_kd(
         tool_used=tool_used,
         mismatch=mismatch,
         source=source,
+        sha256=return_json_sha256(dict_cif),
     )
 
 
@@ -377,15 +381,18 @@ def enrich_with_alphafold(obj_kinase, force: bool = False) -> None:
         obj_kinase.alphafold = None
         return
 
-    # idempotent: re-slice only when the KD bounds changed since the structure was stored
-    # (e.g. an enrichment upstream, such as msa, updated adjudication); otherwise keep it
-    # unless a forced regeneration is requested.
-    if (
-        not force
-        and obj_kinase.alphafold is not None
-        and obj_kinase.alphafold.start == start
-        and obj_kinase.alphafold.end == end
-    ):
+    # idempotent: re-fetch only when an input changed since the structure was stored (the KD
+    # bounds, e.g. after an upstream msa update, the canonical sequence it is checked
+    # against, or this module's code); otherwise keep it unless forced.
+    check = InputCheck(
+        str_label=f"{obj_kinase.hgnc_name} AlphaFold",
+        dict_sha256=return_inputs_sha256(
+            {"canonical_seq": obj_kinase.uniprot.canonical_seq},
+            [sys.modules[__name__]],
+        ),
+        dict_readable={"start": start, "end": end},
+    )
+    if not check.is_stale(obj_kinase.alphafold, force=force, str_action="refetching"):
         return
 
     obj_kinase.alphafold = fetch_alphafold_kd(
@@ -394,6 +401,8 @@ def enrich_with_alphafold(obj_kinase, force: bool = False) -> None:
         end,
         canonical_seq=obj_kinase.uniprot.canonical_seq,
     )
+    if obj_kinase.alphafold is not None:
+        obj_kinase.alphafold.input_sha256 = check.dict_sha256
 
 
 def get_alphafold(obj_kinase):

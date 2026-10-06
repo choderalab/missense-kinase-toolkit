@@ -15,10 +15,14 @@ import git
 import pandas as pd
 from mkt.databases.config import OUTPUT_DIR_VAR
 from mkt.schema.kinase_schema import Provenance
-from mkt.schema.utils import TQDM_BAR_FORMAT, query_date_from_file
+from mkt.schema.utils import TQDM_BAR_FORMAT, query_date_from_file, return_sha256
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
+
+_DICT_SHA256_CACHE: dict[tuple[str, int, int], str] = {}
+"""dict[tuple[str, int, int], str]: (path, mtime_ns, size) -> SHA-256, so unchanged
+source files are hashed once per process."""
 
 
 @dataclass(frozen=True)
@@ -83,19 +87,38 @@ class DataSource:
                         f.write(chunk)
         return self.path
 
+    def sha256(self) -> str | None:
+        """Return the SHA-256 of the source file at :attr:`path`, or None if absent.
+
+        Returns
+        -------
+        str | None
+            Hex digest, cached per (path, mtime, size).
+        """
+        if not os.path.isfile(self.path):
+            logger.warning(f"No source file at {self.path}; provenance has no SHA-256.")
+            return None
+        stat = os.stat(self.path)
+        key = (self.path, stat.st_mtime_ns, stat.st_size)
+        if key not in _DICT_SHA256_CACHE:
+            with open(self.path, "rb") as openfile:
+                _DICT_SHA256_CACHE[key] = return_sha256(openfile.read())
+        return _DICT_SHA256_CACHE[key]
+
     def provenance(self, path: str | None = None) -> Provenance:
-        """Build a :class:`Provenance` stamped with the source file's modification date.
+        """Build a :class:`Provenance` stamped with the source file's date and SHA-256.
 
         Parameters
         ----------
         path : str | None, optional
             File whose mtime dates the provenance; defaults to :attr:`path` (use this to date
-            a post-processed derivative, e.g. an extracted/combined file).
+            a post-processed derivative, e.g. an extracted/combined file). The SHA-256 is
+            always of :attr:`path`, the source as downloaded.
 
         Returns
         -------
         Provenance
-            The source provenance with ``query_date`` from the file mtime.
+            The source provenance with ``query_date`` from the file mtime and ``sha256``.
         """
         return Provenance(
             name=self.name,
@@ -103,6 +126,7 @@ class DataSource:
             citation=self.citation,
             doi=self.doi,
             query_date=query_date_from_file(path or self.path),
+            sha256=self.sha256(),
         )
 
 

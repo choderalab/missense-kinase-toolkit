@@ -15,6 +15,7 @@ PyMOL output or app render so all structures share a common frame.
 
 import logging
 import os
+import sys
 from dataclasses import dataclass
 
 import numpy as np
@@ -22,10 +23,16 @@ from Bio.PDB import PDBParser
 from Bio.PDB.Polypeptide import protein_letters_3to1
 from Bio.SVDSuperimposer import SVDSuperimposer
 from mkt.databases.aligners import BioAligner
+from mkt.databases.input_check import (
+    InputCheck,
+    return_inputs_sha256,
+    return_structure_sha256,
+)
 from mkt.databases.io_utils import DataSource
 from mkt.databases.utils import convert_mmcifdict2structure
 from mkt.schema.io_utils import get_repo_root
 from mkt.schema.kinase_schema import KinaseInfo, Superposition
+from mkt.schema.utils import return_json_sha256
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +77,9 @@ class ReferenceFrame:
     """Template C-alpha coordinates, parallel to full_seq (N x 3)."""
     origin: np.ndarray
     """Origin shift (KLIFS-pocket centroid) subtracted so the shared frame is centered."""
+    sha256: str | None = None
+    """SHA-256 of what the frame was built from (template file, reference kinase's maps and
+    sequence), recorded as the ``reference`` input of each Superposition, by default None."""
 
 
 def _parse_ca(chain) -> tuple[dict[int, np.ndarray], str, list[int]]:
@@ -173,6 +183,18 @@ def build_reference_frame(dict_kinase: dict[str, KinaseInfo]) -> ReferenceFrame:
         f"Built reference frame from {REFERENCE_SOURCE.name} via {REFERENCE_HGNC}: "
         f"{len(klifs)} KLIFS, {len(msa)} MSA, {len(str_pdb_seq)} full C-alpha atoms."
     )
+    str_sha256 = return_json_sha256(
+        {
+            "template": REFERENCE_SOURCE.sha256(),
+            "klifs_map": obj_ref.KLIFS2UniProtIdx,
+            "msa_map": (
+                obj_ref.kincore.msa.region2uniprot
+                if obj_ref.kincore is not None and obj_ref.kincore.msa is not None
+                else None
+            ),
+            "canonical_seq": seq_ref,
+        }
+    )
     return ReferenceFrame(
         name="1GAG",
         klifs=klifs,
@@ -180,6 +202,7 @@ def build_reference_frame(dict_kinase: dict[str, KinaseInfo]) -> ReferenceFrame:
         full_seq=str_pdb_seq,
         full_coords=full_coords,
         origin=origin,
+        sha256=str_sha256,
     )
 
 
@@ -378,8 +401,29 @@ def superpose_structure(
     """
     if structure_model is None:
         return
-    if structure_model.superposition is not None and not force:
-        return  # idempotent: keep an already-computed superposition (unchanged structure)
+    # the KLIFS and MSA maps are both recorded: either can supply the C-alpha correspondence
+    check = InputCheck(
+        str_label=f"{structure_id} superposition",
+        dict_sha256=return_inputs_sha256(
+            {
+                "structure": return_structure_sha256(structure_model),
+                "klifs_map": obj_kinase.KLIFS2UniProtIdx,
+                "msa_map": (
+                    obj_kinase.kincore.msa.region2uniprot
+                    if obj_kinase.kincore is not None
+                    and obj_kinase.kincore.msa is not None
+                    else None
+                ),
+                "reference": frame.sha256 or "",
+            },
+            [sys.modules[__name__], convert_mmcifdict2structure, BioAligner],
+        ),
+        dict_readable={"reference": frame.name},
+    )
+    if not check.is_stale(structure_model.superposition, force=force):
+        return  # idempotent: inputs unchanged, keep the stored superposition
     structure_model.superposition = _superpose_structure(
         structure_model.cif, obj_kinase, frame, structure_id
     )
+    if structure_model.superposition is not None:
+        structure_model.superposition.input_sha256 = check.dict_sha256
