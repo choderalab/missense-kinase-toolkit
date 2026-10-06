@@ -31,7 +31,7 @@ from mkt.schema.kinase_schema import (
     KinCoReSeqSource,
     KinCoReStructureSource,
 )
-from mkt.schema.utils import TQDM_BAR_FORMAT
+from mkt.schema.utils import TQDM_BAR_FORMAT, return_json_sha256
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -425,6 +425,7 @@ def extract_pk_cif_files_as_list() -> list[KinCoReCIF]:
             dict_temp.pop("species")
             dict_temp.pop("state")
             dict_temp["source"] = provenance
+            dict_temp["sha256"] = return_json_sha256(cif)
             list_out.append(dict_temp)
 
     return [KinCoReCIF.model_validate(v) for v in list_out]

@@ -7,6 +7,7 @@ model produced by residue-level SASA computation.
 
 import logging
 import os
+import sys
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict, dataclass
 from enum import Enum
@@ -15,6 +16,11 @@ import pandas as pd
 from Bio.PDB.SASA import ShrakeRupley
 from Bio.PDB.Structure import Structure
 from mkt.databases.colors import map_aa_to_single_letter_code
+from mkt.databases.input_check import (
+    InputCheck,
+    return_inputs_sha256,
+    return_structure_sha256,
+)
 from mkt.databases.io_utils import return_kinase_dict
 from mkt.databases.utils import (
     convert_mmcifdict2structure,
@@ -834,6 +840,38 @@ def _kinase_structures(obj_kinase, only: str | None = None):
         yield obj_kinase.alphafold
 
 
+def _return_sasa_input_check(hgnc_name, obj_kinase, structure, config) -> InputCheck:
+    """Return the inputs a structure's SASA is computed from (see :class:`InputCheck`).
+
+    The structure and its KLIFS map (SASA is keyed on it) are hashed, along with the code in
+    this module and the cross-module helpers it calls; the config fields are readable.
+    """
+    str_structure = (
+        "kincore" if type(structure).__name__ == "KinCoReCIF" else "alphafold"
+    )
+    return InputCheck(
+        str_label=f"{hgnc_name} {str_structure} SASA",
+        dict_sha256=return_inputs_sha256(
+            {
+                "structure": return_structure_sha256(structure),
+                "klifs_map": obj_kinase.KLIFS2UniProtIdx,
+            },
+            [
+                sys.modules[__name__],
+                convert_mmcifdict2structure,
+                map_aa_to_single_letter_code,
+            ],
+        ),
+        dict_readable={
+            "method": _sasa_method_label(config),
+            "probe_radius": config.probe_radius,
+            "n_points": config.n_points,
+            "include_hydrogens": config.bool_include_hydrogens,
+            "max_asa_reference": MAX_ASA_REFERENCE,
+        },
+    )
+
+
 def _build_sasa_model(obj_kinase, lookup, config):
     """Build the SASA model from a per-UniProt-position lookup, keyed by KLIFS region:idx.
 
@@ -913,11 +951,12 @@ def enrich_kinases_with_sasa(
                 struct.sasa = None
             continue
         for i, struct in enumerate(_kinase_structures(obj, only=only)):
-            if struct.sasa is not None and not force:
-                continue  # idempotent: keep already-computed SASA (e.g. an unchanged structure)
+            check = _return_sasa_input_check(hgnc, obj, struct, config)
+            if not check.is_stale(struct.sasa, force=force):
+                continue  # idempotent: inputs unchanged, keep the stored SASA
             key = f"{hgnc}::{i}"
             tasks.append((key, struct.cif, config))
-            meta[key] = (obj, struct)
+            meta[key] = (obj, struct, check)
 
     if not tasks:
         return
@@ -938,5 +977,7 @@ def enrich_kinases_with_sasa(
             )
 
     for key, lookup in results:
-        obj, struct = meta[key]
+        obj, struct, check = meta[key]
         struct.sasa = None if lookup is None else _build_sasa_model(obj, lookup, config)
+        if struct.sasa is not None:
+            struct.sasa.input_sha256 = check.dict_sha256
