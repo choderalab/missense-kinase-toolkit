@@ -21,6 +21,7 @@ set -uo pipefail
 # --- constants (edit here) ---
 ALL_TASKS="kinaseinfo conservation dataset pymol"
 PATH_TO_VENV="missense_kinase_toolkit/VE/bin/activate"
+PATH_TO_ENV="missense_kinase_toolkit/.env"
 CREATE_VENV_SCRIPT="bin/create_venv.sh"
 
 CONFIG=""
@@ -47,12 +48,16 @@ while [ $# -gt 0 ]; do
                 NO_DATA_TASKS="$tasks"
             fi
             ;;
-        --only)
-            ONLY_TASKS="${2:-}"
-            shift 2
-            ;;
-        --skip)
-            SKIP_TASKS="${2:-}"
+        --only | --skip)
+            if [ $# -lt 2 ] || [ "${2#--}" != "$2" ]; then
+                echo "$1 needs a comma-separated list of tasks."
+                exit 1
+            fi
+            if [ "$1" = "--only" ]; then
+                ONLY_TASKS="$2"
+            else
+                SKIP_TASKS="$2"
+            fi
             shift 2
             ;;
         *)
@@ -84,10 +89,10 @@ else
     echo "Create it first:  bash $CREATE_VENV_SCRIPT"
     exit 1
 fi
-if [ -f ".env" ]; then
+if [ -f "$PATH_TO_ENV" ]; then
     set -a
-    # shellcheck disable=SC1091
-    source .env
+    # shellcheck disable=SC1090
+    source "$PATH_TO_ENV"
     set +a
 fi
 
