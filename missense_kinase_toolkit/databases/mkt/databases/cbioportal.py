@@ -8,6 +8,7 @@ named by the kinase domain that contains them.
 
 import logging
 import os
+import re
 import time
 from abc import abstractmethod
 from dataclasses import dataclass, field
@@ -20,7 +21,7 @@ from bravado.client import SwaggerClient
 from mkt.databases import properties
 from mkt.databases.api_schema import APIKeySwaggerClient
 from mkt.databases.config import get_cbioportal_instance, maybe_get_cbioportal_token
-from mkt.databases.constants import normalize_build
+from mkt.databases.constants import EntrezGeneIDPattern, normalize_build
 from mkt.databases.genomenexus import annotate_genomic_locations
 from mkt.databases.io_utils import (
     parse_iterabc2dataframe,
@@ -518,6 +519,66 @@ def apply_gene_replacements(
     return dict_out
 
 
+def clean_entrez_id(value: object) -> str | None:
+    """Return an Entrez Gene ID as a string if it is a valid ID.
+
+    Parameters
+    ----------
+    value : object
+        Entrez Gene ID as found in cBioPortal's ``entrezGeneId`` (an int or string);
+        missing values are allowed. A float such as ``8358.0`` is rejected, so read
+        the column as a nullable integer (``Int64``) first.
+
+    Returns
+    -------
+    str | None
+        The ID (e.g. ``"8358"``) if it matches
+        :data:`~mkt.databases.constants.EntrezGeneIDPattern`, else None.
+    """
+    str_entrez = str(value).strip()
+    if re.fullmatch(EntrezGeneIDPattern, str_entrez):
+        return str_entrez
+    return None
+
+
+def log_hgnc_query_summary(
+    list_resolved: list[str],
+    list_no_uniprot: list[str],
+    list_not_found: list[str],
+    list_err: list[str],
+) -> None:
+    """Log the outcome of an HGNC gene-name query, one gene per line.
+
+    Parameters
+    ----------
+    list_resolved : list[str]
+        ``"old -> new (via field)"`` for symbols found by a fallback (INFO).
+    list_no_uniprot : list[str]
+        Genes HGNC knows but that have no UniProt ID, e.g. readthroughs (WARNING).
+    list_not_found : list[str]
+        Symbols no lookup found (WARNING).
+    list_err : list[str]
+        ``"symbol: error"`` for unexpected failures (ERROR).
+    """
+    for str_msg, list_items, int_level in (
+        (
+            "Resolved by fallback (HGNC no longer uses the symbol)",
+            list_resolved,
+            logging.INFO,
+        ),
+        ("Found in HGNC but without a UniProt ID", list_no_uniprot, logging.WARNING),
+        (
+            "Not found in HGNC by symbol, Entrez ID or previous symbol",
+            list_not_found,
+            logging.WARNING,
+        ),
+        ("Errors retrieving HGNC gene names", list_err, logging.ERROR),
+    ):
+        if list_items:
+            str_items = "\n".join(f"  {item}" for item in sorted(list_items))
+            logger.log(int_level, f"{str_msg} ({len(list_items)}):\n{str_items}")
+
+
 def return_gene2names(
     dict_hgnc2uniprot: dict[str, str | None],
     dict_kinase: dict[str, object],
@@ -944,12 +1005,17 @@ class KinaseMissenseMutations(Mutations):
         except ValueError:
             return None
 
-    def query_hgnc_gene_names(
+    def query_hgnc_uniprot_ids(
         self,
         list_hgnc: list[str],
         dict_kinase: dict[str, object],
+        dict_entrez: dict[str, object] | None = None,
     ) -> dict[str, str | None]:
         """Query HGNC gene names from a DataFrame of mutations.
+
+        A symbol HGNC no longer recognizes (e.g. the renamed histones, ``HIST1H3B``
+        -> ``H3C2``) is retried by its Entrez Gene ID, then as a previous symbol; a
+        fallback is used only when it matches exactly one current gene.
 
         Parameters
         ----------
@@ -957,6 +1023,9 @@ class KinaseMissenseMutations(Mutations):
             List of HGNC gene names to query
         dict_kinase : dict[str, object]
             Dictionary mapping kinase names to KinaseInfo objects
+        dict_entrez : dict[str, object] | None
+            Optional mapping of gene name to Entrez Gene ID (cBioPortal's
+            ``entrezGeneId``), used for the Entrez fallback
 
         Returns
         -------
@@ -966,29 +1035,87 @@ class KinaseMissenseMutations(Mutations):
         """
         from mkt.databases import hgnc
 
+        dict_entrez = dict_entrez or {}
         dict_hgnc2uniprot = dict.fromkeys(set(list_hgnc))
 
-        list_err = []
+        list_resolved, list_no_uniprot, list_not_found, list_err = [], [], [], []
         for hgnc_name in tqdm(
             dict_hgnc2uniprot.keys(),
             desc="Querying HGNC...",
             bar_format=TQDM_BAR_FORMAT,
         ):
-            temp = hgnc.HGNC(input_symbol_or_id=hgnc_name)
+            obj_hgnc = hgnc.HGNC(input_symbol_or_id=hgnc_name)
             try:
-                uniprot_id = temp.maybe_get_info_from_hgnc_fetch(
-                    list_to_extract=["uniprot_ids"]
-                )["uniprot_ids"][0][0]
-                dict_hgnc2uniprot[hgnc_name] = uniprot_id
+                dict_info, str_via = self._query_hgnc_with_fallback(
+                    obj_hgnc, clean_entrez_id(dict_entrez.get(hgnc_name))
+                )
             except Exception as e:
                 list_err.append(f"{hgnc_name}: {e}")
-        if len(list_err) > 0:
-            str_errors = "\n".join(list_err)
-            logger.error(f"Errors retrieving HGNC gene names:\n{str_errors}")
+                continue
+            if dict_info is None:
+                list_not_found.append(hgnc_name)
+                continue
+            if str_via is not None:
+                list_resolved.append(f"{hgnc_name} -> {obj_hgnc.hgnc} (via {str_via})")
+            list_uniprot = (dict_info["uniprot_ids"] or [[]])[0]
+            if len(list_uniprot) == 0:
+                list_no_uniprot.append(obj_hgnc.hgnc)
+                continue
+            dict_hgnc2uniprot[hgnc_name] = list_uniprot[0]
+
+        log_hgnc_query_summary(list_resolved, list_no_uniprot, list_not_found, list_err)
 
         return apply_gene_replacements(
             dict_hgnc2uniprot, dict_kinase, self.dict_replace
         )
+
+    @staticmethod
+    def _query_hgnc_with_fallback(
+        obj_hgnc: object, str_entrez: str | None
+    ) -> tuple[dict | None, str | None]:
+        """Fetch a gene's HGNC symbol and UniProt IDs, falling back on a miss.
+
+        Tries the symbol, then the Entrez Gene ID, then the symbol as a previous
+        symbol. A fallback search matching exactly one gene sets ``obj_hgnc.hgnc``
+        to the current symbol, which is then fetched.
+
+        Parameters
+        ----------
+        obj_hgnc : mkt.databases.hgnc.HGNC
+            HGNC client for the cohort's gene symbol
+        str_entrez : str | None
+            The gene's Entrez Gene ID, if known
+
+        Returns
+        -------
+        tuple[dict | None, str | None]
+            The ``symbol``/``uniprot_ids`` fetch (None if no lookup found the gene)
+            and the fallback field that found it (None for a direct symbol hit)
+        """
+        list_fields = ["symbol", "uniprot_ids"]
+        dict_info = obj_hgnc.maybe_get_info_from_hgnc_fetch(list_to_extract=list_fields)
+        if dict_info is not None and dict_info["symbol"] is not None:
+            return dict_info, None
+
+        for str_field, str_term in (
+            ("entrez_id", str_entrez),
+            ("prev_symbol", obj_hgnc.input_symbol_or_id),
+        ):
+            if str_term is None:
+                continue
+            list_match = obj_hgnc.maybe_get_symbol_from_hgnc_search(
+                custom_field=str_field, custom_term=str_term
+            )
+            # only an unambiguous match; the search then updated obj_hgnc.hgnc
+            if list_match is None or len(list_match) != 1:
+                continue
+            dict_info = obj_hgnc.maybe_get_info_from_hgnc_fetch(
+                list_to_extract=list_fields
+            )
+            if dict_info is not None and dict_info["symbol"] is not None:
+                return dict_info, str_field
+
+        return None, None
 
     def get_kinase_missense_mutations(
         self,
@@ -1013,11 +1140,23 @@ class KinaseMissenseMutations(Mutations):
             return None
 
         col_gene = self.return_adjusted_colname("hugoGeneSymbol")
+        col_entrez = self.return_adjusted_colname("entrezGeneId")
         df_missense = self.filter_single_aa_missense_mutations(self._df.copy())
 
-        dict_hgnc2uniprot = self.query_hgnc_gene_names(
+        # nullable integers: a column with missing IDs would otherwise read as floats
+        dict_entrez = (
+            df_missense.drop_duplicates(subset=col_gene)
+            .set_index(col_gene)[col_entrez]
+            .pipe(pd.to_numeric, errors="coerce")
+            .astype("Int64")
+            .to_dict()
+            if col_entrez in df_missense.columns
+            else None
+        )
+        dict_hgnc2uniprot = self.query_hgnc_uniprot_ids(
             list_hgnc=df_missense[col_gene].tolist(),
             dict_kinase=DICT_KINASE,
+            dict_entrez=dict_entrez,
         )
         dict_gene2names = return_gene2names(dict_hgnc2uniprot, DICT_KINASE)
         dict_gene2seq = return_gene2seq(dict_gene2names, DICT_KINASE)
