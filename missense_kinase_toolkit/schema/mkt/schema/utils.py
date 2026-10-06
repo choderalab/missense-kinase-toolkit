@@ -7,10 +7,11 @@ helpers :func:`return_klifs2msa_dict`/:func:`return_catalytic_klifs2msa_dict`.
 """
 
 import hashlib
+import json
 import logging
 import os
 from datetime import date
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from mkt.schema.kinase_schema import KinaseInfo
@@ -183,6 +184,26 @@ def return_sha256(bytes_data: bytes) -> str:
         Hex digest.
     """
     return hashlib.sha256(bytes_data).hexdigest()
+
+
+def return_json_sha256(obj: Any) -> str:
+    """Return the SHA-256 of an object's canonical JSON (sorted keys, compact separators).
+
+    Defines the hash of a stored structure (``KinCoReCIF.sha256``/``AlphaFold.sha256`` over
+    its ``cif`` dict) and of other JSON-like inputs, so it can be re-derived from the archive.
+
+    Parameters
+    ----------
+    obj : Any
+        JSON-serializable object (e.g. a CIF dict or a residue map).
+
+    Returns
+    -------
+    str
+        Hex digest.
+    """
+    str_json = json.dumps(obj, sort_keys=True, separators=(",", ":"))
+    return return_sha256(str_json.encode("utf-8"))
 
 
 def return_manifest_tallies(
