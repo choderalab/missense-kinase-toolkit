@@ -12,10 +12,11 @@ additive optional fields on the assembled objects.
 
 import logging
 import os
-import shutil
+import tempfile
 from dataclasses import dataclass
 from importlib.metadata import version
-from typing import Any
+from inspect import isclass
+from typing import Any, get_args
 
 import git
 from mkt.databases.generator import steps as build_steps
@@ -34,9 +35,11 @@ from mkt.schema.io_utils import (
     deserialize_kinase_dict,
     get_repo_root,
     load_manifest,
+    return_dir_entry_sha256,
     serialize_kinase_dict,
 )
-from mkt.schema.utils import split_domain_suffix
+from mkt.schema.utils import rgetattr, split_domain_suffix
+from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +69,8 @@ class BuildContext:
     dict_kinaseinfo: dict[str, Any]
     """Assembled KinaseInfo objects keyed by ``hgnc_name`` (incl. ``_1``/``_2`` multi-kinase-domain suffixes)."""
     path_objects: str
-    """Absolute path to the per-kinase serialization directory."""
+    """Absolute path to the objects directory; the archive is written beside it, and
+    entries are staged in a temporary directory, never here."""
     path_reports: str
     """Absolute path to the reports/figures directory."""
     path_tar: str
@@ -139,15 +143,132 @@ def _reconstruct_dict_obj(dict_kinase: dict[str, Any]) -> dict[str, Any]:
     return dict_obj
 
 
+def _return_model_cls(model_cls: type, str_field: str) -> type | None:
+    """Return the Pydantic model class a (possibly optional) field holds, or None."""
+    field = model_cls.model_fields.get(str_field)
+    if field is None:
+        return None
+    for sub_cls in get_args(field.annotation) or (field.annotation,):
+        if isclass(sub_cls) and issubclass(sub_cls, BaseModel):
+            return sub_cls
+    return None
+
+
+def _carry_field(obj_new: Any, obj_old: Any, str_path: str) -> None:
+    """Copy one dotted field from an existing entry onto its rebuilt counterpart.
+
+    Missing parents on the rebuilt entry are created when their model has no required
+    fields (e.g. a KinCoRe shell holding only ``msa``); otherwise the value is dropped
+    with a warning, since it has nothing to attach to.
+
+    Parameters
+    ----------
+    obj_new : KinaseInfo
+        Rebuilt entry (mutated in place).
+    obj_old : KinaseInfo
+        Existing entry the value is copied from.
+    str_path : str
+        Dotted field path, e.g. ``"kincore.cif.sasa"``.
+    """
+    val = rgetattr(obj_old, str_path)
+    if val is None:
+        return
+    *list_parents, str_leaf = str_path.split(".")
+    parent = obj_new
+    for str_name in list_parents:
+        child = getattr(parent, str_name, None)
+        if child is None:
+            child_cls = _return_model_cls(type(parent), str_name)
+            try:
+                child = child_cls() if child_cls is not None else None
+            except ValidationError:
+                child = None
+            if child is None:
+                logger.warning(
+                    f"{obj_new.hgnc_name}: no '{str_name}' to carry '{str_path}' onto; "
+                    "dropping it."
+                )
+                return
+            setattr(parent, str_name, child)
+        parent = child
+    setattr(parent, str_leaf, val)
+
+
+def _clear_field(obj: Any, str_path: str) -> None:
+    """Set one dotted field to None if its parent exists."""
+    str_parent, _, str_leaf = str_path.rpartition(".")
+    parent = rgetattr(obj, str_parent) if str_parent else obj
+    if parent is not None:
+        setattr(parent, str_leaf, None)
+
+
+def merge_rebuilt_entries(
+    dict_existing: dict[str, Any],
+    dict_new: dict[str, Any],
+    names: list[str],
+    set_base_uniprot: set[str],
+) -> set[str]:
+    """Merge rebuilt entries into the existing dict, field by field.
+
+    For each rebuilt entry, fields owned by steps that will re-run (``names``) are cleared so
+    the step computes them fresh, and fields owned by every other step are carried over from
+    the existing entry. Existing entries of a rebuilt UniProt that the rebuild no longer
+    produces (e.g. a renamed or dropped domain) are removed.
+
+    Parameters
+    ----------
+    dict_existing : dict[str, KinaseInfo]
+        Existing dict keyed by ``hgnc_name`` (mutated in place).
+    dict_new : dict[str, KinaseInfo]
+        Rebuilt entries keyed by ``hgnc_name``.
+    names : list[str]
+        Enrichment steps that will run on the rebuilt entries.
+    set_base_uniprot : set[str]
+        Base UniProt IDs that were rebuilt.
+
+    Returns
+    -------
+    set[str]
+        ``hgnc_name`` keys of the rebuilt entries (the enrichment target set).
+    """
+    set_names = set(names)
+    for hgnc_name, obj_new in dict_new.items():
+        obj_old = dict_existing.get(hgnc_name)
+        for step, list_paths in build_steps._STEP_WRITES.items():
+            for str_path in list_paths:
+                if step in set_names:
+                    _clear_field(obj_new, str_path)
+                elif obj_old is not None:
+                    _carry_field(obj_new, obj_old, str_path)
+
+    list_stale = [
+        hgnc_name
+        for hgnc_name, obj in dict_existing.items()
+        if _strip_kd_suffix(obj.uniprot_id) in set_base_uniprot
+        and hgnc_name not in dict_new
+    ]
+    if list_stale:
+        logger.warning(
+            f"removing entr(ies) no longer produced by the rebuild: {sorted(list_stale)}"
+        )
+    for hgnc_name in list_stale:
+        del dict_existing[hgnc_name]
+
+    dict_existing.update(dict_new)
+    return set(dict_new)
+
+
 def run_source_rebuild(
     sources: list[str],
     dict_existing: dict[str, Any],
+    subset_uniprot: set[str] | None = None,
 ) -> dict[str, Any]:
     """Rebuild the dict refreshing only the named base-build source(s).
 
     Reconstructs the raw dict_obj from ``dict_existing``, replaces each named source with a
     fresh :func:`fetch_source`, and re-runs the combine_* pipeline so every cross-source
-    validator (KinCoRe alignments, KLIFS2UniProt mapping) recomputes.
+    validator (KinCoRe alignments, KLIFS2UniProt mapping) recomputes. The result holds only
+    base-build fields; merge it with :func:`merge_rebuilt_entries`.
 
     Parameters
     ----------
@@ -155,12 +276,20 @@ def run_source_rebuild(
         Source names (subset of :class:`Source`) to refresh.
     dict_existing : dict[str, Any]
         The currently serialized KinaseInfo dict.
+    subset_uniprot : set[str] | None, optional
+        Base UniProt IDs to rebuild (``--kinase``), by default None (every entry).
 
     Returns
     -------
     dict[str, Any]
         The rebuilt KinaseInfo dict.
     """
+    if subset_uniprot is not None:
+        dict_existing = {
+            k: v
+            for k, v in dict_existing.items()
+            if _strip_kd_suffix(v.uniprot_id) in subset_uniprot
+        }
     dict_obj = _reconstruct_dict_obj(dict_existing)
     set_uniprot = set(dict_obj[Source.uniprot].keys())
     for source in sources:
@@ -329,7 +458,8 @@ class Pipeline:
     """
 
     path_objects: str
-    """Absolute path to the per-kinase serialization directory."""
+    """Absolute path to the objects directory; the archive is written beside it, and
+    entries are staged in a temporary directory, never here."""
     path_reports: str
     """Absolute path to the reports/figures directory."""
     path_tar: str
@@ -366,11 +496,16 @@ class Pipeline:
         # persist HTTP responses (incl. AlphaFold) so every mode -- not just the base
         # build -- reuses the SQLite cache rather than the per-run in-memory backend
         set_request_cache(os.path.join(path_repo, "requests_cache.sqlite"))
-        path_objects = _resolve_dir(path_repo, path_objects, DEFAULT_PATH_OBJECTS)
+        # not created: entries are staged in a temp dir; only the tar's parent must exist
+        path_objects = os.path.join(
+            path_repo,
+            path_objects if path_objects is not None else DEFAULT_PATH_OBJECTS,
+        )
         path_reports = _resolve_dir(path_repo, path_reports, DEFAULT_PATH_REPORTS)
         path_tar = os.path.normpath(
             os.path.join(path_objects, "..", "KinaseInfo.tar.gz")
         )
+        os.makedirs(os.path.dirname(path_tar), exist_ok=True)
         return cls(path_objects, path_reports, path_tar, config_path=config_path)
 
     def _load_existing(self) -> dict[str, Any]:
@@ -400,20 +535,31 @@ class Pipeline:
         -------
         None
         """
-        serialize_kinase_dict(dict_kinaseinfo, str_path=self.path_objects)
-        manifest = Manifest.from_kinase_dict(
-            dict_kinaseinfo,
-            git=_return_git_info(),
-            packages=_return_package_versions(),
-        )
-        path_manifest = os.path.join(self.path_objects, STR_MANIFEST_FILENAME)
-        with open(path_manifest, "w") as outfile:
-            outfile.write(manifest.model_dump_json(indent=4))
-        if os.path.exists(self.path_tar):
-            os.remove(self.path_tar)
-        create_tar_without_metadata(
-            path_source=self.path_objects, filename_tar=self.path_tar
-        )
+        # stage in a fresh system temp dir: removed on success, error, or Ctrl-C, never
+        # left in the repo/package, and never mixed with files from an earlier run
+        with tempfile.TemporaryDirectory(prefix="KinaseInfo_") as path_staging:
+            serialize_kinase_dict(dict_kinaseinfo, str_path=path_staging)
+            # hash the files exactly as they will be tarred, so loads verify the bytes
+            manifest = Manifest.from_kinase_dict(
+                dict_kinaseinfo,
+                git=_return_git_info(),
+                packages=_return_package_versions(),
+                entry_sha256=return_dir_entry_sha256(path_staging),
+            )
+            path_manifest = os.path.join(path_staging, STR_MANIFEST_FILENAME)
+            with open(path_manifest, "w") as outfile:
+                outfile.write(manifest.model_dump_json(indent=4))
+            # write beside the target, then swap atomically: a failed build keeps the
+            # previous archive instead of deleting it first
+            path_partial = f"{self.path_tar}.partial"
+            try:
+                create_tar_without_metadata(
+                    path_source=path_staging, filename_tar=path_partial
+                )
+                os.replace(path_partial, self.path_tar)
+            finally:
+                if os.path.exists(path_partial):
+                    os.remove(path_partial)
         logger.info(f"built {self.path_tar}\n{manifest.return_summary()}")
 
     def _dated_reports_dir(self) -> str:
@@ -481,6 +627,7 @@ class Pipeline:
         subset_hgnc: set[str] | None,
         bool_figs: bool = True,
         force: bool = False,
+        dict_step_subset: dict[str, set[str]] | None = None,
     ) -> None:
         """Run enrichment steps, serialize + tar, generate reports, and clean up.
 
@@ -498,6 +645,11 @@ class Pipeline:
         bool_figs : bool, optional
             Regenerate the report figures into the datetime-stamped reports subdir, by
             default True; ``--no-figs`` disables them.
+        force : bool, optional
+            Force structure steps to regenerate derived properties, by default False.
+        dict_step_subset : dict[str, set[str]] | None, optional
+            Per-step target keys overriding ``subset_hgnc`` (see
+            :func:`~mkt.databases.generator.steps.run_steps`), by default None.
 
         Returns
         -------
@@ -511,12 +663,11 @@ class Pipeline:
             subset_hgnc=subset_hgnc,
             force=force,
         )
-        build_steps.run_steps(names, ctx)
+        build_steps.run_steps(names, ctx, dict_step_subset=dict_step_subset)
         self._serialize_and_tar(dict_kinaseinfo)
         if bool_figs:
             ctx.path_reports, ctx.report_config = self._reports_target()
             build_steps.run_reports(ctx)
-        shutil.rmtree(self.path_objects)
 
     def figures(self) -> None:
         """Regenerate the report figures from the existing archive without rebuilding.
@@ -616,8 +767,7 @@ class Pipeline:
             logger.warning("base build produced no objects for the requested subset.")
             return
 
-        subset_hgnc = set(dict_sub)
-        dict_full.update(dict_sub)
+        subset_hgnc = merge_rebuilt_entries(dict_full, dict_sub, names, subset_uniprot)
         logger.info(
             f"spliced {len(dict_sub)} updated entr(ies) ({sorted(subset_hgnc)}) into "
             f"{len(dict_full)} total; re-archiving."
@@ -630,14 +780,17 @@ class Pipeline:
         self,
         sources: list[str],
         names: list[str],
+        list_kinase: list[str] | None = None,
         bool_figs: bool = True,
         force: bool = False,
     ) -> None:
         """Partial update on the existing dict: refresh source(s) and/or run step(s).
 
         Loads the existing archive, optionally rebuilds the named base-build source(s), runs
-        the named enrichment steps, and re-serializes. Falls back to a full regeneration when
-        no existing dict is found.
+        the enrichment steps (the requested ones plus everything downstream, resolved by the
+        caller), and re-serializes. Rebuilt entries are merged field by field
+        (:func:`merge_rebuilt_entries`), so fields of steps that don't re-run are kept. Falls
+        back to a full regeneration when no existing dict is found.
 
         Parameters
         ----------
@@ -645,6 +798,9 @@ class Pipeline:
             Base-build source names (:class:`Source`) to refresh; may be empty (steps only).
         names : list[str]
             Enrichment step names to run.
+        list_kinase : list[str] | None, optional
+            Restrict the update to these existing kinases (``--kinase``), by default None
+            (every entry).
         bool_figs : bool, optional
             Regenerate report figures after the update, by default True.
         force : bool, optional
@@ -663,22 +819,71 @@ class Pipeline:
             self.full(names, bool_figs=bool_figs, force=force)
             return
 
+        subset_uniprot = None
+        if list_kinase:
+            subset_uniprot, set_unresolved = _resolve_targets(
+                list_kinase, dict_existing
+            )
+            if set_unresolved:
+                logger.warning(
+                    f"--only applies to existing kinases; skipping {sorted(set_unresolved)} "
+                    "(add new kinases with --kinase alone)."
+                )
+            if not subset_uniprot:
+                logger.warning(
+                    "no requested kinases are in the archive; nothing to do."
+                )
+                return
+
         if sources:
-            dict_new = run_source_rebuild(sources, dict_existing)
+            dict_new = run_source_rebuild(sources, dict_existing, subset_uniprot)
             logger.info(
                 f"source rebuild ({sorted(sources)}) produced {len(dict_new)} entries "
                 f"(was {len(dict_existing)}); re-archiving."
             )
-            dict_existing.update(dict_new)
-            subset_hgnc = set(dict_new)
+            set_base_uniprot = (
+                subset_uniprot
+                if subset_uniprot is not None
+                else {
+                    _strip_kd_suffix(obj.uniprot_id) for obj in dict_existing.values()
+                }
+            )
+            # entries with no existing counterpart have nothing to carry over
+            set_new = set(dict_new) - set(dict_existing)
+            subset_hgnc = merge_rebuilt_entries(
+                dict_existing, dict_new, names, set_base_uniprot
+            )
+        elif subset_uniprot is not None:
+            set_new = set()
+            subset_hgnc = {
+                hgnc_name
+                for hgnc_name, obj in dict_existing.items()
+                if _strip_kd_suffix(obj.uniprot_id) in subset_uniprot
+            }
         else:
+            set_new = set()
             subset_hgnc = set(dict_existing)
+
+        # existing entries get the requested + downstream steps; new entries get every step
+        dict_step_subset = None
+        if set_new:
+            logger.info(
+                f"new entr(ies) {sorted(set_new)} have no existing data; running every "
+                "enrichment step on them."
+            )
+            set_names = set(names)
+            dict_step_subset = {
+                name: (subset_hgnc if name in set_names else set()) | set_new
+                for name in build_steps.resolve_step_names()
+            }
+            names = list(dict_step_subset)
         self._finalize(
             dict_existing,
             names,
             subset_hgnc=subset_hgnc,
             bool_figs=bool_figs,
             force=force,
+            dict_step_subset=dict_step_subset,
         )
 
     def run(
@@ -696,12 +901,15 @@ class Pipeline:
         ----------
         only : list[str] | None, optional
             Components to rebuild on the existing dict: data sources
-            (hgnc/uniprot/kinhub/klifs/pfam/kincore) and/or enrichment steps. Any ``only``
-            triggers a partial update; mutually exclusive with ``skip``.
+            (hgnc/uniprot/kinhub/klifs/pfam/kincore) and/or enrichment steps, plus every
+            step downstream of them. Any ``only`` triggers a partial update; mutually
+            exclusive with ``skip``.
         skip : list[str] | None, optional
             Skip these enrichment steps in a full regen; all other steps run.
         list_kinase : list[str] | None, optional
-            HGNC name(s) to update one-off; None (with no ``only``) runs a full regen.
+            HGNC name(s) to update; alone it rebuilds and splices those entries (adding new
+            kinases), and with ``only`` it restricts the partial update to them. None (with
+            no ``only``) runs a full regen.
         bool_data : bool | None, optional
             Build or update the archive; False draws figures from the existing archive. None
             defers to the config's ``kinaseinfo.data`` (True if unset), by default None.
@@ -749,11 +957,17 @@ class Pipeline:
             return
 
         sources = [name for name in only or [] if name in list_sources]
-        only_steps = [name for name in only or [] if name in list_steps]
-        names = build_steps.resolve_step_names(only_steps or None, skip)
+        # requested steps plus everything downstream of a requested source or step
+        names = build_steps.resolve_step_names(only, skip)
 
         if only:
-            self.partial(sources, names, bool_figs=bool_figs, force=force)
+            self.partial(
+                sources,
+                names,
+                list_kinase=list_kinase,
+                bool_figs=bool_figs,
+                force=force,
+            )
         elif list_kinase:
             self.update(names, list_kinase, bool_figs=bool_figs, force=force)
         else:

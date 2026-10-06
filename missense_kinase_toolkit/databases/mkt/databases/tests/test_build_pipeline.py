@@ -56,6 +56,59 @@ def test_resolve_step_names_only_and_skip_order(monkeypatch):
     assert build_steps.resolve_step_names() == ["alpha", "beta", "gamma"]
 
 
+@pytest.mark.parametrize(
+    "only,expected",
+    [
+        (["kincore"], ["kincore_msa", "kincore_structure_props", "alphafold"]),
+        (["klifs"], ["kincore_msa", "kincore_structure_props", "alphafold"]),
+        (["pfam"], ["alphafold"]),
+        (["hgnc"], ["kincore_msa", "kincore_structure_props", "alphafold", "exon"]),
+        (["uniprot"], ["kincore_msa", "kincore_structure_props", "alphafold", "exon"]),
+        (["kinhub"], []),
+        (["kincore_msa"], ["kincore_msa", "kincore_structure_props", "alphafold"]),
+        (["exon"], ["exon"]),
+        (["kinhub", "exon"], ["exon"]),
+    ],
+)
+def test_resolve_step_names_adds_downstream(only, expected):
+    """--only runs the requested components plus every step downstream of them."""
+    assert build_steps.resolve_step_names(only=only) == expected
+
+
+def test_merge_rebuilt_entries_carries_clears_and_removes():
+    """Unrun steps' fields carry over (creating a KinCoRe shell if needed), re-run steps'
+    fields are cleared, and rebuilt UniProts' vanished entries are removed."""
+    seed = deserialize_kinase_dict(list_ids=["EGFR", "JAK1_1"], bool_verbose=False)
+    if not {"EGFR", "JAK1_1"} <= set(seed):
+        pytest.skip("packaged KinaseInfo.tar.gz missing EGFR/JAK1")
+    assert seed["EGFR"].kincore.msa is not None and seed["EGFR"].exon is not None
+
+    dict_existing = {k: copy.deepcopy(v) for k, v in seed.items()}
+    dict_existing["JAK1_9"] = copy.deepcopy(
+        seed["JAK1_1"]
+    )  # a domain the rebuild drops
+    dict_existing["JAK1_9"].hgnc_name = "JAK1_9"
+    egfr = copy.deepcopy(seed["EGFR"])
+    egfr.kincore, egfr.exon, egfr.alphafold = None, None, None
+    jak1 = copy.deepcopy(seed["JAK1_1"])
+
+    subset_hgnc = pipeline.merge_rebuilt_entries(
+        dict_existing,
+        {"EGFR": egfr, "JAK1_1": jak1},
+        names=["alphafold"],
+        set_base_uniprot={"P00533", "P23458"},
+    )
+
+    assert subset_hgnc == {"EGFR", "JAK1_1"}
+    assert set(dict_existing) == {"EGFR", "JAK1_1"}
+    # exon and kincore.msa carried over; the msa needed a KinCoRe shell to land on
+    assert dict_existing["EGFR"].exon == seed["EGFR"].exon
+    assert dict_existing["EGFR"].kincore.msa == seed["EGFR"].kincore.msa
+    assert dict_existing["EGFR"].kincore.fasta is None
+    # alphafold re-runs, so it starts cleared
+    assert dict_existing["JAK1_1"].alphafold is None
+
+
 class _FakeKinase:
     """Minimal stand-in exposing the ``uniprot_id`` attribute used for resolution."""
 
@@ -130,6 +183,8 @@ def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
     assert manifest is not None
     assert manifest.return_mismatches(after) == []
     assert set(manifest.packages) == set(pipeline.LIST_MANIFEST_PACKAGES)
+    # entry hashes are recorded (the reload above already verified them)
+    assert sorted(manifest.entry_sha256) == ["ABL1.json", "EGFR.json"]
 
 
 def test_dated_reports_dir_uses_manifest(tmp_path):
@@ -151,6 +206,38 @@ def test_dated_reports_dir_uses_manifest(tmp_path):
     os.utime(pl.path_tar, (0, 0))  # a fresh checkout changes the mtime
     assert pl._dated_reports_dir() == path_before
     assert os.path.basename(path_before) == stamp
+
+
+def test_interrupted_build_leaves_no_staging(tmp_path, monkeypatch):
+    """A build that fails mid-archive leaves no staging files and keeps the old archive."""
+    import tempfile
+
+    seed = deserialize_kinase_dict(list_ids=["ABL1"], bool_verbose=False)
+    path_tmp = tmp_path / "tmp"
+    path_tmp.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(path_tmp))
+    path_tar = tmp_path / "KinaseInfo.tar.gz"
+    path_tar.write_bytes(b"previous archive")
+
+    def _fail_tar(path_source, filename_tar):
+        # fail after a partial archive has been started
+        with open(filename_tar, "wb") as f:
+            f.write(b"partial")
+        raise RuntimeError("interrupted")
+
+    monkeypatch.setattr(pipeline, "create_tar_without_metadata", _fail_tar)
+    pl = pipeline.Pipeline(
+        str(tmp_path / "KinaseInfo"),
+        str(tmp_path / "reports"),
+        str(tmp_path / "KinaseInfo.tar.gz"),
+    )
+    with pytest.raises(RuntimeError, match="interrupted"):
+        pl._serialize_and_tar(seed)
+
+    assert not (tmp_path / "KinaseInfo").exists()
+    assert list(path_tmp.iterdir()) == []
+    assert path_tar.read_bytes() == b"previous archive"
+    assert not (tmp_path / "KinaseInfo.tar.gz.partial").exists()
 
 
 def test_dated_reports_dir_requires_manifest(tmp_path):
@@ -234,7 +321,7 @@ def test_run_dispatches_source_only(monkeypatch, tmp_path):
     monkeypatch.setattr(
         pipeline.Pipeline,
         "partial",
-        lambda self, sources, names, bool_figs=True, force=False: calls.__setitem__(
+        lambda self, sources, names, **kwargs: calls.__setitem__(
             "partial", (sources, names)
         ),
     )
@@ -302,6 +389,151 @@ def test_source_only_no_dict_falls_back_to_full(monkeypatch, tmp_path):
     )
     pl.partial(["kincore"], [])
     assert "full" in calls
+
+
+def _seeded_pipeline(tmp_path, monkeypatch, list_ids):
+    """Pipeline over a seed archive of real packaged entries, with no network access.
+
+    ``fetch_source`` returns each source's existing data for the seed entries, and every
+    enrichment step is replaced by a recorder (registry order kept) that logs
+    ``(step, targeted hgnc names)`` without touching the objects.
+
+    Returns
+    -------
+    tuple[Pipeline, dict, list]
+        The pipeline, the seed dict, and the step-call log.
+    """
+    seed = deserialize_kinase_dict(list_ids=list_ids, bool_verbose=False)
+    if set(seed) != set(list_ids):
+        pytest.skip(f"packaged KinaseInfo.tar.gz missing {set(list_ids) - set(seed)}")
+
+    path_seed = tmp_path / "seed"
+    path_tar = tmp_path / "KinaseInfo.tar.gz"
+    serialize_kinase_dict(seed, str_path=str(path_seed))
+    create_tar_without_metadata(path_source=str(path_seed), filename_tar=str(path_tar))
+
+    def _fetch_existing(source, set_uniprot):
+        dict_src = pipeline._reconstruct_dict_obj(seed)[source]
+        return {k: v for k, v in dict_src.items() if k in set_uniprot}
+
+    monkeypatch.setattr(pipeline, "fetch_source", _fetch_existing)
+
+    calls = []
+
+    def _recorder(name):
+        def _step(ctx):
+            set_hgnc = (
+                set(ctx.dict_kinaseinfo)
+                if ctx.subset_hgnc is None
+                else set(ctx.subset_hgnc)
+            )
+            calls.append((name, set_hgnc))
+
+        return _step
+
+    monkeypatch.setattr(
+        build_steps,
+        "_ENRICH_STEPS",
+        {name: _recorder(name) for name in build_steps._ENRICH_STEPS},
+    )
+    pl = pipeline.Pipeline(
+        str(tmp_path / "KinaseInfo"), str(tmp_path / "reports"), str(path_tar)
+    )
+    return pl, seed, calls
+
+
+def _assert_exon_preserved(path_tar, seed):
+    """Every seed entry's exon map survives the rebuild unchanged."""
+    after = deserialize_kinase_dict(str_path=str(path_tar), bool_verbose=False)
+    assert set(after) == set(seed)
+    for hgnc_name, obj in seed.items():
+        assert after[hgnc_name].exon == obj.exon, hgnc_name
+
+
+def test_source_rebuild_runs_downstream_and_keeps_unrelated_fields(
+    tmp_path, monkeypatch
+):
+    """Bug 1: ``--only kincore --only kincore_msa`` dropped every entry's ``exon``.
+
+    A source rebuild now runs the requested steps plus every step downstream of the
+    source, and carries over the fields of steps that don't depend on it.
+    """
+    pl, seed, calls = _seeded_pipeline(tmp_path, monkeypatch, ["ABL1", "EGFR"])
+    assert all(obj.exon is not None for obj in seed.values())
+
+    pl.run(only=["kincore", "kincore_msa"], bool_figs=False)
+
+    assert [name for name, _ in calls] == [
+        "kincore_msa",
+        "kincore_structure_props",
+        "alphafold",
+    ]
+    _assert_exon_preserved(pl.path_tar, seed)
+
+
+def test_non_kincore_source_rebuild_handles_missing_kincore(tmp_path, monkeypatch):
+    """Bug 2: rebuilding a non-kincore source crashed on a domain without KinCoRe (TEX14_2)."""
+    list_ids = ["ABL1", "EGFR", "TEX14_1", "TEX14_2"]
+    pl, seed, calls = _seeded_pipeline(tmp_path, monkeypatch, list_ids)
+    assert seed["TEX14_2"].kincore is None
+
+    pl.run(only=["klifs"], bool_figs=False)
+
+    # klifs feeds the KLIFS mapping, so everything but exon re-runs
+    assert [name for name, _ in calls] == [
+        "kincore_msa",
+        "kincore_structure_props",
+        "alphafold",
+    ]
+    _assert_exon_preserved(pl.path_tar, seed)
+
+
+def test_source_rebuild_runs_every_step_on_new_entries(tmp_path, monkeypatch):
+    """An entry the rebuild produces with no existing counterpart (e.g. a domain renamed by
+    a KinHub refresh) gets every step; existing entries get only the downstream ones."""
+    pl, seed, calls = _seeded_pipeline(tmp_path, monkeypatch, ["ABL1", "EGFR"])
+    abl1_renamed = copy.deepcopy(seed["ABL1"])
+    abl1_renamed.hgnc_name = "ABL1_RENAMED"
+    abl1_renamed.exon = None
+
+    def _fake_rebuild(sources, dict_existing, subset_uniprot=None):
+        return {
+            "EGFR": copy.deepcopy(seed["EGFR"]),
+            "ABL1_RENAMED": abl1_renamed,
+        }
+
+    monkeypatch.setattr(pipeline, "run_source_rebuild", _fake_rebuild)
+    pl.run(only=["kinhub"], bool_figs=False)
+
+    # kinhub has no downstream steps, so only the new entry is enriched, by every step
+    assert calls == [(name, {"ABL1_RENAMED"}) for name in build_steps._ENRICH_STEPS]
+    after = deserialize_kinase_dict(str_path=str(pl.path_tar), bool_verbose=False)
+    assert set(after) == {"EGFR", "ABL1_RENAMED"}  # the old ABL1 key is gone
+    assert after["EGFR"].exon == seed["EGFR"].exon
+
+
+def test_only_and_kinase_compose(tmp_path, monkeypatch):
+    """Bug 3: ``--only exon --kinase EGFR`` ran exon on the whole kinome."""
+    pl, _, calls = _seeded_pipeline(tmp_path, monkeypatch, ["ABL1", "EGFR"])
+
+    pl.run(only=["exon"], list_kinase=["EGFR"], bool_figs=False)
+
+    assert calls == [("exon", {"EGFR"})]
+
+
+def test_kinase_splice_keeps_skipped_step_fields(tmp_path, monkeypatch):
+    """``--kinase EGFR --skip exon`` rebuilds EGFR without wiping its existing exon map."""
+    pl, seed, calls = _seeded_pipeline(tmp_path, monkeypatch, ["ABL1", "EGFR"])
+    fresh = copy.deepcopy(seed["EGFR"])
+    fresh.exon = None  # a fresh base build has no enrichment fields
+
+    monkeypatch.setattr(
+        pipeline, "run_base_build", lambda subset_uniprot=None: {"EGFR": fresh}
+    )
+    pl.run(list_kinase=["EGFR"], skip=["exon"], bool_figs=False)
+
+    assert "exon" not in [name for name, _ in calls]
+    _assert_exon_preserved(pl.path_tar, seed)
 
 
 def _data_pipeline(tmp_path, monkeypatch, str_yaml=None):

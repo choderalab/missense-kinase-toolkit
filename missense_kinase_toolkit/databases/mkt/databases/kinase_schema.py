@@ -1021,12 +1021,13 @@ def combine_kinaseinfo_kd(
                     if v is None:
                         dict_temp[k] = None
                     else:
-                        # kincore fasta.hgnc is a set
+                        # kincore fasta.hgnc is a set; a rebuild from an existing dict
+                        # can carry None (domain without KinCoRe) or a FASTA-less entry
                         if k == "kincore":
                             dict_temp[k] = [
                                 i
                                 for i in dict_in[k][uniprot_id]
-                                if v in rgetattr(i, dict_general[k])
+                                if v in (rgetattr(i, dict_general[k]) or ())
                             ][0]
                         # kinhub xname and klifs gene_name are strings
                         else:
@@ -1048,7 +1049,7 @@ def combine_kinaseinfo_kd(
             for k in dict_general.keys():
                 try:
                     dict_temp[k] = dict_in[k][uniprot_id][0]
-                except KeyError or IndexError:
+                except (KeyError, IndexError):
                     logger.warning(f"Key error: {uniprot_id} missing {k} entry.")
                     dict_temp[k] = None
 
