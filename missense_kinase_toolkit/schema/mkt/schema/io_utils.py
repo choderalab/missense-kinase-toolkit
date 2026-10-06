@@ -64,8 +64,6 @@ class Manifest(BaseModel):
     """Dotted sub-model path -> number of non-None entries."""
     source_versions: dict[str, dict[str, int]] = {}
     """Dotted sub-model path -> ``Provenance.version`` tally, by default empty."""
-    source_sha256: dict[str, dict[str, int]] = {}
-    """Source file name -> ``Provenance.sha256`` tally, by default empty."""
     entry_sha256: dict[str, str] = {}
     """Archive entry filename -> SHA-256 of its serialized bytes, by default empty."""
     sources: dict[str, kinase_schema.Provenance] = {}
@@ -88,8 +86,8 @@ class Manifest(BaseModel):
         list_paths : list[str] | None, optional
             Paths to tally, by default None (see :func:`return_manifest_tallies`).
         **kwargs : Any
-            Additional fields (``git``, ``packages``, ``generated_at``,
-            ``entry_sha256``); ``generated_at`` defaults to now (UTC).
+            Additional fields (``git``, ``packages``, ``generated_at``, ``entry_sha256``,
+            ``sources``); ``generated_at`` defaults to now (UTC).
 
         Returns
         -------
@@ -97,14 +95,11 @@ class Manifest(BaseModel):
             Manifest with counts and source versions computed from ``dict_kinase``.
         """
         kwargs.setdefault("generated_at", datetime.now(timezone.utc))
-        counts, source_versions, source_sha256 = return_manifest_tallies(
-            dict_kinase, list_paths
-        )
+        counts, source_versions = return_manifest_tallies(dict_kinase, list_paths)
         return cls(
             n_entries=len(dict_kinase),
             counts=counts,
             source_versions=source_versions,
-            source_sha256=source_sha256,
             **kwargs,
         )
 
@@ -130,7 +125,7 @@ class Manifest(BaseModel):
             list_diff.append(
                 f"n_entries: expected {self.n_entries}, got {actual.n_entries}"
             )
-        for field in ("counts", "source_versions", "source_sha256"):
+        for field in ("counts", "source_versions"):
             dict_expected, dict_actual = getattr(self, field), getattr(actual, field)
             list_diff.extend(
                 f"{field}[{key}]: expected {val}, got {dict_actual.get(key)}"
@@ -183,11 +178,10 @@ class Manifest(BaseModel):
             *(
                 [f"  sha256     {len(self.entry_sha256):,} entries"]
                 + [
-                    f"             {name} {sha[:12]} ({n:,})"
-                    for name, dict_sha in self.source_sha256.items()
-                    for sha, n in dict_sha.items()
+                    f"             {prov.name} {sha[:12]}"
+                    for sha, prov in self.sources.items()
                 ]
-                if self.entry_sha256 or self.source_sha256
+                if self.entry_sha256 or self.sources
                 else []
             ),
             "",

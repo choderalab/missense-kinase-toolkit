@@ -89,7 +89,7 @@ def _write_hashed_tar(tmp_path, dict_entries, str_tamper=None):
 
 def test_manifest_tallies_match_corpus(dict_kinase):
     """Tallies on the packaged dict agree with the hardcoded ``test_dict_counts``."""
-    counts, source_versions, _ = return_manifest_tallies(dict_kinase)
+    counts, source_versions = return_manifest_tallies(dict_kinase)
     assert counts == DICT_CORPUS_COUNTS
     assert source_versions == DICT_CORPUS_SOURCE_VERSIONS
 
@@ -346,22 +346,6 @@ def test_manifest_without_hashes_loads(tmp_path, dict_sample):
     str_tar = _write_tar(tmp_path, dict_sample, manifest)
 
     assert len(io_utils.deserialize_kinase_dict(str_path=str_tar)) == 2
-
-
-def test_source_sha256_tallied_and_checked(tmp_path, mutable_kinase):
-    """Provenance SHA-256s are tallied by source name and checked on full loads."""
-    abl1 = mutable_kinase("ABL1")
-    abl1.kincore.cif.source.sha256 = "a" * 64
-    dict_entries = {"ABL1": abl1}
-
-    manifest = io_utils.Manifest.from_kinase_dict(dict_entries)
-    str_name = abl1.kincore.cif.source.name
-    assert manifest.source_sha256[str_name] == {"a" * 64: 1}
-
-    manifest.source_sha256[str_name] = {"b" * 64: 1}
-    str_tar = _write_tar(tmp_path, dict_entries, manifest)
-    with pytest.raises(ValueError, match=r"source_sha256\["):
-        io_utils.deserialize_kinase_dict(str_path=str_tar)
 
 
 STR_SOURCE_SHA256 = "f" * 64
