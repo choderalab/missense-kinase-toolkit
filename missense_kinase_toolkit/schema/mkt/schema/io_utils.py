@@ -25,9 +25,8 @@ from mkt.schema.config import get_output_dir
 from mkt.schema.utils import (
     TQDM_BAR_FORMAT,
     return_manifest_tallies,
+    return_resolved_sources,
     return_sha256,
-    return_submodel_paths,
-    rgetattr,
 )
 from pydantic import BaseModel
 from tqdm import tqdm
@@ -319,12 +318,7 @@ def check_source_sha256(
     -------
     None
     """
-    set_missing = set()
-    for obj in dict_kinase.values():
-        for path in return_submodel_paths():
-            source = rgetattr(obj, f"{path}.source")
-            if source is not None and source.resolve(manifest) is None:
-                set_missing.add(source.sha256)
+    _, set_missing = return_resolved_sources(dict_kinase, manifest)
     if set_missing:
         str_table = (
             f"its {STR_MANIFEST_FILENAME} sources table"

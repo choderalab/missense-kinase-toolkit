@@ -231,6 +231,39 @@ def return_manifest_tallies(
     }
 
 
+def return_resolved_sources(
+    dict_kinase: dict[str, "KinaseInfo"],
+    manifest=None,
+) -> tuple[dict[str, Any], set[str]]:
+    """Resolve every SHA-256-only record source in a kinase dictionary.
+
+    Parameters
+    ----------
+    dict_kinase : dict[str, KinaseInfo]
+        Kinase dictionary to scan.
+    manifest : Manifest | None, optional
+        Manifest whose sources table to use, by default None (registered sources; see
+        :meth:`~mkt.schema.kinase_schema.Provenance.resolve`).
+
+    Returns
+    -------
+    tuple[dict[str, Provenance], set[str]]
+        Source-file SHA-256 -> full Provenance, and the SHA-256s that did not resolve.
+    """
+    dict_sources, set_missing = {}, set()
+    for obj in dict_kinase.values():
+        for path in return_submodel_paths():
+            source = rgetattr(obj, f"{path}.source")
+            if source is None or source.name is not None:
+                continue
+            resolved = source.resolve(manifest)
+            if resolved is None:
+                set_missing.add(source.sha256)
+            else:
+                dict_sources[source.sha256] = resolved
+    return dict_sources, set_missing
+
+
 # adapted from: https://nathanielknight.ca/articles/consistent_random_uuids_in_python.html
 def random_uuid():
     """Generate a random UUID that allows to set a seed.

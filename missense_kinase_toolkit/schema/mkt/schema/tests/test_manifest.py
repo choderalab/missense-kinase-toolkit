@@ -6,6 +6,7 @@ from mkt.schema import io_utils, kinase_schema
 from mkt.schema.utils import (
     LIST_MANIFEST_EXTRA_PATHS,
     return_manifest_tallies,
+    return_resolved_sources,
     return_submodel_paths,
     rgetattr,
 )
@@ -49,14 +50,7 @@ def _manifest(dict_entries, **kwargs):
     """Manifest for ``dict_entries``: entry hashes empty (``_write_dir`` fills them), sources
     resolved from the packaged archive, plus any ``sources`` given."""
     manifest_pkg = io_utils.load_manifest(io_utils.return_str_path_from_pkg_data())
-    dict_sources = {}
-    for obj in dict_entries.values():
-        for path in return_submodel_paths():
-            source = rgetattr(obj, f"{path}.source")
-            if source is not None and source.name is None:
-                resolved = source.resolve(manifest_pkg)
-                if resolved is not None:
-                    dict_sources[source.sha256] = resolved
+    dict_sources, _ = return_resolved_sources(dict_entries, manifest_pkg)
     dict_sources.update(kwargs.pop("sources", {}))
     kwargs.setdefault("entry_sha256", {})
     return io_utils.Manifest.from_kinase_dict(
