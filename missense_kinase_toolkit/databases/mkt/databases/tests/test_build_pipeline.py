@@ -61,6 +61,52 @@ def test_resolve_step_names_only_and_skip_order(monkeypatch):
     assert build_steps.resolve_step_names() == ["alpha", "beta", "gamma"]
 
 
+def _fake_steps(dict_reads):
+    """Fake step registry (insertion order kept) with the given ``reads`` per step."""
+    return {
+        name: build_steps.Component(
+            name, "step", name, reads=frozenset(reads), run=lambda ctx: None
+        )
+        for name, reads in dict_reads.items()
+    }
+
+
+def test_run_order_follows_reads(monkeypatch):
+    """A step listed before what it reads still runs after it; ties keep registry order,
+    and a step that isn't running still orders the steps that read it."""
+    monkeypatch.setattr(
+        build_steps,
+        "COMPONENTS",
+        _fake_steps({"beta": {"alpha"}, "alpha": set(), "gamma": set()}),
+    )
+    assert build_steps.resolve_step_names() == ["alpha", "beta", "gamma"]
+    assert build_steps.resolve_step_names(only=["alpha"]) == ["alpha", "beta"]
+    assert build_steps.resolve_step_names(skip=["alpha"]) == ["beta", "gamma"]
+
+
+def test_run_order_rejects_cycles_and_unknown_reads(monkeypatch):
+    """A read cycle or a read of an unregistered name fails before anything runs."""
+    from graphlib import CycleError
+
+    monkeypatch.setattr(
+        build_steps, "COMPONENTS", _fake_steps({"alpha": {"beta"}, "beta": {"alpha"}})
+    )
+    with pytest.raises(CycleError):
+        build_steps.resolve_step_names()
+
+    monkeypatch.setattr(build_steps, "COMPONENTS", _fake_steps({"alpha": {"typo"}}))
+    with pytest.raises(ValueError, match=r"alpha reads \['typo'\]"):
+        build_steps.resolve_step_names()
+
+
+def test_registry_steps_run_after_their_reads():
+    """In the real registry, every step runs after each step it reads."""
+    list_order = build_steps.resolve_step_names()
+    for idx, name in enumerate(list_order):
+        set_steps_read = build_steps.COMPONENTS[name].reads & set(list_order)
+        assert set_steps_read <= set(list_order[:idx]), name
+
+
 @pytest.mark.parametrize(
     "only,expected",
     [

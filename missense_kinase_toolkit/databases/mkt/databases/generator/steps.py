@@ -1,15 +1,16 @@
 """Component and report-step registries for the KinaseInfo build pipeline.
 
-:data:`COMPONENTS` lists every build component in run order: the base-build sources, then
-the enrichment steps (each mutating its owned fields on the assembled :class:`KinaseInfo`
-objects in place). Each declares what it reads and writes, which drives ``--only``
-(requested components plus everything downstream), ``--skip`` warnings, partial-rebuild
-merges, and the CLI help. Every step must be idempotent (overwrite its fields, never append)
-so ``--only`` and ``--kinase`` re-runs are safe.
+:data:`COMPONENTS` lists every build component: the base-build sources, then the enrichment
+steps (each mutating its owned fields on the assembled :class:`KinaseInfo` objects in place).
+Each declares what it reads and writes, which drives the step run order (each step after the
+steps it reads), ``--only`` (requested components plus everything downstream), ``--skip``
+warnings, partial-rebuild merges, and the CLI help. Every step must be idempotent (overwrite
+its fields, never append) so ``--only`` and ``--kinase`` re-runs are safe.
 """
 
 import logging
 from dataclasses import dataclass
+from graphlib import TopologicalSorter
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
@@ -217,9 +218,9 @@ class Component:
     re-run carries its fields over instead of clearing them, by default False."""
 
 
-# run order: sources, then steps. kincore_msa runs first so its KD bounds (and the MSA
-# superposition tier) are available to the structure steps; each structure step owns its
-# structure's derived properties (SASA + superposition).
+# sources, then steps; steps run in dependency order (return_run_order), with this order
+# breaking ties. kincore_msa supplies KD bounds and the MSA superposition tier to the
+# structure steps; each structure step owns its structure's SASA + superposition.
 COMPONENTS: dict[str, Component] = {
     component.name: component
     for component in [
@@ -268,11 +269,11 @@ COMPONENTS: dict[str, Component] = {
         ),
     ]
 }
-"""dict[str, Component]: Every build component, in run order (name -> Component)."""
+"""dict[str, Component]: Every build component, in registry order (name -> Component)."""
 
 
 def return_component_names(kind: str | None = None) -> list[str]:
-    """Return component names in run order, optionally of one kind (source/step)."""
+    """Return component names in registry order, optionally of one kind (source/step)."""
     return [
         name
         for name, component in COMPONENTS.items()
@@ -313,11 +314,61 @@ def warn_skipped_steps(skip: list[str], names: list[str], str_scope: str) -> Non
         )
 
 
+def return_run_order(names: list[str]) -> list[str]:
+    """Order steps so each runs after the steps it reads; ties keep registry order.
+
+    The order comes from every step's ``reads``, then is filtered to ``names``, so a step
+    that is not running still orders the steps that read its stored output.
+
+    Parameters
+    ----------
+    names : list[str]
+        Enrichment-step names to order.
+
+    Returns
+    -------
+    list[str]
+        ``names`` in run order.
+
+    Raises
+    ------
+    ValueError
+        If a component reads a name that is not a registered component.
+    graphlib.CycleError
+        If steps read each other in a cycle.
+    """
+    list_unknown = [
+        f"{name} reads {sorted(component.reads - set(COMPONENTS))}"
+        for name, component in COMPONENTS.items()
+        if component.reads - set(COMPONENTS)
+    ]
+    if list_unknown:
+        raise ValueError(f"unregistered component(s): {'; '.join(list_unknown)}")
+
+    list_steps = return_component_names("step")
+    dict_index = {name: idx for idx, name in enumerate(list_steps)}
+    # step-to-step edges only: sources are fetched in the base build, before any step
+    sorter = TopologicalSorter(
+        {name: COMPONENTS[name].reads & set(list_steps) for name in list_steps}
+    )
+    sorter.prepare()
+    # one step at a time, always the earliest ready one in registry order, so a registry
+    # that already respects its reads runs exactly as written
+    list_order, list_ready = [], []
+    while sorter.is_active():
+        list_ready = sorted(list_ready + list(sorter.get_ready()), key=dict_index.get)
+        str_next = list_ready.pop(0)
+        list_order.append(str_next)
+        sorter.done(str_next)
+    set_names = set(names)
+    return [name for name in list_order if name in set_names]
+
+
 def resolve_step_names(
     only: list[str] | None = None,
     skip: list[str] | None = None,
 ) -> list[str]:
-    """Resolve the enrichment steps to run into registry order.
+    """Resolve the enrichment steps to run, in run order (:func:`return_run_order`).
 
     ``only`` may name base-build sources and/or steps; the result is the requested steps
     plus every step downstream of a requested source or step (transitively, via each
@@ -336,7 +387,7 @@ def resolve_step_names(
     Returns
     -------
     list[str]
-        Enrichment-step names to run, in registry order.
+        Enrichment-step names to run, in run order.
     """
     list_steps = return_component_names("step")
     if only:
@@ -350,9 +401,9 @@ def resolve_step_names(
             }
             set_closure |= set_downstream
             bool_grew = bool(set_downstream)
-        return [name for name in list_steps if name in set_closure]
+        return return_run_order([name for name in list_steps if name in set_closure])
     skipped = set(skip or [])
-    return [name for name in list_steps if name not in skipped]
+    return return_run_order([name for name in list_steps if name not in skipped])
 
 
 def run_steps(
@@ -360,7 +411,7 @@ def run_steps(
     ctx: "BuildContext",
     dict_step_subset: dict[str, set[str]] | None = None,
 ) -> None:
-    """Run the enabled enrichment steps sequentially in registry order.
+    """Run the enabled enrichment steps sequentially, in the order given.
 
     A failing step is logged and skipped rather than aborting the whole batch (step
     bodies additionally isolate per-kinase failures).
@@ -368,7 +419,7 @@ def run_steps(
     Parameters
     ----------
     names : list[str]
-        Enrichment-step names to run, in registry order.
+        Enrichment-step names to run, in run order (:func:`resolve_step_names`).
     ctx : BuildContext
         The build context threaded through each step.
     dict_step_subset : dict[str, set[str]] | None, optional
