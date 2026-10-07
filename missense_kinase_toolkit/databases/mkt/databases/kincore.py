@@ -326,7 +326,7 @@ def extract_pk_fasta_info_as_list(
     if not os.path.exists(str_path_filename):
         logger.error(f"File {str_path_filename} does not exist")
 
-    provenance = DICT_SEQ_SOURCE[seq_source].provenance(str_path_filename)
+    provenance = DICT_SEQ_SOURCE[seq_source].provenance()
 
     fasta_sequences = return_fasta_contents(str_path_filename)
     list_out = [
@@ -394,9 +394,7 @@ def extract_pk_cif_files_as_list() -> list[KinCoReCIF]:
         List of KinCoReCIF objects (one active-state model per kinase domain).
     """
     path_zip = _resolve_kincore_cif_zip()
-    provenance = DICT_STRUCTURE_SOURCE[KinCoReStructureSource.GIZZIO_2026].provenance(
-        path_zip
-    )
+    provenance = DICT_STRUCTURE_SOURCE[KinCoReStructureSource.GIZZIO_2026].provenance()
 
     list_out = []
     with zipfile.ZipFile(path_zip) as zf:

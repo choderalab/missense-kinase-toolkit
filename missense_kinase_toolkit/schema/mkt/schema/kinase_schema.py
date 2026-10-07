@@ -24,6 +24,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     constr,
+    field_serializer,
     field_validator,
     model_serializer,
     model_validator,
@@ -204,6 +205,15 @@ class UniProt(BaseModel):
     phospho_sites: list[int] | None = None
     phospho_evidence: list[set[str]] | None = None
     phospho_description: list[str] | None = None
+
+    @field_serializer("phospho_evidence")
+    def serialize_phospho_evidence(
+        self, phospho_evidence: list[set[str]] | None
+    ) -> list[list[str]] | None:
+        """Sort each set so serialized output does not depend on set order."""
+        if phospho_evidence is None:
+            return None
+        return [sorted(evidence) for evidence in phospho_evidence]
 
 
 class KLIFS(BaseModel):
@@ -421,6 +431,11 @@ class KinCoReFASTA(BaseModel):
     start: int | None = None  # fasta2uniprot
     end: int | None = None  # fasta2uniprot
     mismatch: list[int] | None = None  # fasta2uniprot
+
+    @field_serializer("hgnc")
+    def serialize_hgnc(self, hgnc: set[str]) -> list[str]:
+        """Sort the set so serialized output does not depend on set order."""
+        return sorted(hgnc)
 
 
 class KinCoReCIF(BaseModel):

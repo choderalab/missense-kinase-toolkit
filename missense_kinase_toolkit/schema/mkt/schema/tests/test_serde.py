@@ -103,3 +103,25 @@ def test_serde_roundtrip(serde_sample, tmp_path, suffix):
     dict_temp = io_utils.deserialize_kinase_dict(suffix=suffix, str_path=str_path)
 
     _assert_kinase_dicts_equal(dict_sample, dict_temp)
+
+
+def test_set_fields_serialize_sorted(mutable_kinase):
+    """Set-valued fields serialize sorted, so output and entry hashes are stable."""
+    kinase = mutable_kinase("JAK3_2")
+    fasta = kinase.kincore.fasta
+    assert len(fasta.hgnc) == 2
+    assert fasta.model_dump()["hgnc"] == sorted(fasta.hgnc)
+    assert fasta.model_dump(mode="json")["hgnc"] == sorted(fasta.hgnc)
+    assert type(fasta).model_validate_json(fasta.model_dump_json()).hgnc == fasta.hgnc
+
+    uniprot = kinase.uniprot
+    uniprot.phospho_evidence = [{"b", "a", "c"}, {"z"}]
+    assert uniprot.model_dump()["phospho_evidence"] == [["a", "b", "c"], ["z"]]
+    assert uniprot.model_dump(mode="json")["phospho_evidence"] == [
+        ["a", "b", "c"],
+        ["z"],
+    ]
+    assert (
+        type(uniprot).model_validate_json(uniprot.model_dump_json()).phospho_evidence
+        == uniprot.phospho_evidence
+    )

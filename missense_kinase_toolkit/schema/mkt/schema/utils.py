@@ -9,8 +9,6 @@ helpers :func:`return_klifs2msa_dict`/:func:`return_catalytic_klifs2msa_dict`.
 import hashlib
 import json
 import logging
-import os
-from datetime import date
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -22,28 +20,6 @@ TQDM_BAR_FORMAT = (
     "{l_bar}{bar}| {n:,}/{total:,} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
 )
 """Default tqdm bar format with comma-separated thousands in counts."""
-
-
-def query_date_from_file(path: str) -> str | None:
-    """Return a source file's modification date (ISO) for :class:`~mkt.schema.kinase_schema.Provenance`.
-
-    A freshly downloaded file's mtime is its download date; an existing local file's mtime is
-    when it was last modified -- so this covers both the re-download and local-file cases.
-    Shared by the databases source loaders (KinCoRe FASTA/CIF, the Dunbrack MSA, ...).
-
-    Parameters
-    ----------
-    path : str
-        Path to the source file.
-
-    Returns
-    -------
-    str | None
-        ISO date string (YYYY-MM-DD), or None if the file is absent.
-    """
-    if not os.path.exists(path):
-        return None
-    return date.fromtimestamp(os.path.getmtime(path)).isoformat()
 
 
 def fill_missing_none(value: dict | None, keys) -> dict | None:
@@ -209,8 +185,8 @@ def return_json_sha256(obj: Any) -> str:
 def return_manifest_tallies(
     dict_kinase: dict[str, "KinaseInfo"],
     list_paths: list[str] | None = None,
-) -> tuple[dict[str, int], dict[str, dict[str, int]], dict[str, dict[str, int]]]:
-    """Count non-None values and tally ``source.version``/``source.sha256`` in one pass.
+) -> tuple[dict[str, int], dict[str, dict[str, int]]]:
+    """Count non-None values and tally ``source.version`` per dotted path in one pass.
 
     Shared by the manifest writer and the load-time check so the two cannot drift.
 
@@ -224,9 +200,9 @@ def return_manifest_tallies(
 
     Returns
     -------
-    tuple[dict[str, int], dict[str, dict[str, int]], dict[str, dict[str, int]]]
-        Path -> non-None count; path -> version -> count (paths without a versioned
-        source omitted); and source name -> SHA-256 -> count (unhashed sources omitted).
+    tuple[dict[str, int], dict[str, dict[str, int]]]
+        Path -> non-None count, and path -> version -> count (paths without a versioned
+        source omitted).
     """
     from collections import Counter
 
@@ -235,7 +211,6 @@ def return_manifest_tallies(
 
     dict_counts = dict.fromkeys(list_paths, 0)
     dict_versions = {path: Counter() for path in list_paths}
-    dict_sha256 = {}
     for obj in dict_kinase.values():
         for path in list_paths:
             if rgetattr(obj, path) is None:
@@ -244,26 +219,49 @@ def return_manifest_tallies(
             source = rgetattr(obj, f"{path}.source")
             if source is None:
                 continue
-            # SHA-256-only entries carry name/version in the sources table
+            # SHA-256-only entries carry their version in the sources table
             resolved = source.resolve() or source
             if resolved.version is not None:
                 dict_versions[path][resolved.version] += 1
-            if source.sha256 is not None:
-                str_name = resolved.name or "unresolved"
-                dict_sha256.setdefault(str_name, Counter())[source.sha256] += 1
 
-    return (
-        dict_counts,
-        {
-            path: dict(sorted(counter.items()))
-            for path, counter in dict_versions.items()
-            if counter
-        },
-        {
-            name: dict(sorted(counter.items()))
-            for name, counter in sorted(dict_sha256.items())
-        },
-    )
+    return dict_counts, {
+        path: dict(sorted(counter.items()))
+        for path, counter in dict_versions.items()
+        if counter
+    }
+
+
+def return_resolved_sources(
+    dict_kinase: dict[str, "KinaseInfo"],
+    manifest=None,
+) -> tuple[dict[str, Any], set[str]]:
+    """Resolve every SHA-256-only record source in a kinase dictionary.
+
+    Parameters
+    ----------
+    dict_kinase : dict[str, KinaseInfo]
+        Kinase dictionary to scan.
+    manifest : Manifest | None, optional
+        Manifest whose sources table to use, by default None (registered sources; see
+        :meth:`~mkt.schema.kinase_schema.Provenance.resolve`).
+
+    Returns
+    -------
+    tuple[dict[str, Provenance], set[str]]
+        Source-file SHA-256 -> full Provenance, and the SHA-256s that did not resolve.
+    """
+    dict_sources, set_missing = {}, set()
+    for obj in dict_kinase.values():
+        for path in return_submodel_paths():
+            source = rgetattr(obj, f"{path}.source")
+            if source is None or source.name is not None:
+                continue
+            resolved = source.resolve(manifest)
+            if resolved is None:
+                set_missing.add(source.sha256)
+            else:
+                dict_sources[source.sha256] = resolved
+    return dict_sources, set_missing
 
 
 # adapted from: https://nathanielknight.ca/articles/consistent_random_uuids_in_python.html

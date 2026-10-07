@@ -13,10 +13,22 @@ from typing import Annotated, Optional
 
 import typer
 from mkt.databases.generator import pipeline
+from mkt.databases.generator import steps as build_steps
 from mkt.databases.plot_config import ArgumentError
 from mkt.schema.log_config import configure_logging
 
 logger = logging.getLogger(__name__)
+
+STR_COMPONENTS = ", ".join(build_steps.return_component_names())
+"""str: Every component name, in run order, for the --only help."""
+
+STR_STEPS = ", ".join(build_steps.return_component_names("step"))
+"""str: Enrichment-step names, in run order, for the --skip help."""
+
+STR_EPILOG = "Components, in run order:\n\n" + "\n\n".join(
+    f"{name}: {component.help}" for name, component in build_steps.COMPONENTS.items()
+)
+"""str: Help epilog describing each component."""
 
 app = typer.Typer(
     help="Generate KinaseInfo objects from API or scraper.",
@@ -24,24 +36,23 @@ app = typer.Typer(
 )
 
 
-@app.command()
+@app.command(epilog=STR_EPILOG)
 def main(
     only: Annotated[
         Optional[list[str]],
         typer.Option(
             "--only",
             help="Rebuild only these component(s) on the existing archive, plus every "
-            "step downstream of them (other fields are kept); repeatable. One of: hgnc, "
-            "uniprot, kinhub, klifs, pfam, kincore, kincore_msa, "
-            "kincore_structure_props, alphafold, exon. Mutually exclusive with --skip.",
+            f"step downstream of them (other fields are kept); repeatable. One of: "
+            f"{STR_COMPONENTS}. Mutually exclusive with --skip.",
         ),
     ] = None,
     skip: Annotated[
         Optional[list[str]],
         typer.Option(
             "--skip",
-            help="Skip these component(s) in a full rebuild; repeatable. One of: "
-            "kincore_msa, kincore_structure_props, alphafold, exon.",
+            help="Skip these step(s); repeatable. Steps downstream of a skipped step still "
+            f"run, with a warning listing them. One of: {STR_STEPS}.",
         ),
     ] = None,
     kinase: Annotated[

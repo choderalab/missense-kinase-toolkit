@@ -21,22 +21,26 @@ def test_source_files_match_packaged_manifest():
     archive needs regenerating.
     """
     manifest = load_manifest(return_str_path_from_pkg_data())
-    if manifest is None or not manifest.source_sha256:
-        pytest.skip("packaged manifest records no source SHA-256s (pre-v2 archive)")
+    if manifest is None or not manifest.sources:
+        pytest.skip("packaged manifest has no sources table yet")
+
+    dict_name2sha = {}
+    for str_sha, prov in manifest.sources.items():
+        dict_name2sha.setdefault(prov.name, set()).add(str_sha)
 
     list_checked, list_problems = [], []
     for source in LIST_DATA_SOURCES:
-        if source.name not in manifest.source_sha256:
+        if source.name not in dict_name2sha:
             continue
         # sources without a URL must already be present locally
         if source.url is None and source.sha256() is None:
             continue
         source.resolve()
         str_sha = source.sha256()
-        if str_sha not in manifest.source_sha256[source.name]:
+        if str_sha not in dict_name2sha[source.name]:
             list_problems.append(
                 f"{source.name}: {str_sha}, archive built from "
-                f"{sorted(manifest.source_sha256[source.name])}"
+                f"{sorted(dict_name2sha[source.name])}"
             )
         list_checked.append(source.name)
 

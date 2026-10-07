@@ -329,7 +329,7 @@ def enrich_kinases_with_msa(dict_targets: dict) -> None:
     """
     path = MSA_SOURCE.resolve()
     entries = parse_msa(path)
-    source = MSA_SOURCE.provenance(path)
+    source = MSA_SOURCE.provenance()
     by_base: dict[str, list] = defaultdict(list)
     for obj in dict_targets.values():
         by_base[_base_accession(obj.uniprot_id)].append(obj)

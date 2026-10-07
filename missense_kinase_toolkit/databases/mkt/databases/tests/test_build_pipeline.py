@@ -7,6 +7,8 @@ API calls are made and the committed archive is never touched).
 """
 
 import copy
+import dataclasses
+import logging
 
 import pytest
 from mkt.databases.generator import pipeline
@@ -14,6 +16,8 @@ from mkt.databases.generator import steps as build_steps
 from mkt.databases.io_utils import create_tar_without_metadata
 from mkt.databases.plot_config import ArgumentError
 from mkt.schema.io_utils import (
+    LIST_MANIFEST_PACKAGES,
+    STR_MANIFEST_FILENAME,
     deserialize_kinase_dict,
     load_manifest,
     serialize_kinase_dict,
@@ -37,7 +41,7 @@ def test_strip_kd_suffix(str_in, expected):
 
 def test_resolve_step_names_defaults_run_all():
     """A full regen runs every enrichment step unless skipped."""
-    list_all = list(build_steps._ENRICH_STEPS)
+    list_all = build_steps.return_component_names("step")
     assert build_steps.resolve_step_names() == list_all
     assert build_steps.resolve_step_names(skip=[]) == list_all
     assert "alphafold" not in build_steps.resolve_step_names(skip=["alphafold"])
@@ -45,8 +49,11 @@ def test_resolve_step_names_defaults_run_all():
 
 def test_resolve_step_names_only_and_skip_order(monkeypatch):
     """--only/--skip return steps in registry order regardless of arg order."""
-    fake_registry = {name: (lambda ctx: None) for name in ("alpha", "beta", "gamma")}
-    monkeypatch.setattr(build_steps, "_ENRICH_STEPS", fake_registry)
+    fake_registry = {
+        name: build_steps.Component(name, "step", name, run=lambda ctx: None)
+        for name in ("alpha", "beta", "gamma")
+    }
+    monkeypatch.setattr(build_steps, "COMPONENTS", fake_registry)
 
     # --only preserves registry order, not the order supplied
     assert build_steps.resolve_step_names(only=["gamma", "alpha"]) == ["alpha", "gamma"]
@@ -54,6 +61,52 @@ def test_resolve_step_names_only_and_skip_order(monkeypatch):
     assert build_steps.resolve_step_names(skip=["beta"]) == ["alpha", "gamma"]
     # neither runs all steps
     assert build_steps.resolve_step_names() == ["alpha", "beta", "gamma"]
+
+
+def _fake_steps(dict_reads):
+    """Fake step registry (insertion order kept) with the given ``reads`` per step."""
+    return {
+        name: build_steps.Component(
+            name, "step", name, reads=frozenset(reads), run=lambda ctx: None
+        )
+        for name, reads in dict_reads.items()
+    }
+
+
+def test_run_order_follows_reads(monkeypatch):
+    """A step listed before what it reads still runs after it; ties keep registry order,
+    and a step that isn't running still orders the steps that read it."""
+    monkeypatch.setattr(
+        build_steps,
+        "COMPONENTS",
+        _fake_steps({"beta": {"alpha"}, "alpha": set(), "gamma": set()}),
+    )
+    assert build_steps.resolve_step_names() == ["alpha", "beta", "gamma"]
+    assert build_steps.resolve_step_names(only=["alpha"]) == ["alpha", "beta"]
+    assert build_steps.resolve_step_names(skip=["alpha"]) == ["beta", "gamma"]
+
+
+def test_run_order_rejects_cycles_and_unknown_reads(monkeypatch):
+    """A read cycle or a read of an unregistered name fails before anything runs."""
+    from graphlib import CycleError
+
+    monkeypatch.setattr(
+        build_steps, "COMPONENTS", _fake_steps({"alpha": {"beta"}, "beta": {"alpha"}})
+    )
+    with pytest.raises(CycleError):
+        build_steps.resolve_step_names()
+
+    monkeypatch.setattr(build_steps, "COMPONENTS", _fake_steps({"alpha": {"typo"}}))
+    with pytest.raises(ValueError, match=r"alpha reads \['typo'\]"):
+        build_steps.resolve_step_names()
+
+
+def test_registry_steps_run_after_their_reads():
+    """In the real registry, every step runs after each step it reads."""
+    list_order = build_steps.resolve_step_names()
+    for idx, name in enumerate(list_order):
+        set_steps_read = build_steps.COMPONENTS[name].reads & set(list_order)
+        assert set_steps_read <= set(list_order[:idx]), name
 
 
 @pytest.mark.parametrize(
@@ -77,7 +130,8 @@ def test_resolve_step_names_adds_downstream(only, expected):
 
 def test_merge_rebuilt_entries_carries_clears_and_removes():
     """Unrun steps' fields carry over (creating a KinCoRe shell if needed), re-run steps'
-    fields are cleared, and rebuilt UniProts' vanished entries are removed."""
+    fields are cleared unless the step checks its own inputs, and rebuilt UniProts'
+    vanished entries are removed."""
     seed = deserialize_kinase_dict(list_ids=["EGFR", "JAK1_1"], bool_verbose=False)
     if not {"EGFR", "JAK1_1"} <= set(seed):
         pytest.skip("packaged KinaseInfo.tar.gz missing EGFR/JAK1")
@@ -105,8 +159,134 @@ def test_merge_rebuilt_entries_carries_clears_and_removes():
     assert dict_existing["EGFR"].exon == seed["EGFR"].exon
     assert dict_existing["EGFR"].kincore.msa == seed["EGFR"].kincore.msa
     assert dict_existing["EGFR"].kincore.fasta is None
-    # alphafold re-runs, so it starts cleared
-    assert dict_existing["JAK1_1"].alphafold is None
+    # alphafold re-runs but checks its own inputs, so the stored value is carried over
+    assert dict_existing["JAK1_1"].alphafold == seed["JAK1_1"].alphafold
+
+    # kincore_msa has no input check, so a re-run starts it cleared
+    dict_existing = {"JAK1_1": copy.deepcopy(seed["JAK1_1"])}
+    jak1 = copy.deepcopy(seed["JAK1_1"])
+    pipeline.merge_rebuilt_entries(
+        dict_existing, {"JAK1_1": jak1}, ["kincore_msa"], {"P23458"}
+    )
+    assert dict_existing["JAK1_1"].kincore.msa is None
+
+
+def test_registry_sources_match_source_enum():
+    """The registry's sources are exactly the Source enum (the raw-data key type)."""
+    from mkt.databases.kinase_schema import Source
+
+    assert build_steps.return_component_names("source") == [s.value for s in Source]
+
+
+def test_cli_help_lists_every_component():
+    """--only/--skip help and the epilog come from the registry, not a hardcoded list."""
+    from mkt.databases.cli import generate_kinaseinfo_objects as cli
+
+    for name in build_steps.return_component_names():
+        assert name in cli.STR_COMPONENTS
+        assert f"{name}: {build_steps.COMPONENTS[name].help}" in cli.STR_EPILOG
+    assert cli.STR_STEPS.split(", ") == build_steps.return_component_names("step")
+
+
+def test_skip_warns_about_downstream_steps(caplog):
+    """--skip X names the steps that still run on X's output, and the fields at risk."""
+    caplog.set_level(logging.WARNING, logger=build_steps.__name__)
+    names = build_steps.resolve_step_names(skip=["kincore_msa"])
+    build_steps.warn_skipped_steps(["kincore_msa"], names, "all entries")
+
+    assert (
+        "--skip kincore_msa: kincore_structure_props, alphafold read its output and "
+        "will run on all entries without a fresh kincore_msa" in caplog.text
+    )
+    assert "kincore.cif.sasa, kincore.cif.superposition, alphafold" in caplog.text
+
+    caplog.clear()
+    build_steps.warn_skipped_steps(["exon"], ["kincore_msa"], "all entries")
+    assert caplog.text == ""  # nothing reads exon
+
+
+def _stub_fetch_from_seed(monkeypatch, module, seed):
+    """Make ``module.fetch_source`` return each source's data for the seed entries."""
+
+    def _fetch(source, set_uniprot):
+        dict_src = pipeline._reconstruct_dict_obj(seed)[source]
+        if set_uniprot is None:
+            return dict(dict_src)
+        return {k: v for k, v in dict_src.items() if k in set_uniprot}
+
+    monkeypatch.setattr(module, "fetch_source", _fetch)
+
+
+def test_base_build_subset_restricts_every_source(monkeypatch):
+    """--kinase used to crash with KeyError: the discovery sources (KinHub/KLIFS/KinCoRe)
+    kept the whole kinome while HGNC/UniProt/Pfam held only the subset."""
+    from mkt.databases import kinase_schema as databases_kinase_schema
+    from mkt.databases.kinase_schema import (
+        combine_kinaseinfo,
+        combine_kinaseinfo_kd,
+        combine_kinaseinfo_uniprot,
+    )
+
+    seed = deserialize_kinase_dict(
+        list_ids=["ABL1", "EGFR", "BRAF"], bool_verbose=False
+    )
+    if set(seed) != {"ABL1", "EGFR", "BRAF"}:
+        pytest.skip("packaged KinaseInfo.tar.gz missing ABL1/EGFR/BRAF")
+    _stub_fetch_from_seed(monkeypatch, databases_kinase_schema, seed)
+
+    dict_obj = databases_kinase_schema.generate_dict_obj_from_api_or_scraper(
+        subset_uniprot={"P00533"}
+    )
+    assert all(set(dict_src) <= {"P00533"} for dict_src in dict_obj.values())
+    dict_out = combine_kinaseinfo(
+        combine_kinaseinfo_uniprot(dict_obj), combine_kinaseinfo_kd(dict_obj)
+    )
+    assert list(dict_out) == ["EGFR"]
+
+
+def test_only_hgnc_applies_name_fallback(monkeypatch):
+    """--only hgnc names an entry HGNC returns no symbol for, as the base build does."""
+    seed = deserialize_kinase_dict(list_ids=["ABL1"], bool_verbose=False)
+    if "ABL1" not in seed:
+        pytest.skip("packaged KinaseInfo.tar.gz missing ABL1")
+    _stub_fetch_from_seed(monkeypatch, pipeline, seed)
+    # HGNC has no symbol: the client returns the UniProt ID as the name
+    stub_fetch = pipeline.fetch_source
+    monkeypatch.setattr(
+        pipeline,
+        "fetch_source",
+        lambda source, ids: (
+            {"P00519": "P00519"} if source == "hgnc" else stub_fetch(source, ids)
+        ),
+    )
+
+    dict_new = pipeline.run_source_rebuild(["hgnc"], seed)
+    assert list(dict_new) == ["ABL1"]
+
+
+class _Named:
+    """Minimal source record with name attributes for find_alternative_hgnc."""
+
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+
+def test_find_alternative_hgnc_returns_one_name(caplog):
+    """Duplicates collapse to one name; disagreeing sources warn and use the first; no
+    name raises."""
+    from mkt.databases.kinase_schema import find_alternative_hgnc
+
+    kinhub = {"X": [_Named(hgnc_name="SIK1B", xname=None)]}
+    kincore = {"X": [_Named(fasta=_Named(hgnc={"SIK1B"}))]}
+    assert find_alternative_hgnc("X", kinhub, {}, kincore) == "SIK1B"
+
+    caplog.set_level(logging.WARNING)
+    klifs = {"X": [_Named(gene_name="SIK1")]}
+    assert find_alternative_hgnc("X", kinhub, klifs, kincore) == "SIK1B"
+    assert "sources give different names (SIK1B, SIK1); using SIK1B" in caplog.text
+
+    with pytest.raises(ValueError, match="No HGNC name for Y"):
+        find_alternative_hgnc("Y", {}, {}, {})
 
 
 class _FakeKinase:
@@ -137,6 +317,16 @@ def test_resolve_targets_reports_unresolved():
     assert unresolved == {"NOTAKINASE"}
 
 
+def _write_seed_archive(tmp_path, seed):
+    """Write ``seed`` to ``tmp_path/KinaseInfo.tar.gz`` as a build would (manifest, entry
+    hashes, sources table)."""
+    path_tar = tmp_path / "KinaseInfo.tar.gz"
+    pipeline.Pipeline(
+        str(tmp_path / "seed"), str(tmp_path / "reports"), str(path_tar)
+    )._serialize_and_tar(seed)
+    return path_tar
+
+
 def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
     """--kinase rebuilds only the targeted entry and splices it into the archive.
 
@@ -150,10 +340,7 @@ def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
 
     # build the seed archive at the location the pipeline will read/write
     path_objects = tmp_path / "KinaseInfo"
-    path_tar = tmp_path / "KinaseInfo.tar.gz"
-    path_seed = tmp_path / "seed"
-    serialize_kinase_dict(seed, str_path=str(path_seed))
-    create_tar_without_metadata(path_source=str(path_seed), filename_tar=str(path_tar))
+    path_tar = _write_seed_archive(tmp_path, seed)
 
     # stub the base build to return a tweaked EGFR (detectable via the header)
     sentinel = "SENTINEL_SPLICE_TEST"
@@ -166,7 +353,15 @@ def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
 
     monkeypatch.setattr(pipeline, "run_base_build", _fake_base_build)
     # enrichment steps fetch structures/transcripts; keep the splice test network-free
-    monkeypatch.setattr(build_steps, "_ENRICH_STEPS", {})
+    monkeypatch.setattr(
+        build_steps,
+        "COMPONENTS",
+        {
+            name: component
+            for name, component in build_steps.COMPONENTS.items()
+            if component.kind == "source"
+        },
+    )
 
     # no figures: they would render into the repo's images/ reports dir
     pipeline.run(list_kinase=["EGFR"], path_objects=str(path_objects), bool_figs=False)
@@ -182,9 +377,40 @@ def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
     manifest = load_manifest(str(path_tar))
     assert manifest is not None
     assert manifest.return_mismatches(after) == []
-    assert set(manifest.packages) == set(pipeline.LIST_MANIFEST_PACKAGES)
+    assert set(manifest.packages) == set(LIST_MANIFEST_PACKAGES)
     # entry hashes are recorded (the reload above already verified them)
     assert sorted(manifest.entry_sha256) == ["ABL1.json", "EGFR.json"]
+
+
+def test_archive_writes_sources_table(tmp_path, monkeypatch):
+    """A SHA-256-only record source is written to the manifest's sources table and
+    resolves after reload; an unregistered one fails before anything is written."""
+    from mkt.schema import kinase_schema
+    from mkt.schema.kinase_schema import Provenance
+
+    monkeypatch.setattr(kinase_schema, "_DICT_SOURCES", {})
+    seed = deserialize_kinase_dict(list_ids=["ABL1"], bool_verbose=False)
+    abl1 = copy.deepcopy(seed["ABL1"])
+    str_sha = "e" * 64
+    full = abl1.kincore.cif.source.resolve().model_copy(update={"sha256": str_sha})
+    abl1.kincore.cif.source = Provenance(sha256=str_sha)
+    pl = pipeline.Pipeline(
+        str(tmp_path / "KinaseInfo"),
+        str(tmp_path / "reports"),
+        str(tmp_path / "KinaseInfo.tar.gz"),
+    )
+
+    with pytest.raises(ValueError, match="no registered provenance"):
+        pl._serialize_and_tar({"ABL1": abl1})
+    assert not (tmp_path / "KinaseInfo.tar.gz").exists()
+
+    kinase_schema.register_sources({str_sha: full})
+    pl._serialize_and_tar({"ABL1": abl1})
+    assert load_manifest(pl.path_tar).sources[str_sha] == full
+
+    kinase_schema._DICT_SOURCES.clear()  # a fresh session
+    after = deserialize_kinase_dict(str_path=pl.path_tar, bool_verbose=False)
+    assert after["ABL1"].kincore.cif.source.resolve() == full
 
 
 def test_dated_reports_dir_uses_manifest(tmp_path):
@@ -246,6 +472,7 @@ def test_dated_reports_dir_requires_manifest(tmp_path):
     path_seed = tmp_path / "seed"
     path_tar = tmp_path / "KinaseInfo.tar.gz"
     serialize_kinase_dict(seed, str_path=str(path_seed))
+    (path_seed / STR_MANIFEST_FILENAME).unlink()
     create_tar_without_metadata(path_source=str(path_seed), filename_tar=str(path_tar))
 
     pl = pipeline.Pipeline(str(path_seed), str(tmp_path / "reports"), str(path_tar))
@@ -407,10 +634,7 @@ def _seeded_pipeline(tmp_path, monkeypatch, list_ids):
     if set(seed) != set(list_ids):
         pytest.skip(f"packaged KinaseInfo.tar.gz missing {set(list_ids) - set(seed)}")
 
-    path_seed = tmp_path / "seed"
-    path_tar = tmp_path / "KinaseInfo.tar.gz"
-    serialize_kinase_dict(seed, str_path=str(path_seed))
-    create_tar_without_metadata(path_source=str(path_seed), filename_tar=str(path_tar))
+    path_tar = _write_seed_archive(tmp_path, seed)
 
     def _fetch_existing(source, set_uniprot):
         dict_src = pipeline._reconstruct_dict_obj(seed)[source]
@@ -433,8 +657,15 @@ def _seeded_pipeline(tmp_path, monkeypatch, list_ids):
 
     monkeypatch.setattr(
         build_steps,
-        "_ENRICH_STEPS",
-        {name: _recorder(name) for name in build_steps._ENRICH_STEPS},
+        "COMPONENTS",
+        {
+            name: (
+                dataclasses.replace(component, run=_recorder(name))
+                if component.kind == "step"
+                else component
+            )
+            for name, component in build_steps.COMPONENTS.items()
+        },
     )
     pl = pipeline.Pipeline(
         str(tmp_path / "KinaseInfo"), str(tmp_path / "reports"), str(path_tar)
@@ -506,7 +737,9 @@ def test_source_rebuild_runs_every_step_on_new_entries(tmp_path, monkeypatch):
     pl.run(only=["kinhub"], bool_figs=False)
 
     # kinhub has no downstream steps, so only the new entry is enriched, by every step
-    assert calls == [(name, {"ABL1_RENAMED"}) for name in build_steps._ENRICH_STEPS]
+    assert calls == [
+        (name, {"ABL1_RENAMED"}) for name in build_steps.return_component_names("step")
+    ]
     after = deserialize_kinase_dict(str_path=str(pl.path_tar), bool_verbose=False)
     assert set(after) == {"EGFR", "ABL1_RENAMED"}  # the old ABL1 key is gone
     assert after["EGFR"].exon == seed["EGFR"].exon

@@ -195,7 +195,7 @@ class InputCheck:
         str_msg = f"{self.str_label} stale: {str_changed}"
         if list_changed != ["no recorded inputs"]:
             str_msg += " changed"
-        # values from pre-Phase-2 archives are expected; keep them out of INFO
+        # a value with no recorded inputs is expected once; keep it out of INFO
         log = logger.debug if list_changed == ["no recorded inputs"] else logger.info
         log(f"{str_msg}; {str_action}")
         return True

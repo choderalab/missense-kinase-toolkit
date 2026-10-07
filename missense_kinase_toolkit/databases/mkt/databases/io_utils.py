@@ -10,12 +10,14 @@ import logging
 import os
 import tarfile
 from dataclasses import dataclass
+from datetime import date
 
 import git
 import pandas as pd
 from mkt.databases.config import OUTPUT_DIR_VAR
-from mkt.schema.kinase_schema import Provenance
-from mkt.schema.utils import TQDM_BAR_FORMAT, query_date_from_file, return_sha256
+from mkt.schema import kinase_schema
+from mkt.schema.kinase_schema import Provenance, register_sources
+from mkt.schema.utils import TQDM_BAR_FORMAT, return_sha256
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,10 @@ logger = logging.getLogger(__name__)
 _DICT_SHA256_CACHE: dict[tuple[str, int, int], str] = {}
 """dict[tuple[str, int, int], str]: (path, mtime_ns, size) -> SHA-256, so unchanged
 source files are hashed once per process."""
+
+_SET_DOWNLOADED: set[str] = set()
+"""set[str]: Source paths downloaded in this process (dated today by
+:meth:`DataSource.query_date`)."""
 
 
 @dataclass(frozen=True)
@@ -32,8 +38,9 @@ class DataSource:
     Bundles the metadata and location of an external source (KinCoRe FASTA/CIF, the Dunbrack
     MSA, ...) so a new on-demand source is a single declaration: :meth:`resolve` returns the
     local path (streaming it from :attr:`url` when absent, or assuming a pre-provided local file
-    when ``url`` is None), and :meth:`provenance` stamps a :class:`~mkt.schema.kinase_schema.Provenance`
-    with the file's modification date.
+    when ``url`` is None), and :meth:`provenance` returns a SHA-256-only
+    :class:`~mkt.schema.kinase_schema.Provenance`, registering the full entry for the
+    manifest's ``sources`` table.
 
     Attributes
     ----------
@@ -85,6 +92,7 @@ class DataSource:
                 with open(self.path, "wb") as f:
                     for chunk in res.iter_content(chunk_size=chunk_size):
                         f.write(chunk)
+            _SET_DOWNLOADED.add(self.path)
         return self.path
 
     def sha256(self) -> str | None:
@@ -105,29 +113,64 @@ class DataSource:
                 _DICT_SHA256_CACHE[key] = return_sha256(openfile.read())
         return _DICT_SHA256_CACHE[key]
 
-    def provenance(self, path: str | None = None) -> Provenance:
-        """Build a :class:`Provenance` stamped with the source file's date and SHA-256.
+    def provenance(self) -> Provenance:
+        """Return a SHA-256-only :class:`Provenance` and register the full entry.
 
-        Parameters
-        ----------
-        path : str | None, optional
-            File whose mtime dates the provenance; defaults to :attr:`path` (use this to date
-            a post-processed derivative, e.g. an extracted/combined file). The SHA-256 is
-            always of :attr:`path`, the source as downloaded.
+        The full entry (with :meth:`query_date`) goes to the sources lookup, from which the
+        build writes the manifest's ``sources`` table. A missing file gets inline provenance.
 
         Returns
         -------
         Provenance
-            The source provenance with ``query_date`` from the file mtime and ``sha256``.
+            ``Provenance(sha256=...)``, or inline provenance if the file is absent.
         """
-        return Provenance(
-            name=self.name,
-            version=self.version,
-            citation=self.citation,
-            doi=self.doi,
-            query_date=query_date_from_file(path or self.path),
-            sha256=self.sha256(),
+        str_sha256 = self.sha256()
+        if str_sha256 is None:
+            return Provenance(
+                name=self.name,
+                version=self.version,
+                citation=self.citation,
+                doi=self.doi,
+            )
+        register_sources(
+            {
+                str_sha256: Provenance(
+                    name=self.name,
+                    version=self.version,
+                    citation=self.citation,
+                    doi=self.doi,
+                    query_date=self.query_date(str_sha256),
+                    sha256=str_sha256,
+                )
+            }
         )
+        return Provenance(sha256=str_sha256)
+
+    def query_date(self, str_sha256: str) -> str:
+        """Return the date this exact file (by SHA-256) was obtained.
+
+        The previous archive's date carries forward for an unchanged file; a file downloaded
+        this run is dated today; otherwise (a new local file) the build date, with a note.
+
+        Parameters
+        ----------
+        str_sha256 : str
+            The file's SHA-256.
+
+        Returns
+        -------
+        str
+            ISO date.
+        """
+        previous = kinase_schema._DICT_SOURCES.get(str_sha256)
+        if previous is not None and previous.query_date is not None:
+            return previous.query_date
+        if self.path not in _SET_DOWNLOADED:
+            logger.info(
+                f"{self.name}: not downloaded this run and not in a previous manifest; "
+                "dating it to this build."
+            )
+        return date.today().isoformat()
 
 
 def check_outdir_exists() -> str:

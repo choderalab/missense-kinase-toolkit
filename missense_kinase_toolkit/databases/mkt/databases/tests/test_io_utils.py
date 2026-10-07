@@ -1,3 +1,4 @@
+import logging
 import os
 import tarfile
 
@@ -72,19 +73,72 @@ class TestCreateTarWithoutMetadata:
             )
 
 
+@pytest.fixture
+def _empty_sources(monkeypatch):
+    """Isolate the module-level sources lookup and download log from other tests."""
+    from mkt.schema import kinase_schema
+
+    monkeypatch.setattr(kinase_schema, "_DICT_SOURCES", {})
+    monkeypatch.setattr(io_utils, "_SET_DOWNLOADED", set())
+
+
 class TestDataSourceSha256:
-    def test_provenance_stamps_source_sha256(self, tmp_path):
-        """provenance() records the SHA-256 of the source file, even when dated by another."""
+    def test_provenance_is_sha256_only_and_registers_full_entry(
+        self, tmp_path, _empty_sources
+    ):
+        """provenance() returns just the file's SHA-256; the full entry resolves from it."""
         import hashlib
 
         path_src = tmp_path / "source.txt"
         path_src.write_bytes(b"kinase data")
-        path_derived = tmp_path / "derived.txt"
-        path_derived.write_bytes(b"processed")
-        source = io_utils.DataSource(name="source.txt", path=str(path_src))
+        source = io_utils.DataSource(
+            name="source.txt",
+            path=str(path_src),
+            version="v1",
+            citation="Someone, 2026.",
+        )
 
-        prov = source.provenance(str(path_derived))
-        assert prov.sha256 == hashlib.sha256(b"kinase data").hexdigest()
+        prov = source.provenance()
+        str_sha = hashlib.sha256(b"kinase data").hexdigest()
+        assert prov.model_dump() == {"sha256": str_sha}
+        full = prov.resolve()
+        assert (full.name, full.version, full.citation, full.sha256) == (
+            "source.txt",
+            "v1",
+            "Someone, 2026.",
+            str_sha,
+        )
+
+    def test_query_date_rules(self, tmp_path, _empty_sources, caplog):
+        """An unchanged file keeps its previous date; otherwise it's dated today, noting
+        when the file was neither downloaded nor previously recorded."""
+        from datetime import date
+
+        from mkt.schema.kinase_schema import Provenance, register_sources
+
+        path_src = tmp_path / "source.txt"
+        path_src.write_bytes(b"kinase data")
+        source = io_utils.DataSource(name="source.txt", path=str(path_src))
+        str_sha = source.sha256()
+        str_today = date.today().isoformat()
+
+        caplog.set_level(logging.INFO, logger=io_utils.__name__)
+        assert source.query_date(str_sha) == str_today
+        assert "not downloaded this run" in caplog.text
+
+        caplog.clear()
+        io_utils._SET_DOWNLOADED.add(str(path_src))
+        assert source.query_date(str_sha) == str_today
+        assert "not downloaded this run" not in caplog.text
+
+        register_sources(
+            {
+                str_sha: Provenance(
+                    name="source.txt", query_date="2026-01-02", sha256=str_sha
+                )
+            }
+        )
+        assert source.query_date(str_sha) == "2026-01-02"
 
     def test_changed_file_rehashes(self, tmp_path):
         """A changed file (new mtime/size) gets a new hash despite the cache."""
@@ -96,11 +150,12 @@ class TestDataSourceSha256:
         path_src.write_bytes(b"version 2")
         assert source.sha256() != sha_v1
 
-    def test_missing_file_has_no_sha256(self, tmp_path):
-        """A source file that isn't present yields no hash rather than raising."""
+    def test_missing_file_has_inline_provenance(self, tmp_path, _empty_sources):
+        """A source file that isn't present yields inline provenance rather than raising."""
         source = io_utils.DataSource(name="absent", path=str(tmp_path / "absent"))
         assert source.sha256() is None
-        assert source.provenance(str(tmp_path)).sha256 is None
+        prov = source.provenance()
+        assert prov.sha256 is None and prov.name == "absent"
 
 
 class TestConvertStr2List:

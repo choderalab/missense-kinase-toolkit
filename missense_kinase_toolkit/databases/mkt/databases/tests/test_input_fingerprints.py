@@ -157,3 +157,41 @@ def test_alphafold_refetched_when_canonical_sequence_changes(dict_seed, monkeypa
     abl1.uniprot.canonical_seq = ("A" if str_seq[0] != "A" else "C") + str_seq[1:]
     alphafold.enrich_with_alphafold(abl1)
     assert len(calls) == 1
+
+
+def test_source_rebuild_keeps_unchanged_sasa(dict_seed, monkeypatch):
+    """A source rebuild carries SASA onto the rebuilt CIF; it is recomputed only if the
+    structure changed or --recompute forces it."""
+    from mkt.databases.generator import pipeline
+
+    abl1 = copy.deepcopy(dict_seed["ABL1"])
+    calls = []
+
+    def _record(task):
+        calls.append(task[0])
+        return task[0], {}
+
+    monkeypatch.setattr(sasa, "_sasa_pool_worker", _record)
+    sasa.enrich_kinases_with_sasa({"ABL1": abl1}, only="kincore")  # records the inputs
+
+    def _rebuild(str_sha256=None):
+        rebuilt = copy.deepcopy(abl1)
+        rebuilt.kincore.cif.sasa = None  # a rebuilt CIF has no derived values
+        if str_sha256 is not None:
+            rebuilt.kincore.cif.sha256 = str_sha256
+        dict_existing = {"ABL1": copy.deepcopy(abl1)}
+        pipeline.merge_rebuilt_entries(
+            dict_existing, {"ABL1": rebuilt}, ["kincore_structure_props"], {"P00519"}
+        )
+        return dict_existing
+
+    calls.clear()
+    sasa.enrich_kinases_with_sasa(_rebuild(), only="kincore")
+    assert calls == [], "unchanged inputs should keep the carried SASA"
+
+    sasa.enrich_kinases_with_sasa(_rebuild(), only="kincore", force=True)
+    assert calls == ["ABL1::0"]
+
+    calls.clear()
+    sasa.enrich_kinases_with_sasa(_rebuild("f" * 64), only="kincore")
+    assert calls == ["ABL1::0"]
