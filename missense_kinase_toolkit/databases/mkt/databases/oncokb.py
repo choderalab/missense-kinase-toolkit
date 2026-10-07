@@ -15,8 +15,29 @@ import pandas as pd
 from mkt.databases import requests_wrapper
 from mkt.databases.api_schema import APIKeyRESTAPIClient, RESTAPIClient
 from mkt.databases.config import maybe_get_oncokb_token
+from strenum import StrEnum
 
 logger = logging.getLogger(__name__)
+
+SET_ONCOKB_AUTH_STATUS = frozenset({401, 403})
+"""frozenset[int]: HTTP statuses meaning OncoKB rejected the API token."""
+
+
+class OncoKBAuthError(RuntimeError):
+    """OncoKB rejected the API token; every further query would fail the same way."""
+
+
+class OncoKBReviewStatus(StrEnum):
+    """How OncoKB answered a variant query (the ``review_status`` values)."""
+
+    reviewed = "reviewed"
+    """The gene is in OncoKB and the alteration was reviewed."""
+    alteration_not_reviewed = "alteration_not_reviewed"
+    """The gene is in OncoKB but the alteration has not been specifically reviewed."""
+    gene_not_in_oncokb = "gene_not_in_oncokb"
+    """The gene is not in OncoKB."""
+    query_error = "query_error"
+    """OncoKB returned an error for the query (e.g. HTTP 400 for a malformed one)."""
 
 
 DICT_ONCOKB_PREFIXES = {
@@ -77,6 +98,11 @@ class OncoKB(APIKeyRESTAPIClient, ABC):
     """OncoKB API token, if available."""
     url_query: str | None = field(init=False, default=None)
     """URL to update for specific queries."""
+    status_code: int | None = field(init=False, default=None)
+    """HTTP status of the query; None until queried."""
+    review_status: OncoKBReviewStatus | None = field(init=False, default=None)
+    """How OncoKB answered a variant query; None until queried (and for queries that
+    are not about a variant, such as :class:`OncoKBInfo`)."""
     _json: dict | None = field(init=False, default=None)
 
     def __post_init__(self):
@@ -99,16 +125,55 @@ class OncoKB(APIKeyRESTAPIClient, ABC):
     def update_url(self): ...
 
     def query_api(self):
-        """Query the OncoKB API for a given URL."""
+        """Query the OncoKB API for a given URL.
+
+        Raises
+        ------
+        OncoKBAuthError
+            If OncoKB rejects the API token (HTTP 401/403), since every further
+            query would fail the same way. Other error statuses are logged and
+            recorded as :attr:`OncoKBReviewStatus.query_error`.
+        """
         res = requests_wrapper.get_cached_session().get(
             self.url_query, headers=self.header
         )
         self._stamp_from_response(res)
+        self.status_code = res.status_code
+        if res.status_code in SET_ONCOKB_AUTH_STATUS:
+            raise OncoKBAuthError(
+                f"OncoKB rejected the API token (HTTP {res.status_code}); check the "
+                "ONCOKB_TOKEN environment variable."
+            )
         if res.ok:
             self._json = res.json()
         else:
             logger.error(f"Error querying OncoKB API: {res.status_code} - {res.text}")
             self._json = None
+            self.review_status = OncoKBReviewStatus.query_error
+
+    @staticmethod
+    def return_review_status(
+        bool_gene_exists: bool, bool_variant_reviewed: bool
+    ) -> OncoKBReviewStatus:
+        """Classify an answered variant query.
+
+        Parameters
+        ----------
+        bool_gene_exists : bool
+            The response's ``geneExist``.
+        bool_variant_reviewed : bool
+            Whether ``variantSummary`` lacks "has not specifically been reviewed".
+
+        Returns
+        -------
+        OncoKBReviewStatus
+            ``gene_not_in_oncokb``, ``alteration_not_reviewed`` or ``reviewed``.
+        """
+        if not bool_gene_exists:
+            return OncoKBReviewStatus.gene_not_in_oncokb
+        if not bool_variant_reviewed:
+            return OncoKBReviewStatus.alteration_not_reviewed
+        return OncoKBReviewStatus.reviewed
 
     def has_json(self) -> dict | None:
         """Get the JSON response from the OncoKB API query.
@@ -244,6 +309,9 @@ class OncoKBProteinChange(OncoKB):
             variant_reviewed = (
                 "has not specifically been reviewed" not in variant_summary
             )
+            self.review_status = self.return_review_status(
+                gene_exists, variant_reviewed
+            )
 
             if gene_exists and variant_reviewed:
                 self.annotate_highest_level()
@@ -336,6 +404,7 @@ class OncoKBStructuralVariant(OncoKB):
         gene_exists = json_data["geneExist"]
         variant_summary = json_data["variantSummary"]
         variant_reviewed = "has not specifically been reviewed" not in variant_summary
+        self.review_status = self.return_review_status(gene_exists, variant_reviewed)
 
         if gene_exists and variant_reviewed:
             self.annotate_highest_level()
@@ -439,6 +508,7 @@ class OncoKBGenomicChange(OncoKB):
         gene_exists = json_data.get("geneExist", False)
         variant_summary = json_data.get("variantSummary", "")
         variant_reviewed = "has not specifically been reviewed" not in variant_summary
+        self.review_status = self.return_review_status(gene_exists, variant_reviewed)
 
         if gene_exists and variant_reviewed:
             self.annotate_highest_level()
