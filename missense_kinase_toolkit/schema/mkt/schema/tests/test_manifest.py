@@ -45,11 +45,32 @@ def dict_sample(dict_kinase):
     return {key: dict_kinase[key] for key in ("ABL1", "BUB1B")}
 
 
+def _manifest(dict_entries, **kwargs):
+    """Manifest for ``dict_entries``: entry hashes empty (``_write_dir`` fills them), sources
+    resolved from the packaged archive, plus any ``sources`` given."""
+    manifest_pkg = io_utils.load_manifest(io_utils.return_str_path_from_pkg_data())
+    dict_sources = {}
+    for obj in dict_entries.values():
+        for path in return_submodel_paths():
+            source = rgetattr(obj, f"{path}.source")
+            if source is not None and source.name is None:
+                resolved = source.resolve(manifest_pkg)
+                if resolved is not None:
+                    dict_sources[source.sha256] = resolved
+    dict_sources.update(kwargs.pop("sources", {}))
+    kwargs.setdefault("entry_sha256", {})
+    return io_utils.Manifest.from_kinase_dict(
+        dict_entries, sources=dict_sources, **kwargs
+    )
+
+
 def _write_dir(tmp_path, dict_entries, manifest=None):
-    """Serialize entries (and an optional manifest) into ``tmp_path/KinaseInfo``."""
+    """Serialize entries (and an optional manifest, given their hashes) into
+    ``tmp_path/KinaseInfo``."""
     path_dir = tmp_path / "KinaseInfo"
     io_utils.serialize_kinase_dict(dict_entries, str_path=str(path_dir))
     if manifest is not None:
+        manifest.entry_sha256 = io_utils.return_dir_entry_sha256(str(path_dir))
         (path_dir / io_utils.STR_MANIFEST_FILENAME).write_text(
             manifest.model_dump_json(indent=4)
         )
@@ -72,11 +93,7 @@ def _write_hashed_tar(tmp_path, dict_entries, str_tamper=None):
     The edit appends a newline, so the JSON stays valid and the stem still matches:
     only the hash check can catch it.
     """
-    path_dir = _write_dir(tmp_path, dict_entries)
-    manifest = io_utils.Manifest.from_kinase_dict(
-        dict_entries, entry_sha256=io_utils.return_dir_entry_sha256(str(path_dir))
-    )
-    (path_dir / io_utils.STR_MANIFEST_FILENAME).write_text(manifest.model_dump_json())
+    path_dir = _write_dir(tmp_path, dict_entries, _manifest(dict_entries))
     if str_tamper is not None:
         path_file = path_dir / str_tamper
         path_file.write_bytes(path_file.read_bytes() + b"\n")
@@ -113,7 +130,7 @@ def test_manifest_extra_paths_resolve(dict_kinase):
 
 def test_untar_skips_manifest(tmp_path, dict_sample):
     """The manifest is neither an entry ID nor an extracted kinase file."""
-    manifest = io_utils.Manifest.from_kinase_dict(dict_sample)
+    manifest = _manifest(dict_sample)
     str_tar = _write_tar(tmp_path, dict_sample, manifest)
 
     list_entries, dict_str = io_utils.untar_files_in_memory(str_tar)
@@ -126,7 +143,7 @@ def test_untar_skips_manifest(tmp_path, dict_sample):
 
 def test_load_manifest(tmp_path, dict_sample):
     """``load_manifest`` reads from a tar or directory and returns None when absent."""
-    manifest = io_utils.Manifest.from_kinase_dict(dict_sample)
+    manifest = _manifest(dict_sample)
     str_tar = _write_tar(tmp_path, dict_sample, manifest)
 
     assert io_utils.load_manifest(str_tar) == manifest
@@ -140,7 +157,7 @@ def test_load_manifest(tmp_path, dict_sample):
 
 def test_manifest_summary(tmp_path, dict_kinase, capsys):
     """The summary nests children under parents and prints from an archive."""
-    manifest = io_utils.Manifest.from_kinase_dict(
+    manifest = _manifest(
         dict_kinase,
         git={"sha": "0123456789abcdef", "dirty": True},
         packages={"mkt-schema": "0.1.0"},
@@ -167,7 +184,7 @@ def test_manifest_summary(tmp_path, dict_kinase, capsys):
 def test_load_with_matching_manifest(tmp_path, dict_sample, caplog):
     """A consistent archive loads without a missing-manifest warning."""
     caplog.set_level(logging.WARNING)
-    manifest = io_utils.Manifest.from_kinase_dict(dict_sample)
+    manifest = _manifest(dict_sample)
     str_tar = _write_tar(tmp_path, dict_sample, manifest)
 
     dict_loaded = io_utils.deserialize_kinase_dict(str_path=str_tar)
@@ -177,7 +194,7 @@ def test_load_with_matching_manifest(tmp_path, dict_sample, caplog):
 
 def test_tampered_count_raises(tmp_path, dict_sample):
     """A count that disagrees with the loaded dict raises with the offending path."""
-    manifest = io_utils.Manifest.from_kinase_dict(dict_sample)
+    manifest = _manifest(dict_sample)
     manifest.counts["kincore.cif"] += 1
     str_tar = _write_tar(tmp_path, dict_sample, manifest)
 
@@ -187,7 +204,7 @@ def test_tampered_count_raises(tmp_path, dict_sample):
 
 def test_stale_entry_raises(tmp_path, dict_kinase, dict_sample):
     """An extra file not recorded in the manifest raises on ``n_entries``."""
-    manifest = io_utils.Manifest.from_kinase_dict(dict_sample)
+    manifest = _manifest(dict_sample)
     dict_stale = {**dict_sample, "CDK2": dict_kinase["CDK2"]}
     str_tar = _write_tar(tmp_path, dict_stale, manifest)
 
@@ -197,7 +214,7 @@ def test_stale_entry_raises(tmp_path, dict_kinase, dict_sample):
 
 def test_missing_entry_raises(tmp_path, dict_sample):
     """An entry dropped from the archive (e.g. a truncated tar) raises on ``n_entries``."""
-    manifest = io_utils.Manifest.from_kinase_dict(dict_sample)
+    manifest = _manifest(dict_sample)
     str_tar = _write_tar(tmp_path, {"ABL1": dict_sample["ABL1"]}, manifest)
 
     with pytest.raises(ValueError, match="n_entries: expected 2, got 1"):
@@ -218,6 +235,9 @@ def test_deserialize_rejects_renamed_file(tmp_path, dict_sample):
     """A file whose name differs from its ``hgnc_name`` raises, from a tar or directory."""
     path_dir = _write_dir(tmp_path, dict_sample)
     (path_dir / "ABL1.json").rename(path_dir / "NOT_ABL1.json")
+    manifest = _manifest(dict_sample)
+    manifest.entry_sha256 = io_utils.return_dir_entry_sha256(str(path_dir))
+    (path_dir / io_utils.STR_MANIFEST_FILENAME).write_text(manifest.model_dump_json())
 
     path_tar = tmp_path / "renamed.tar.gz"
     with tarfile.open(path_tar, "w:gz") as tar:
@@ -230,19 +250,23 @@ def test_deserialize_rejects_renamed_file(tmp_path, dict_sample):
         io_utils.deserialize_kinase_dict(str_path=str(path_dir), bool_remove=False)
 
 
-def test_missing_manifest_warns(tmp_path, dict_sample, caplog):
-    """A manifest-less tar still loads, with a warning."""
-    caplog.set_level(logging.WARNING)
+def test_missing_manifest(tmp_path, dict_sample):
+    """A manifest-less tar raises, full or subset; a plain directory still loads."""
     str_tar = _write_tar(tmp_path, dict_sample)
 
-    dict_loaded = io_utils.deserialize_kinase_dict(str_path=str_tar)
-    assert len(dict_loaded) == len(dict_sample)
-    assert f"No {io_utils.STR_MANIFEST_FILENAME}" in caplog.text
+    for list_ids in (None, ["ABL1"]):
+        with pytest.raises(ValueError, match=f"No {io_utils.STR_MANIFEST_FILENAME}"):
+            io_utils.deserialize_kinase_dict(str_path=str_tar, list_ids=list_ids)
+
+    dict_loaded = io_utils.deserialize_kinase_dict(
+        str_path=str(tmp_path / "KinaseInfo"), bool_remove=False
+    )
+    assert list(dict_loaded) == sorted(dict_sample)
 
 
 def test_list_ids_skips_check(tmp_path, dict_sample):
     """A subset load skips the check even against a mismatched manifest."""
-    manifest = io_utils.Manifest.from_kinase_dict(dict_sample)
+    manifest = _manifest(dict_sample)
     manifest.n_entries += 1
     str_tar = _write_tar(tmp_path, dict_sample, manifest)
 
@@ -252,7 +276,7 @@ def test_list_ids_skips_check(tmp_path, dict_sample):
 
 def test_directory_load_checks_manifest(tmp_path, dict_sample):
     """Directory loads skip the manifest file and check it when present."""
-    manifest = io_utils.Manifest.from_kinase_dict(dict_sample)
+    manifest = _manifest(dict_sample)
     path_dir = _write_dir(tmp_path, dict_sample, manifest)
     dict_loaded = io_utils.deserialize_kinase_dict(
         str_path=str(path_dir), bool_remove=False
@@ -324,7 +348,7 @@ def test_manifest_cached_until_archive_changes(tmp_path, dict_sample):
     """A repeat load reuses the parsed manifest; a rebuilt archive is re-read."""
     import os
 
-    manifest = io_utils.Manifest.from_kinase_dict(dict_sample)
+    manifest = _manifest(dict_sample)
     str_tar = _write_tar(tmp_path, dict_sample, manifest)
     first = io_utils.load_manifest(str_tar)
     assert io_utils.load_manifest(str_tar) is first
@@ -339,13 +363,27 @@ def test_manifest_cached_until_archive_changes(tmp_path, dict_sample):
     assert rebuilt.counts["kincore"] == first.counts["kincore"] + 1
 
 
-def test_manifest_without_hashes_loads(tmp_path, dict_sample):
-    """A manifest without entry hashes skips the SHA-256 check."""
-    manifest = io_utils.Manifest.from_kinase_dict(dict_sample)
-    assert manifest.entry_sha256 == {}
-    str_tar = _write_tar(tmp_path, dict_sample, manifest)
+def test_manifest_without_hashes_raises(tmp_path, dict_sample):
+    """A manifest missing its hash or sources table fails to load; empty hashes fail the
+    entry check."""
+    from pydantic import ValidationError
 
-    assert len(io_utils.deserialize_kinase_dict(str_path=str_tar)) == 2
+    manifest = _manifest(dict_sample)
+    for str_field in ("entry_sha256", "sources"):
+        dict_json = manifest.model_dump(mode="json")
+        del dict_json[str_field]
+        with pytest.raises(ValidationError, match=str_field):
+            io_utils.Manifest.model_validate(dict_json)
+
+    str_tar = _write_tar(tmp_path, dict_sample, manifest)
+    manifest.entry_sha256 = {}
+    path_dir = tmp_path / "KinaseInfo"
+    (path_dir / io_utils.STR_MANIFEST_FILENAME).write_text(manifest.model_dump_json())
+    with tarfile.open(str_tar, "w:gz") as tar:
+        for path in sorted(path_dir.iterdir()):
+            tar.add(path, arcname=path.name)
+    with pytest.raises(ValueError, match="ABL1.json: not listed"):
+        io_utils.deserialize_kinase_dict(str_path=str_tar)
 
 
 STR_SOURCE_SHA256 = "f" * 64
@@ -361,7 +399,10 @@ def _empty_sources(monkeypatch):
 def _abl1_by_sha256(mutable_kinase):
     """ABL1 whose KinCoRe CIF source is stored by SHA-256, plus the matching table entry."""
     abl1 = mutable_kinase("ABL1")
-    full = abl1.kincore.cif.source.model_copy(update={"sha256": STR_SOURCE_SHA256})
+    manifest_pkg = io_utils.load_manifest(io_utils.return_str_path_from_pkg_data())
+    full = abl1.kincore.cif.source.resolve(manifest_pkg).model_copy(
+        update={"sha256": STR_SOURCE_SHA256}
+    )
     abl1.kincore.cif.source = kinase_schema.Provenance(sha256=STR_SOURCE_SHA256)
     return abl1, {STR_SOURCE_SHA256: full}
 
@@ -397,6 +438,7 @@ def test_provenance_resolve_and_str(_empty_sources):
         generated_at="2026-10-06T00:00:00Z",
         n_entries=0,
         counts={},
+        entry_sha256={},
         sources={STR_SOURCE_SHA256: full},
     )
     assert prov.resolve(manifest) == full
@@ -417,7 +459,7 @@ def test_sources_table_resolves_after_load(tmp_path, mutable_kinase, _empty_sour
     abl1, dict_sources = _abl1_by_sha256(mutable_kinase)
     dict_entries = {"ABL1": abl1}
     kinase_schema.register_sources(dict_sources)  # as a build would
-    manifest = io_utils.Manifest.from_kinase_dict(dict_entries, sources=dict_sources)
+    manifest = _manifest(dict_entries, sources=dict_sources)
     assert manifest.source_versions["kincore.cif"] == {"v2": 1}
     str_tar = _write_tar(tmp_path, dict_entries, manifest)
 
@@ -432,7 +474,7 @@ def test_sources_table_resolves_after_load(tmp_path, mutable_kinase, _empty_sour
 def test_missing_sources_entry_raises(tmp_path, mutable_kinase, _empty_sources):
     """A hash-only record source absent from the sources table raises, subset loads too."""
     abl1, _ = _abl1_by_sha256(mutable_kinase)
-    manifest = io_utils.Manifest.from_kinase_dict({"ABL1": abl1})
+    manifest = _manifest({"ABL1": abl1})
     str_tar = _write_tar(tmp_path, {"ABL1": abl1}, manifest)
 
     for list_ids in (None, ["ABL1"]):

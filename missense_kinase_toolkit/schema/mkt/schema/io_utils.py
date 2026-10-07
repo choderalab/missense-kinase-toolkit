@@ -64,11 +64,11 @@ class Manifest(BaseModel):
     """Dotted sub-model path -> number of non-None entries."""
     source_versions: dict[str, dict[str, int]] = {}
     """Dotted sub-model path -> ``Provenance.version`` tally, by default empty."""
-    entry_sha256: dict[str, str] = {}
-    """Archive entry filename -> SHA-256 of its serialized bytes, by default empty."""
-    sources: dict[str, kinase_schema.Provenance] = {}
+    entry_sha256: dict[str, str]
+    """Archive entry filename -> SHA-256 of its serialized bytes."""
+    sources: dict[str, kinase_schema.Provenance]
     """Source-file SHA-256 -> full Provenance, for records whose ``source`` stores only the
-    SHA-256 (see :meth:`~mkt.schema.kinase_schema.Provenance.resolve`), by default empty."""
+    SHA-256 (see :meth:`~mkt.schema.kinase_schema.Provenance.resolve`)."""
 
     @classmethod
     def from_kinase_dict(
@@ -117,16 +117,20 @@ class Manifest(BaseModel):
             One line per mismatched quantity; empty if consistent.
         """
         # tally only this manifest's paths so newer schema fields don't count as drift
-        actual = Manifest.from_kinase_dict(
-            dict_kinase, list(self.counts), generated_at=self.generated_at
+        counts, source_versions = return_manifest_tallies(
+            dict_kinase, list(self.counts)
         )
+        dict_actual_tallies = {"counts": counts, "source_versions": source_versions}
         list_diff = []
-        if actual.n_entries != self.n_entries:
+        if len(dict_kinase) != self.n_entries:
             list_diff.append(
-                f"n_entries: expected {self.n_entries}, got {actual.n_entries}"
+                f"n_entries: expected {self.n_entries}, got {len(dict_kinase)}"
             )
         for field in ("counts", "source_versions"):
-            dict_expected, dict_actual = getattr(self, field), getattr(actual, field)
+            dict_expected, dict_actual = (
+                getattr(self, field),
+                dict_actual_tallies[field],
+            )
             list_diff.extend(
                 f"{field}[{key}]: expected {val}, got {dict_actual.get(key)}"
                 for key, val in dict_expected.items()
@@ -175,14 +179,10 @@ class Manifest(BaseModel):
             f"  packages   {list_packages[0] if list_packages else 'n/a'}",
             *(f"             {pkg}" for pkg in list_packages[1:]),
             f"  entries    {self.n_entries:,}",
+            f"  sha256     {len(self.entry_sha256):,} entries",
             *(
-                [f"  sha256     {len(self.entry_sha256):,} entries"]
-                + [
-                    f"             {prov.name} {sha[:12]}"
-                    for sha, prov in self.sources.items()
-                ]
-                if self.entry_sha256 or self.sources
-                else []
+                f"             {prov.name} {sha[:12]}"
+                for sha, prov in self.sources.items()
             ),
             "",
             f"  {'field':<{int_label}}  {'n':>5}  {'%':>6}",
@@ -208,14 +208,14 @@ def check_kinase_dict_manifest(
     manifest: Manifest | None,
     str_path: str,
 ) -> None:
-    """Raise if a loaded kinase dictionary disagrees with its manifest; warn if absent.
+    """Raise if a loaded kinase dictionary disagrees with its manifest.
 
     Parameters
     ----------
     dict_kinase : dict[str, KinaseInfo]
         Loaded kinase dictionary.
-    manifest : Manifest | None
-        Manifest read from the archive, or None if missing.
+    manifest : Manifest
+        Manifest read from the archive.
     str_path : str
         Archive path, for messages.
 
@@ -223,12 +223,6 @@ def check_kinase_dict_manifest(
     -------
     None
     """
-    if manifest is None:
-        logger.warning(
-            f"No {STR_MANIFEST_FILENAME} in {str_path}; skipping integrity check."
-        )
-        return
-
     list_diff = manifest.return_mismatches(dict_kinase)
     if list_diff:
         raise ValueError(
@@ -268,7 +262,8 @@ def check_entry_sha256(
 ) -> None:
     """Raise if loaded entries' SHA-256 digests disagree with the manifest.
 
-    Skipped when the manifest has no entry hashes or lists another serialization format.
+    Every loaded entry must be listed with a matching hash; skipped only without a manifest
+    (a plain per-kinase directory).
 
     Parameters
     ----------
@@ -283,17 +278,10 @@ def check_entry_sha256(
     -------
     None
     """
-    if manifest is None or not manifest.entry_sha256 or not dict_sha256:
+    if manifest is None:
         return
 
     list_unlisted = [k for k in dict_sha256 if k not in manifest.entry_sha256]
-    if len(list_unlisted) == len(dict_sha256):
-        logger.warning(
-            f"{STR_MANIFEST_FILENAME} in {str_path} has no hashes for these files "
-            "(different serialization format?); skipping SHA-256 check."
-        )
-        return
-
     list_diff = [f"{k}: not listed in the manifest" for k in sorted(list_unlisted)]
     list_diff.extend(
         f"{k}: SHA-256 {sha[:12]}..., expected {manifest.entry_sha256[k][:12]}..."
@@ -313,7 +301,10 @@ def check_source_sha256(
     manifest: Manifest | None,
     str_path: str,
 ) -> None:
-    """Raise if a record's SHA-256-only source has no entry in the manifest's sources table.
+    """Raise if a record's SHA-256-only source cannot be resolved.
+
+    With a manifest, its sources table must hold every such source; without one (a plain
+    per-kinase directory), sources registered from loaded archives are used.
 
     Parameters
     ----------
@@ -328,21 +319,21 @@ def check_source_sha256(
     -------
     None
     """
-    dict_sources = manifest.sources if manifest is not None else {}
     set_missing = set()
     for obj in dict_kinase.values():
         for path in return_submodel_paths():
             source = rgetattr(obj, f"{path}.source")
-            if (
-                source is not None
-                and source.name is None
-                and source.sha256 not in dict_sources
-            ):
+            if source is not None and source.resolve(manifest) is None:
                 set_missing.add(source.sha256)
     if set_missing:
+        str_table = (
+            f"its {STR_MANIFEST_FILENAME} sources table"
+            if manifest is not None
+            else "the sources registered from loaded archives"
+        )
         raise ValueError(
             f"{str_path} has records whose source is stored by SHA-256 but missing from "
-            f"its {STR_MANIFEST_FILENAME} sources table: "
+            f"{str_table}: "
             + ", ".join(f"{sha[:12]}..." for sha in sorted(set_missing))
         )
 
@@ -840,6 +831,11 @@ def deserialize_kinase_dict(
         if key not in _DICT_MANIFEST_CACHE:
             _cache_manifest(key, str_manifest)
         manifest = _DICT_MANIFEST_CACHE[key]
+        if manifest is None:
+            raise ValueError(
+                f"No {STR_MANIFEST_FILENAME} in {str_path}; archives must be built by "
+                "generate_kinaseinfo_objects."
+            )
         # verify bytes before parsing, so a corrupt entry fails as such
         check_entry_sha256(dict_sha256, manifest, str_path)
         for str_member, val in tqdm(
@@ -898,7 +894,7 @@ def deserialize_kinase_dict(
     check_source_sha256(dict_import, manifest, str_path)
 
     # subset loads can't match the manifest; directories are checked only if one exists
-    if list_ids is None and (manifest is not None or str_path.endswith(".tar.gz")):
+    if list_ids is None and manifest is not None:
         check_kinase_dict_manifest(dict_import, manifest, str_path)
 
     if str_name is not None:

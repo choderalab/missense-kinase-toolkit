@@ -145,10 +145,10 @@ def test_return_json_sha256_is_canonical():
     assert return_json_sha256(dict_a) != return_json_sha256({**dict_a, "b": [2, 1]})
 
 
-def test_input_sha256_fields_default_none_and_roundtrip(mutable_kinase):
-    """Archives without input hashes load with None; set hashes survive JSON round trip."""
+def test_input_sha256_fields_populated_and_roundtrip(mutable_kinase):
+    """The packaged archive records every structure and input hash, derived values point at
+    their structure's hash, and the hashes survive a JSON round trip."""
     from mkt.schema.kinase_schema import KinaseInfo
-    from mkt.schema.utils import return_json_sha256
 
     abl1 = mutable_kinase("ABL1")
     for model in (
@@ -161,12 +161,12 @@ def test_input_sha256_fields_default_none_and_roundtrip(mutable_kinase):
     ):
         for str_field in ("sha256", "input_sha256"):
             if str_field in type(model).model_fields:
-                assert getattr(model, str_field) is None
+                assert getattr(model, str_field), f"{type(model).__name__}.{str_field}"
 
-    abl1.kincore.cif.sha256 = return_json_sha256(abl1.kincore.cif.cif)
-    abl1.kincore.cif.sasa.input_sha256 = {"structure": abl1.kincore.cif.sha256}
+    for structure in (abl1.kincore.cif, abl1.alphafold):
+        for derived in (structure.sasa, structure.superposition):
+            assert derived.input_sha256["structure"] == structure.sha256
+
     roundtrip = KinaseInfo.model_validate_json(abl1.model_dump_json())
     assert roundtrip.kincore.cif.sha256 == abl1.kincore.cif.sha256
-    assert roundtrip.kincore.cif.sasa.input_sha256 == {
-        "structure": abl1.kincore.cif.sha256
-    }
+    assert roundtrip.alphafold.sasa.input_sha256 == abl1.alphafold.sasa.input_sha256
