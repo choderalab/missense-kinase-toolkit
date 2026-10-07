@@ -30,7 +30,6 @@ from mkt.databases.kinase_schema import (
     fetch_source,
     generate_dict_obj_from_api_or_scraper,
 )
-from mkt.schema import kinase_schema
 from mkt.schema.io_utils import (
     STR_MANIFEST_FILENAME,
     Manifest,
@@ -42,7 +41,7 @@ from mkt.schema.io_utils import (
     serialize_kinase_dict,
 )
 from mkt.schema.kinase_schema import Provenance, register_sources
-from mkt.schema.utils import return_submodel_paths, rgetattr, split_domain_suffix
+from mkt.schema.utils import return_resolved_sources, rgetattr, split_domain_suffix
 from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger(__name__)
@@ -67,17 +66,7 @@ def return_manifest_sources(dict_kinase: dict[str, Any]) -> dict[str, Provenance
         If a record's SHA-256-only source was never registered (the archive could not
         resolve it).
     """
-    dict_sources, set_missing = {}, set()
-    for obj in dict_kinase.values():
-        for path in return_submodel_paths():
-            source = rgetattr(obj, f"{path}.source")
-            if source is None or source.name is not None:
-                continue
-            full = kinase_schema._DICT_SOURCES.get(source.sha256)
-            if full is None:
-                set_missing.add(source.sha256)
-            else:
-                dict_sources[source.sha256] = full
+    dict_sources, set_missing = return_resolved_sources(dict_kinase)
     if set_missing:
         raise ValueError(
             "record sources with no registered provenance: "
