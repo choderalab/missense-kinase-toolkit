@@ -950,8 +950,8 @@ class KinaseMissenseMutations(Mutations):
     """Isoform-override source for the transcript tier, by default "mskcc"."""
     str_build: str = "GRCh37"
     """Genome build for transcript and variant lookups; only rows on this build get a Genome Nexus variant, by default "GRCh37"."""
-    bool_drop_unreconciled: bool = True
-    """Drop rows whose position could not be reconciled onto the canonical sequence, by default True."""
+    bool_drop_unreconciled: bool = False
+    """Drop rows whose position could not be reconciled onto the canonical sequence, by default False (kept with unreconciled_reason so callers can report them)."""
     str_col_gene: str = "mkt_name"
     """Column :meth:`generate_pivot_table` groups mutations by, by default "mkt_name"."""
     _df_filter: pd.DataFrame | None = field(init=False, default=None)
@@ -1210,7 +1210,8 @@ class KinaseMissenseMutations(Mutations):
         """Drop every mutation of any gene with a mismatch to its canonical sequence.
 
         Legacy alternative to :meth:`reconcile_uniprot_positions`; emits the same
-        ``uniprot_idx`` and ``reconcile_source`` columns, with every kept row ``"direct"``.
+        ``uniprot_idx``, ``reconcile_source`` and ``unreconciled_reason`` columns, with
+        every kept row ``"direct"``.
 
         Parameters
         ----------
@@ -1245,6 +1246,7 @@ class KinaseMissenseMutations(Mutations):
             dtype="Int64",
         )
         df["reconcile_source"] = str(SourceTier.direct)
+        df["unreconciled_reason"] = None
         return df
 
     def reconcile_uniprot_positions(
@@ -1255,8 +1257,9 @@ class KinaseMissenseMutations(Mutations):
         """Reconcile each mutation's position onto the canonical UniProt sequence.
 
         Runs :class:`~mkt.databases.isoform.CanonicalReconciler` over the rows; rows that
-        cannot be reconciled are logged per gene and, with :attr:`bool_drop_unreconciled`,
-        dropped individually.
+        cannot be reconciled get an ``unreconciled_reason``
+        (:class:`~mkt.databases.isoform.UnreconciledReason`), are logged per gene and,
+        with :attr:`bool_drop_unreconciled`, dropped individually.
 
         Parameters
         ----------
@@ -1268,7 +1271,8 @@ class KinaseMissenseMutations(Mutations):
         Returns
         -------
         pd.DataFrame
-            Mutations with ``uniprot_idx`` and ``reconcile_source`` added.
+            Mutations with ``uniprot_idx``, ``reconcile_source`` and
+            ``unreconciled_reason`` (None for reconciled rows) added.
         """
         col_gene = self.return_adjusted_colname("hugoGeneSymbol")
         list_codon = df["proteinChange"].tolist()
@@ -1282,13 +1286,16 @@ class KinaseMissenseMutations(Mutations):
             str_override=self.str_isoform_override,
             str_build=self.str_build,
         )
+        list_symbol = df[col_gene].tolist()
+        list_position = [self.try_except_middle_int(codon) for codon in list_codon]
+        list_aa_ref = [
+            codon[0].upper() if isinstance(codon, str) and codon else None
+            for codon in list_codon
+        ]
         list_idx, list_source = reconciler.reconcile_many(
-            df[col_gene].tolist(),
-            [self.try_except_middle_int(codon) for codon in list_codon],
-            [
-                codon[0].upper() if isinstance(codon, str) and codon else None
-                for codon in list_codon
-            ],
+            list_symbol,
+            list_position,
+            list_aa_ref,
             list_refseq=list_refseq,
             list_hgvsg=return_hgvsg_list(
                 df,
@@ -1302,13 +1309,27 @@ class KinaseMissenseMutations(Mutations):
         df = df.copy()
         df["uniprot_idx"] = pd.array(list_idx, dtype="Int64")
         df["reconcile_source"] = [None if s is None else str(s) for s in list_source]
+        list_refseq = list_refseq or [None] * len(df)
+        df["unreconciled_reason"] = [
+            (
+                None
+                if idx is not None
+                else str(
+                    reconciler.return_unreconciled_reason(
+                        list_symbol[i], list_position[i], list_aa_ref[i], list_refseq[i]
+                    )
+                )
+            )
+            for i, idx in enumerate(list_idx)
+        ]
 
         mask_drop = df["uniprot_idx"].isna()
         if mask_drop.any():
             df_drop = df.loc[mask_drop]
             list_summary = [
                 f"{symbol} (n={len(group)}, residues {group['proteinChange'].map(self.try_except_middle_int).min()}-"
-                f"{group['proteinChange'].map(self.try_except_middle_int).max()})"
+                f"{group['proteinChange'].map(self.try_except_middle_int).max()}, "
+                f"{', '.join(f'{k}={v}' for k, v in group['unreconciled_reason'].value_counts().items())})"
                 for symbol, group in df_drop.groupby(col_gene)
             ]
             logger.warning(

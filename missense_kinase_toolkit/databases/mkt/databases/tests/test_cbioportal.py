@@ -353,6 +353,7 @@ class TestPositionRoutes:
         assert df_out["proteinChange"].tolist() == [df["proteinChange"][0], "K2A"]
         assert df_out["uniprot_idx"].tolist() == [600, 2]
         assert df_out["reconcile_source"].tolist() == ["direct", "direct"]
+        assert _to_list(df_out["unreconciled_reason"]) == [None, None]
 
     def test_unreconciled_rows_kept_on_request(self):
         df, dict_gene2seq = _braf_rows()
@@ -361,6 +362,20 @@ class TestPositionRoutes:
         )
         assert len(df_out) == 3
         assert _to_list(df_out["reconcile_source"]) == ["direct", None, "direct"]
+        # direct-only tiers: no isoform sequence to check the mismatched BRAF row against
+        assert _to_list(df_out["unreconciled_reason"]) == [
+            None,
+            "isoform_unknown",
+            None,
+        ]
+
+    def test_unreconciled_rows_kept_by_default(self):
+        assert (
+            cbioportal.KinaseMissenseMutations.__dataclass_fields__[
+                "bool_drop_unreconciled"
+            ].default
+            is False
+        )
 
     def test_both_routes_emit_the_same_columns(self):
         df, dict_gene2seq = _braf_rows()
