@@ -14,11 +14,9 @@ import logging
 import os
 import tempfile
 from dataclasses import dataclass
-from importlib.metadata import version
 from inspect import isclass
 from typing import Any, get_args
 
-import git
 from mkt.databases.generator import steps as build_steps
 from mkt.databases.io_utils import create_tar_without_metadata
 from mkt.databases.kinase_schema import (
@@ -32,47 +30,17 @@ from mkt.databases.kinase_schema import (
 )
 from mkt.schema.io_utils import (
     STR_MANIFEST_FILENAME,
-    Manifest,
     deserialize_kinase_dict,
     get_repo_root,
     load_manifest,
-    return_dir_entry_sha256,
     return_str_path_from_pkg_data,
     serialize_kinase_dict,
 )
-from mkt.schema.kinase_schema import Provenance, register_sources
-from mkt.schema.utils import return_resolved_sources, rgetattr, split_domain_suffix
+from mkt.schema.kinase_schema import register_sources
+from mkt.schema.utils import rgetattr, split_domain_suffix
 from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger(__name__)
-
-
-def return_manifest_sources(dict_kinase: dict[str, Any]) -> dict[str, Provenance]:
-    """Return the manifest ``sources`` table for every SHA-256-only source in the dict.
-
-    Parameters
-    ----------
-    dict_kinase : dict[str, KinaseInfo]
-        The dict being archived.
-
-    Returns
-    -------
-    dict[str, Provenance]
-        Source-file SHA-256 -> full Provenance, from the registered sources.
-
-    Raises
-    ------
-    ValueError
-        If a record's SHA-256-only source was never registered (the archive could not
-        resolve it).
-    """
-    dict_sources, set_missing = return_resolved_sources(dict_kinase)
-    if set_missing:
-        raise ValueError(
-            "record sources with no registered provenance: "
-            + ", ".join(f"{sha[:12]}..." for sha in sorted(set_missing))
-        )
-    return dict(sorted(dict_sources.items()))
 
 
 DEFAULT_PATH_OBJECTS = "missense_kinase_toolkit/schema/mkt/schema/KinaseInfo"
@@ -88,9 +56,6 @@ REPORTS_GROUP_SUBDIR = "dict_kinase"
 DATETIME_SUBDIR_FMT = "%Y.%m.%d.%H%M%S"
 """str: ``strftime`` format for the datetime-stamped reports subdirectory, applied to the
 archive manifest's ``generated_at`` (UTC)."""
-
-LIST_MANIFEST_PACKAGES = ["mkt-schema", "mkt-databases"]
-"""list[str]: Packages whose versions are recorded in the archive manifest."""
 
 
 @dataclass
@@ -454,36 +419,6 @@ def _resolve_dir(path_repo: str, path_rel: str | None, default_rel: str) -> str:
     return path_out
 
 
-def _return_git_info() -> dict[str, str | bool]:
-    """Return the build checkout's commit SHA and dirty flag.
-
-    Returns
-    -------
-    dict[str, str | bool]
-        ``{"sha": ..., "dirty": ...}``, or empty outside a git checkout.
-    """
-    try:
-        repo = git.Repo(get_repo_root(), search_parent_directories=True)
-    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
-        logger.warning("not a git checkout; manifest records package versions only.")
-        return {}
-    bool_dirty = repo.is_dirty()
-    if bool_dirty:
-        logger.warning("building from a dirty tree; manifest git sha is ambiguous.")
-    return {"sha": repo.head.commit.hexsha, "dirty": bool_dirty}
-
-
-def _return_package_versions() -> dict[str, str]:
-    """Return installed versions of :data:`LIST_MANIFEST_PACKAGES`.
-
-    Returns
-    -------
-    dict[str, str]
-        Package name -> version string.
-    """
-    return {name: version(name) for name in LIST_MANIFEST_PACKAGES}
-
-
 @dataclass
 class Pipeline:
     """Orchestrates the KinaseInfo build across its run modes.
@@ -561,7 +496,7 @@ class Pipeline:
         return deserialize_kinase_dict()
 
     def _serialize_and_tar(self, dict_kinaseinfo: dict[str, Any]) -> None:
-        """Serialize the dict and its manifest to files and (re)build the tar archive.
+        """Serialize the dict with its manifest (:func:`serialize_kinase_dict`) and tar it.
 
         Parameters
         ----------
@@ -575,18 +510,16 @@ class Pipeline:
         # stage in a fresh system temp dir: removed on success, error, or Ctrl-C, never
         # left in the repo/package, and never mixed with files from an earlier run
         with tempfile.TemporaryDirectory(prefix="KinaseInfo_") as path_staging:
-            serialize_kinase_dict(dict_kinaseinfo, str_path=path_staging)
-            # hash the files exactly as they will be tarred, so loads verify the bytes
-            manifest = Manifest.from_kinase_dict(
-                dict_kinaseinfo,
-                git=_return_git_info(),
-                packages=_return_package_versions(),
-                entry_sha256=return_dir_entry_sha256(path_staging),
-                sources=return_manifest_sources(dict_kinaseinfo),
-            )
-            path_manifest = os.path.join(path_staging, STR_MANIFEST_FILENAME)
-            with open(path_manifest, "w") as outfile:
-                outfile.write(manifest.model_dump_json(indent=4))
+            # entries plus their manifest (hashes, sources, git, packages)
+            manifest = serialize_kinase_dict(dict_kinaseinfo, str_path=path_staging)
+            if not manifest.git:
+                logger.warning(
+                    "not a git checkout; manifest records package versions only."
+                )
+            elif manifest.git["dirty"]:
+                logger.warning(
+                    "building from a dirty tree; manifest git sha is ambiguous."
+                )
             # write beside the target, then swap atomically: a failed build keeps the
             # previous archive instead of deleting it first
             path_partial = f"{self.path_tar}.partial"

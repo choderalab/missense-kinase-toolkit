@@ -16,6 +16,8 @@ from mkt.databases.generator import steps as build_steps
 from mkt.databases.io_utils import create_tar_without_metadata
 from mkt.databases.plot_config import ArgumentError
 from mkt.schema.io_utils import (
+    LIST_MANIFEST_PACKAGES,
+    STR_MANIFEST_FILENAME,
     deserialize_kinase_dict,
     load_manifest,
     serialize_kinase_dict,
@@ -375,7 +377,7 @@ def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
     manifest = load_manifest(str(path_tar))
     assert manifest is not None
     assert manifest.return_mismatches(after) == []
-    assert set(manifest.packages) == set(pipeline.LIST_MANIFEST_PACKAGES)
+    assert set(manifest.packages) == set(LIST_MANIFEST_PACKAGES)
     # entry hashes are recorded (the reload above already verified them)
     assert sorted(manifest.entry_sha256) == ["ABL1.json", "EGFR.json"]
 
@@ -470,6 +472,7 @@ def test_dated_reports_dir_requires_manifest(tmp_path):
     path_seed = tmp_path / "seed"
     path_tar = tmp_path / "KinaseInfo.tar.gz"
     serialize_kinase_dict(seed, str_path=str(path_seed))
+    (path_seed / STR_MANIFEST_FILENAME).unlink()
     create_tar_without_metadata(path_source=str(path_seed), filename_tar=str(path_tar))
 
     pl = pipeline.Pipeline(str(path_seed), str(tmp_path / "reports"), str(path_tar))
