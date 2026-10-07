@@ -21,7 +21,11 @@ from bravado.client import SwaggerClient
 from mkt.databases import properties
 from mkt.databases.api_schema import APIKeySwaggerClient
 from mkt.databases.config import get_cbioportal_instance, maybe_get_cbioportal_token
-from mkt.databases.constants import EntrezGeneIDPattern, normalize_build
+from mkt.databases.constants import (
+    EntrezGeneIDPattern,
+    MissenseProteinChangePattern,
+    normalize_build,
+)
 from mkt.databases.genomenexus import annotate_genomic_locations
 from mkt.databases.io_utils import (
     parse_iterabc2dataframe,
@@ -541,6 +545,25 @@ def clean_entrez_id(value: object) -> str | None:
     return None
 
 
+def is_missense_protein_change(value: object) -> bool:
+    """Return whether a ``proteinChange`` is a single-residue missense substitution.
+
+    Parameters
+    ----------
+    value : object
+        cBioPortal ``proteinChange`` (e.g. ``"V600E"``); missing values are allowed.
+
+    Returns
+    -------
+    bool
+        True if it matches
+        :data:`~mkt.databases.constants.MissenseProteinChangePattern` with different
+        reference and alternate residues (so not a stop-retained ``*28*``).
+    """
+    match = re.fullmatch(MissenseProteinChangePattern, str(value).strip())
+    return match is not None and match.group(1) != match.group(3)
+
+
 def log_hgnc_query_summary(
     list_resolved: list[str],
     list_no_uniprot: list[str],
@@ -976,10 +999,7 @@ class KinaseMissenseMutations(Mutations):
 
         # filter for single amino acid changes
         df_missense = df_missense.loc[
-            df_missense["proteinChange"].apply(
-                lambda x: type(self.try_except_middle_int(x)) is int
-            ),
-            :,
+            df_missense["proteinChange"].apply(is_missense_protein_change), :
         ].reset_index(drop=True)
 
         return df_missense

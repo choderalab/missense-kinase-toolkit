@@ -640,3 +640,31 @@ def test_entrez_ids_read_as_nullable_integers():
         for v in pd.to_numeric(ser, errors="coerce").astype("Int64")
     ]
     assert list_out == ["8358", None, "100533107"]
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("V600E", True),
+        ("G12C", True),
+        ("*28*", False),
+        ("V600V", False),
+        ("Q61*", False),
+        ("X200_splice", False),
+        ("E746_A750del", False),
+        (None, False),
+    ],
+)
+def test_is_missense_protein_change(value, expected):
+    assert cbioportal.is_missense_protein_change(value) is expected
+
+
+def test_missense_filter_drops_stop_retained_changes():
+    df = pd.DataFrame(
+        {
+            "mutationType": ["Missense_Mutation"] * 3 + ["Nonsense_Mutation"],
+            "proteinChange": ["V600E", "*28*", "R45K", "Q61*"],
+        }
+    )
+    df_out = KMM.filter_single_aa_missense_mutations(_stub(), df)
+    assert df_out["proteinChange"].tolist() == ["V600E", "R45K"]
