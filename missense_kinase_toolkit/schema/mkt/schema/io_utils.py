@@ -14,6 +14,7 @@ import tarfile
 from datetime import datetime, timezone
 from functools import partial
 from importlib import resources
+from importlib.metadata import PackageNotFoundError, version
 from io import BytesIO
 from typing import Any, Optional
 
@@ -46,6 +47,29 @@ _deserialization_cache = {}
 
 STR_MANIFEST_FILENAME = "manifest.json"
 """str: Filename of the build manifest stored alongside the per-kinase files."""
+
+LIST_MANIFEST_PACKAGES = ["mkt-schema", "mkt-databases"]
+"""list[str]: Packages whose installed versions are recorded in the manifest."""
+
+
+def return_git_info() -> dict[str, str | bool]:
+    """Return the current checkout's commit SHA and dirty flag (empty outside a checkout)."""
+    try:
+        repo = git.Repo(get_repo_root(), search_parent_directories=True)
+    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
+        return {}
+    return {"sha": repo.head.commit.hexsha, "dirty": repo.is_dirty()}
+
+
+def return_package_versions() -> dict[str, str]:
+    """Return installed versions of :data:`LIST_MANIFEST_PACKAGES` (absent ones omitted)."""
+    dict_versions = {}
+    for name in LIST_MANIFEST_PACKAGES:
+        try:
+            dict_versions[name] = version(name)
+        except PackageNotFoundError:
+            continue
+    return dict_versions
 
 
 class Manifest(BaseModel):
@@ -689,8 +713,12 @@ def serialize_kinase_dict(
     suffix: str = "json",
     serialization_kwargs: Optional[dict[str, Any]] = None,
     str_path: str | None = None,
-) -> None:
-    """Serialize KinaseInfo object to files.
+) -> Manifest | None:
+    """Serialize KinaseInfo objects to per-kinase files plus their ``manifest.json``.
+
+    The manifest records the tallies, each written file's SHA-256, the sources table for
+    hash-only record sources, and the writing checkout and package versions, so the
+    directory loads and is verified on its own.
 
     Parameters
     ----------
@@ -704,10 +732,17 @@ def serialize_kinase_dict(
     str_path: str | None = None
         Path to save the serialized file, by default None will use package data or Github repo data.
 
+    Returns
+    -------
+    Manifest | None
+        The manifest written, or None if nothing was written (unsupported suffix, or TOML
+        on Windows).
+
     Raises
     ------
     ValueError
-        If any key differs from its object's ``hgnc_name`` (files are named by the key).
+        If any key differs from its object's ``hgnc_name`` (files are named by the key), or
+        a hash-only record source has no registered provenance; nothing is written.
     """
     list_mismatch = [
         (key, val.hgnc_name)
@@ -730,27 +765,48 @@ def serialize_kinase_dict(
         logger.info("TOML serialization is not supported on Windows.")
         return None
 
+    dict_sources, set_missing = return_resolved_sources(kinase_dict)
+    if set_missing:
+        raise ValueError(
+            "record sources with no registered provenance: "
+            + ", ".join(f"{sha[:12]}..." for sha in sorted(set_missing))
+        )
+
     if serialization_kwargs is None:
         serialization_kwargs = DICT_FUNCS[suffix]["kwargs_serialize"]
 
     str_path = return_str_path_from_pkg_data(str_path)
 
+    dict_sha256 = {}
     for key, val in tqdm(
         kinase_dict.items(),
         desc="Serializing KinaseInfo objects...",
         bar_format=TQDM_BAR_FORMAT,
     ):
-        with open(f"{str_path}/{key}.{suffix}", "w") as outfile:
-            # TOML tables require string keys; mode="json" stringifies non-string dict keys
-            # (e.g. int-keyed maps), which pydantic coerces back on deserialize
-            model_dump = (
-                val.model_dump(mode="json") if suffix == "toml" else val.model_dump()
-            )
-            val_serialized = DICT_FUNCS[suffix]["serialize"](
-                model_dump,
-                **serialization_kwargs,
-            )
-            outfile.write(val_serialized)
+        # TOML tables require string keys; mode="json" stringifies non-string dict keys
+        # (e.g. int-keyed maps), which pydantic coerces back on deserialize
+        model_dump = (
+            val.model_dump(mode="json") if suffix == "toml" else val.model_dump()
+        )
+        # bytes, not text mode, so Windows writes (and hashes) the same LF output
+        bytes_entry = (
+            DICT_FUNCS[suffix]["serialize"](model_dump, **serialization_kwargs)
+        ).encode("utf-8")
+        str_file = f"{key}.{suffix}"
+        with open(os.path.join(str_path, str_file), "wb") as outfile:
+            outfile.write(bytes_entry)
+        dict_sha256[str_file] = return_sha256(bytes_entry)
+
+    manifest = Manifest.from_kinase_dict(
+        kinase_dict,
+        git=return_git_info(),
+        packages=return_package_versions(),
+        entry_sha256=dict_sha256,
+        sources=dict(sorted(dict_sources.items())),
+    )
+    with open(os.path.join(str_path, STR_MANIFEST_FILENAME), "wb") as outfile:
+        outfile.write(manifest.model_dump_json(indent=4).encode("utf-8"))
+    return manifest
 
 
 def deserialize_kinase_dict(

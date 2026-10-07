@@ -59,15 +59,19 @@ def _manifest(dict_entries, **kwargs):
 
 
 def _write_dir(tmp_path, dict_entries, manifest=None):
-    """Serialize entries (and an optional manifest, given their hashes) into
-    ``tmp_path/KinaseInfo``."""
+    """Serialize entries into ``tmp_path/KinaseInfo``, replacing the written manifest with
+    ``manifest`` (given the written hashes), or removing it when ``manifest`` is None.
+    """
     path_dir = tmp_path / "KinaseInfo"
-    io_utils.serialize_kinase_dict(dict_entries, str_path=str(path_dir))
-    if manifest is not None:
-        manifest.entry_sha256 = io_utils.return_dir_entry_sha256(str(path_dir))
-        (path_dir / io_utils.STR_MANIFEST_FILENAME).write_text(
-            manifest.model_dump_json(indent=4)
-        )
+    manifest_written = io_utils.serialize_kinase_dict(
+        dict_entries, str_path=str(path_dir)
+    )
+    path_manifest = path_dir / io_utils.STR_MANIFEST_FILENAME
+    if manifest is None:
+        path_manifest.unlink()
+    else:
+        manifest.entry_sha256 = manifest_written.entry_sha256
+        path_manifest.write_text(manifest.model_dump_json(indent=4))
     return path_dir
 
 
@@ -327,9 +331,12 @@ def test_directory_load_checks_entry_sha256(tmp_path, dict_sample):
 def test_unlisted_entry_raises(tmp_path, dict_kinase, dict_sample):
     """An entry absent from the manifest's hashes raises, even on a subset load."""
     str_tar, path_dir = _write_hashed_tar(tmp_path, dict_sample)
+    path_manifest = path_dir / io_utils.STR_MANIFEST_FILENAME
+    str_manifest = path_manifest.read_text()
     io_utils.serialize_kinase_dict(
         {"CDK2": dict_kinase["CDK2"]}, str_path=str(path_dir)
     )
+    path_manifest.write_text(str_manifest)  # keep the manifest that omits CDK2
     with tarfile.open(str_tar, "w:gz") as tar:
         for path in sorted(path_dir.iterdir()):
             tar.add(path, arcname=path.name)
@@ -391,14 +398,16 @@ def _empty_sources(monkeypatch):
 
 
 def _abl1_by_sha256(mutable_kinase):
-    """ABL1 whose KinCoRe CIF source is stored by SHA-256, plus the matching table entry."""
+    """ABL1 whose KinCoRe CIF source is stored under a stand-in SHA-256, plus a sources
+    table covering it and ABL1's other sources."""
     abl1 = mutable_kinase("ABL1")
     manifest_pkg = io_utils.load_manifest(io_utils.return_str_path_from_pkg_data())
     full = abl1.kincore.cif.source.resolve(manifest_pkg).model_copy(
         update={"sha256": STR_SOURCE_SHA256}
     )
     abl1.kincore.cif.source = kinase_schema.Provenance(sha256=STR_SOURCE_SHA256)
-    return abl1, {STR_SOURCE_SHA256: full}
+    dict_sources, _ = return_resolved_sources({"ABL1": abl1}, manifest_pkg)
+    return abl1, {**dict_sources, STR_SOURCE_SHA256: full}
 
 
 def test_provenance_sha256_only_is_compact_and_needs_an_identifier():
@@ -467,10 +476,40 @@ def test_sources_table_resolves_after_load(tmp_path, mutable_kinase, _empty_sour
 
 def test_missing_sources_entry_raises(tmp_path, mutable_kinase, _empty_sources):
     """A hash-only record source absent from the sources table raises, subset loads too."""
-    abl1, _ = _abl1_by_sha256(mutable_kinase)
-    manifest = _manifest({"ABL1": abl1})
+    abl1, dict_sources = _abl1_by_sha256(mutable_kinase)
+    kinase_schema.register_sources(dict_sources)  # so the write succeeds
+    manifest = _manifest({"ABL1": abl1})  # a table without the stand-in source
     str_tar = _write_tar(tmp_path, {"ABL1": abl1}, manifest)
 
     for list_ids in (None, ["ABL1"]):
         with pytest.raises(ValueError, match="missing from its manifest.json sources"):
             io_utils.deserialize_kinase_dict(str_path=str_tar, list_ids=list_ids)
+
+
+def test_serialize_writes_manifest_that_loads_alone(tmp_path, dict_sample, monkeypatch):
+    """A serialized directory carries its own manifest (hashes, sources, writer), so it
+    loads and resolves its sources in a session that has registered nothing."""
+    path_dir = tmp_path / "KinaseInfo"
+    manifest = io_utils.serialize_kinase_dict(dict_sample, str_path=str(path_dir))
+
+    assert io_utils.load_manifest(str(path_dir)) == manifest
+    assert sorted(manifest.entry_sha256) == ["ABL1.json", "BUB1B.json"]
+    assert manifest.entry_sha256 == io_utils.return_dir_entry_sha256(str(path_dir))
+    assert manifest.sources and "mkt-schema" in manifest.packages
+
+    monkeypatch.setattr(kinase_schema, "_DICT_SOURCES", {})  # a fresh session
+    dict_loaded = io_utils.deserialize_kinase_dict(
+        str_path=str(path_dir), bool_remove=False
+    )
+    assert dict_loaded["ABL1"].kincore.cif.source.resolve().name is not None
+
+
+def test_serialize_unregistered_source_writes_nothing(
+    tmp_path, mutable_kinase, _empty_sources
+):
+    """A hash-only source with no registered provenance raises before any file is written."""
+    abl1, _ = _abl1_by_sha256(mutable_kinase)
+    path_dir = tmp_path / "KinaseInfo"
+    with pytest.raises(ValueError, match="no registered provenance"):
+        io_utils.serialize_kinase_dict({"ABL1": abl1}, str_path=str(path_dir))
+    assert not path_dir.exists()
