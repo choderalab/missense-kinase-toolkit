@@ -253,9 +253,11 @@ def merge_rebuilt_entries(
     """Merge rebuilt entries into the existing dict, field by field.
 
     For each rebuilt entry, fields owned by steps that will re-run (``names``) are cleared so
-    the step computes them fresh, and fields owned by every other step are carried over from
-    the existing entry. Existing entries of a rebuilt UniProt that the rebuild no longer
-    produces (e.g. a renamed or dropped domain) are removed.
+    the step computes them fresh, unless the step checks its own inputs
+    (``Component.checks_inputs``) and keeps or recomputes the carried value itself. Fields
+    owned by every other step are carried over from the existing entry. Existing entries of
+    a rebuilt UniProt that the rebuild no longer produces (e.g. a renamed or dropped domain)
+    are removed.
 
     Parameters
     ----------
@@ -273,12 +275,14 @@ def merge_rebuilt_entries(
     set[str]
         ``hgnc_name`` keys of the rebuilt entries (the enrichment target set).
     """
-    set_names = set(names)
+    set_clear = {
+        name for name in names if not build_steps.COMPONENTS[name].checks_inputs
+    }
     for hgnc_name, obj_new in dict_new.items():
         obj_old = dict_existing.get(hgnc_name)
         for step, list_paths in build_steps.return_step_writes().items():
             for str_path in list_paths:
-                if step in set_names:
+                if step in set_clear:
                     _clear_field(obj_new, str_path)
                 elif obj_old is not None:
                     _carry_field(obj_new, obj_old, str_path)

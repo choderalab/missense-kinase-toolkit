@@ -208,9 +208,13 @@ class Component:
     """Sources and steps whose output it reads, by default empty."""
     writes: tuple[str, ...] = ()
     """Dotted KinaseInfo fields a step owns, by default empty. A partial rebuild carries
-    these over when the step does not run, and clears them before it re-runs."""
+    these over when the step does not run, and clears them before it re-runs unless
+    ``checks_inputs``."""
     run: Callable[["BuildContext"], None] | None = None
     """Step function; None for sources (fetched by ``fetch_source``)."""
+    checks_inputs: bool = False
+    """Step keeps a stored value whose recorded inputs are unchanged (``InputCheck``), so a
+    re-run carries its fields over instead of clearing them, by default False."""
 
 
 # run order: sources, then steps. kincore_msa runs first so its KD bounds (and the MSA
@@ -242,6 +246,7 @@ COMPONENTS: dict[str, Component] = {
             reads=frozenset({"uniprot", "klifs", "kincore", "kincore_msa"}),
             writes=("kincore.cif.sasa", "kincore.cif.superposition"),
             run=_enrich_kincore_structure_props,
+            checks_inputs=True,
         ),
         Component(
             "alphafold",
@@ -251,6 +256,7 @@ COMPONENTS: dict[str, Component] = {
             reads=frozenset({"uniprot", "klifs", "kincore", "pfam", "kincore_msa"}),
             writes=("alphafold",),
             run=_enrich_alphafold,
+            checks_inputs=True,
         ),
         Component(
             "exon",

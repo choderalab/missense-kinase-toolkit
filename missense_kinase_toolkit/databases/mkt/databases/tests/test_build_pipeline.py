@@ -82,7 +82,8 @@ def test_resolve_step_names_adds_downstream(only, expected):
 
 def test_merge_rebuilt_entries_carries_clears_and_removes():
     """Unrun steps' fields carry over (creating a KinCoRe shell if needed), re-run steps'
-    fields are cleared, and rebuilt UniProts' vanished entries are removed."""
+    fields are cleared unless the step checks its own inputs, and rebuilt UniProts'
+    vanished entries are removed."""
     seed = deserialize_kinase_dict(list_ids=["EGFR", "JAK1_1"], bool_verbose=False)
     if not {"EGFR", "JAK1_1"} <= set(seed):
         pytest.skip("packaged KinaseInfo.tar.gz missing EGFR/JAK1")
@@ -110,8 +111,16 @@ def test_merge_rebuilt_entries_carries_clears_and_removes():
     assert dict_existing["EGFR"].exon == seed["EGFR"].exon
     assert dict_existing["EGFR"].kincore.msa == seed["EGFR"].kincore.msa
     assert dict_existing["EGFR"].kincore.fasta is None
-    # alphafold re-runs, so it starts cleared
-    assert dict_existing["JAK1_1"].alphafold is None
+    # alphafold re-runs but checks its own inputs, so the stored value is carried over
+    assert dict_existing["JAK1_1"].alphafold == seed["JAK1_1"].alphafold
+
+    # kincore_msa has no input check, so a re-run starts it cleared
+    dict_existing = {"JAK1_1": copy.deepcopy(seed["JAK1_1"])}
+    jak1 = copy.deepcopy(seed["JAK1_1"])
+    pipeline.merge_rebuilt_entries(
+        dict_existing, {"JAK1_1": jak1}, ["kincore_msa"], {"P23458"}
+    )
+    assert dict_existing["JAK1_1"].kincore.msa is None
 
 
 def test_registry_sources_match_source_enum():
