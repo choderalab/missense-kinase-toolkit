@@ -353,6 +353,7 @@ class TestPositionRoutes:
         assert df_out["proteinChange"].tolist() == [df["proteinChange"][0], "K2A"]
         assert df_out["uniprot_idx"].tolist() == [600, 2]
         assert df_out["reconcile_source"].tolist() == ["direct", "direct"]
+        assert _to_list(df_out["unreconciled_reason"]) == [None, None]
 
     def test_unreconciled_rows_kept_on_request(self):
         df, dict_gene2seq = _braf_rows()
@@ -361,6 +362,20 @@ class TestPositionRoutes:
         )
         assert len(df_out) == 3
         assert _to_list(df_out["reconcile_source"]) == ["direct", None, "direct"]
+        # direct-only tiers: no isoform sequence to check the mismatched BRAF row against
+        assert _to_list(df_out["unreconciled_reason"]) == [
+            None,
+            "isoform_unknown",
+            None,
+        ]
+
+    def test_unreconciled_rows_kept_by_default(self):
+        assert (
+            cbioportal.KinaseMissenseMutations.__dataclass_fields__[
+                "bool_drop_unreconciled"
+            ].default
+            is False
+        )
 
     def test_both_routes_emit_the_same_columns(self):
         df, dict_gene2seq = _braf_rows()
@@ -640,3 +655,31 @@ def test_entrez_ids_read_as_nullable_integers():
         for v in pd.to_numeric(ser, errors="coerce").astype("Int64")
     ]
     assert list_out == ["8358", None, "100533107"]
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("V600E", True),
+        ("G12C", True),
+        ("*28*", False),
+        ("V600V", False),
+        ("Q61*", False),
+        ("X200_splice", False),
+        ("E746_A750del", False),
+        (None, False),
+    ],
+)
+def test_is_missense_protein_change(value, expected):
+    assert cbioportal.is_missense_protein_change(value) is expected
+
+
+def test_missense_filter_drops_stop_retained_changes():
+    df = pd.DataFrame(
+        {
+            "mutationType": ["Missense_Mutation"] * 3 + ["Nonsense_Mutation"],
+            "proteinChange": ["V600E", "*28*", "R45K", "Q61*"],
+        }
+    )
+    df_out = KMM.filter_single_aa_missense_mutations(_stub(), df)
+    assert df_out["proteinChange"].tolist() == ["V600E", "R45K"]

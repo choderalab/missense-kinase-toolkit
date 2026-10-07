@@ -10,6 +10,7 @@ import pytest
 from mkt.databases.isoform import (
     CanonicalReconciler,
     SourceTier,
+    UnreconciledReason,
     clean_refseq_accession,
     map_positions_by_alignment,
     return_refseq_accessions,
@@ -214,6 +215,70 @@ class TestCanonicalReconciler:
 
     def test_unknown_gene_is_skipped(self):
         assert _Fakes().reconciler().reconcile("NOTAKINASE", 10, "K") == (None, None)
+
+
+class TestUnreconciledReason:
+    def test_isoform_only_residue(self):
+        """The isoform holds the residue but it has no canonical equivalent (FGFR1 2-33)."""
+        fakes = _Fakes(refseq={"NM_000001": ISOFORM_INSERTED})
+        rec = fakes.reconciler()
+        assert rec.reconcile("KIN", 23, "W", refseq="NM_000001") == (None, None)
+        assert (
+            rec.return_unreconciled_reason("KIN", 23, "W", refseq="NM_000001")
+            == UnreconciledReason.isoform_only
+        )
+        # the reason reuses the sequence reconcile() fetched
+        assert fakes.calls["refseq"] == 1
+
+    def test_swapped_exon_is_isoform_only(self):
+        """A same-length swapped stretch aligns as substitutions, not a gap (FYN 7A/7B)."""
+        isoform = CANONICAL[:30] + "WWWWWWWWWW" + CANONICAL[40:]
+        fakes = _Fakes(refseq={"NM_000003": isoform})
+        assert (
+            fakes.reconciler().return_unreconciled_reason(
+                "KIN", 35, "W", refseq="NM_000003"
+            )
+            == UnreconciledReason.isoform_only
+        )
+
+    def test_isolated_residue_difference_is_a_mismatch(self):
+        """The isoform holds the residue, but only that residue differs from canonical
+        (MST1R S1195): a sequence difference, not an isoform-only stretch."""
+        aa_alt = "W" if CANONICAL[34] != "W" else "C"
+        fakes = _Fakes(refseq={"NM_000002": CANONICAL[:34] + aa_alt + CANONICAL[35:]})
+        assert (
+            fakes.reconciler().return_unreconciled_reason(
+                "KIN", 35, aa_alt, refseq="NM_000002"
+            )
+            == UnreconciledReason.reference_mismatch
+        )
+
+    def test_reference_mismatch_when_no_isoform_holds_the_residue(self):
+        """An isoform was checked but lacks the residue too (IKBKE G42V)."""
+        fakes = _Fakes(
+            transcripts={"KIN": "ENST_OVERRIDE"},
+            ensembl={"ENST_OVERRIDE": ISOFORM_EXTENDED},
+        )
+        wrong_aa = "W" if ISOFORM_EXTENDED[34] != "W" else "C"
+        assert (
+            fakes.reconciler().return_unreconciled_reason("KIN", 35, wrong_aa)
+            == UnreconciledReason.reference_mismatch
+        )
+
+    def test_isoform_unknown_without_a_sequence_to_check(self):
+        """No override transcript and no usable RefSeq to check."""
+        fakes = _Fakes()
+        assert (
+            fakes.reconciler().return_unreconciled_reason("KIN", 42, "W", refseq=".")
+            == UnreconciledReason.isoform_unknown
+        )
+
+    def test_failed_fetch_counts_as_unknown(self):
+        fakes = _Fakes(transcripts={"KIN": "ENST_MISSING"})
+        assert (
+            fakes.reconciler().return_unreconciled_reason("KIN", 42, "W")
+            == UnreconciledReason.isoform_unknown
+        )
 
 
 def test_clean_refseq_accession():
