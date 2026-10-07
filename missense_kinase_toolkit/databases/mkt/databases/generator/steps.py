@@ -1,15 +1,16 @@
-"""Enrichment- and report-step registries for the KinaseInfo build pipeline.
+"""Component and report-step registries for the KinaseInfo build pipeline.
 
-Defines the ordered registry of enrichment steps (each mutating additive optional
-fields on the assembled :class:`KinaseInfo` objects in place), the terminal report
-steps, and the selection/validation helpers that back the ``--only``/``--skip`` CLI
-flags. Enrichment steps are added incrementally per workstream (alphafold, then rsasa,
-activation_loop, alignment, exon). All steps run in a full regen (opt out with ``--skip``);
-every step must be idempotent (overwrite its field, never append) so
-``--only <step>`` and ``--kinase`` splicing are safe to re-run.
+:data:`COMPONENTS` lists every build component: the base-build sources, then the enrichment
+steps (each mutating its owned fields on the assembled :class:`KinaseInfo` objects in place).
+Each declares what it reads and writes, which drives the step run order (each step after the
+steps it reads), ``--only`` (requested components plus everything downstream), ``--skip``
+warnings, partial-rebuild merges, and the CLI help. Every step must be idempotent (overwrite
+its fields, never append) so ``--only`` and ``--kinase`` re-runs are safe.
 """
 
 import logging
+from dataclasses import dataclass
+from graphlib import TopologicalSorter
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
@@ -194,53 +195,184 @@ def _enrich_exon(ctx: "BuildContext") -> None:
     enrich_kinases_with_exons(dict(_iter_targets(ctx)))
 
 
-# ordered enrichment-step registry; each step takes a BuildContext and mutates additive
-# optional fields on ctx.dict_kinaseinfo in place. steps run in this insertion order.
-# kincore_msa runs first so its KD bounds / MSA-only shells (and the MSA superposition tier)
-# are available to the structure steps. each structure step owns its structure's derived
-# properties (SASA + reference-frame superposition), so they are (re)generated alongside the
-# structure itself. KinCoRe-component steps share the kincore_* prefix (fasta needs no step --
-# it is fully populated in the base build).
-_ENRICH_STEPS: dict[str, Callable[["BuildContext"], None]] = {
-    "kincore_msa": _enrich_kincore_msa,
-    "kincore_structure_props": _enrich_kincore_structure_props,
-    "alphafold": _enrich_alphafold,
-    "exon": _enrich_exon,
-}
-"""dict[str, Callable]: Ordered enrichment-step registry (name -> step function)."""
+@dataclass(frozen=True)
+class Component:
+    """One build component: a base-build source or an enrichment step."""
 
-_STEP_WRITES: dict[str, list[str]] = {
-    "kincore_msa": ["kincore.msa"],
-    "kincore_structure_props": ["kincore.cif.sasa", "kincore.cif.superposition"],
-    "alphafold": ["alphafold"],
-    "exon": ["exon"],
-}
-"""dict[str, list[str]]: Enrichment-step name -> dotted KinaseInfo fields it owns. A partial
-rebuild carries these over from the existing entry when the step does not run, and clears
-them before the step re-runs."""
+    name: str
+    """Name used by ``--only``/``--skip``."""
+    kind: str
+    """``"source"`` (fetched in the base build) or ``"step"`` (enrichment)."""
+    help: str
+    """One-line description for the CLI help."""
+    reads: frozenset[str] = frozenset()
+    """Sources and steps whose output it reads, by default empty."""
+    writes: tuple[str, ...] = ()
+    """Dotted KinaseInfo fields a step owns, by default empty. A partial rebuild carries
+    these over when the step does not run, and clears them before it re-runs unless
+    ``checks_inputs``."""
+    run: Callable[["BuildContext"], None] | None = None
+    """Step function; None for sources (fetched by ``fetch_source``)."""
+    checks_inputs: bool = False
+    """Step keeps a stored value whose recorded inputs are unchanged (``InputCheck``), so a
+    re-run carries its fields over instead of clearing them, by default False."""
 
-_STEP_READS: dict[str, set[str]] = {
-    # KLIFS2UniProtIdx (uniprot + klifs + kincore) picks the domain; hgnc is the fallback
-    "kincore_msa": {"hgnc", "uniprot", "klifs", "kincore"},
-    # SASA keys on KLIFS2UniProtIdx; superposition falls back to the MSA tier
-    "kincore_structure_props": {"uniprot", "klifs", "kincore", "kincore_msa"},
-    # slices to adjudicated KD bounds: kincore cif > fasta > msa > pfam > KLIFS span
-    "alphafold": {"uniprot", "klifs", "kincore", "pfam", "kincore_msa"},
-    "exon": {"hgnc", "uniprot"},
+
+# sources, then steps; steps run in dependency order (return_run_order), with this order
+# breaking ties. kincore_msa supplies KD bounds and the MSA superposition tier to the
+# structure steps; each structure step owns its structure's SASA + superposition.
+COMPONENTS: dict[str, Component] = {
+    component.name: component
+    for component in [
+        Component("hgnc", "source", "HGNC gene symbols"),
+        Component("uniprot", "source", "UniProt canonical sequences and phosphosites"),
+        Component("kinhub", "source", "KinHub kinase classification"),
+        Component("klifs", "source", "KLIFS pocket annotations"),
+        Component("pfam", "source", "Pfam kinase-domain boundaries"),
+        Component("kincore", "source", "KinCoRe kinase-domain FASTA and CIFs"),
+        Component(
+            "kincore_msa",
+            "step",
+            "Dunbrack MSA rows and kinase-domain bounds",
+            # KLIFS2UniProtIdx (uniprot + klifs + kincore) picks the domain; hgnc fallback
+            reads=frozenset({"hgnc", "uniprot", "klifs", "kincore"}),
+            writes=("kincore.msa",),
+            run=_enrich_kincore_msa,
+        ),
+        Component(
+            "kincore_structure_props",
+            "step",
+            "SASA and superposition of the KinCoRe structure",
+            # SASA keys on KLIFS2UniProtIdx; superposition falls back to the MSA tier
+            reads=frozenset({"uniprot", "klifs", "kincore", "kincore_msa"}),
+            writes=("kincore.cif.sasa", "kincore.cif.superposition"),
+            run=_enrich_kincore_structure_props,
+            checks_inputs=True,
+        ),
+        Component(
+            "alphafold",
+            "step",
+            "KD-sliced AlphaFold structure, its SASA and superposition",
+            # slices to adjudicated KD bounds: kincore cif > fasta > msa > pfam > KLIFS span
+            reads=frozenset({"uniprot", "klifs", "kincore", "pfam", "kincore_msa"}),
+            writes=("alphafold",),
+            run=_enrich_alphafold,
+            checks_inputs=True,
+        ),
+        Component(
+            "exon",
+            "step",
+            "exon map from Genome Nexus",
+            reads=frozenset({"hgnc", "uniprot"}),
+            writes=("exon",),
+            run=_enrich_exon,
+        ),
+    ]
 }
-"""dict[str, set[str]]: Enrichment-step name -> base-build sources and steps whose output it
-reads. Requesting any of these also re-runs the step (see :func:`resolve_step_names`)."""
+"""dict[str, Component]: Every build component, in registry order (name -> Component)."""
+
+
+def return_component_names(kind: str | None = None) -> list[str]:
+    """Return component names in registry order, optionally of one kind (source/step)."""
+    return [
+        name
+        for name, component in COMPONENTS.items()
+        if kind is None or component.kind == kind
+    ]
+
+
+def return_step_writes() -> dict[str, tuple[str, ...]]:
+    """Return each enrichment step's owned fields (step name -> dotted paths)."""
+    return {name: COMPONENTS[name].writes for name in return_component_names("step")}
+
+
+def warn_skipped_steps(skip: list[str], names: list[str], str_scope: str) -> None:
+    """Warn which steps that will run read the output of a skipped step.
+
+    Parameters
+    ----------
+    skip : list[str]
+        Steps skipped with ``--skip``.
+    names : list[str]
+        Steps that will run.
+    str_scope : str
+        Which entries they run on, for the message (e.g. ``"all entries"``).
+    """
+    for str_skip in skip:
+        list_downstream = [
+            name for name in resolve_step_names(only=[str_skip]) if name in names
+        ]
+        if not list_downstream:
+            continue
+        list_fields = [
+            path for name in list_downstream for path in COMPONENTS[name].writes
+        ]
+        logger.warning(
+            f"--skip {str_skip}: {', '.join(list_downstream)} read its output and will "
+            f"run on {str_scope} without a fresh {str_skip}, so these fields may regress: "
+            f"{', '.join(list_fields)}. Rerun with --only {str_skip} to refresh them."
+        )
+
+
+def return_run_order(names: list[str]) -> list[str]:
+    """Order steps so each runs after the steps it reads; ties keep registry order.
+
+    The order comes from every step's ``reads``, then is filtered to ``names``, so a step
+    that is not running still orders the steps that read its stored output.
+
+    Parameters
+    ----------
+    names : list[str]
+        Enrichment-step names to order.
+
+    Returns
+    -------
+    list[str]
+        ``names`` in run order.
+
+    Raises
+    ------
+    ValueError
+        If a component reads a name that is not a registered component.
+    graphlib.CycleError
+        If steps read each other in a cycle.
+    """
+    list_unknown = [
+        f"{name} reads {sorted(component.reads - set(COMPONENTS))}"
+        for name, component in COMPONENTS.items()
+        if component.reads - set(COMPONENTS)
+    ]
+    if list_unknown:
+        raise ValueError(f"unregistered component(s): {'; '.join(list_unknown)}")
+
+    list_steps = return_component_names("step")
+    dict_index = {name: idx for idx, name in enumerate(list_steps)}
+    # step-to-step edges only: sources are fetched in the base build, before any step
+    sorter = TopologicalSorter(
+        {name: COMPONENTS[name].reads & set(list_steps) for name in list_steps}
+    )
+    sorter.prepare()
+    # one step at a time, always the earliest ready one in registry order, so a registry
+    # that already respects its reads runs exactly as written
+    list_order, list_ready = [], []
+    while sorter.is_active():
+        list_ready = sorted(list_ready + list(sorter.get_ready()), key=dict_index.get)
+        str_next = list_ready.pop(0)
+        list_order.append(str_next)
+        sorter.done(str_next)
+    set_names = set(names)
+    return [name for name in list_order if name in set_names]
 
 
 def resolve_step_names(
     only: list[str] | None = None,
     skip: list[str] | None = None,
 ) -> list[str]:
-    """Resolve the enrichment steps to run into registry order.
+    """Resolve the enrichment steps to run, in run order (:func:`return_run_order`).
 
     ``only`` may name base-build sources and/or steps; the result is the requested steps
-    plus every step downstream of a requested source or step (transitively, via
-    :data:`_STEP_READS`), so nothing that depends on refreshed data is left stale. Names
+    plus every step downstream of a requested source or step (transitively, via each
+    component's ``reads``), so nothing that depends on refreshed data is left stale. Names
     are validated by :meth:`mkt.databases.generator.pipeline.Pipeline.run`; unknown names
     are ignored here.
 
@@ -255,23 +387,23 @@ def resolve_step_names(
     Returns
     -------
     list[str]
-        Enrichment-step names to run, in registry order.
+        Enrichment-step names to run, in run order.
     """
+    list_steps = return_component_names("step")
     if only:
         set_closure = set(only)
         bool_grew = True
         while bool_grew:
             set_downstream = {
                 name
-                for name in _ENRICH_STEPS
-                if name not in set_closure
-                and _STEP_READS.get(name, set()) & set_closure
+                for name in list_steps
+                if name not in set_closure and COMPONENTS[name].reads & set_closure
             }
             set_closure |= set_downstream
             bool_grew = bool(set_downstream)
-        return [name for name in _ENRICH_STEPS if name in set_closure]
+        return return_run_order([name for name in list_steps if name in set_closure])
     skipped = set(skip or [])
-    return [name for name in _ENRICH_STEPS if name not in skipped]
+    return return_run_order([name for name in list_steps if name not in skipped])
 
 
 def run_steps(
@@ -279,7 +411,7 @@ def run_steps(
     ctx: "BuildContext",
     dict_step_subset: dict[str, set[str]] | None = None,
 ) -> None:
-    """Run the enabled enrichment steps sequentially in registry order.
+    """Run the enabled enrichment steps sequentially, in the order given.
 
     A failing step is logged and skipped rather than aborting the whole batch (step
     bodies additionally isolate per-kinase failures).
@@ -287,7 +419,7 @@ def run_steps(
     Parameters
     ----------
     names : list[str]
-        Enrichment-step names to run, in registry order.
+        Enrichment-step names to run, in run order (:func:`resolve_step_names`).
     ctx : BuildContext
         The build context threaded through each step.
     dict_step_subset : dict[str, set[str]] | None, optional
@@ -300,7 +432,7 @@ def run_steps(
             ctx.subset_hgnc = dict_step_subset[name]
         logger.info(f"running enrichment step '{name}'...")
         try:
-            _ENRICH_STEPS[name](ctx)
+            COMPONENTS[name].run(ctx)
             logger.info(f"enrichment step '{name}' completed.")
         except Exception as e:
             logger.error(f"enrichment step '{name}' failed: {e}", exc_info=True)

@@ -1,3 +1,7 @@
 missense_kinase_toolkit/_version.py export-subst
 
 *.ipynb -linguist-detectable
+
+# source files hashed into the KinaseInfo manifest: check out byte-for-byte (no CRLF on Windows)
+data/Human-PK.fasta -text
+data/1gag_template.pdb -text

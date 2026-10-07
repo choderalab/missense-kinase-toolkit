@@ -14,15 +14,14 @@ import logging
 import os
 import tempfile
 from dataclasses import dataclass
-from importlib.metadata import version
 from inspect import isclass
 from typing import Any, get_args
 
-import git
 from mkt.databases.generator import steps as build_steps
 from mkt.databases.io_utils import create_tar_without_metadata
 from mkt.databases.kinase_schema import (
     Source,
+    apply_hgnc_fallback,
     combine_kinaseinfo,
     combine_kinaseinfo_kd,
     combine_kinaseinfo_uniprot,
@@ -31,13 +30,13 @@ from mkt.databases.kinase_schema import (
 )
 from mkt.schema.io_utils import (
     STR_MANIFEST_FILENAME,
-    Manifest,
     deserialize_kinase_dict,
     get_repo_root,
     load_manifest,
-    return_dir_entry_sha256,
+    return_str_path_from_pkg_data,
     serialize_kinase_dict,
 )
+from mkt.schema.kinase_schema import register_sources
 from mkt.schema.utils import rgetattr, split_domain_suffix
 from pydantic import BaseModel, ValidationError
 
@@ -57,9 +56,6 @@ REPORTS_GROUP_SUBDIR = "dict_kinase"
 DATETIME_SUBDIR_FMT = "%Y.%m.%d.%H%M%S"
 """str: ``strftime`` format for the datetime-stamped reports subdirectory, applied to the
 archive manifest's ``generated_at`` (UTC)."""
-
-LIST_MANIFEST_PACKAGES = ["mkt-schema", "mkt-databases"]
-"""list[str]: Packages whose versions are recorded in the archive manifest."""
 
 
 @dataclass
@@ -211,9 +207,11 @@ def merge_rebuilt_entries(
     """Merge rebuilt entries into the existing dict, field by field.
 
     For each rebuilt entry, fields owned by steps that will re-run (``names``) are cleared so
-    the step computes them fresh, and fields owned by every other step are carried over from
-    the existing entry. Existing entries of a rebuilt UniProt that the rebuild no longer
-    produces (e.g. a renamed or dropped domain) are removed.
+    the step computes them fresh, unless the step checks its own inputs
+    (``Component.checks_inputs``) and keeps or recomputes the carried value itself. Fields
+    owned by every other step are carried over from the existing entry. Existing entries of
+    a rebuilt UniProt that the rebuild no longer produces (e.g. a renamed or dropped domain)
+    are removed.
 
     Parameters
     ----------
@@ -231,12 +229,14 @@ def merge_rebuilt_entries(
     set[str]
         ``hgnc_name`` keys of the rebuilt entries (the enrichment target set).
     """
-    set_names = set(names)
+    set_clear = {
+        name for name in names if not build_steps.COMPONENTS[name].checks_inputs
+    }
     for hgnc_name, obj_new in dict_new.items():
         obj_old = dict_existing.get(hgnc_name)
-        for step, list_paths in build_steps._STEP_WRITES.items():
+        for step, list_paths in build_steps.return_step_writes().items():
             for str_path in list_paths:
-                if step in set_names:
+                if step in set_clear:
                     _clear_field(obj_new, str_path)
                 elif obj_old is not None:
                     _carry_field(obj_new, obj_old, str_path)
@@ -297,6 +297,8 @@ def run_source_rebuild(
             f"refreshing source '{source}' for {len(set_uniprot)} UniProt IDs..."
         )
         dict_obj[source] = fetch_source(source, set_uniprot)
+    if Source.hgnc in sources:
+        apply_hgnc_fallback(dict_obj)
     dict_uniprot = combine_kinaseinfo_uniprot(dict_obj)
     dict_kd = combine_kinaseinfo_kd(dict_obj)
     return combine_kinaseinfo(dict_uniprot, dict_kd)
@@ -417,36 +419,6 @@ def _resolve_dir(path_repo: str, path_rel: str | None, default_rel: str) -> str:
     return path_out
 
 
-def _return_git_info() -> dict[str, str | bool]:
-    """Return the build checkout's commit SHA and dirty flag.
-
-    Returns
-    -------
-    dict[str, str | bool]
-        ``{"sha": ..., "dirty": ...}``, or empty outside a git checkout.
-    """
-    try:
-        repo = git.Repo(get_repo_root(), search_parent_directories=True)
-    except (git.InvalidGitRepositoryError, git.NoSuchPathError):
-        logger.warning("not a git checkout; manifest records package versions only.")
-        return {}
-    bool_dirty = repo.is_dirty()
-    if bool_dirty:
-        logger.warning("building from a dirty tree; manifest git sha is ambiguous.")
-    return {"sha": repo.head.commit.hexsha, "dirty": bool_dirty}
-
-
-def _return_package_versions() -> dict[str, str]:
-    """Return installed versions of :data:`LIST_MANIFEST_PACKAGES`.
-
-    Returns
-    -------
-    dict[str, str]
-        Package name -> version string.
-    """
-    return {name: version(name) for name in LIST_MANIFEST_PACKAGES}
-
-
 @dataclass
 class Pipeline:
     """Orchestrates the KinaseInfo build across its run modes.
@@ -524,7 +496,7 @@ class Pipeline:
         return deserialize_kinase_dict()
 
     def _serialize_and_tar(self, dict_kinaseinfo: dict[str, Any]) -> None:
-        """Serialize the dict and its manifest to files and (re)build the tar archive.
+        """Serialize the dict with its manifest (:func:`serialize_kinase_dict`) and tar it.
 
         Parameters
         ----------
@@ -538,17 +510,16 @@ class Pipeline:
         # stage in a fresh system temp dir: removed on success, error, or Ctrl-C, never
         # left in the repo/package, and never mixed with files from an earlier run
         with tempfile.TemporaryDirectory(prefix="KinaseInfo_") as path_staging:
-            serialize_kinase_dict(dict_kinaseinfo, str_path=path_staging)
-            # hash the files exactly as they will be tarred, so loads verify the bytes
-            manifest = Manifest.from_kinase_dict(
-                dict_kinaseinfo,
-                git=_return_git_info(),
-                packages=_return_package_versions(),
-                entry_sha256=return_dir_entry_sha256(path_staging),
-            )
-            path_manifest = os.path.join(path_staging, STR_MANIFEST_FILENAME)
-            with open(path_manifest, "w") as outfile:
-                outfile.write(manifest.model_dump_json(indent=4))
+            # entries plus their manifest (hashes, sources, git, packages)
+            manifest = serialize_kinase_dict(dict_kinaseinfo, str_path=path_staging)
+            if not manifest.git:
+                logger.warning(
+                    "not a git checkout; manifest records package versions only."
+                )
+            elif manifest.git["dirty"]:
+                logger.warning(
+                    "building from a dirty tree; manifest git sha is ambiguous."
+                )
             # write beside the target, then swap atomically: a failed build keeps the
             # previous archive instead of deleting it first
             path_partial = f"{self.path_tar}.partial"
@@ -713,6 +684,15 @@ class Pipeline:
         -------
         None
         """
+        # register the previous archive's sources so unchanged files keep their query_date
+        path_previous = (
+            self.path_tar
+            if os.path.exists(self.path_tar)
+            else return_str_path_from_pkg_data()
+        )
+        manifest_previous = load_manifest(path_previous)
+        if manifest_previous is not None:
+            register_sources(manifest_previous.sources)
         dict_ki = run_base_build(subset_uniprot=None)
         self._finalize(
             dict_ki, names, subset_hgnc=None, bool_figs=bool_figs, force=force
@@ -932,8 +912,8 @@ class Pipeline:
         # validate --only/--skip once, before any work, against every valid component
         if only and skip:
             raise ArgumentError("--only and --skip are mutually exclusive.")
-        list_sources = [source.value for source in Source]
-        list_steps = build_steps.resolve_step_names()
+        list_sources = build_steps.return_component_names("source")
+        list_steps = build_steps.return_component_names("step")
         list_components = list_sources + list_steps
         unknown_only = [name for name in only or [] if name not in list_components]
         if unknown_only:
@@ -959,6 +939,13 @@ class Pipeline:
         sources = [name for name in only or [] if name in list_sources]
         # requested steps plus everything downstream of a requested source or step
         names = build_steps.resolve_step_names(only, skip)
+        if skip:
+            str_scope = (
+                f"the --kinase entries ({', '.join(list_kinase)})"
+                if list_kinase
+                else "all entries"
+            )
+            build_steps.warn_skipped_steps(skip, names, str_scope)
 
         if only:
             self.partial(
