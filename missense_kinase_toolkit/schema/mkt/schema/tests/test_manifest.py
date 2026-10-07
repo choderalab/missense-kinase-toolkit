@@ -174,6 +174,15 @@ def test_manifest_summary(tmp_path, dict_kinase, capsys):
     assert _row("    pocket_seq ") < _row("  pfam ")
     assert "v1 60 · v3 437" in list_lines[_row("    fasta ")]
 
+    # package versions and source hashes start in one column, after the padded names
+    list_named = (
+        list_lines[_row("  packages ") : _row("  entries ")]
+        + list_lines[_row("  sha256 ") : _row("  sha256 ") + len(manifest.sources)]
+    )
+    assert len(list_named) == len(manifest.packages) + len(manifest.sources)
+    assert len({line.rindex("  ") for line in list_named}) == 1
+    assert "entries" not in list_lines[_row("  sha256 ")]
+
     str_tar = _write_tar(tmp_path, {"ABL1": dict_kinase["ABL1"]}, manifest)
     io_utils.print_manifest_summary(str_tar)
     assert "KinaseInfo manifest (mkt-schema 0.1.0)" in capsys.readouterr().out
@@ -292,7 +301,6 @@ def test_entry_sha256_roundtrip(tmp_path, dict_sample):
     str_tar, _ = _write_hashed_tar(tmp_path, dict_sample)
     manifest = io_utils.load_manifest(str_tar)
     assert sorted(manifest.entry_sha256) == ["ABL1.json", "BUB1B.json"]
-    assert "sha256     2 entries" in manifest.return_summary()
 
     assert list(io_utils.deserialize_kinase_dict(str_path=str_tar)) == ["ABL1", "BUB1B"]
     assert list(

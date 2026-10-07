@@ -193,20 +193,27 @@ class Manifest(BaseModel):
         str_git = self.git.get("sha", "n/a")[:12]
         if self.git.get("dirty"):
             str_git += " (dirty)"
-        list_packages = [f"{name} {ver}" for name, ver in self.packages.items()]
+        list_packages = list(self.packages.items())
+        list_sources = [(prov.name, sha[:12]) for sha, prov in self.sources.items()]
+        # one column for package and source names, so versions and hashes line up
+        int_name = max(
+            (len(name) for name, _ in list_packages + list_sources), default=0
+        )
+
+        def _block(str_label: str, list_pairs: list[tuple[str, str]]) -> list[str]:
+            list_rows = [f"{name:<{int_name}}  {val}" for name, val in list_pairs]
+            list_rows = list_rows or ["n/a"]
+            return [f"  {str_label:<9}  {list_rows[0]}"] + [
+                f"  {'':<9}  {row}" for row in list_rows[1:]
+            ]
 
         list_lines = [
             f"KinaseInfo manifest (mkt-schema {self.packages.get('mkt-schema', 'n/a')})",
             f"  generated  {self.generated_at:%Y-%m-%d %H:%M:%S %Z}".rstrip(),
             f"  git        {str_git}",
-            f"  packages   {list_packages[0] if list_packages else 'n/a'}",
-            *(f"             {pkg}" for pkg in list_packages[1:]),
+            *_block("packages", list_packages),
             f"  entries    {self.n_entries:,}",
-            f"  sha256     {len(self.entry_sha256):,} entries",
-            *(
-                f"             {prov.name} {sha[:12]}"
-                for sha, prov in self.sources.items()
-            ),
+            *_block("sha256", list_sources),
             "",
             f"  {'field':<{int_label}}  {'n':>5}  {'%':>6}",
             "  " + "─" * (int_label + 17 + int_bar_width),
