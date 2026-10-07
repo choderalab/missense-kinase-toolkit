@@ -13,8 +13,12 @@ asks about the wrong residue for some genes.
 
 import pandas as pd
 import pytest
-from mkt.databases import cbioportal
-from mkt.databases.oncokb import OncoKBGenomicChange
+from mkt.databases import cbioportal, oncokb
+from mkt.databases.oncokb import (
+    OncoKBAuthError,
+    OncoKBGenomicChange,
+    OncoKBReviewStatus,
+)
 
 
 def _annotated_json(hugo="FGFR1", alteration="N577K"):
@@ -166,3 +170,74 @@ class TestOncoKBGenomicChange:
 
         assert obj.url_query is None
         assert obj._json is None
+
+
+class TestReviewStatus:
+    """How each answer is classified, so an empty row is never ambiguous."""
+
+    @pytest.mark.parametrize(
+        "bool_gene, str_summary, expected",
+        [
+            (True, "N577K is likely oncogenic.", OncoKBReviewStatus.reviewed),
+            (
+                True,
+                "The FGFR1 G2C mutation has not specifically been reviewed.",
+                OncoKBReviewStatus.alteration_not_reviewed,
+            ),
+            (False, "", OncoKBReviewStatus.gene_not_in_oncokb),
+        ],
+    )
+    def test_answered_queries(self, stub_query, bool_gene, str_summary, expected):
+        dict_json = _annotated_json()
+        dict_json.update({"geneExist": bool_gene, "variantSummary": str_summary})
+        stub_query(dict_json)
+
+        obj = OncoKBGenomicChange(
+            genomic_location="8,38274849,38274849,G,C", verbose=False
+        )
+
+        assert obj.review_status == expected
+
+
+class _FakeResponse:
+    def __init__(self, status_code, dict_json=None):
+        self.status_code = status_code
+        self.ok = status_code < 400
+        self.text = "error"
+        self._dict_json = dict_json
+
+    def json(self):
+        return self._dict_json
+
+
+class TestQueryErrors:
+    @staticmethod
+    def _serve(monkeypatch, res):
+        monkeypatch.setattr(OncoKBGenomicChange, "set_api_key", lambda self: {})
+        monkeypatch.setattr(
+            oncokb.requests_wrapper,
+            "get_cached_session",
+            lambda: type("S", (), {"get": lambda self, *a, **k: res})(),
+        )
+
+    def test_rejected_token_raises(self, monkeypatch):
+        self._serve(monkeypatch, _FakeResponse(401))
+        with pytest.raises(OncoKBAuthError, match="HTTP 401"):
+            OncoKBGenomicChange(genomic_location="8,38274849,38274849,G,C")
+
+    def test_other_error_is_recorded_not_raised(self, monkeypatch):
+        self._serve(monkeypatch, _FakeResponse(400))
+        obj = OncoKBGenomicChange(
+            genomic_location="8,38274849,38274849,G,C", verbose=False
+        )
+
+        assert obj.status_code == 400
+        assert obj.review_status == OncoKBReviewStatus.query_error
+        assert obj.oncogenic is None
+
+    def test_answered_query_records_its_status(self, monkeypatch):
+        self._serve(monkeypatch, _FakeResponse(200, _annotated_json()))
+        obj = OncoKBGenomicChange(genomic_location="8,38274849,38274849,G,C")
+
+        assert obj.status_code == 200
+        assert obj.review_status == OncoKBReviewStatus.reviewed
