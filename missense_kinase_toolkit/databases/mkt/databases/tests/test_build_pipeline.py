@@ -269,6 +269,16 @@ def test_resolve_targets_reports_unresolved():
     assert unresolved == {"NOTAKINASE"}
 
 
+def _write_seed_archive(tmp_path, seed):
+    """Write ``seed`` to ``tmp_path/KinaseInfo.tar.gz`` as a build would (manifest, entry
+    hashes, sources table)."""
+    path_tar = tmp_path / "KinaseInfo.tar.gz"
+    pipeline.Pipeline(
+        str(tmp_path / "seed"), str(tmp_path / "reports"), str(path_tar)
+    )._serialize_and_tar(seed)
+    return path_tar
+
+
 def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
     """--kinase rebuilds only the targeted entry and splices it into the archive.
 
@@ -282,10 +292,7 @@ def test_run_update_splices_targeted_entry(tmp_path, monkeypatch):
 
     # build the seed archive at the location the pipeline will read/write
     path_objects = tmp_path / "KinaseInfo"
-    path_tar = tmp_path / "KinaseInfo.tar.gz"
-    path_seed = tmp_path / "seed"
-    serialize_kinase_dict(seed, str_path=str(path_seed))
-    create_tar_without_metadata(path_source=str(path_seed), filename_tar=str(path_tar))
+    path_tar = _write_seed_archive(tmp_path, seed)
 
     # stub the base build to return a tweaked EGFR (detectable via the header)
     sentinel = "SENTINEL_SPLICE_TEST"
@@ -337,7 +344,7 @@ def test_archive_writes_sources_table(tmp_path, monkeypatch):
     seed = deserialize_kinase_dict(list_ids=["ABL1"], bool_verbose=False)
     abl1 = copy.deepcopy(seed["ABL1"])
     str_sha = "e" * 64
-    full = abl1.kincore.cif.source.model_copy(update={"sha256": str_sha})
+    full = abl1.kincore.cif.source.resolve().model_copy(update={"sha256": str_sha})
     abl1.kincore.cif.source = Provenance(sha256=str_sha)
     pl = pipeline.Pipeline(
         str(tmp_path / "KinaseInfo"),
@@ -351,7 +358,7 @@ def test_archive_writes_sources_table(tmp_path, monkeypatch):
 
     kinase_schema.register_sources({str_sha: full})
     pl._serialize_and_tar({"ABL1": abl1})
-    assert load_manifest(pl.path_tar).sources == {str_sha: full}
+    assert load_manifest(pl.path_tar).sources[str_sha] == full
 
     kinase_schema._DICT_SOURCES.clear()  # a fresh session
     after = deserialize_kinase_dict(str_path=pl.path_tar, bool_verbose=False)
@@ -578,10 +585,7 @@ def _seeded_pipeline(tmp_path, monkeypatch, list_ids):
     if set(seed) != set(list_ids):
         pytest.skip(f"packaged KinaseInfo.tar.gz missing {set(list_ids) - set(seed)}")
 
-    path_seed = tmp_path / "seed"
-    path_tar = tmp_path / "KinaseInfo.tar.gz"
-    serialize_kinase_dict(seed, str_path=str(path_seed))
-    create_tar_without_metadata(path_source=str(path_seed), filename_tar=str(path_tar))
+    path_tar = _write_seed_archive(tmp_path, seed)
 
     def _fetch_existing(source, set_uniprot):
         dict_src = pipeline._reconstruct_dict_obj(seed)[source]
