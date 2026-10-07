@@ -30,6 +30,14 @@ logger = logging.getLogger(__name__)
 _SET_REFSEQ_NOTED: set[str] = set()
 """refseqMrnaId elements / prefixes already logged, so each is noted once per session."""
 
+INT_ISOFORM_WINDOW = 5
+"""int: Residues either side of an unreconciled position checked against canonical."""
+
+INT_ISOFORM_MIN_DIVERGENT = 3
+"""int: Window positions that must differ from canonical (or align to a gap) for an
+isoform-only stretch; fewer is an isolated residue difference. On MSK-IMPACT isoform
+stretches differ at 4-11 of 11 positions, an isolated difference (MST1R S1195) at 1."""
+
 
 def _note_refseq_once(str_key: str, str_msg: str, int_level: int) -> None:
     """Log ``str_msg`` at ``int_level`` the first time ``str_key`` is seen."""
@@ -45,6 +53,17 @@ class SourceTier(StrEnum):
     mskcc = "mskcc"
     refseq = "refseq"
     genomenexus = "genomenexus"
+
+
+class UnreconciledReason(StrEnum):
+    """Why a position could not be reconciled (the ``unreconciled_reason`` values)."""
+
+    isoform_only = "isoform_only"
+    """An isoform holds the reported residue there, in a stretch differing from canonical."""
+    reference_mismatch = "reference_mismatch"
+    """No isoform checked holds the reported residue in a stretch differing from canonical."""
+    isoform_unknown = "isoform_unknown"
+    """No isoform sequence was available to check."""
 
 
 TUPLE_DEFAULT_TIERS = (
@@ -378,6 +397,113 @@ class CanonicalReconciler:
             if self._is_match(str_symbol, candidate, str_aa_ref):
                 return candidate, tier
         return None, None
+
+    def return_unreconciled_reason(
+        self,
+        str_symbol: str,
+        idx_position: int | None,
+        str_aa_ref: str | None,
+        refseq: object = None,
+    ) -> UnreconciledReason:
+        """Classify why a position could not be reconciled.
+
+        Checks the isoform sequences the mskcc and refseq tiers use (cached by
+        :meth:`reconcile`) for the reported residue at the reported position, within
+        a stretch that differs from canonical (an inserted or swapped exon) rather
+        than an isolated residue difference.
+
+        Parameters
+        ----------
+        str_symbol : str
+            Gene symbol.
+        idx_position : int | None
+            1-based protein position as reported by cBioPortal.
+        str_aa_ref : str | None
+            Reported reference residue.
+        refseq : object, optional
+            Raw ``refseqMrnaId`` cell, by default None.
+
+        Returns
+        -------
+        UnreconciledReason
+            ``isoform_only`` if an isoform holds the residue there within a stretch
+            differing from canonical (see :meth:`_count_divergent`),
+            ``reference_mismatch`` if no isoform checked does, ``isoform_unknown`` if
+            there was no isoform sequence to check.
+        """
+        if str_symbol not in self.dict_canonical or idx_position is None:
+            return UnreconciledReason.isoform_unknown
+
+        list_sources = []
+        if SourceTier.mskcc in self.tuple_sources:
+            self.prime([str_symbol])
+            transcript_id = self._dict_transcript.get(str_symbol)
+            if transcript_id is not None:
+                list_sources.append((transcript_id, self._fetch_ensembl))
+        if SourceTier.refseq in self.tuple_sources:
+            accession = clean_refseq_accession(refseq)
+            if accession is not None:
+                list_sources.append((accession, self.fetch_refseq_protein))
+
+        bool_checked = False
+        for accession, fetch in list_sources:
+            # builds and caches the sequence and its map, as reconcile() does
+            dict_map = self._position_map(str_symbol, accession, fetch)
+            seq_source = self._dict_seq.get(accession)
+            if seq_source is None:
+                continue
+            bool_checked = True
+            if (
+                str_aa_ref
+                and 1 <= idx_position <= len(seq_source)
+                and seq_source[idx_position - 1] == str_aa_ref
+                and self._count_divergent(
+                    str_symbol, seq_source, dict_map, idx_position
+                )
+                >= INT_ISOFORM_MIN_DIVERGENT
+            ):
+                return UnreconciledReason.isoform_only
+        if bool_checked:
+            return UnreconciledReason.reference_mismatch
+        return UnreconciledReason.isoform_unknown
+
+    def _count_divergent(
+        self,
+        str_symbol: str,
+        seq_source: str,
+        dict_map: dict[int, int],
+        idx_position: int,
+    ) -> int:
+        """Count window positions where an isoform differs from canonical.
+
+        Parameters
+        ----------
+        str_symbol : str
+            Gene symbol.
+        seq_source : str
+            The isoform's protein sequence.
+        dict_map : dict[int, int]
+            Isoform -> canonical positions (see :func:`map_positions_by_alignment`).
+        idx_position : int
+            1-based isoform position at the window's centre.
+
+        Returns
+        -------
+        int
+            Positions within :data:`INT_ISOFORM_WINDOW` of ``idx_position`` that align
+            to a gap or to a different canonical residue: an inserted or swapped exon
+            differs at many, an isolated residue difference at one.
+        """
+        seq_canonical = self.dict_canonical[str_symbol]
+        return sum(
+            1
+            for idx in range(
+                max(1, idx_position - INT_ISOFORM_WINDOW),
+                min(len(seq_source), idx_position + INT_ISOFORM_WINDOW) + 1,
+            )
+            if dict_map.get(idx) is None
+            or seq_canonical[dict_map[idx] - 1] != seq_source[idx - 1]
+        )
 
     def reconcile_many(
         self,
