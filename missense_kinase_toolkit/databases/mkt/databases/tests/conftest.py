@@ -125,14 +125,3 @@ def egfr_klifs_pocket(egfr_uniprot, egfr_klifs_info, egfr_kincore_alignment):
             egfr_kincore_alignment["end"] - 1,
         ),
     )
-
-
-# ---------------------------------------------------------------------------
-# reusable bad-request response (used by test_utils_requests)
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(scope="session")
-def uniprot_bad_request_response():
-    """Make a single bad request to UniProt for error-handling tests."""
-    return requests.get("https://rest.uniprot.org/uniprotkb/TEST")
