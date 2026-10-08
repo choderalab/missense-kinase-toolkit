@@ -52,6 +52,8 @@ class SourceTier(StrEnum):
     direct = "direct"
     mskcc = "mskcc"
     refseq = "refseq"
+    ensembl = "ensembl"
+    """The caller's own Ensembl transcript (e.g. a hotspot table's transcriptId)."""
     genomenexus = "genomenexus"
 
 
@@ -70,9 +72,11 @@ TUPLE_DEFAULT_TIERS = (
     SourceTier.direct,
     SourceTier.mskcc,
     SourceTier.refseq,
+    SourceTier.ensembl,
     SourceTier.genomenexus,
 )
-"""tuple[SourceTier, ...]: Tiers tried in order; the Genome Nexus tier always runs last."""
+"""tuple[SourceTier, ...]: Tiers tried in order; the Genome Nexus tier always runs last.
+The refseq and ensembl tiers are skipped for a row that names no such transcript."""
 
 
 def map_positions_by_alignment(
@@ -348,8 +352,9 @@ class CanonicalReconciler:
         idx_position: int | None,
         str_aa_ref: str | None,
         refseq: object = None,
+        ensembl_transcript_id: str | None = None,
     ) -> tuple[int | None, SourceTier | None]:
-        """Reconcile one position through the direct, mskcc and refseq tiers.
+        """Reconcile one position through the direct, mskcc, refseq and ensembl tiers.
 
         The Genome Nexus tier needs genomic coordinates and runs batched in
         :meth:`reconcile_many`.
@@ -364,6 +369,9 @@ class CanonicalReconciler:
             Reported reference residue.
         refseq : object, optional
             Raw ``refseqMrnaId`` cell, by default None.
+        ensembl_transcript_id : str | None, optional
+            Ensembl transcript the position is numbered on, if the source names one
+            (e.g. a hotspot table's ``transcriptId``), by default None.
 
         Returns
         -------
@@ -391,6 +399,12 @@ class CanonicalReconciler:
                     continue
                 candidate = self._position_map(
                     str_symbol, accession, self.fetch_refseq_protein
+                ).get(idx_position)
+            elif tier is SourceTier.ensembl:
+                if not ensembl_transcript_id:
+                    continue
+                candidate = self._position_map(
+                    str_symbol, ensembl_transcript_id, self._fetch_ensembl
                 ).get(idx_position)
             else:
                 continue
