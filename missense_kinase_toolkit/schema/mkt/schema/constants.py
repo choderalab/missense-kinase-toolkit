@@ -1053,3 +1053,12 @@ SET_LIPID_KINASE = frozenset(
 )
 """frozenset[str]: Lipid kinases among ``DICT_KINASE`` keys (plus bare multi-domain symbols
 whose domains all qualify); precomputed by :func:`mkt.schema.utils.return_lipid_kinase_set`."""
+
+LIST_JAK_FAMILY = [
+    "JAK1",
+    "JAK2",
+    "JAK3",
+    "TYK2",
+]
+"""list[str]: The four JAK-family kinases, which share a pseudokinase domain (JH2) and a
+catalytic domain (JH1)."""
