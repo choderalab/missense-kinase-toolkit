@@ -105,6 +105,82 @@ def _post_chunks(url, params, payload, chunk_size, desc):
         yield res.json()
 
 
+def _match_exonless_transcript(record: dict, candidates: list[dict]) -> dict | None:
+    """Return the candidate with exons that shares ``record``'s CCDS (else RefSeq) id.
+
+    Parameters
+    ----------
+    record : dict
+        Canonical-transcript record lacking ``exons``.
+    candidates : list[dict]
+        Transcript records for the same gene and build.
+
+    Returns
+    -------
+    dict | None
+        The first matching candidate with exons, or None if none matches.
+    """
+    uniprot = record.get("uniprotId")
+    list_candidate = [
+        rec
+        for rec in candidates
+        if rec.get("exons")
+        # compare UniProt only when both records carry one
+        and (uniprot is None or rec.get("uniprotId") in (None, uniprot))
+    ]
+    for key in ("ccdsId", "refseqMrnaId"):
+        value = record.get(key)
+        if value is None:
+            continue
+        for rec in list_candidate:
+            if rec.get(key) == value:
+                return rec
+    return None
+
+
+def _resolve_exonless_transcript(host: str, symbol: str, record: dict) -> dict:
+    """Swap an exon-less canonical record for its same-CCDS twin with exons.
+
+    Genome Nexus can pick a canonical transcript on a patch/alternate contig that it
+    serves without exons (e.g. IKBKE ENST00000581977 on GRCh37 ``HG1293_PATCH``);
+    the primary-assembly copy shares its CCDS, so its coding exons are identical.
+
+    Parameters
+    ----------
+    host : str
+        Genome Nexus REST host for the build.
+    symbol : str
+        HGNC gene symbol.
+    record : dict
+        Canonical-transcript record lacking ``exons``.
+
+    Returns
+    -------
+    dict
+        The matching transcript record, or ``record`` unchanged if none matches.
+    """
+    session = requests_wrapper.get_cached_session()
+    res = session.get(f"{host}/ensembl/transcript", params={"hugoSymbol": symbol})
+    if not res.ok:
+        logger.error("Error: %s", res.status_code)
+        return record
+    match = _match_exonless_transcript(record, res.json())
+    if match is None:
+        logger.warning(
+            "%s: canonical %s has no exons and no same-CCDS/RefSeq transcript does",
+            symbol,
+            record.get("transcriptId"),
+        )
+        return record
+    logger.info(
+        "%s: canonical %s has no exons; using same-CCDS/RefSeq %s",
+        symbol,
+        record.get("transcriptId"),
+        match.get("transcriptId"),
+    )
+    return match
+
+
 def get_canonical_transcripts(
     genes: list[str],
     build: str = "GRCh37",
@@ -130,9 +206,11 @@ def get_canonical_transcripts(
     dict[str, dict]
         Mapping of gene symbol to its transcript record (``transcriptId``,
         ``proteinLength``, ``uniprotId``, ``refseqMrnaId``, ``exons``, ``utrs``,
-        ...). Genes with no canonical transcript are absent.
+        ...). Genes with no canonical transcript are absent; an exon-less record
+        is replaced by its same-CCDS transcript with exons where one exists.
     """
-    url = f"{rest_host(build)}/ensembl/canonical-transcript/hgnc"
+    host = rest_host(build)
+    url = f"{host}/ensembl/canonical-transcript/hgnc"
     params = {"isoformOverrideSource": isoform_override}
     dict_transcript: dict[str, dict] = {}
     for records in _post_chunks(
@@ -141,6 +219,10 @@ def get_canonical_transcripts(
         for rec in records:
             for symbol in rec.get("hugoSymbols") or []:
                 dict_transcript[symbol] = rec
+    # patch/alternate-contig canonicals carry no exons; use the primary-assembly copy
+    for symbol, rec in dict_transcript.items():
+        if not rec.get("exons"):
+            dict_transcript[symbol] = _resolve_exonless_transcript(host, symbol, rec)
     return dict_transcript
 
 

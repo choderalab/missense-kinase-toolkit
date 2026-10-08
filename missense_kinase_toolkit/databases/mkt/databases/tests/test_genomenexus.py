@@ -1,5 +1,6 @@
 import pytest
 from mkt.databases.genomenexus import (
+    _match_exonless_transcript,
     annotate_genomic_locations,
     build_exon_map,
     get_canonical_transcripts,
@@ -43,6 +44,55 @@ class TestBuildExonMap:
         assert build_exon_map({"exons": [], "utrs": []}, 3) is None
 
 
+def _canonical(**kwargs):
+    """Return an exon-less canonical record (a patch/alternate-contig copy)."""
+    return {
+        "transcriptId": "ENST_PATCH",
+        "ccdsId": "CCDS1",
+        "refseqMrnaId": "NM_1",
+        "uniprotId": "P1",
+        **kwargs,
+    }
+
+
+def _candidate(transcript_id, exons=True, **kwargs):
+    """Return a candidate transcript record, with exons unless ``exons`` is False."""
+    return {
+        "transcriptId": transcript_id,
+        "exons": _record()["exons"] if exons else [],
+        **kwargs,
+    }
+
+
+class TestMatchExonlessTranscript:
+    def test_same_ccds_with_exons(self):
+        candidates = [
+            _candidate("ENST_PATCH", exons=False, ccdsId="CCDS1", uniprotId="P1"),
+            _candidate("ENST_OTHER", ccdsId="CCDS2", uniprotId="P1"),
+            _candidate("ENST_PRIMARY", ccdsId="CCDS1", uniprotId="P1"),
+        ]
+        match = _match_exonless_transcript(_canonical(), candidates)
+        assert match["transcriptId"] == "ENST_PRIMARY"
+
+    def test_refseq_when_no_ccds(self):
+        candidates = [_candidate("ENST_PRIMARY", refseqMrnaId="NM_1")]
+        match = _match_exonless_transcript(_canonical(ccdsId=None), candidates)
+        assert match["transcriptId"] == "ENST_PRIMARY"
+
+    def test_uniprot_mismatch_rejected(self):
+        candidates = [_candidate("ENST_PRIMARY", ccdsId="CCDS1", uniprotId="P2")]
+        assert _match_exonless_transcript(_canonical(), candidates) is None
+
+    def test_missing_uniprot_not_compared(self):
+        candidates = [_candidate("ENST_PRIMARY", ccdsId="CCDS1", uniprotId=None)]
+        match = _match_exonless_transcript(_canonical(uniprotId=None), candidates)
+        assert match["transcriptId"] == "ENST_PRIMARY"
+
+    def test_no_match_returns_none(self):
+        candidates = [_candidate("ENST_OTHER", ccdsId="CCDS2", refseqMrnaId="NM_2")]
+        assert _match_exonless_transcript(_canonical(), candidates) is None
+
+
 @pytest.mark.network
 class TestGenomeNexusExons:
     def test_egfr_landmark_exons(self):
@@ -60,6 +110,22 @@ class TestGenomeNexusExons:
         rec = get_canonical_transcripts(["BRAF"], build="GRCh37")["BRAF"]
         idx2exon = build_exon_map(rec, rec["proteinLength"])
         assert idx2exon[600] == 15
+
+    def test_ikbke_grch37_patch_canonical_resolved(self):
+        # the GRCh37 canonical ENST00000581977 sits on HG1293_PATCH without exons;
+        # the chr1 copy shares CCDS30996
+        rec = get_canonical_transcripts(["IKBKE"], build="GRCh37")["IKBKE"]
+        assert rec["transcriptId"] == "ENST00000367120"
+        assert rec["ccdsId"] == "CCDS30996"
+        assert len(build_exon_map(rec, rec["proteinLength"])) == 716
+
+    def test_pip4k2b_grch38_alt_canonical_resolved(self):
+        # the GRCh38 canonical ENST00000613180 sits on HSCHR17_7_CTG4 without exons;
+        # the chr17 copy shares CCDS11329
+        rec = get_canonical_transcripts(["PIP4K2B"], build="GRCh38")["PIP4K2B"]
+        assert rec["transcriptId"] == "ENST00000619039"
+        assert rec["ccdsId"] == "CCDS11329"
+        assert len(build_exon_map(rec, rec["proteinLength"])) == 416
 
 
 @pytest.mark.network

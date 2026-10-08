@@ -213,6 +213,32 @@ class TestCanonicalReconciler:
         ]
         assert fakes.calls["annotations"] == [["1:g.100A>T"]]
 
+    def test_ensembl_tier_maps_through_the_callers_transcript(self):
+        """A position numbered on the source's own isoform (the TGFBR2 hotspot case)."""
+        fakes = _Fakes(ensembl={"ENST_ROW": ISOFORM_INSERTED})
+        idx_isoform = _shifted_position(40, 5)
+        result = fakes.reconciler().reconcile(
+            "KIN", idx_isoform, CANONICAL[39], ensembl_transcript_id="ENST_ROW"
+        )
+        assert result == (40, SourceTier.ensembl)
+
+    def test_ensembl_tier_is_skipped_without_a_transcript(self):
+        fakes = _Fakes(ensembl={"ENST_ROW": ISOFORM_INSERTED})
+        idx_isoform = _shifted_position(40, 5)
+        assert fakes.reconciler().reconcile("KIN", idx_isoform, CANONICAL[39]) == (
+            None,
+            None,
+        )
+        assert fakes.calls["ensembl"] == 0
+
+    def test_direct_hit_comes_before_the_ensembl_tier(self):
+        fakes = _Fakes(ensembl={"ENST_ROW": ISOFORM_INSERTED})
+        rec = fakes.reconciler()
+        assert rec.reconcile(
+            "KIN", 10, CANONICAL[9], ensembl_transcript_id="ENST_ROW"
+        ) == (10, SourceTier.direct)
+        assert fakes.calls["ensembl"] == 0
+
     def test_unknown_gene_is_skipped(self):
         assert _Fakes().reconciler().reconcile("NOTAKINASE", 10, "K") == (None, None)
 
