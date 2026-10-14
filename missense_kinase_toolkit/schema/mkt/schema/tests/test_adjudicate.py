@@ -306,3 +306,105 @@ def test_return_hrd_motif_labels(dict_kinase):
         "R2871",
         "D2870",
     ]
+
+
+def _return_klifs_span(obj) -> tuple[int, int]:
+    """First and last UniProt index of a kinase's KLIFS pocket."""
+    list_idx = [i for i in obj.KLIFS2UniProtIdx.values() if i is not None]
+    return min(list_idx), max(list_idx)
+
+
+@pytest.mark.parametrize(
+    "hgnc_name, expected",
+    [
+        ("ABL1", "ABL1"),
+        ("JAK1_1", "JAK1 JH1"),
+        ("JAK1_2", "JAK1 JH2"),
+        ("JAK2_1", "JAK2 JH1"),
+        ("JAK2_2", "JAK2 JH2"),
+        ("JAK3_1", "JAK3 JH1"),
+        ("JAK3_2", "JAK3 JH2"),
+        ("TYK2_1", "TYK2 JH1"),
+        ("TYK2_2", "TYK2 JH2"),
+        ("RPS6KA1_1", "RPS6KA1 NTKD"),
+        ("RPS6KA1_2", "RPS6KA1 CTKD"),
+        ("RPS6KA4_1", "RPS6KA4 NTKD"),
+        ("RPS6KA4_2", "RPS6KA4 CTKD"),
+        ("EIF2AK4_1", "EIF2AK4 KD"),
+        ("EIF2AK4_2", "EIF2AK4 ΨKD"),
+        ("OBSCN_1", "OBSCN SK1"),
+        ("OBSCN_2", "OBSCN SK2"),
+        ("SPEG_1", "SPEG SK1"),
+        ("SPEG_2", "SPEG SK2"),
+        ("TEX14_1", "TEX14 (SgK307)"),
+        ("TEX14_2", "TEX14 (SgK424)"),
+    ],
+)
+def test_adjudicate_name(dict_kinase, hgnc_name, expected):
+    """A single-domain kinase keeps its HGNC name; a domain entry names its domain."""
+    assert dict_kinase[hgnc_name].adjudicate_name() == expected
+
+
+def test_adjudicate_name_resolves_every_multi_domain_entry(dict_kinase):
+    """Every suffixed entry gets a name without the suffix, distinct from its pair's."""
+    from mkt.schema.utils import split_domain_suffix
+
+    dict_names: dict[str, set[str]] = {}
+    for hgnc_name, obj in dict_kinase.items():
+        str_gene, str_suffix = split_domain_suffix(hgnc_name)
+        if not str_suffix:
+            assert obj.adjudicate_name() == hgnc_name
+            continue
+        str_name = obj.adjudicate_name()
+        assert str_name.startswith(f"{str_gene} ")
+        assert not str_name.endswith(str_suffix)
+        dict_names.setdefault(str_gene, set()).add(str_name)
+    # 14 multi-domain proteins, each with two differently named domains
+    assert len(dict_names) == 14
+    assert all(len(set_names) == 2 for set_names in dict_names.values())
+
+
+@pytest.mark.parametrize("str_gene", ["JAK1", "JAK2", "JAK3", "TYK2"])
+def test_adjudicate_name_jak_jh1_follows_jh2(dict_kinase, str_gene):
+    """JH1 is the C-terminal catalytic domain: its KLIFS pocket starts after JH2's
+    pocket ends, and only JH2 is a pseudokinase."""
+    obj_jh1, obj_jh2 = dict_kinase[f"{str_gene}_1"], dict_kinase[f"{str_gene}_2"]
+    assert obj_jh1.adjudicate_name().endswith("JH1")
+    assert _return_klifs_span(obj_jh1)[0] > _return_klifs_span(obj_jh2)[1]
+    assert obj_jh2.is_pseudokinase() is True
+    assert obj_jh1.is_pseudokinase() is False
+
+
+@pytest.mark.parametrize(
+    "str_gene", ["RPS6KA1", "RPS6KA2", "RPS6KA3", "RPS6KA4", "RPS6KA5", "RPS6KA6"]
+)
+def test_adjudicate_name_rsk_ntkd_precedes_ctkd(dict_kinase, str_gene):
+    """NTKD is the N-terminal AGC domain, CTKD the C-terminal CAMK domain."""
+    obj_ntkd, obj_ctkd = dict_kinase[f"{str_gene}_1"], dict_kinase[f"{str_gene}_2"]
+    assert obj_ntkd.adjudicate_name().endswith("NTKD")
+    assert _return_klifs_span(obj_ntkd)[1] < _return_klifs_span(obj_ctkd)[0]
+    assert obj_ntkd.adjudicate_group() == "AGC"
+    assert obj_ctkd.adjudicate_group() == "CAMK"
+
+
+def test_adjudicate_name_gcn2_pseudokinase_precedes_kd(dict_kinase):
+    """GCN2's pseudokinase domain (ΨKD, _2) lies N-terminal to its kinase domain."""
+    obj_kd, obj_pkd = dict_kinase["EIF2AK4_1"], dict_kinase["EIF2AK4_2"]
+    assert _return_klifs_span(obj_pkd)[1] < _return_klifs_span(obj_kd)[0]
+    assert obj_pkd.is_pseudokinase() is True
+    assert obj_kd.is_pseudokinase() is False
+
+
+@pytest.mark.parametrize("str_gene", ["OBSCN", "SPEG"])
+def test_adjudicate_name_sk1_precedes_sk2(dict_kinase, str_gene):
+    """SK1 is the first of the two kinase domains in the sequence."""
+    obj_sk1, obj_sk2 = dict_kinase[f"{str_gene}_1"], dict_kinase[f"{str_gene}_2"]
+    assert _return_klifs_span(obj_sk1)[1] < _return_klifs_span(obj_sk2)[0]
+
+
+def test_adjudicate_name_unknown_multi_domain_kinase_raises(mutable_kinase):
+    """A suffixed kinase outside the known families raises rather than guessing."""
+    obj = mutable_kinase("ABL1")
+    obj.hgnc_name = "ABL1_1"
+    with pytest.raises(ValueError, match="not in the known list"):
+        obj.adjudicate_name()

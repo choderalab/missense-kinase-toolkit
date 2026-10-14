@@ -11,6 +11,7 @@ from enum import Enum
 
 from mkt.schema.constants import (
     LIST_FULL_KLIFS_REGION,
+    LIST_JAK_FAMILY,
     LIST_KLIFS_HRD_MOTIF,
     LIST_KLIFS_HRD_MOTIF_REVERSED,
     LIST_KLIFS_REGION,
@@ -19,7 +20,7 @@ from mkt.schema.constants import (
     LIST_PFAM_KD,
     SET_FAMILY_HRD_REVERSED,
 )
-from mkt.schema.utils import fill_missing_none, rgetattr
+from mkt.schema.utils import fill_missing_none, rgetattr, split_domain_suffix
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -1193,3 +1194,48 @@ class KinaseInfo(BaseModel):
             dict_residues[label] == canonical
             for label, canonical in DICT_MOLECULAR_BRAKE.items()
         )
+
+    def adjudicate_name(self) -> str:
+        """Return the best name for this kinase.
+
+        Returns
+        -------
+        str
+            The HGNC name; for a multi-kinase-domain protein, the gene with the
+            domain's name in place of the ``_1``/``_2`` suffix (e.g. ``JAK2 JH1``).
+        """
+        hgnc_base, str_suffix = split_domain_suffix(self.hgnc_name)
+        if str_suffix:
+            # _1 is Manning's primary domain: JH1 (catalytic) for the JAKs
+            if hgnc_base in LIST_JAK_FAMILY:
+                if self.hgnc_name.endswith("_1"):
+                    return f"{hgnc_base} JH1"
+                else:
+                    return f"{hgnc_base} JH2"
+            if self.hgnc_name.startswith("RPS6KA"):
+                if self.hgnc_name.endswith("_1"):
+                    return f"{hgnc_base} NTKD"
+                else:
+                    return f"{hgnc_base} CTKD"
+            if self.hgnc_name.startswith("EIF2AK4"):
+                if self.hgnc_name.endswith("_1"):
+                    return f"{hgnc_base} KD"
+                else:
+                    return f"{hgnc_base} ΨKD"
+            if any([self.hgnc_name.startswith(i) for i in ["OBSCN", "SPEG"]]):
+                if self.hgnc_name.endswith("_1"):
+                    return f"{hgnc_base} SK1"
+                else:
+                    return f"{hgnc_base} SK2"
+            if hgnc_base.startswith("TEX14"):
+                if self.hgnc_name.endswith("_1"):
+                    return f"{hgnc_base} (SgK307)"
+                else:
+                    return f"{hgnc_base} (SgK424)"
+            else:
+                raise ValueError(
+                    f"Kinase {self.hgnc_name} has a multi-domain suffix but is not "
+                    f"in the known list of multi-domain kinases."
+                )
+        else:
+            return self.hgnc_name
