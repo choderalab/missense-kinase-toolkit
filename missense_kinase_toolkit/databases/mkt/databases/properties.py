@@ -11,32 +11,117 @@ logger = logging.getLogger(__name__)
 
 # https://www.imgt.org/IMGTeducation/Aide-memoire/_UK/aminoacids/abbreviation.html#refs
 # https://www.imgt.org/IMGTeducation/Aide-memoire/_UK/aminoacids/IMGTclasses.html
+# https://resources.qiagenbioinformatics.com/manuals/clcgenomicsworkbench/650/Hydrophobicity_scales.html
+# Eisenberg consensus scale: read per residue, not windowed (Kyte-Doolittle) or burial
 DICT_AA_PROPERTIES = {
-    "A": {"charge": "nonpolar", "volume": 88.6},
-    "C": {"charge": "polar", "volume": 108.5},
-    "D": {"charge": "negative", "volume": 111.1},
-    "E": {"charge": "negative", "volume": 138.4},
-    "F": {"charge": "nonpolar", "volume": 189.9},
-    "G": {"charge": "nonpolar", "volume": 60.1},
-    "H": {"charge": "positive", "volume": 153.2},  # pKa around 6.0
-    "I": {"charge": "nonpolar", "volume": 166.7},
-    "K": {"charge": "positive", "volume": 168.6},
-    "L": {"charge": "nonpolar", "volume": 166.7},
-    "M": {"charge": "nonpolar", "volume": 162.9},
-    "N": {"charge": "polar", "volume": 114.1},
-    "P": {"charge": "nonpolar", "volume": 112.7},
-    "Q": {"charge": "polar", "volume": 143.8},
-    "R": {"charge": "positive", "volume": 173.4},
-    "S": {"charge": "polar", "volume": 89.0},
-    "T": {"charge": "polar", "volume": 116.1},
-    "V": {"charge": "nonpolar", "volume": 140.0},
-    "W": {"charge": "nonpolar", "volume": 227.8},
-    "Y": {"charge": "polar", "volume": 193.6},
+    "A": {
+        "charge": "nonpolar",
+        "volume": 88.6,
+        "hydrophobicity": 0.62,
+    },
+    "C": {
+        "charge": "polar",
+        "volume": 108.5,
+        "hydrophobicity": 0.29,
+    },
+    "D": {
+        "charge": "negative",
+        "volume": 111.1,
+        "hydrophobicity": -0.90,
+    },
+    "E": {
+        "charge": "negative",
+        "volume": 138.4,
+        "hydrophobicity": -0.74,
+    },
+    "F": {
+        "charge": "nonpolar",
+        "volume": 189.9,
+        "hydrophobicity": 1.19,
+    },
+    "G": {
+        "charge": "nonpolar",
+        "volume": 60.1,
+        "hydrophobicity": 0.48,
+    },
+    # pKa around 6.0
+    "H": {
+        "charge": "positive",
+        "volume": 153.2,
+        "hydrophobicity": -0.40,
+    },
+    "I": {
+        "charge": "nonpolar",
+        "volume": 166.7,
+        "hydrophobicity": 1.38,
+    },
+    "K": {
+        "charge": "positive",
+        "volume": 168.6,
+        "hydrophobicity": -1.50,
+    },
+    "L": {
+        "charge": "nonpolar",
+        "volume": 166.7,
+        "hydrophobicity": 1.06,
+    },
+    "M": {
+        "charge": "nonpolar",
+        "volume": 162.9,
+        "hydrophobicity": 0.64,
+    },
+    "N": {
+        "charge": "polar",
+        "volume": 114.1,
+        "hydrophobicity": -0.78,
+    },
+    "P": {
+        "charge": "nonpolar",
+        "volume": 112.7,
+        "hydrophobicity": 0.12,
+    },
+    "Q": {
+        "charge": "polar",
+        "volume": 143.8,
+        "hydrophobicity": -0.85,
+    },
+    "R": {
+        "charge": "positive",
+        "volume": 173.4,
+        "hydrophobicity": -2.53,
+    },
+    "S": {
+        "charge": "polar",
+        "volume": 89.0,
+        "hydrophobicity": -0.18,
+    },
+    "T": {
+        "charge": "polar",
+        "volume": 116.1,
+        "hydrophobicity": -0.05,
+    },
+    "V": {
+        "charge": "nonpolar",
+        "volume": 140.0,
+        "hydrophobicity": 1.08,
+    },
+    "W": {
+        "charge": "nonpolar",
+        "volume": 227.8,
+        "hydrophobicity": 0.81,
+    },
+    "Y": {
+        "charge": "polar",
+        "volume": 193.6,
+        "hydrophobicity": 0.26,
+    },
 }
-"""dict[str, dict[str, str | int]]: Dictionary of amino acid properties.
+"""dict[str, dict[str, str | float]]: Dictionary of amino acid properties.
 Keys are single-letter amino acid codes, and values are dictionaries with properties:
 - `charge`: Charge of the amino acid (e.g., "nonpolar", "polar", "positive", "negative").
 - `volume`: Volume of the amino acid in cubic angstroms (int).
+- `hydrophobicity`: Eisenberg et al. (1984) normalized consensus hydrophobicity
+  (float; higher is more hydrophobic).
 This dictionary can be used to look up properties of amino acids by their single-letter code.
 """
 
