@@ -216,6 +216,28 @@ class TestOncoKBGenomicChange:
 
         assert obj.variant_exist is False
 
+    def test_records_version_allele_and_errors(self, stub_query):
+        dict_json = _annotated_json()
+        dict_json.update(
+            {
+                "alleleExist": True,
+                "dataVersion": "v7.7",
+                "errors": [
+                    {
+                        "type": "REFERENCE_ALLELE_MISMATCH",
+                        "message": "The reference amino acid at position 577 is N.",
+                    }
+                ],
+            }
+        )
+        stub_query(dict_json)
+
+        obj = OncoKBGenomicChange(genomic_location="8,38274849,38274849,G,C")
+
+        assert obj.allele_exist is True
+        assert obj.data_version == "v7.7"
+        assert obj.list_error == ["REFERENCE_ALLELE_MISMATCH"]
+
     def test_missing_location_is_rejected(self, caplog):
         obj = OncoKBGenomicChange()
 
