@@ -81,7 +81,9 @@ class TestMutations:
         assert mutations_instance.get_entity_id() == "msk_impact_2017"
 
     def test_mutation_count(self, mutations_instance):
-        assert mutations_instance._df.shape[0] == 78142
+        # a lower bound, not an exact count: cBioPortal re-imports the live study
+        # (78,142 -> 78,178 in Nov 2026), so only a short load should fail
+        assert mutations_instance._df.shape[0] >= 78142
 
 
 @pytest.mark.network

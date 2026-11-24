@@ -72,6 +72,7 @@ DICT_AA_PROPERTIES = {
     },
     "N": {
         "charge": "polar",
+        # may be a transcription error as matches molar mass
         "volume": 114.1,
         "hydrophobicity": -0.78,
     },
@@ -119,7 +120,7 @@ DICT_AA_PROPERTIES = {
 """dict[str, dict[str, str | float]]: Dictionary of amino acid properties.
 Keys are single-letter amino acid codes, and values are dictionaries with properties:
 - `charge`: Charge of the amino acid (e.g., "nonpolar", "polar", "positive", "negative").
-- `volume`: Volume of the amino acid in cubic angstroms (int).
+- `volume`: Volume of the amino acid in cubic angstroms (float).
 - `hydrophobicity`: Eisenberg et al. (1984) normalized consensus hydrophobicity
   (float; higher is more hydrophobic).
 This dictionary can be used to look up properties of amino acids by their single-letter code.
@@ -197,7 +198,7 @@ DICT_AA_CHANGES = {
         "to": -25,
     },
 }
-"""dict[str, dict[str, str | int]]: Dictionary of amino acid change properties.
+"""dict[str, dict[str, str | float]]: Dictionary of amino acid change properties.
 Keys are descriptions of the change (e.g., "charge gain, positive"), and values are dictionaries with properties:
 - `property`: The property being changed (e.g., "charge", "volume").
 - `from`: The original value of the property before the change.
@@ -206,7 +207,7 @@ This dictionary can be used to look up the nature of changes in amino acid prope
 """
 
 
-def get_aa_property(aa: str, property_name: str) -> str | int | None:
+def get_aa_property(aa: str, property_name: str) -> str | float | None:
     """
     Get a specific property of an amino acid.
 
@@ -219,7 +220,7 @@ def get_aa_property(aa: str, property_name: str) -> str | int | None:
 
     Returns
     -------
-    str | int | None
+    str | float | None
         The value of the specified property, or None if the amino acid or property does not exist.
     """
     aa = aa.upper()

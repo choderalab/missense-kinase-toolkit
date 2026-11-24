@@ -25,6 +25,19 @@ baseline.
   `databases/`, `ml/`, `app/`) where practical — CI workflows are path-filtered
   per sub-package (see the `ci` skill).
 
+## One checkout — no worktrees
+
+I work in a single checkout and `git switch` one branch at a time. **Don't
+create git worktrees** (sibling folders or scratchpad), even temporarily to
+merge into several branches — switch to each branch in turn instead. Stale
+worktrees freeze their index (it later shows as bogus staged changes reverting
+newer commits) and block checking out their branch elsewhere.
+
+If one turns up, verify before removing: compare `git write-tree` against the
+branch history, and check untracked **and** ignored files
+(`git ls-files --others --ignored --exclude-standard`) against the main
+checkout — `git status | grep -v '^??'` hides untracked files.
+
 ## Refreshing a stale topic branch from `main`
 
 I keep long-lived topic branches (e.g. `databases`, `ml`, `app`, `schema`,
