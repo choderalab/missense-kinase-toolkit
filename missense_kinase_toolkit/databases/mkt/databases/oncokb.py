@@ -103,6 +103,11 @@ class OncoKB(APIKeyRESTAPIClient, ABC):
     review_status: OncoKBReviewStatus | None = field(init=False, default=None)
     """How OncoKB answered a variant query; None until queried (and for queries that
     are not about a variant, such as :class:`OncoKBInfo`)."""
+    variant_summary: str | None = field(init=False, default=None)
+    """OncoKB's ``variantSummary``: says whether the answer is curated, inferred from
+    another alteration at the residue, or from OncoKB's hotspot rule."""
+    variant_exist: bool | None = field(init=False, default=None)
+    """OncoKB's ``variantExist``: whether the exact alteration queried is curated."""
     _json: dict | None = field(init=False, default=None)
 
     def __post_init__(self):
@@ -174,6 +179,43 @@ class OncoKB(APIKeyRESTAPIClient, ABC):
         if not bool_variant_reviewed:
             return OncoKBReviewStatus.alteration_not_reviewed
         return OncoKBReviewStatus.reviewed
+
+    def annotate_response(self) -> None:
+        """Classify a variant answer and parse its annotation fields.
+
+        Shared by :class:`OncoKBProteinChange`, :class:`OncoKBGenomicChange` and
+        :class:`OncoKBStructuralVariant`, whose responses have the same schema. The
+        fields are parsed whenever the gene is in OncoKB: an alteration OncoKB has
+        not specifically reviewed still carries its answer -- ``Unknown``, or a call
+        inferred from another alteration at the residue (e.g. "MAP2K4 S251N is known
+        to be oncogenic, and therefore MAP2K4 S251R is considered likely
+        oncogenic") -- and :attr:`review_status` keeps the two apart.
+        """
+        json_data = self._json
+        gene_exists = json_data.get("geneExist", False)
+        self.variant_summary = json_data.get("variantSummary", "")
+        self.variant_exist = json_data.get("variantExist", None)
+        variant_reviewed = "has not specifically been reviewed" not in (
+            self.variant_summary
+        )
+        self.review_status = self.return_review_status(gene_exists, variant_reviewed)
+
+        if not gene_exists:
+            if self.verbose:
+                logger.error(f"Gene for {self._label} does not exist in OncoKB.")
+            return
+
+        self.annotate_highest_level()
+        self.get_treatments()
+        self.oncogenic = json_data.get("oncogenic", None)
+        self.vus = json_data.get("vus", None)
+        if "mutationEffect" in json_data:
+            self.known_effect = json_data["mutationEffect"].get("knownEffect", None)
+        if self.verbose and not variant_reviewed:
+            logger.warning(
+                f"{self._label} has not been specifically reviewed in OncoKB; "
+                f"keeping its inferred answer ({self.oncogenic})."
+            )
 
     def has_json(self) -> dict | None:
         """Get the JSON response from the OncoKB API query.
@@ -300,36 +342,7 @@ class OncoKBProteinChange(OncoKB):
             super().__post_init__()
             if not self.has_json():
                 return
-
-            json_data = self._json
-            gene_exists = json_data["geneExist"]
-            # The "variantExist" value is False if that specific alteration is not annotated (e.g., truncated)
-            # variant_exists = json_data["variantExist"]
-            variant_summary = json_data["variantSummary"]
-            variant_reviewed = (
-                "has not specifically been reviewed" not in variant_summary
-            )
-            self.review_status = self.return_review_status(
-                gene_exists, variant_reviewed
-            )
-
-            if gene_exists and variant_reviewed:
-                self.annotate_highest_level()
-                self.get_treatments()
-                self.oncogenic = json_data.get("oncogenic", None)
-                self.vus = json_data.get("vus", None)
-                if "mutationEffect" in json_data:
-                    self.known_effect = json_data["mutationEffect"].get(
-                        "knownEffect", None
-                    )
-            elif self.verbose:
-                if gene_exists:
-                    msg = f"Alteration {self.alteration} has not been reviewed for gene {self.gene_name} in OncoKB."
-                elif variant_reviewed:
-                    msg = f"Gene {self.gene_name} does not exist in OncoKB for alteration {self.alteration}."
-                else:
-                    msg = f"Gene {self.gene_name} does not exist and alteration {self.alteration} has not been reviewed in OncoKB."
-                logger.error(msg)
+            self.annotate_response()
 
     def update_url(self):
         """Update the URL for the OncoKB API query based on the UniProt ID."""
@@ -399,22 +412,7 @@ class OncoKBStructuralVariant(OncoKB):
         super().__post_init__()
         if not self.has_json():
             return
-
-        json_data = self._json
-        gene_exists = json_data["geneExist"]
-        variant_summary = json_data["variantSummary"]
-        variant_reviewed = "has not specifically been reviewed" not in variant_summary
-        self.review_status = self.return_review_status(gene_exists, variant_reviewed)
-
-        if gene_exists and variant_reviewed:
-            self.annotate_highest_level()
-            self.get_treatments()
-            self.oncogenic = json_data.get("oncogenic", None)
-            self.vus = json_data.get("vus", None)
-            if "mutationEffect" in json_data:
-                self.known_effect = json_data["mutationEffect"].get("knownEffect", None)
-        elif self.verbose:
-            logger.error(f"Fusion {self._label} not reviewed / gene absent in OncoKB.")
+        self.annotate_response()
 
     def update_url(self):
         """Build the structural-variant annotation URL."""
@@ -504,23 +502,7 @@ class OncoKBGenomicChange(OncoKB):
         dict_query = json_data.get("query") or {}
         self.gene_name = dict_query.get("hugoSymbol", None)
         self.alteration = dict_query.get("alteration", None)
-
-        gene_exists = json_data.get("geneExist", False)
-        variant_summary = json_data.get("variantSummary", "")
-        variant_reviewed = "has not specifically been reviewed" not in variant_summary
-        self.review_status = self.return_review_status(gene_exists, variant_reviewed)
-
-        if gene_exists and variant_reviewed:
-            self.annotate_highest_level()
-            self.get_treatments()
-            self.oncogenic = json_data.get("oncogenic", None)
-            self.vus = json_data.get("vus", None)
-            if "mutationEffect" in json_data:
-                self.known_effect = json_data["mutationEffect"].get("knownEffect", None)
-        elif self.verbose:
-            logger.error(
-                f"Mutation {self._label} not reviewed / gene absent in OncoKB."
-            )
+        self.annotate_response()
 
     def update_url(self):
         """Build the genomic-change annotation URL."""

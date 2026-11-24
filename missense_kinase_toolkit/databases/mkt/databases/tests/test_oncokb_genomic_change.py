@@ -149,10 +149,14 @@ class TestOncoKBGenomicChange:
         assert obj.dict_highest_level["Sensitive"] == 4
         assert obj.list_treatment == [["Erdafitinib"]]
 
-    def test_unreviewed_variant_leaves_annotations_unset(self, stub_query):
+    def test_unreviewed_variant_keeps_its_inferred_answer(self, stub_query):
+        # OncoKB infers a call from another alteration at the residue; dropping it
+        # because the exact alteration is unreviewed loses real evidence
         dict_json = _annotated_json()
         dict_json["variantSummary"] = (
-            "The mutation has not specifically been reviewed by the OncoKB team."
+            "The FGFR1 N577K mutation has not specifically been reviewed by the "
+            "OncoKB team. However, FGFR1 N577I is likely oncogenic, and therefore "
+            "FGFR1 N577K is considered likely oncogenic."
         )
         stub_query(dict_json)
 
@@ -162,8 +166,55 @@ class TestOncoKBGenomicChange:
 
         # the query echo still resolves, so the caller learns what it hit
         assert obj.gene_name == "FGFR1"
+        assert obj.review_status == OncoKBReviewStatus.alteration_not_reviewed
+        assert obj.oncogenic == "Likely Oncogenic"
+        assert obj.known_effect == "Likely Gain-of-function"
+        assert obj.dict_highest_level["Sensitive"] == 4
+        assert obj.variant_summary == dict_json["variantSummary"]
+
+    def test_unreviewed_unknown_variant_reads_unknown(self, stub_query):
+        dict_json = _annotated_json()
+        dict_json.update(
+            {
+                "variantSummary": "The FGFR1 G2C mutation has not specifically been "
+                "reviewed by the OncoKB team, and therefore its biological "
+                "significance is unknown.",
+                "oncogenic": "Unknown",
+                "mutationEffect": {"knownEffect": "Unknown"},
+                "highestSensitiveLevel": None,
+                "treatments": [],
+            }
+        )
+        stub_query(dict_json)
+
+        obj = OncoKBGenomicChange(
+            genomic_location="8,38274849,38274849,G,C", verbose=False
+        )
+
+        assert obj.oncogenic == "Unknown"
+        assert obj.dict_highest_level["Sensitive"] is None
+
+    def test_absent_gene_leaves_annotations_unset(self, stub_query):
+        dict_json = _annotated_json()
+        dict_json.update({"geneExist": False, "variantSummary": ""})
+        stub_query(dict_json)
+
+        obj = OncoKBGenomicChange(
+            genomic_location="8,38274849,38274849,G,C", verbose=False
+        )
+
+        assert obj.review_status == OncoKBReviewStatus.gene_not_in_oncokb
         assert obj.oncogenic is None
         assert obj.dict_highest_level["Sensitive"] is None
+
+    def test_records_whether_the_alteration_is_curated(self, stub_query):
+        dict_json = _annotated_json()
+        dict_json["variantExist"] = False
+        stub_query(dict_json)
+
+        obj = OncoKBGenomicChange(genomic_location="8,38274849,38274849,G,C")
+
+        assert obj.variant_exist is False
 
     def test_missing_location_is_rejected(self, caplog):
         obj = OncoKBGenomicChange()
