@@ -238,6 +238,23 @@ class TestOncoKBGenomicChange:
         assert obj.data_version == "v7.7"
         assert obj.list_error == ["REFERENCE_ALLELE_MISMATCH"]
 
+    def test_answer_without_errors_field_reports_no_check(self, stub_query):
+        # data versions before v7.5 return no errors field: unchecked, not clean
+        stub_query(_annotated_json())
+
+        obj = OncoKBGenomicChange(genomic_location="8,38274849,38274849,G,C")
+
+        assert obj.list_error is None
+
+    def test_answer_with_empty_errors_reports_a_clean_check(self, stub_query):
+        dict_json = _annotated_json()
+        dict_json["errors"] = []
+        stub_query(dict_json)
+
+        obj = OncoKBGenomicChange(genomic_location="8,38274849,38274849,G,C")
+
+        assert obj.list_error == []
+
     def test_missing_location_is_rejected(self, caplog):
         obj = OncoKBGenomicChange()
 

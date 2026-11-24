@@ -113,9 +113,10 @@ class OncoKB(APIKeyRESTAPIClient, ABC):
     any allele at that position is curated."""
     data_version: str | None = field(init=False, default=None)
     """OncoKB data version the answer was taken from (e.g. ``v7.7``)."""
-    list_error: list[str] = field(init=False, default_factory=list)
+    list_error: list[str] | None = field(init=False, default=None)
     """Types of the answer's ``errors`` (e.g. ``REFERENCE_ALLELE_MISMATCH`` when the
-    queried reference residue is not OncoKB's at that position)."""
+    queried reference residue is not OncoKB's at that position); None when the answer
+    has no ``errors`` field (data versions before v7.5), so no check was reported."""
     _json: dict | None = field(init=False, default=None)
 
     def __post_init__(self):
@@ -205,7 +206,11 @@ class OncoKB(APIKeyRESTAPIClient, ABC):
         self.variant_exist = json_data.get("variantExist", None)
         self.allele_exist = json_data.get("alleleExist", None)
         self.data_version = json_data.get("dataVersion", None)
-        self.list_error = [i.get("type") for i in json_data.get("errors") or []]
+        self.list_error = (
+            None
+            if "errors" not in json_data
+            else [i.get("type") for i in json_data["errors"] or []]
+        )
         variant_reviewed = "has not specifically been reviewed" not in (
             self.variant_summary
         )
